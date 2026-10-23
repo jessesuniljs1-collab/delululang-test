@@ -9103,3 +9103,88 @@ red: the helper's custody asked with no method.
 node's grant takes POST, while the program's own capability, narrower, refused the call after. The interpreter asks the
 custody before `prim` judges the capability, for every op. So the chain records a use the custody allowed and the
 program never made. Nothing is performed, and the run reports DL0904. The test counts that record and names the row.
+
+## 2026-10-24 — the laptop: a certificate carries every dimension a delegation can (CERT-SECRET-1, RW 4.80)
+
+**Found.** Setting up the agent test campaign, the head chef ran the broker as `DEPLOYMENT.md` documents for
+production: strict anchored roots, the root adopted from a certificate the anchor key signed. Delegating a lease that
+carries the broker-held secret `TOKEN` and its audience was refused DL0802: the adopted root held no secret. `grants
+certify` wrote effects, `fs.read`, `fs.write`, `net` and devices only. The certificate's `authority` field already
+carries secrets, audiences, `declassify`, foreign libraries and the budget, and `adopt` and `⊑` read them. Only the
+command line could not write them. Under strict mode a root enters only by adoption (DL1421), so no lease there could
+ever hold a broker-held secret, `declassify` or a foreign library.
+
+**Fixed.** `certify` reads `--secret`, `--secret-to`, `--declassify`, `--foreign-c`, `--foreign-python` and `--budget`,
+parsed as `delegate` parses them. `--secret NAME=VALUE` is refused: a certificate names a secret and never carries its
+value. Each audience member is canonicalized by the egress client's `parse_audience`. A pair for a secret the
+certificate does not name is refused in words. `delegate` and `certify` now share the two helpers, `secret_name_flag`
+and `secret_audiences`, so the two cannot drift.
+
+**Evidence.**
+- `federation_cli` `a_strict_broker_delegates_the_secret_its_certificate_carries`: a certificate with a secret, its
+  audience and `declassify`; `secrets set`; `broker start --require-anchored-roots`; adopt. The delegation of the secret
+  to its audience is allowed, and one to `example.com` is refused DL0802.
+- Red before the fix: `unknown grants certify argument --secret`. Mutant red: the certificate's audience dropped.
+- `federation_cli` 10 passed.
+
+**And.** `toolchain --json` described `net` as `net=HOST[/PATH]` a day after D-V2-182 gave it methods. `GRANT_FORMS`
+now says `net=HOST[:METHODS][/PATH]` for `net` and `net.special`, with the default (no methods: GET alone). Its
+example names two methods and still parses (`broker` grant-form tests, 12 passed).
+
+## 2026-10-24 — the laptop: the effect row escaped through a generic; a generic's parameters are rigid in its body (GENERIC-RIGID-1, D-V2-184)
+
+**Found by the agent test campaign.** The owner asked for agents to build and test DeluluLang under access conditions
+only the head chef can change. The head chef ran a broker with strict anchored roots and delegated one lease per
+condition. A wrapper (`dl`) was the agents' only way to run delulu, and a Claude Code PreToolUse gate refused any agent
+call that would change access. The gate was falsified first by a test agent, and judged by its own log. Agents: A, the
+builder (Sonnet 5.5); B, least authority (Sonnet 5.5); C, zero authority (Haiku 5.5). Models read from the transcripts.
+C's programs `coerce[A, B](x: A) -> B { x }` and `hide[e](…) -> fn() -> Unit { f }` printed under a console grant while
+`check` said `main` never performed `Write`. The head chef reproduced both on the current binary.
+
+**Cause.** `check_fn` gave the body fresh *flexible* variables for its generics (`make_genv`). The body unified `T` with
+`Int`, or closed `e` to `{}`, and each call site instantiated them afresh. `check_actor` did the same for actor generics.
+
+**Fixed.** Rigid variables (D-V2-184): never bound; a flexible variable meeting one is bound to it; a rigid row tail is
+never closed. The body sees rigid generics; call sites and `spawn` see flexible ones. Messages name `T` and `e`.
+
+**And the laundering suite's own witnesses.** Writing the new witnesses showed that F-3, F-3b and F-4 never parsed: two
+statements on one line, DL0209, passed through recovery. `rejects_with` now refuses a witness that does not parse. The
+three are repaired, and each is still refused with its own code.
+
+**Evidence.** `laundering` 17 passed. Mutants red: the type guard dropped, the closed-row guard dropped, actor generics
+flexible. Agent C's eleven generic programs are now refused DL0401.
+Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## 2026-10-24 — the laptop: a top-level constant's value is checked (CONST-UNCHECKED-1, RW 4.82)
+
+**Found by the agent test campaign** (agent C, Haiku 5.5): `let Y: Int = "not an int"` at module level checked clean
+and ran; `let W = spawn Worker()` checked clean, and `authority` reported only `Write`. The head chef reproduced both.
+
+**Cause.** `check_module`'s item loop matched `Fn`, `Actor` and `Test` and passed every other item with `_ => {}`. A
+constant was registered (`resolve`), its declared type used at its uses, and its value never looked at. The runtime
+evaluates every constant before `main` (`eval_consts`), trusting a "checker invariant" nothing checked. This is the
+walk's catch-all again (MATCH-NEST-1's lesson, HANDOFF §11.4): the item the loop never named was never checked.
+
+**Fixed.** `check_const` checks each constant, in order and before the functions. Its value is an expression with
+nothing in scope but the module's items, held to its declared type, and refused DL0501 if it performs any effect.
+An unannotated constant's uses share the type its value has (`const_types`), where each use had a fresh one.
+
+**Evidence.** `delulu-check/tests/constants.rs`, five tests, red before the fix. Mutants red: the constant pass
+removed, the purity check removed, the use-site type ignored. Agent C's `p5_01`, `p5_02`, `p5_05` and `p5_06` are
+refused.
+Full workspace suite on the laptop (`cargo test --workspace --no-fail-fast -j 4`): 2,472 passed; the 4 failures were `doctor_cli` (3) and the Survey's `freshness` (1), which fail until the map is regenerated after the last edit, and pass after it (below).
+
+## 2026-10-24 — the laptop: `% 0` faults alike on both engines (RW 4.83); three stale doc passages (campaign B10)
+
+**`% 0`.** The builder agent (Sonnet 5.5) found `str(id(1) % id(0))` reported DL0902 on the interpreter and DL0901 on
+WASM, while `/` agreed. The head chef reproduced it. `chk_rem_fn` trapped `b == 0` with `unreachable`, which the host's
+`clean_trap` can only read as overflow; HARDENING_CAMPAIGN C20 had recorded the mismatch as a residual. `i64.rem_s`
+traps `IntegerDivisionByZero` by itself, so the helper now leaves `b == 0` to it and keeps `unreachable` for `INT_MIN %
+-1` alone. `fault_parity` gains `7 % 0` and `INT_MIN % -1`; it was red before the fix and is green after. `delulu-wasm`
+199 passed; `core_invariance` and `wasm_cli` passed.
+
+**Docs (B10, the least-authority agent, Sonnet 5.5; confirmed by the head chef).** `for-agents.md` said `--lease` and
+`--broker` are refused under `--sandbox`. A leased `--sandbox` run works, and the lease judges the guest's uses
+(`guest: error[DL0904]: lease … does not grant …`); `APPLIED_UNDER_SANDBOX` has listed both since RW 4.20. Two
+passages said a secret-carrying request is "not yet" under `--engine wasm`, a claim stale since D-V2-174. All three now
+say what the binary does.

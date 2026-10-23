@@ -500,6 +500,96 @@ fn the_ground_side_mints_credentials_with_no_broker_running() {
     assert!(stderr(&o).contains("ONLY bound that"), "and the reason is stated: {}", stderr(&o));
 }
 
+/// CERT-SECRET-1 (found 2026-10-24 setting up the agent test campaign): `certify` named no secret, no audience and no
+/// `declassify`, so a root adopted under strict anchored roots — the only way a root enters there (DL1421) — could never
+/// hand a broker-held secret to a lease: every `delegate --secret` under it was refused DL0802. The certificate's
+/// authority already carried those dimensions; the command line could not write them.
+#[test]
+fn a_strict_broker_delegates_the_secret_its_certificate_carries() {
+    let f = setup("secret");
+    // A value never travels in a certificate: a secret is named, and the broker that adopts it holds its bytes.
+    let o =
+        f.certify(&["--subject", &f.vehicle_pub, "--effects", "Net", "--secret", "TOKEN=abc", "--ttl", "20m", "--key", &f.gk()]);
+    assert_eq!(o.status.code(), Some(2), "a certificate never carries a secret's value: {}", stderr(&o));
+    assert!(stderr(&o).contains("`--secret TOKEN`"), "and the refusal says what to write: {}", stderr(&o));
+    // An audience for a secret the certificate does not name would reach nothing: refused in words, not dropped.
+    let o = f.certify(&[
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Net",
+        "--secret-to",
+        "TOKEN@127.0.0.1",
+        "--ttl",
+        "20m",
+        "--key",
+        &f.gk(),
+    ]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("add `--secret TOKEN`"), "{}", stderr(&o));
+
+    let o = f.certify(&[
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Net,Write,Declassify",
+        "--net",
+        "127.0.0.1",
+        "--secret",
+        "TOKEN",
+        "--secret-to",
+        "TOKEN@127.0.0.1",
+        "--declassify",
+        "TOKEN",
+        "--ttl",
+        "20m",
+        "--key",
+        &f.gk(),
+        "--out",
+        "s.dlcert",
+    ]);
+    assert!(o.status.success(), "certify with a secret: {}", stderr(&o));
+    let cert = std::fs::read_to_string(f.cwd.join("s.dlcert")).unwrap();
+    for part in [r#""secrets":["TOKEN"]"#, r#""secret_to":["TOKEN@127.0.0.1"#, r#""declassify":["TOKEN"]"#] {
+        assert!(cert.contains(part), "the certificate's authority carries `{part}`:\n{cert}");
+    }
+
+    // The vehicle: strict anchored roots, the secret's bytes in its own store.
+    let o = f.vehicle(&["secrets", "set", "TOKEN", "tok-value"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["broker", "start", "--require-anchored-roots", &f.ground_pub]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let o = f.vehicle(&["grants", "adopt", "s.dlcert", "--anchor", &f.ground_pub]);
+    assert!(o.status.success(), "adopt: {}", stderr(&o));
+    let node = stdout(&o).trim().to_string();
+
+    // The secret and its audience delegate onward under the adopted root ...
+    let delegate = |audience: &str| {
+        f.vehicle(&[
+            "grants",
+            "delegate",
+            "--parent",
+            &node,
+            "--effects",
+            "Net,Write",
+            "--net",
+            "127.0.0.1",
+            "--secret",
+            "TOKEN",
+            "--secret-to",
+            audience,
+            "--ttl",
+            "10m",
+        ])
+    };
+    let o = delegate("TOKEN@127.0.0.1");
+    assert!(o.status.success(), "a strict broker delegates the secret its root carries: {}", stderr(&o));
+    // ... and an audience the certificate did not sign is refused: ⊑ holds across the boundary.
+    let o = delegate("TOKEN@example.com");
+    assert!(!o.status.success() && stderr(&o).contains("DL0802"), "a wider audience must be refused: {}", stderr(&o));
+}
+
 // ===================================================================================================
 // RFC 0001 phase F4 — the uplink lease. Revocation cannot cross a partition; expiry can.
 // ===================================================================================================

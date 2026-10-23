@@ -510,3 +510,37 @@ methods still allows GET alone (D-V2-182), so no existing grant reaches a POST. 
 git checkout <this-commit>^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-183's code, or the release gate refuses the uncovered anchor.
+
+## 2026-10-24 — `crates/delulu-check/tests/laundering.rs`: five GENERIC-RIGID-1 witnesses; a witness must parse
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `crates/delulu-check/tests/laundering.rs`: `rejects_with` also asserts the witness lexes and parses (no DL01xx or DL02xx). Two statements on one line are separated in F-3 (`cb(); cb()`), F-3b (`f(); g()`) and F-4 (`out.println(str(x)); x`). Five tests appended: `generic_rigid_a_body_cannot_decide_its_type_parameter`, `generic_rigid_an_effectful_closure_cannot_be_coerced_pure`, `generic_rigid_a_body_cannot_close_its_row_parameter`, `generic_rigid_an_actor_body_cannot_decide_its_parameter`, `generic_rigid_honest_generics_still_check`. |
+| Entrenched by | `.github/CODEOWNERS:28` → `@jessesuniljs1-collab` |
+| Campaign | the agent test campaign of 2026-10-24; `REMAINING_WORK.md` 4.81; decision D-V2-184 |
+| Approved by | **the head chef, 2026-10-24, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+The suite asks one question: can authority escape the type? A generic answered yes (GENERIC-RIGID-1), and the suite had
+no witness for it. Writing one showed that three of its own witnesses never parsed. They still met their codes, through
+the parser's recovery, so a refusal could have come from the repair rather than the rule.
+
+**Nothing is weakened.** No witness is removed or relaxed. The three repaired programs are now the programs their
+comments describe, and each is still refused with its own code (DL0401, DL0504, DL0501). The new assertion makes every
+witness, present and future, prove it parses.
+
+**Verified before the change**
+
+1. `cargo test -p delulu-check --test laundering`: with the stricter helper and the old programs, F-3, F-3b and F-4
+   failed ("does not lex or parse cleanly: DL0209 …"). Repaired, 17 passed.
+2. Mutants of D-V2-184's code turn the new witnesses red (see the decision).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- crates/delulu-check/tests/laundering.rs
+```
+— together with D-V2-184's code, or the generic witnesses fail.

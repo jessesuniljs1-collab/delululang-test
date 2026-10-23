@@ -74,6 +74,11 @@ the anchor private key it cannot mint a certificate, and unsigned issuance is re
 without the flag, downgrading you to Tier 0. It cannot do so *quietly* — every start records its
 effective mode in the hash-chained audit log — but it can do it.
 
+A certificate carries every dimension a delegation can name (since 2026-10-24): `--secret NAME` and
+`--secret-to NAME@HOST[:PORT]` for a broker-held secret and where it may be sent, `--declassify`, `--foreign-c`,
+`--foreign-python` and `--budget`. It names a secret and never carries its value: store the value on the delulu host
+with `delulu secrets set NAME VALUE` before `broker start`.
+
 > **Scopes in a certificate must be ABSOLUTE.** A relative path names a location only the signing
 > machine's working directory could mean; `certify` refuses it and tells you the absolute form.
 

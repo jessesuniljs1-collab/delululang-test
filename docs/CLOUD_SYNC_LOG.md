@@ -5557,3 +5557,49 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - **Open / next:** the launch merge of #61 to #63 and this; RW 4.79 (judge the capability before the custody).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — a certificate carries every dimension a delegation can (CERT-SECRET-1, RW 4.80); `net` form names methods (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found while setting up an agent test campaign (Sonnet 5.5 and Haiku 5.5 sous-chefs, running under leases the head chef delegated; their findings are not in this change).
+- Branch: `laptop/cert-secret` (on `laptop/wasm-post` `41f1dc6`, PR #64)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/federation_cli.rs`, `crates/delulu-runtime/src/broker.rs`,
+  `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** the agent campaign's findings, verified against the binary; the launch merge of #61 to #64 and this.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — the effect row escaped through a generic: a generic's parameters are rigid in its body (GENERIC-RIGID-1, D-V2-184) (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign's zero-authority agent (Haiku 5.5, `claude-haiku-5-5` per its transcript); verified and fixed by the head chef.
+- Branch: `laptop/generic-rigid` (on `laptop/cert-secret` `bf922f6`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name, D-V2-184 and `ENTRENCHED_CHANGE_RECORD.md` (laundering.rs).
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/unify.rs`, `crates/delulu-check/src/ty.rs`,
+  `crates/delulu-check/tests/laundering.rs` (entrenched), `CHANGELOG.md`, `HANDOFF.md` (§11: two owner instructions, three
+  lessons), `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Not in the repository (the laptop only): `.claude/settings.local.json` (the agent gate hook, untracked);
+  `D:\nelan\dogfood-campaign\` (the saver, the mirror and the snapshot repo); branch `autosave/dogfood` on origin (agent
+  workdir snapshots, never merged).
+- **Open / next:** the campaign's other findings, verified (top-level `let` never checked, C4/C5; `--within` and a use
+  path escaping its capability, B9; leases cannot carry `net.special`, B1; doc contradictions, B10).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — a top-level constant's value is checked (CONST-UNCHECKED-1, RW 4.82) (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign's zero-authority agent (Haiku 5.5).
+- Branch: `laptop/const-check` (on `laptop/generic-rigid` `85f5f7a`, PR #66)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added: `crates/delulu-check/tests/constants.rs`. Deleted, renamed: nothing.
+- **Open / next:** WASM `% 0` reports overflow (A3); `--within` and a use path escaping its capability (B9); a dependency
+  pin repair that writes invalid TOML (A2); `--report-out` under `--sandbox` (A18); the remaining campaign papercuts.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — `% 0` faults alike on both engines (RW 4.83); three stale doc passages (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign (A3, B10).
+- Branch: `laptop/wasm-rem` (on `laptop/const-check` `0f79ac4`, PR #67)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `docs/for-agents.md`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
+  `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
+- Survey and doctor (after the last edit): in the commit message.

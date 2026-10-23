@@ -655,8 +655,9 @@ A budget is also AUTHORITY (PS-B-05). Whoever delegates to you can hand one down
 a budget inherits it. When you run under `--lease`, the node's budget is what you are held to and your
 default: `--limits` may ask for less and is refused, before `main`, if it asks for more. A delegation
 that asks for a larger budget than its parent holds is DL0802, and its repair is the meet. Under
-`--sandbox`, a flag the sandboxed run does not apply (`--lease` and `--broker` among them) is refused
-rather than ignored; a lease runs without `--sandbox`.
+`--sandbox`, a flag the sandboxed run does not apply is refused rather than ignored. `--lease` and
+`--broker` apply there (REMAINING_WORK 4.20): the guest performs nothing itself, and each use it asks of the
+host is judged by the lease's node first (`guest: error[DL0904]: lease … does not grant …`).
 
 On Windows a `--sandbox` guest also runs as a separate identity (PS-B-03): a per-run AppContainer with
 no network and none of the operator's files. On Linux, where the host allows user namespaces, it runs
@@ -717,7 +718,8 @@ overstate it downstream:
   chain records a `send` with the pair; a delegated node's send is guarded (DL1410) until a person approves
   `declassify:NAME@host:port` — one for another destination does not buy it; a rule or permit on the secret's NAME
   (`declassify:NAME`) covers every send of it, and a seal on it refuses them all (D-V2-137). Not yet in a
-  `--sandbox` guest (DL1401: no secret crosses the channel), or under `--engine wasm`.
+  `--sandbox` guest (DL1401: no secret crosses the channel). Under `--engine wasm` it runs as on the interpreter
+  (D-V2-174; `post_with_secret` since 2026-10-23).
   `http.post(url, headers, body)` (P9-05 (d), D-V2-183) is the one request that is not a GET: the program mints
   `root.http(["api.example.com:POST/v1/**"])` and the operator grants the same (`--grant net=api.example.com:POST/v1/**`;
   `--grants` prints it). Under an entry naming no methods it is refused at the call, DL0904, *"a `POST` to … is outside

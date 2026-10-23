@@ -44,6 +44,14 @@ pub const TYPE_PARTS_TOTAL: u64 = 2_000_000;
 pub struct InferCtx {
     type_bindings: Vec<Option<Type>>,
     row_bindings: Vec<Option<Row>>,
+    /// Which type variables are RIGID: a generic function's (or actor's) own parameter while its body is checked
+    /// (GENERIC-RIGID-1, D-V2-184). A rigid variable is never bound; it unifies with itself and with a flexible
+    /// variable (which is bound to it). Inside `fn forge[T](x: Int) -> T { x }`, `T` is any type the caller picks, so
+    /// the body may not decide it is `Int` — a flexible `T` did, and the program forged a capability; a flexible row
+    /// `e` closed to `{}` and an effectful closure left a pure function.
+    type_rigid: Vec<bool>,
+    /// Which row variables are rigid, as `type_rigid`.
+    row_rigid: Vec<bool>,
     /// Parts written out so far by types past [`TYPE_PARTS_FREE`].
     written: Cell<u64>,
     /// Whether a type was too large to write out (`TYPE_PARTS_LIMIT`, `TYPE_PARTS_TOTAL`); the checker refuses the
@@ -53,7 +61,14 @@ pub struct InferCtx {
 
 impl InferCtx {
     pub fn new() -> Self {
-        InferCtx { type_bindings: Vec::new(), row_bindings: Vec::new(), written: Cell::new(0), too_large: Cell::new(false) }
+        InferCtx {
+            type_bindings: Vec::new(),
+            row_bindings: Vec::new(),
+            type_rigid: Vec::new(),
+            row_rigid: Vec::new(),
+            written: Cell::new(0),
+            too_large: Cell::new(false),
+        }
     }
 
     /// Whether a type has been too large to write out (RW 2.3): the checker refuses the program with DL0211.
@@ -64,13 +79,39 @@ impl InferCtx {
     pub fn fresh_type(&mut self) -> Type {
         let v = self.type_bindings.len() as u32;
         self.type_bindings.push(None);
+        self.type_rigid.push(false);
         Type::Var(TypeVar(v))
     }
 
     pub fn fresh_row_var(&mut self) -> RowVar {
         let v = self.row_bindings.len() as u32;
         self.row_bindings.push(None);
+        self.row_rigid.push(false);
         RowVar(v)
+    }
+
+    /// A rigid type variable: a generic's own parameter while the body that declares it is checked (GENERIC-RIGID-1).
+    pub fn fresh_rigid_type(&mut self) -> Type {
+        let t = self.fresh_type();
+        if let Type::Var(TypeVar(v)) = t {
+            self.type_rigid[v as usize] = true;
+        }
+        t
+    }
+
+    /// A rigid row variable, as [`Self::fresh_rigid_type`].
+    pub fn fresh_rigid_row_var(&mut self) -> RowVar {
+        let v = self.fresh_row_var();
+        self.row_rigid[v.0 as usize] = true;
+        v
+    }
+
+    fn rigid_type(&self, v: u32) -> bool {
+        self.type_rigid[v as usize]
+    }
+
+    fn rigid_row(&self, v: RowVar) -> bool {
+        self.row_rigid[v.0 as usize]
     }
 
     pub fn fresh_row(&mut self) -> Row {
@@ -245,14 +286,17 @@ impl InferCtx {
         let b = self.resolve_type_shallow(b);
         match (&a, &b) {
             (Type::Var(x), Type::Var(y)) if x == y => Ok(()),
-            (Type::Var(TypeVar(v)), _) => {
+            // A rigid variable is bound by nothing (GENERIC-RIGID-1): these two arms take a FLEXIBLE variable only, so
+            // a rigid one meets a flexible one in the second arm (the flexible one is bound to it), and meets any
+            // other type — a concrete one, or a different rigid one — in the mismatch at the end.
+            (Type::Var(TypeVar(v)), _) if !self.rigid_type(*v) => {
                 if self.occurs_type(*v, &b) {
                     return Err(UnifyError::Occurs);
                 }
                 self.type_bindings[*v as usize] = Some(b);
                 Ok(())
             }
-            (_, Type::Var(TypeVar(v))) => {
+            (_, Type::Var(TypeVar(v))) if !self.rigid_type(*v) => {
                 if self.occurs_type(*v, &a) {
                     return Err(UnifyError::Occurs);
                 }
@@ -333,15 +377,16 @@ impl InferCtx {
                 }
             }
             (Some(rv), None) => {
-                // {A | rv} = B (closed). Equality requires A ⊆ B; bind rv := B \ A.
-                if !ra.effects.is_subset(&rb.effects) {
+                // {A | rv} = B (closed). Equality requires A ⊆ B; bind rv := B \ A. A rigid rv is no closed row
+                // (GENERIC-RIGID-1): `e` is whatever the caller's closure performs, so the body may not close it.
+                if !ra.effects.is_subset(&rb.effects) || self.rigid_row(rv) {
                     return Err(if expanded { UnifyError::RowConflict } else { UnifyError::RowMismatch });
                 }
                 let remainder: BTreeSet<Effect> = rb.effects.difference(&ra.effects).cloned().collect();
                 self.bind_row(rv, Row::closed(remainder))
             }
             (None, Some(rv)) => {
-                if !rb.effects.is_subset(&ra.effects) {
+                if !rb.effects.is_subset(&ra.effects) || self.rigid_row(rv) {
                     return Err(if expanded { UnifyError::RowConflict } else { UnifyError::RowMismatch });
                 }
                 let remainder: BTreeSet<Effect> = ra.effects.difference(&rb.effects).cloned().collect();
@@ -354,6 +399,17 @@ impl InferCtx {
                     } else {
                         Err(UnifyError::RowConflict)
                     }
+                } else if self.rigid_row(rv) || self.rigid_row(sv) {
+                    // A rigid tail stays; only a flexible one is bound, to the rigid side's tail and the effects the
+                    // flexible side lacks. The flexible side's own extra effects would have to be inside the rigid
+                    // tail, which the body cannot know: a mismatch. Two different rigid tails never meet.
+                    let (fixed, flex, fixed_effects, flex_effects) =
+                        if self.rigid_row(rv) { (rv, sv, &ra.effects, &rb.effects) } else { (sv, rv, &rb.effects, &ra.effects) };
+                    if self.rigid_row(flex) || !flex_effects.is_subset(fixed_effects) {
+                        return Err(if expanded { UnifyError::RowConflict } else { UnifyError::RowMismatch });
+                    }
+                    let remainder: BTreeSet<Effect> = fixed_effects.difference(flex_effects).cloned().collect();
+                    self.bind_row(flex, Row { effects: remainder, tail: Some(fixed) })
                 } else {
                     // {A | rv} = {B | sv}: introduce a fresh shared tail.
                     let fresh = self.fresh_row_var();

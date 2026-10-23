@@ -5478,17 +5478,14 @@ fn ovf_mul_fn() -> Function {
 }
 
 /// `a % b`, trapping on `b == 0` and on `INT_MIN % -1` (matching `checked_rem`; core `i64.rem_s`
-/// would return 0 for the latter rather than trap).
+/// would return 0 for the latter rather than trap). `b == 0` is left to `i64.rem_s` itself, which traps
+/// `IntegerDivisionByZero` — DL0902, as the interpreter says. An `unreachable` there was read as overflow
+/// (DL0901), so `7 % 0` faulted with a different code on each engine (A3, the agent test campaign, 2026-10-24).
 fn chk_rem_fn() -> Function {
     use Instruction::*;
     build(
         &[],
         &[
-            LocalGet(1),
-            I64Eqz,
-            If(BlockType::Empty),
-            Unreachable,
-            End,
             LocalGet(0),
             I64Const(i64::MIN),
             I64Eq,
