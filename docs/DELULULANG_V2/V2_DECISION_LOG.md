@@ -4737,3 +4737,47 @@ the previous code too (exit 0, a document printed). Mutants N1 to N6 were red in
 order, out of the judge, unparsed, a union meet, a malformed suffix dropped, the default allowing every method.
 N1, N2, N3 and N5 were also red end to end. Z3 §2e: 9 obligations proved (50 in all). Its mutants
 `net-method-dropped` and `net-method-meet-union` each leave obligations undischarged, and CI requires both.
+
+## D-V2-183 — P9-05 (d), second slice: `Cap[Http].post(url, headers, body)`, the first request that is not a GET — judged by its method at every check, its method carried to the broker and its record, a redirect's method by its status — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**Context.** RW 2.11 gave an agent a way to call an authenticated API, but only by GET, and most APIs take their writes
+by POST. D-V2-182 made the method dimension first, so that a POST could not widen any grant written before it: an
+entry naming no methods allows GET alone.
+
+**Decision.**
+1. **The primitive.** `post(url: Str, headers: Map[Str, Str], body: Str) -> Result[Str, NetErr] ! {Net}`. The URL stays
+   argument one, as `get_with`'s, so every check that reads a request's URL reads it there. The headers are held to
+   `get_with`'s rules, and the body is at most 1 MiB (`MAX_REQUEST_BODY`, refused before anything is resolved).
+   `PRIM_TABLE_VERSION` goes from 7 to 8 (additive). Conformance anchor `ref.prim.http.post` with four witnesses
+   (`ENTRENCHED_CHANGE_RECORD.md`).
+2. **Judged by its method everywhere a GET is judged by its path:**
+   - the runtime's first check (DL0904: "a `POST` to … is outside the methods the grant names for it");
+   - every egress hop, by that hop's own method;
+   - the broker's use check under a daemon or lease: the custody's `check_at` carries the method, and the IPC's
+     `Check` gains an optional `method`, absent for a GET, so a GET's frame and record are as before;
+   - `--within`, by the request's method.
+
+   A program asks for `root.http(["HOST:POST"])`, and `--grants` names that line.
+3. **The record.** A use that is not a GET names its `method` beside `url_path`, allowed or refused. OCSF maps it to
+   `http_request.http_method`, which was always `GET` before. A run report's egress hop names its `method` when it
+   is not a GET.
+4. **Redirects.** After a request that is not a GET, a 301, 302 or 303 is followed as a GET with no body, as browsers
+   do, and judged as a GET, so a grant naming POST alone refuses it. A 307 or 308 keeps the method and the body, but
+   only to the origin the program named. The body is the program's data, as its headers are, so a redirect that would
+   carry it elsewhere is refused (`Reason::BodyElsewhere`).
+5. **One implementation for L0 and every guest:** a sandboxed guest's `post` is performed by the host, in the same
+   `prim` arm.
+6. **Not yet:** `post` on the WASM engine (its custody check passes no method, and the compiler does not emit
+   `post`); a POST carrying a secret (`post_with_secret`); and PUT, PATCH, DELETE. `deploy plan` decides with
+   `--within`'s verdict (D-V2-176), so it judges a POST by its method too. No test of `deploy plan` with a POST was
+   written in this slice.
+
+**Evidence.** Unit tests on the egress client (`a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status`:
+the body sent, refused under GET alone before anything is resolved, 301, 302 and 303 as GET without a body, 307 and 308
+kept, kept only to the same origin, the size limit, a GET's record unchanged). Over real TLS
+(`a_post_arrives_over_tls_with_its_body`): the request line `POST /items`, its `Content-Length`, its body whole. The
+broker (`a_net_use_is_judged_by_its_method_and_a_post_is_recorded_as_one`) and OCSF (`audit_ocsf_cli`) were also
+tested. End to end at L0 and from a guest: `egress_cli` `a_post_leaves_under_a_grant_that_names_post_and_no_other`
+(TLS out under `:POST`; DL0904 in words about the method under a host-only grant, nothing connects; the report's hop
+names POST). `within_cli` `a_post_is_decided_by_its_method_against_the_boundary` covers the mint and a request decided
+by its method. Mutants: see V2_LOG.

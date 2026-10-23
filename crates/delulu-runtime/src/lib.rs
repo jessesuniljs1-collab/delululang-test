@@ -290,7 +290,13 @@ mod tests {
             fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
                 self.check_at(op, arg, None, None)
             }
-            fn check_at(&mut self, _op: Op, _arg: Option<&str>, url_path: Option<&str>, _method: Option<&str>) -> CustodyDecision {
+            fn check_at(
+                &mut self,
+                _op: Op,
+                _arg: Option<&str>,
+                url_path: Option<&str>,
+                _method: Option<&str>,
+            ) -> CustodyDecision {
                 self.0.borrow_mut().push(url_path.map(str::to_string));
                 CustodyDecision::Allow
             }

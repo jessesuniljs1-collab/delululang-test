@@ -299,7 +299,8 @@ fn a_post_leaves_under_a_grant_that_names_post_and_no_other() {
     for sandbox in [false, true] {
         let run = |dir: &Path, grant: &str| {
             let grant = format!("net.special={grant}");
-            let mut args = vec!["run", "post.delulu", "--grant", "console", "--grant", grant.as_str(), "--report-out", "rep.json"];
+            let mut args =
+                vec!["run", "post.delulu", "--grant", "console", "--grant", grant.as_str(), "--report-out", "rep.json"];
             if sandbox {
                 args.push("--sandbox");
             }

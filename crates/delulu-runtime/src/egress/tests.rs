@@ -415,7 +415,8 @@ fn a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its
 
     let big = "x".repeat(MAX_REQUEST_BODY + 1);
     let t = FakeTransport::answering(vec![ok("never")]);
-    let (rec, got) = request(&policy(&["a.example.com:POST"], &[]), "POST", "https://a.example.com/x", &[], Some(&big), None, &r, &t);
+    let (rec, got) =
+        request(&policy(&["a.example.com:POST"], &[]), "POST", "https://a.example.com/x", &[], Some(&big), None, &r, &t);
     assert_eq!((got, rec.outcome), (None, Err(Reason::RequestTooLarge)));
     assert!(t.sent.borrow().is_empty());
     // A GET's record is what it always was: no `method`.
@@ -667,7 +668,15 @@ fn a_secret_goes_only_to_its_audience_on_the_origins_hops() {
     assert!(json.contains("\"secret\":\"API_TOKEN\"") && json.contains("\"authorization\""), "{json}");
     assert!(!json.contains(SECRET_BYTES), "the record never holds the secret's bytes: {json}");
     assert!(!format!("{secret:?}").contains(SECRET_BYTES), "nor does the carrier's own Debug");
-    let pinned = PinnedRequest { url: "https://a.example.com/", host: "a.example.com", port: 443, addrs: &[], headers: &with, method: "GET", body: None };
+    let pinned = PinnedRequest {
+        url: "https://a.example.com/",
+        host: "a.example.com",
+        port: 443,
+        addrs: &[],
+        headers: &with,
+        method: "GET",
+        body: None,
+    };
     let shown = format!("{pinned:?}");
     assert!(shown.contains("authorization") && !shown.contains(SECRET_BYTES), "nor a pinned request's: {shown}");
 }
@@ -1189,7 +1198,15 @@ mod real_transport {
         let t = ReqwestTransport::with_roots(s.roots.clone());
         let addrs = [SocketAddr::new(ip("127.0.0.1"), s.port)];
         let url = format!("https://localhost:{}/", s.port);
-        let req = PinnedRequest { url: &url, host: "pinned.test", port: s.port, addrs: &addrs, headers: &[], method: "GET", body: None };
+        let req = PinnedRequest {
+            url: &url,
+            host: "pinned.test",
+            port: s.port,
+            addrs: &addrs,
+            headers: &[],
+            method: "GET",
+            body: None,
+        };
         let got = t.fetch(&req, 1024, Duration::from_secs(5));
         assert_eq!(got, Err(Reason::Connect), "an unpinned host is not resolved");
         std::thread::sleep(Duration::from_millis(200));

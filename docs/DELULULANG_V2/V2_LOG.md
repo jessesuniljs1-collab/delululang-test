@@ -8985,3 +8985,41 @@ not in the granted allowlist") and `sandbox_openshell_cli`'s method case (exit 0
 mutants `net-method-dropped` and `net-method-meet-union` each caught. CI's teeth step now names 11 mutants.
 `delulu-broker` `netscope` 10 passed; the `delulu` binary's `within` unit tests 8 passed, the agreement test
 generating method entries.
+
+## 2026-10-23 (night) — the laptop: `http.post`, the first request that is not a GET (P9-05 (d), second slice, D-V2-183)
+
+**Why.** An agent calls an authenticated API to change something, and that takes a POST. D-V2-182 made the methods a
+dimension first, so this primitive widens no grant written before it.
+
+**What.**
+- `post(url, headers, body)`, typed as `get_with` plus a `Str` body, the URL still argument one.
+- The egress client gained `request(policy, method, url, headers, body, secret, …)`, with `request_with_secret` as
+  its GET. Each hop is judged by its own method. A 301, 302 or 303 after a non-GET continues as a GET with no body; a
+  307 or 308 keeps both, to the named origin only (`Reason::BodyElsewhere`). The body is at most 1 MiB
+  (`Reason::RequestTooLarge`).
+- The reqwest transport sends `request(method, url).body(…)`.
+- The custody's `check_at` carries the method (`custody_method_for`, `None` for a GET) to the daemon. `ReqBody::Check`
+  gains an optional `method`, absent for a GET, so a GET's frame is unchanged. `Broker::check_use_by` judges the
+  method and records `method` beside `url_path`. OCSF maps it to `http_request.http_method`.
+- `--within`'s `Ask::Request` and its `RequestSite` carry the method. The requirement line for a POST names `:POST`.
+- The conformance anchor `ref.prim.http.post` has four witnesses (entrenched; `ENTRENCHED_CHANGE_RECORD.md`), and the
+  reference was regenerated. `PRIM_TABLE_VERSION` is 8, and the pinned table count 85.
+
+**Evidence.**
+- Tests:
+  - egress unit tests: the POST, refusal under GET alone, each redirect status, the cross-origin refusal, the size
+    limit, a GET's record unchanged;
+  - over real TLS: the request line, `Content-Length` and the body whole;
+  - the broker's method judgement and record, and OCSF's `http_method`;
+  - `egress_cli` at L0 and from a guest;
+  - `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded`: embedded, the daemon, the daemon
+    with a guest; the chain's records `POST allow` and `GET deny`;
+  - `within_cli` `a_post_is_decided_by_its_method_against_the_boundary`, including a request decided by its method
+    alone.
+- Mutants, each red: P1 the first check asking GET, P2 every hop judged as GET, P3 a 303 keeping the POST, P4 the
+  body allowed elsewhere, P5 the custody never told the method, P6 `--within` deciding GET, P7 the daemon dropping
+  the method.
+- `delulu-conform --coverage`: one gap before the witness rows, 356/356 after. `--check-reference` in sync.
+
+**Found on the way:** the egress test server read only a request's head, so its body arrived unseen. It now reads to
+the head's `Content-Length`.

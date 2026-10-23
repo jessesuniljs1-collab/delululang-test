@@ -2056,6 +2056,33 @@ file = "crates/delulu-runtime/src/egress/tests.rs"
 test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
 kind = "negative"
 
+# P9-05 (d), D-V2-183 (the laptop, 2026-10-23, under the owner's delegation — ENTRENCHED_CHANGE_RECORD.md): a POST with
+# headers and a body, judged by its method. The table's own two witnesses; the egress client's POST, its body kept or
+# dropped by each redirect's status; and the judge that refuses a POST under an entry naming no methods (GET alone).
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-broker/src/netscope.rs"
+test = "an_entry_judges_its_host_then_its_path_then_its_method"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.clock.now_ms"
 file = "crates/delulu-check/src/prim_table.rs"
