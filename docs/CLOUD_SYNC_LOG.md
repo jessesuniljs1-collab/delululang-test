@@ -5488,8 +5488,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
 - Branch: `laptop/send-url-let` (on `laptop/send-rebind` `6d1242c`, #59)   Pull request: opened once #59 lands
 - **What:** see V2_LOG's entry of the same name. `--grants`, `--within` and `deploy plan` read a send's or a request's
-  URL through a `let` or a module constant, under SEND-REBIND-1's forgetting rules.
+  URL through a `let` or a module constant, under SEND-REBIND-1's forgetting rules. A second commit records the owner's
+  setup script for the cloud environment in `docs/CLOUD_ROUTINE.md`; no run has used it yet.
 - Files and folders: M `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`, `CHANGELOG.md`,
-  `docs/for-agents.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  `docs/for-agents.md`, `docs/CLOUD_ROUTINE.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
   renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
