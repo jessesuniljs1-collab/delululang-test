@@ -9154,3 +9154,22 @@ three are repaired, and each is still refused with its own code.
 **Evidence.** `laundering` 17 passed. Mutants red: the type guard dropped, the closed-row guard dropped, actor generics
 flexible. Agent C's eleven generic programs are now refused DL0401.
 Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## 2026-10-24 — the laptop: a top-level constant's value is checked (CONST-UNCHECKED-1, RW 4.82)
+
+**Found by the agent test campaign** (agent C, Haiku 5.5): `let Y: Int = "not an int"` at module level checked clean
+and ran; `let W = spawn Worker()` checked clean, and `authority` reported only `Write`. The head chef reproduced both.
+
+**Cause.** `check_module`'s item loop matched `Fn`, `Actor` and `Test` and passed every other item with `_ => {}`. A
+constant was registered (`resolve`), its declared type used at its uses, and its value never looked at. The runtime
+evaluates every constant before `main` (`eval_consts`), trusting a "checker invariant" nothing checked. This is the
+walk's catch-all again (MATCH-NEST-1's lesson, HANDOFF §11.4): the item the loop never named was never checked.
+
+**Fixed.** `check_const` checks each constant, in order and before the functions. Its value is an expression with
+nothing in scope but the module's items, held to its declared type, and refused DL0501 if it performs any effect.
+An unannotated constant's uses share the type its value has (`const_types`), where each use had a fresh one.
+
+**Evidence.** `delulu-check/tests/constants.rs`, five tests, red before the fix. Mutants red: the constant pass
+removed, the purity check removed, the use-site type ignored. Agent C's `p5_01`, `p5_02`, `p5_05` and `p5_06` are
+refused.
+Full workspace suite on the laptop (`cargo test --workspace --no-fail-fast -j 4`): 2,472 passed; the 4 failures were `doctor_cli` (3) and the Survey's `freshness` (1), which fail until the map is regenerated after the last edit, and pass after it (below).
