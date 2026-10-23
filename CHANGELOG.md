@@ -21,6 +21,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   that may hold another value at the call still counts as computed: one assigned in a branch, a loop or a closure, or a
   parameter or local `let` that shadows the constant.
 
+## Unreleased — ctutils 0.4.5, 2026-10-23
+
+- **Security: RUSTSEC-2026-0385, published on 2026-10-23, is fixed by a patch update.** `ctutils` 0.4.2 → 0.4.5. Before
+  0.4.4, its constant-time mask functions could compile to a branch on common platforms, and its `u128` comparisons
+  branched on 32-bit targets. Such a branch can leak a secret through timing. `ctutils` provides the constant-time
+  comparisons and selects that ML-DSA uses when signing (`ml-dsa` 0.1.1). Only `delulu sign --hybrid` signs with
+  ML-DSA, and it needs `--unstable` as well; verifying handles public data only. `ml-kem` also links `ctutils`. Nothing
+  else in the lockfile moved.
+
 ## Unreleased — a reassigned secret is not attributed to its first value, 2026-10-23
 
 - **Fixed: `authority --grants`/`--within`/`deploy plan` attributed a send of a secret reassigned in a branch, a loop or
