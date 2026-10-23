@@ -294,19 +294,15 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // node type through the final substitution, and collapse each node's raw effect accumulator to
     // its resolved effect set (DIR §2.3). This runs after all functions are checked so that later
     // unifications are reflected in earlier nodes' types.
-    //
-    // In node order, so that when a type is too large to write out (RW 2.3) the node named is the same on every run.
     let mut node_types: HashMap<NodeId, Type> = HashMap::with_capacity(checker.node_types_raw.len());
-    let mut settle_order: Vec<(&NodeId, &(Type, Span))> = checker.node_types_raw.iter().collect();
-    settle_order.sort_unstable_by_key(|(id, _)| id.0);
-    let mut too_large_at = checker.too_large_at;
-    for (id, (raw, span)) in settle_order {
+    let refused_before = checker.cx.too_large();
+    let written_before = checker.cx.written();
+    for (id, (raw, _)) in &checker.node_types_raw {
         node_types.insert(*id, checker.cx.apply_type(raw));
-        if too_large_at.is_none() && checker.cx.too_large() {
-            too_large_at = Some(*span);
-        }
     }
-    checker.too_large_at = too_large_at;
+    if !refused_before && checker.cx.too_large() {
+        checker.too_large_at = refused_in_node_order(&checker.cx, &checker.node_types_raw, written_before);
+    }
     let mut node_rows: HashMap<NodeId, Row> = HashMap::with_capacity(checker.node_row_accs.len());
     for (id, acc) in &checker.node_row_accs {
         node_rows.insert(*id, checker.resolve_row_acc(acc));
@@ -365,6 +361,27 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         node_types,
         node_rows,
     }
+}
+
+/// The node a settle refused as too large to write out (RW 2.3, D-V2-179), named the same on every run: the settle ran
+/// in the table's order, so it is run again here in node order, counting rather than writing: the first node whose type
+/// alone passes [`TYPE_PARTS_LIMIT`](crate::unify::TYPE_PARTS_LIMIT), or at which the large types, from what was
+/// written before the settle, pass [`TYPE_PARTS_TOTAL`](crate::unify::TYPE_PARTS_TOTAL).
+fn refused_in_node_order(cx: &InferCtx, raw: &HashMap<NodeId, (Type, Span)>, written_before: u64) -> Option<Span> {
+    use crate::unify::{TYPE_PARTS_FREE, TYPE_PARTS_LIMIT, TYPE_PARTS_TOTAL};
+    let mut nodes: Vec<(&NodeId, &(Type, Span))> = raw.iter().collect();
+    nodes.sort_unstable_by_key(|(id, _)| id.0);
+    let mut written = written_before;
+    for (_, (t, span)) in nodes {
+        let left = TYPE_PARTS_TOTAL.saturating_sub(written);
+        let limit = TYPE_PARTS_LIMIT.min(usize::try_from(left).unwrap_or(usize::MAX)).max(TYPE_PARTS_FREE);
+        match cx.parts_within(t, limit) {
+            None => return Some(*span),
+            Some(parts) if parts > TYPE_PARTS_FREE => written = written.saturating_add(parts as u64),
+            Some(_) => {}
+        }
+    }
+    None
 }
 
 /// Lower a **concrete** type expression (no generics in scope) against a module's declaration

@@ -126,18 +126,66 @@ impl InferCtx {
             Type::Option(inner) => Type::Option(Box::new(self.apply_within(&inner, left)?)),
             Type::Map(k, v) => Type::Map(Box::new(self.apply_within(&k, left)?), Box::new(self.apply_within(&v, left)?)),
             Type::Result(o, e) => Type::Result(Box::new(self.apply_within(&o, left)?), Box::new(self.apply_within(&e, left)?)),
-            Type::Record(id, args) => Type::Record(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
-            Type::Sum(id, args) => Type::Sum(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
+            Type::Record(id, args) => Type::Record(id, self.apply_all(&args, left)?),
+            Type::Sum(id, args) => Type::Sum(id, self.apply_all(&args, left)?),
             Type::Fn { params, ret, row } => Type::Fn {
-                params: params.iter().map(|p| self.apply_within(p, left)).collect::<Option<_>>()?,
+                params: self.apply_all(&params, left)?,
                 ret: Box::new(self.apply_within(&ret, left)?),
                 row: self.apply_row(&row),
             },
             Type::Secret(inner) => Type::Secret(Box::new(self.apply_within(&inner, left)?)),
             Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_within(&inner, left)?)),
-            Type::Actor(name, args) => Type::Actor(name, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
+            Type::Actor(name, args) => Type::Actor(name, self.apply_all(&args, left)?),
             other => other,
         })
+    }
+
+    /// Parts written out so far by types past [`TYPE_PARTS_FREE`], toward [`TYPE_PARTS_TOTAL`].
+    pub fn written(&self) -> u64 {
+        self.written.get()
+    }
+
+    /// The parts `t` needs written out, counted as [`apply_type`](Self::apply_type) counts them and without writing it,
+    /// or `None` past `limit`. What names, on every run, the node a settle refused (`check_module`).
+    pub fn parts_within(&self, t: &Type, limit: usize) -> Option<usize> {
+        let mut left = limit;
+        self.count_within(t, &mut left)?;
+        Some(limit - left)
+    }
+
+    fn count_within(&self, t: &Type, left: &mut usize) -> Option<()> {
+        *left = left.checked_sub(1)?;
+        let mut t = t;
+        while let Type::Var(TypeVar(v)) = t {
+            match &self.type_bindings[*v as usize] {
+                Some(bound) => t = bound,
+                None => return Some(()),
+            }
+        }
+        match t {
+            Type::List(x) | Type::Option(x) | Type::Secret(x) | Type::Plugin(x) => self.count_within(x, left),
+            Type::Map(a, b) | Type::Result(a, b) => {
+                self.count_within(a, left)?;
+                self.count_within(b, left)
+            }
+            Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => {
+                args.iter().try_for_each(|a| self.count_within(a, left))
+            }
+            Type::Fn { params, ret, .. } => {
+                params.iter().try_for_each(|p| self.count_within(p, left))?;
+                self.count_within(ret, left)
+            }
+            _ => Some(()),
+        }
+    }
+
+    /// Each of `ts` written out, within the same `left`, into a vector sized for them.
+    fn apply_all(&self, ts: &[Type], left: &mut usize) -> Option<Vec<Type>> {
+        let mut out = Vec::with_capacity(ts.len());
+        for t in ts {
+            out.push(self.apply_within(t, left)?);
+        }
+        Some(out)
     }
 
     /// Resolve a row: expand bound tail variables, accumulating their effects. Returns the
@@ -189,7 +237,7 @@ impl InferCtx {
         if let (Type::Var(TypeVar(x)), Type::Var(TypeVar(y))) = (a, b) {
             // Only two bound variables lead anywhere a later pair can repeat; an unbound one is bound here and now.
             let bound = |v: &u32| self.type_bindings[*v as usize].is_some();
-            if x == y || (bound(x) && bound(y) && !met.insert((*x, *y))) {
+            if x == y {
                 return Ok(());
             }
         }
