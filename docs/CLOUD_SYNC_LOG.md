@@ -5482,4 +5482,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (criterion 2 re-measured 2026-10-23: 355/355, reference in sync); (4) #56's `everything` `39905652720` `miri-slow`
   (delulu-broker); (5) `docs/CLOUD_ROUTINE.md`: the owner's setup script (saved 12:02 IST) and whether the first run shows
   xhigh; (6) a records commit after #58 for (5).
+
+### 2026-10-23 (evening) — RUSTSEC-2026-0385: ctutils 0.4.5 (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/ctutils-0385` (on `master` `30e714b`)   Pull request: opened with this push
+- **Read first:** `launch/2.0.0` `cab60c7`'s `everything` `39911650269`: **18 of 18 jobs success** (the broker's Miri
+  2 h 29 min, the checker's 1 h 23 min), and its release dry run `39911653388`: four packages success, release skipped.
+  #56's `everything` `39905652720`: **18 of 18 success**, `miri-slow` (delulu-broker) included (1 h 46 min).
+- **What:** #59's CI `39929350206` (`master` merged into `laptop/send-rebind`, `6d1242c`) went red on `supply-chain`:
+  RUSTSEC-2026-0385, published on 2026-10-23, against `ctutils` 0.4.2. This is the one-line lockfile update; see V2_LOG's
+  entry of the same name. `master` and `launch/2.0.0` carry the same lockfile and are red the same way until it lands.
+- Files and folders: M `Cargo.lock`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** land this, merge `master` into #59 and land it; then the launch merge takes #58, #59 and this, and
+  CHECKLIST-2.0 criteria 1, 3 and 4 are re-cited from that tree's own `everything` run (criterion 4 gains this advisory).
 - Survey and doctor (after the last edit): in the commit message.
