@@ -1,0 +1,18 @@
+module t.nongenhide
+
+fn hide2(f: fn() -> Unit ! {Write}) -> fn() -> Unit {
+    f
+}
+
+fn writer(out: Cap[Console]) -> fn() -> Unit ! {Write} {
+    fn() -> Unit ! {Write} { out.println("P3-04-NONGENERIC-HIDE-LEAK") }
+}
+
+fn pure_caller(out: Cap[Console]) -> Unit {
+    let f = hide2(writer(out))
+    f()
+}
+
+fn main(root: Root) ! {Write} {
+    pure_caller(root.console())
+}

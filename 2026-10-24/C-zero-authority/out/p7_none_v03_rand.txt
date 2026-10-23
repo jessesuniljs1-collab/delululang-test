@@ -1,0 +1,7 @@
+error[DL0703]: `rand` was not granted to this program — pass `--grant rand`
+  --> progs/v03_rand.delulu:4:13
+   |
+ 4 |     let r = root.rand().int(0, 10)
+   |             ^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

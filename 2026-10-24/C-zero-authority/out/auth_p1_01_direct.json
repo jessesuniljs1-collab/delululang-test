@@ -1,0 +1,84 @@
+{
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `leak` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_01_direct.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 37,
+                "start_byte": 37
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1_01_direct.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 20,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 130,
+            "col": 30,
+            "line": 8
+          },
+          "file": "progs/p1_01_direct.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 121,
+            "col": 21,
+            "line": 8
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 1
+  }
+}

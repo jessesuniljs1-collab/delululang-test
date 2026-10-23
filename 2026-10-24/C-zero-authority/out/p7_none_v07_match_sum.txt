@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/v07_match_sum.delulu:14:5
+   |
+14 |     root.console().println("V07-AREA " + str(area(Rect(2, 5))))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

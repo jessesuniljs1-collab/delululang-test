@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/p4_11_actor_holds_cap_ok.delulu:16:28
+   |
+16 |     let sp = spawn Speaker(root.console())
+   |                            ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/hello.delulu:4:15
+   |
+ 4 |     let out = root.console()
+   |               ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

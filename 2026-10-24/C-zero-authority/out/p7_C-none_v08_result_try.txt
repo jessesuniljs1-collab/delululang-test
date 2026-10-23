@@ -1,0 +1,10 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_37b3516ebdd1e2de10da37ec078ecd2a`
+custody: daemon
+error[DL0703]: `console` was not granted to this program — the lease this run redeemed (node `g_37b3516ebdd1e2de10da37ec078ecd2a`) does not carry `console`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> progs/v08_result_try.delulu:24:5
+   |
+24 |     root.console().println("V08 " + describe("42") + " / " + describe("x"))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

@@ -1,8 +1,8 @@
-mode=[gets] scope=[127.0.0.1] url=[https://example.com/] header=[Authorization]
-error[DL0904]: host of `https://example.com/` is not in the granted allowlist
-  --> progs/sec.delulu:23:15
+mode=[get] scope=[127.0.0.1:GET,POST] url=[https://] header=[]
+error[DL0904]: host of `https://` is not in the granted allowlist
+  --> progs/sec.delulu:43:15
    |
-23 |         match c.get_with_secret(url, hs, hname, tok) {
-   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+43 |         match c.get(url) {
+   |               ^^^^^^^^^^ runtime fault here
   explain: delulu explain E-DL0904
 

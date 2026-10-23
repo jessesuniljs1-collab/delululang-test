@@ -1,0 +1,19 @@
+module t.topspawn
+
+actor Worker {
+    var done: Int
+
+    new() {
+        self.done = 0
+    }
+
+    be job(n: Int) {
+        self.done = self.done + n
+    }
+}
+
+let W = spawn Worker()
+
+fn main(root: Root) ! {Write} {
+    root.console().println("P5-05-TOPLEVEL-SPAWN-MAIN")
+}

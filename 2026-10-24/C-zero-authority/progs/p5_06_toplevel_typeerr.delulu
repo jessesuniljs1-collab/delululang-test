@@ -1,0 +1,7 @@
+module t.toptype
+
+let Y: Int = "not an int"
+
+fn main(root: Root) ! {Write} {
+    root.console().println("P5-06-TOPLEVEL-TYPE")
+}

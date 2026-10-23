@@ -1,0 +1,8 @@
+error[DL0501]: function `main` performs effect `Write` not declared in its row
+  --> progs/v12_console_read_none.delulu:3:4
+   |
+ 3 | fn main(root: Root) ! {Read} {
+   |    ^^^^ declared row is here
+  repair: add_effect_to_row (exact)  [widens authority — review before applying]
+  explain: delulu explain E-DL0501
+

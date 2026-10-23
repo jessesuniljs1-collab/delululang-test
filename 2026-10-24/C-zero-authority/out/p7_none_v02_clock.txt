@@ -1,0 +1,7 @@
+error[DL0703]: `clock` was not granted to this program — pass `--grant clock`
+  --> progs/v02_clock.delulu:4:13
+   |
+ 4 |     let t = root.clock().now_ms()
+   |             ^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

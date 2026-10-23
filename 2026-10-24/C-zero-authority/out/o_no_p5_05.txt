@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/p5_05_toplevel_spawn.delulu:18:5
+   |
+18 |     root.console().println("P5-05-TOPLEVEL-SPAWN-MAIN")
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

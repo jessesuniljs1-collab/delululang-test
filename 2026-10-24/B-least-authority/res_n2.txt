@@ -1,0 +1,96 @@
+#01 exit=1 CONNS=0  url=[https://localhost/api/x] mode=get
+     -> error[DL0904]: host of `https://localhost/api/x` is not in the granted allowlist 
+#02 exit=1 CONNS=0  url=[https://127.1/api/x] mode=get
+     -> error[DL0904]: host of `https://127.1/api/x` is not in the granted allowlist 
+#03 exit=1 CONNS=0  url=[https://2130706433/api/x] mode=get
+     -> error[DL0904]: host of `https://2130706433/api/x` is not in the granted allowlist 
+#04 exit=1 CONNS=0  url=[https://0x7f000001/api/x] mode=get
+     -> error[DL0904]: host of `https://0x7f000001/api/x` is not in the granted allowlist 
+#05 exit=1 CONNS=0  url=[https://0177.0.0.1/api/x] mode=get
+     -> error[DL0904]: host of `https://0177.0.0.1/api/x` is not in the granted allowlist 
+#06 exit=1 CONNS=0  url=[https://127.000.000.001/api/x] mode=get
+     -> error[DL0904]: host of `https://127.000.000.001/api/x` is not in the granted allowlist 
+#07 exit=1 CONNS=0  url=[https://[::1]/api/x] mode=get
+     -> error[DL0904]: host of `https://[::1]/api/x` is not in the granted allowlist 
+#08 exit=1 CONNS=0  url=[https://[::ffff:127.0.0.1]/api/x] mode=get
+     -> error[DL0904]: host of `https://[::ffff:127.0.0.1]/api/x` is not in the granted allowlist 
+#09 exit=1 CONNS=0  url=[https://127.0.0.1./api/x] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1./api/x` is not in the granted allowlist 
+#10 exit=0 CONNS=0  url=[https://a@127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `https://a@127.0.0.1/api/x` was not delivered: the URL carries userinfo (`user@host`), which is refused rather than parsed [egress: userinfo] 
+#11 exit=0 CONNS=0  url=[https://user:pw@127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `https://user:pw@127.0.0.1/api/x` was not delivered: the URL carries userinfo (`user@host`), which is refused rather than parsed [egress: userinfo] 
+#12 exit=1 CONNS=0  url=[https://127.0.0.1:443@example.com/] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1:443@example.com/` is not in the granted allowlist 
+#13 exit=1 CONNS=0  url=[https://127.0.0.1@example.com/] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1@example.com/` is not in the granted allowlist 
+#14 exit=0 CONNS=0  url=[HTTPS://127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `HTTPS://127.0.0.1/api/x` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#15 exit=0 CONNS=0  url=[http://127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `http://127.0.0.1/api/x` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#16 exit=0 CONNS=1 01:05:10 lport=8443 peer=127.0.0.1 client_port=58051 sni=- len=233 hex=16030100e4010000e0030310..; url=[https://127.0.0.1:8443/api/x] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1:8443/api/x` was not delivered: the connection could not be made [egress: connect] 
+#17 exit=0 CONNS=1 01:05:11 lport=4443 peer=127.0.0.1 client_port=58052 sni=- len=233 hex=16030100e4010000e00303a6..; url=[https://127.0.0.1:4443/api/x] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1:4443/api/x` was not delivered: the connection could not be made [egress: connect] 
+#18 exit=0 CONNS=1 01:05:12 lport=80 peer=127.0.0.1 client_port=58053 sni=- len=233 hex=16030100e4010000e0030399..; url=[https://127.0.0.1:80/api/x] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1:80/api/x` was not delivered: the connection could not be made [egress: connect] 
+#19 exit=0 CONNS=1 01:05:13 lport=443 peer=127.0.0.1 client_port=58054 sni=- len=233 hex=16030100e4010000e00303ae..; url=[https://127.0.0.1:443/api/x] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1:443/api/x` was not delivered: the connection could not be made [egress: connect] 
+#20 exit=0 CONNS=0  url=[https://127.0.0.1:0/api/x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1:0/api/x` was not delivered: the URL is refused rather than normalized: the port is not a canonical number from 1 to 65535 [egress: 
+#21 exit=0 CONNS=0  url=[https://127.0.0.1:65536/api/x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1:65536/api/x` was not delivered: the URL is refused rather than normalized: the port is not a canonical number from 1 to 65535 [egr 
+#22 exit=0 CONNS=0  url=[https://127.0.0.1:abc/api/x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1:abc/api/x` was not delivered: the URL is refused rather than normalized: the port is not a canonical number from 1 to 65535 [egres 
+#23 exit=1 CONNS=0  url=[https://127.0.0.1\@example.com/] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1\@example.com/` is not in the granted allowlist 
+#24 exit=1 CONNS=0  url=[https://example.com#@127.0.0.1/] mode=get
+     -> error[DL0904]: host of `https://example.com#@127.0.0.1/` is not in the granted allowlist 
+#25 exit=1 CONNS=0  url=[https://example.com?@127.0.0.1/] mode=get
+     -> error[DL0904]: host of `https://example.com?@127.0.0.1/` is not in the granted allowlist 
+#26 exit=1 CONNS=0  url=[https://127.0.0.1.example.com/] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1.example.com/` is not in the granted allowlist 
+#27 exit=1 CONNS=0  url=[https://127.0.0.1 /api/x] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1 /api/x` is not in the granted allowlist 
+#28 exit=1 CONNS=0  url=[https://%31%32%37.0.0.1/api/x] mode=get
+     -> error[DL0904]: host of `https://%31%32%37.0.0.1/api/x` is not in the granted allowlist 
+#29 exit=1 CONNS=0  url=[https://１２７.０.０.１/api/x] mode=get
+     -> error[DL0904]: host of `https://１２７.０.０.１/api/x` is not in the granted allowlist 
+#30 exit=1 CONNS=0  url=[https://127.0.0.1%00.example.com/] mode=get
+     -> error[DL0904]: host of `https://127.0.0.1%00.example.com/` is not in the granted allowlist 
+#31 exit=1 CONNS=0  url=[https:///127.0.0.1/api/x] mode=get
+     -> error[DL0904]: host of `https:///127.0.0.1/api/x` is not in the granted allowlist 
+#32 exit=0 CONNS=0  url=[https:127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `https:127.0.0.1/api/x` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#33 exit=0 CONNS=0  url=[//127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `//127.0.0.1/api/x` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#34 exit=0 CONNS=0  url=[127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `127.0.0.1/api/x` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#35 exit=1 CONNS=0  url=[https://LOCALHOST/api/x] mode=get
+     -> error[DL0904]: host of `https://LOCALHOST/api/x` is not in the granted allowlist 
+#36 exit=1 CONNS=0  url=[https://0.0.0.0/api/x] mode=get
+     -> error[DL0904]: host of `https://0.0.0.0/api/x` is not in the granted allowlist 
+#37 exit=1 CONNS=0  url=[https://127.0.0.2/api/x] mode=get
+     -> error[DL0904]: host of `https://127.0.0.2/api/x` is not in the granted allowlist 
+#38 exit=0 CONNS=1 01:05:25 lport=443 peer=127.0.0.1 client_port=58058 sni=- len=233 hex=16030100e4010000e0030382..; url=[https://127.0.0.1/api/x?q=1#frag] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1/api/x?q=1#frag` was not delivered: the connection could not be made [egress: connect] 
+#39 exit=0 CONNS=1 01:05:26 lport=443 peer=127.0.0.1 client_port=58059 sni=- len=233 hex=16030100e4010000e00303fa..; url=[https://127.0.0.1/api/../admin] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1/api/../admin` was not delivered: the connection could not be made [egress: connect] 
+#40 exit=0 CONNS=1 01:05:27 lport=443 peer=127.0.0.1 client_port=58060 sni=- len=233 hex=16030100e4010000e003035d..; url=[https://127.0.0.1/api/%2e%2e/admin] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1/api/%2e%2e/admin` was not delivered: the connection could not be made [egress: connect] 
+#41 exit=0 CONNS=1 01:05:28 lport=443 peer=127.0.0.1 client_port=58061 sni=- len=233 hex=16030100e4010000e003034b..; url=[https://127.0.0.1//api/x] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1//api/x` was not delivered: the connection could not be made [egress: connect] 
+#42 exit=0 CONNS=1 01:05:28 lport=443 peer=127.0.0.1 client_port=58062 sni=- len=233 hex=16030100e4010000e003031f..; url=[https://127.0.0.1/API/x] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1/API/x` was not delivered: the connection could not be made [egress: connect] 
+#43 exit=0 CONNS=0  url=[https://127.0.0.1/api\x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1/api\\x` was not delivered: the URL is refused rather than normalized: it contains a backslash, which URL parsers read as `/` [egre 
+#44 exit=0 CONNS=1 01:05:30 lport=443 peer=127.0.0.1 client_port=58063 sni=- len=233 hex=16030100e4010000e0030329..; url=[https://127.0.0.1/admin] mode=get
+     -> ERR:Other(connection failed) note: the request to `https://127.0.0.1/admin` was not delivered: the connection could not be made [egress: connect] 
+#45 exit=0 CONNS=0  url=[file:///C:/Windows/win.ini] mode=get
+     -> ERR:Refused note: the request to `file:///C:/Windows/win.ini` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#46 exit=0 CONNS=0  url=[ftp://127.0.0.1/] mode=get
+     -> ERR:Refused note: the request to `ftp://127.0.0.1/` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#47 exit=0 CONNS=0  url=[] mode=get
+     -> ERR:Refused note: the request to `` was not delivered: only `https://` is fetched; there is no plain-HTTP path [egress: scheme] 
+#48 exit=1 CONNS=0  url=[https://] mode=get
+     -> error[DL0904]: host of `https://` is not in the granted allowlist 

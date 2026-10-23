@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/p3_03_rowvar_hide.delulu:17:17
+   |
+17 |     pure_caller(root.console())
+   |                 ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

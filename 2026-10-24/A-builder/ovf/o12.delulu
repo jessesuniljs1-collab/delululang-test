@@ -1,0 +1,14 @@
+module ovf.o12
+
+fn id(x: Int) -> Int { x }
+
+fn rec(n: Int) -> Int {
+    if n == 0 { 0 } else { 1 + rec(n - 1) }
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    c.println("before")
+    c.println("rec100000 = " + str(rec(100000)))
+    c.println("after")
+}

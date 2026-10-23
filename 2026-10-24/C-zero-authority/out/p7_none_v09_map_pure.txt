@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/v09_map_pure.delulu:7:5
+   |
+ 7 |     root.console().println("V09-KEYS " + str(m.len()))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

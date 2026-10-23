@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/v08_result_try.delulu:24:5
+   |
+24 |     root.console().println("V08 " + describe("42") + " / " + describe("x"))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

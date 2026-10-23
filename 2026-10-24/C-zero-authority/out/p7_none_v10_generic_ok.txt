@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/v10_generic_ok.delulu:8:5
+   |
+ 8 |     root.console().println("V10-IDENT " + str(ident(5)))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

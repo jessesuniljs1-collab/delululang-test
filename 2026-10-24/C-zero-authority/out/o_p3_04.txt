@@ -1,0 +1,15 @@
+error[DL0401]: function body type must match the return type: expected `fn() -> Unit`, found `fn() -> Unit !{Write}`
+  --> progs/p3_04_nongeneric_hide.delulu:3:53
+   |
+ 3 | fn hide2(f: fn() -> Unit ! {Write}) -> fn() -> Unit {
+   |                                                     ^ type mismatch here
+  explain: delulu explain E-DL0401
+
+warning[DL0502]: function `main` declares effect `Write` it never performs
+  --> progs/p3_04_nongeneric_hide.delulu:16:21
+   |
+16 | fn main(root: Root) ! {Write} {
+   |                     ^^^^^^^^^ declared here
+  repair: remove_effect_from_row (safe)  [requires human decision]
+  explain: delulu explain E-DL0502
+

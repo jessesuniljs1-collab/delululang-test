@@ -1,0 +1,14 @@
+module ovf.o2
+
+fn id(x: Int) -> Int { x }
+
+fn rec(n: Int) -> Int {
+    if n == 0 { 0 } else { 1 + rec(n - 1) }
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    c.println("before")
+    c.println("max*2 = " + str(id(9223372036854775807) * 2))
+    c.println("after")
+}

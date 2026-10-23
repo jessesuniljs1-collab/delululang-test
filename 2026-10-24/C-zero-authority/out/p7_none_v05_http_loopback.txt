@@ -1,0 +1,7 @@
+error[DL0703]: `network host` was not granted to this program — pass `--grant net=HOST`
+  --> progs/v05_http_loopback.delulu:4:13
+   |
+ 4 |     let c = root.http(["127.0.0.1"])
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

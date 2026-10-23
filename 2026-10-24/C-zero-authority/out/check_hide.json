@@ -1,0 +1,98 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 323,
+            "col": 30,
+            "line": 16
+          },
+          "file": "progs/p3_03_rowvar_hide.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 314,
+            "col": 21,
+            "line": 16
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "function body type must match the return type: expected `fn() -> Unit`, found `fn() -> Unit !{Write}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 82,
+            "col": 2,
+            "line": 5
+          },
+          "file": "progs/p3_04_nongeneric_hide.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 73,
+            "col": 53,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 332,
+            "col": 30,
+            "line": 16
+          },
+          "file": "progs/p3_04_nongeneric_hide.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 323,
+            "col": 21,
+            "line": 16
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 2
+  }
+}

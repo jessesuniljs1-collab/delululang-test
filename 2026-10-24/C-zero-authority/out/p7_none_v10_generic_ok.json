@@ -1,0 +1,59 @@
+{
+  "command": "run",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0703",
+      "explanation_id": "E-DL0703",
+      "message": "`console` was not granted to this program — pass `--grant console`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 98,
+            "col": 19,
+            "line": 8
+          },
+          "file": "progs/v10_generic_ok.delulu",
+          "label": "runtime fault here",
+          "start": {
+            "byte": 84,
+            "col": 5,
+            "line": 8
+          }
+        }
+      ]
+    }
+  ],
+  "egress": {
+    "not_delivered": 0,
+    "records": [],
+    "records_kept": 0,
+    "requests": 0
+  },
+  "outcome": {
+    "exit": 1,
+    "ran": true
+  },
+  "sandbox": {
+    "backend": "inproc",
+    "break_glass": false,
+    "granted": "none",
+    "host_guarantees": [],
+    "level": 0,
+    "limits": {
+      "cpu_seconds": 300,
+      "enforced_by": "a host watchdog sampling this process every 25 ms; a run can overshoot by what it allocates in one interval",
+      "memory_bytes": 1073741824,
+      "wall_seconds": null
+    },
+    "mode": "strict",
+    "requested": "none"
+  },
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}

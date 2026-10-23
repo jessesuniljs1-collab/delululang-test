@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/v11_closure_capture_pure.delulu:9:5
+   |
+ 9 |     root.console().println("V11-ADD " + str(f(5)))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

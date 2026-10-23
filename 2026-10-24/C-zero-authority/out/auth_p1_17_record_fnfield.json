@@ -1,0 +1,89 @@
+{
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "record field type mismatch: expected `fn(Str) -> Unit`, found `fn(Str) -> Unit !{Write}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 156,
+            "col": 57,
+            "line": 8
+          },
+          "file": "progs/p1_17_record_fnfield.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 119,
+            "col": 20,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `Handler` has no method `run`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 201,
+            "col": 10,
+            "line": 12
+          },
+          "file": "progs/p1_17_record_fnfield.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 198,
+            "col": 7,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 256,
+            "col": 30,
+            "line": 15
+          },
+          "file": "progs/p1_17_record_fnfield.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 247,
+            "col": 21,
+            "line": 15
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 1
+  }
+}

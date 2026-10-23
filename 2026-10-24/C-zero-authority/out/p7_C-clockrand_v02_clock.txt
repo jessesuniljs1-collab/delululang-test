@@ -1,0 +1,4 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_3786d98041549dfe4d7abc3e04133fa1`
+custody: daemon
+V02-CLOCK true

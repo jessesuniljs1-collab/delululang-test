@@ -1,0 +1,7 @@
+module t.unann
+
+fn main(root: Root) ! {Write} {
+    let zs = ["a"]
+    zs.push("c")
+    root.console().println(str(zs.len()))
+}

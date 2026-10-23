@@ -1,0 +1,13 @@
+{
+  "command": "grants",
+  "count": 0,
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "proposals": [],
+  "schema": 1,
+  "subcommand": "proposals",
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

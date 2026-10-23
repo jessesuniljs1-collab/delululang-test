@@ -1,0 +1,7 @@
+error[DL0703]: `console` was not granted to this program — pass `--grant console`
+  --> progs/v06_pure_compute.delulu:13:5
+   |
+13 |     root.console().println("V06-TOTAL " + str(total(ys)))
+   |     ^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

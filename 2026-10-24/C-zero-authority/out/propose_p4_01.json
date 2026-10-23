@@ -1,0 +1,29 @@
+{
+  "call": "root.fs_read(\"./a\")",
+  "command": "grants",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "filed": null,
+  "not_filed": null,
+  "program": "progs/p4_01_dotdot.delulu",
+  "proposal": [
+    "fs.read=./a"
+  ],
+  "proposes": true,
+  "reason": "the narrowest grant for the refused call (DL0703 at progs/p4_01_dotdot.delulu:4:13) — that call's own requirement, read from the source",
+  "refusal": {
+    "at": {
+      "column": 13,
+      "line": 4
+    },
+    "code": "DL0703",
+    "message": "filesystem read of `./a` was not granted — the lease this run redeemed (node `g_3786d98041549dfe4d7abc3e04133fa1`) does not carry `fs.read=./a`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)"
+  },
+  "report": "out/r_cr_p4_01_dotdot.json",
+  "schema": 1,
+  "subcommand": "propose",
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
