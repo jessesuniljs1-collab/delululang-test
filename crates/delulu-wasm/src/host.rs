@@ -341,6 +341,12 @@ impl HostState {
     /// [`HostState::custody_allows`] for a network use naming its request path (P9-05, D-V2-169): the custody judges it
     /// and names it in the use's record, as the interpreter's gate does.
     fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
+        self.custody_allows_by(op, arg, url_path, None)
+    }
+
+    /// [`HostState::custody_allows_at`] by a network use's HTTP method when it is not a GET (P9-05 (d), D-V2-183: `post`),
+    /// judged and recorded beside the path, as the interpreter's gate asks it.
+    fn custody_allows_by(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> bool {
         // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
         // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
         // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
@@ -350,8 +356,7 @@ impl HostState {
             }
         }
         let Some(custody) = &self.custody else { return true };
-        // The WASM engine makes GET requests only: `post` is not compiled there yet (P9-05 (d), D-V2-183).
-        match custody.borrow_mut().check_at(op, arg, url_path, None) {
+        match custody.borrow_mut().check_at(op, arg, url_path, method) {
             CustodyDecision::Allow => true,
             CustodyDecision::Deny(d) => {
                 self.refused = Some(format!("{}: {}", d.code, d.message));
@@ -1488,6 +1493,87 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         0
                     }
                     None => unheld(&mut caller, "http.get", &answer, 0),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // `Cap[Http].post(url, headers, body)` (P9-05 (d), D-V2-183), as `http_get` is: the custody on the URL's host, path AND
+    // method (POST), unless the URL is not `https://`; then the interpreter's own `post` — the allowlist by method, the
+    // egress client with its redirect rules and all. An egress refusal after the custody allowed it is said to the custody.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_post",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             body_ptr: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (allow, special) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Http capability"));
+                        return 0;
+                    }
+                };
+                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
+                    caller.data_mut().refused = Some("DL0903: http post URL pointer is out of bounds".into());
+                    return 0;
+                };
+                let Some(body) = read_guest_str(&mut caller, body_ptr) else {
+                    caller.data_mut().refused = Some("DL0903: a request body lies outside the guest's memory".into());
+                    return 0;
+                };
+                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
+                let headers = hs.pop().unwrap_or(Value::Unit);
+                caller.data_mut().push_trace("Net", "post", "Http", Some(url.clone()), file, start, end);
+                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+                if let Some(h) = &host {
+                    let url_path = delulu_runtime::prim::request_path(&url);
+                    if !caller.data_mut().custody_allows_by(CustodyOp::Net, Some(h), Some(url_path), None) {
+                        caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
+                        return 0;
+                    }
+                    delulu_runtime::egress::begin_fetch();
+                }
+                let capv = delulu_runtime::value::CapVal {
+                    kind: delulu_check::ResourceKind::Http,
+                    scope: delulu_runtime::value::CapScope::Net { allow, special },
+                };
+                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+                let args = [Value::str(url.clone()), headers, Value::str(body)];
+                let answer = delulu_runtime::prim::call_cap_method(&capv, "post", &args, span);
+                if let Some(h) = &host {
+                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+                        if let Some(custody) = &caller.data().custody {
+                            custody.borrow_mut().note_egress_refusal(h, reason);
+                        }
+                    }
+                }
+                let answer = match answer {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
+                        return 0;
+                    }
+                };
+                match build_net_answer(&mut caller, &answer) {
+                    Some(Ok(ptr)) => ptr,
+                    Some(Err(())) => {
+                        caller.data_mut().refused = Some("guest heap exhausted building the http result".into());
+                        0
+                    }
+                    None => unheld(&mut caller, "http.post", &answer, 0),
                 }
             },
         )
