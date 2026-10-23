@@ -5446,3 +5446,29 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
 
+### 2026-10-23 (afternoon) — #56 and #57 landed; the routine checked (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/records-1023` (on `master` `85f6b5c`)   Pull request: the one this entry rides in
+- **Landed and read:**
+  - #56 (D-V2-179): run `39905613592` **success**, master `d4c6e1a`. Its `jobs=everything` `39905652720` on
+    `d4c6e1a`'s branch head: every job **success** so far, `miri-slow` (delulu-check) included, so the unifier's sets did
+    not push it past its limit; `miri-slow` (delulu-broker) still running at this entry.
+  - #57 (D-V2-180, D-V2-181, and a merge of master): run `39908682203` **success**, master `85f6b5c`. Its first run
+    `39907090579`, on `839b975`, was cancelled when the branch moved on.
+- **A self-attack on D-V2-179's bound:** seven other ways of building a large type (nested `dup(dup(…))`, a `dup`
+  chain, `str`, `==`, `match`, a `Box` around each pair, a closure) were each refused at depth 40 in about 0.1 s; the
+  closure's program did not parse, so that shape was not tested. A first pass reported them still exponential: its
+  binary was built before master was merged into the branch. Rebuilt from the merged tree, the bound held.
+- **The routine, checked at the owner's request:** paused, Opus 5.5, `5 */6 * * *`; the prompt as the owner last edited
+  it on 2026-10-21. Effort: see `docs/CLOUD_ROUTINE.md` (the owner set `CLAUDE_CODE_EFFORT_LEVEL=xhigh` in the cloud
+  environment on 2026-10-23; the next run reports what it saw). No setup script; the network reaches crates.io, the
+  Rust servers and the GitHub API; the Claude-Docs connector is attached and unused. The prompt's line that the settings
+  file sets the effort is left for the owner to change.
+- **What:** records only: `docs/CLOUD_ROUTINE.md` (effort, setup script) and HANDOFF §11.5 (a static verdict that judges
+  the mint judges half the authority).
+- Files and folders: M `docs/CLOUD_ROUTINE.md`, `HANDOFF.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **Open / next:** read `39905652720`'s `miri-slow` (delulu-broker); the next launch merge takes #54 to #57: four
+  CHANGELOG sections, the DL0211 bound in 2.0.0's Breaking paragraph, and `--within`/`deploy plan` stricter.
+- Survey and doctor (after the last edit): in the commit message.
+

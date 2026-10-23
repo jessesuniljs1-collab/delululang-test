@@ -719,7 +719,6 @@ pub(crate) fn secret_destinations(modules: &[&delulu_syntax::ast::Module], map: 
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
-        mutated: Default::default(),
     };
     w.modules(modules);
     w.out
@@ -755,7 +754,6 @@ pub(crate) fn request_sites(
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
-        mutated: Default::default(),
     };
     w.modules(&[module]);
     w.sites
@@ -773,7 +771,6 @@ pub(crate) fn secret_sends(modules: &[&delulu_syntax::ast::Module]) -> Vec<Secre
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
-        mutated: Default::default(),
     };
     w.modules(modules);
     w.sends
@@ -797,7 +794,6 @@ pub(crate) fn request_destinations(
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
-        mutated: Default::default(),
     };
     w.modules(&[module]);
     w.requests
@@ -812,15 +808,15 @@ impl SendWalk<'_> {
                 match item {
                     // Each body is a block, and a block's names end with it: a parameter, which no `let` in the body
                     // bound, is never attributed.
-                    Item::Fn(f) => w.body(&f.body),
-                    Item::Test(t) => w.body(&t.body),
+                    Item::Fn(f) => w.block(&f.body),
+                    Item::Test(t) => w.block(&t.body),
                     Item::Actor(a) => {
-                        w.body(&a.ctor.body);
+                        w.block(&a.ctor.body);
                         for b in &a.behaviors {
-                            w.body(&b.body);
+                            w.block(&b.body);
                         }
                         for f in &a.fns {
-                            w.body(&f.body);
+                            w.block(&f.body);
                         }
                     }
                     _ => {}
@@ -841,105 +837,15 @@ struct SendWalk<'a> {
     requests: Vec<Json>,
     sends: Vec<SecretSend>,
     sites: Vec<RequestSite>,
-    /// Every name the body being walked assigns anywhere (`assigned`): what a closure in it reads as unknown, since it may
-    /// run after any of those assignments (SEND-REBIND-1).
-    mutated: std::collections::BTreeSet<String>,
-}
-
-/// Every name `b` assigns (`x = …`), at any depth: its blocks, loops, arms and closures (SEND-REBIND-1).
-fn assigned(b: &delulu_syntax::ast::Block) -> std::collections::BTreeSet<String> {
-    use delulu_syntax::ast::{Expr, LValue, Stmt};
-    fn block(b: &delulu_syntax::ast::Block, out: &mut std::collections::BTreeSet<String>) {
-        for s in &b.stmts {
-            match s {
-                Stmt::Let { value, .. } => expr(value, out),
-                Stmt::Assign { target, value, .. } => {
-                    if let LValue::Var(name) = target {
-                        out.insert(name.name.clone());
-                    }
-                    expr(value, out);
-                }
-                Stmt::While { cond, body, .. } => {
-                    expr(cond, out);
-                    block(body, out);
-                }
-                Stmt::For { iter, body, .. } => {
-                    expr(iter, out);
-                    block(body, out);
-                }
-                Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => expr(e, out),
-                Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
-            }
-        }
-    }
-    fn expr(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
-        match e {
-            Expr::Method { recv, args, .. } => {
-                expr(recv, out);
-                args.iter().for_each(|a| expr(a, out));
-            }
-            Expr::List { items, .. } => items.iter().for_each(|a| expr(a, out)),
-            Expr::Record { fields, .. } => fields.iter().for_each(|(_, v)| expr(v, out)),
-            Expr::Call { callee, args, .. } => {
-                expr(callee, out);
-                args.iter().for_each(|a| expr(a, out));
-            }
-            Expr::Field { recv, .. } | Expr::Unary { operand: recv, .. } | Expr::Try { inner: recv, .. } => expr(recv, out),
-            Expr::Index { recv, index, .. } => {
-                expr(recv, out);
-                expr(index, out);
-            }
-            Expr::Binary { lhs, rhs, .. } => {
-                expr(lhs, out);
-                expr(rhs, out);
-            }
-            Expr::If { cond, then_, else_, .. } => {
-                expr(cond, out);
-                block(then_, out);
-                if let Some(e) = else_ {
-                    expr(e, out);
-                }
-            }
-            Expr::Match { scrutinee, arms, .. } => {
-                expr(scrutinee, out);
-                arms.iter().for_each(|a| expr(&a.body, out));
-            }
-            Expr::Lambda { body, .. } | Expr::Recover { body, .. } | Expr::Block(body) => block(body, out),
-            Expr::Spawn { args, .. } => args.iter().for_each(|a| expr(a, out)),
-            Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => {}
-        }
-    }
-    let mut out = std::collections::BTreeSet::new();
-    block(b, &mut out);
-    out
 }
 
 impl SendWalk<'_> {
-    /// A function's, test's, behaviour's or constructor's body, with the names it assigns anywhere (`mutated`).
-    fn body(&mut self, b: &delulu_syntax::ast::Block) {
-        self.mutated = assigned(b);
-        self.block(b);
-    }
-
-    /// A name assigned in `names` no longer holds the secret it was bound to: it may hold another (SEND-REBIND-1).
-    fn forget<'n>(&mut self, names: impl IntoIterator<Item = &'n String>) {
-        for n in names {
-            if let Some(held) = self.vars.get_mut(n) {
-                *held = None;
-            }
-        }
-    }
-
-    /// A block's own names end with it, and a name it assigns from outside holds, after it, either value
-    /// (SEND-REBIND-1: `if c { tok = root.secret("B") }` was undone at the block's end, so a send after it was attributed to
-    /// the secret `tok` held before, and `--within` decided it by that secret's audience).
     fn block(&mut self, b: &delulu_syntax::ast::Block) {
         let saved = self.vars.clone();
         for s in &b.stmts {
             self.stmt(s);
         }
         self.vars = saved;
-        self.forget(&assigned(b));
     }
 
     fn stmt(&mut self, s: &delulu_syntax::ast::Stmt) {
@@ -957,15 +863,12 @@ impl SendWalk<'_> {
                     self.vars.insert(name.name.clone(), held);
                 }
             }
-            // A loop's body runs again after it assigns, so a name it assigns is unknown from its first statement on.
             Stmt::While { cond, body, .. } => {
-                self.forget(&assigned(body));
                 self.expr(cond);
                 self.block(body);
             }
             Stmt::For { var, iter, body, .. } => {
                 self.expr(iter);
-                self.forget(&assigned(body));
                 let saved = self.vars.clone();
                 self.vars.insert(var.name.clone(), None);
                 self.block(body);
@@ -1074,23 +977,15 @@ impl SendWalk<'_> {
                     }
                     self.expr(&arm.body);
                     self.vars = saved;
-                    if let Expr::Block(b) = &arm.body {
-                        self.forget(&assigned(b));
-                    }
                 }
             }
-            // A closure runs when it is called, after any assignment its function makes: the names assigned there are
-            // unknown inside it, and a name it assigns is unknown after it.
             Expr::Lambda { params, body, .. } => {
                 let saved = self.vars.clone();
-                let mutated = self.mutated.clone();
-                self.forget(&mutated);
                 for p in params {
                     self.vars.insert(p.name.name.clone(), None);
                 }
                 self.block(body);
                 self.vars = saved;
-                self.forget(&assigned(body));
             }
             Expr::Try { inner, .. } => self.expr(inner),
             Expr::Block(b) => self.block(b),
