@@ -404,14 +404,18 @@ fn a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_metho
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let guard = DaemonGuard { state: state.clone() };
     let secret = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
-    let daemon = |file: &str| {
+    let daemon_on = |file: &str, engine: &str| {
         let net = "net.special=127.0.0.1:GET,POST";
         delulu_in(
             &cwd,
             &state,
-            &["run", file, "--grant", "console", "--grant", net, "--grant", &secret, "--no-prompt", "--broker", "daemon"],
+            &[
+                "run", file, "--grant", "console", "--grant", net, "--grant", &secret, "--no-prompt", "--broker", "daemon",
+                "--engine", engine,
+            ],
         )
     };
+    let daemon = |file: &str| daemon_on(file, "interp");
     let audit_dir = state.join("audit").to_string_lossy().to_string();
     let records = || -> Vec<serde_json::Value> {
         let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
@@ -424,25 +428,37 @@ fn a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_metho
     assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("a `POST` to"), "{}{}", stdout(&o), stderr(&o));
     assert_eq!(sends(&records()), 0, "{:#?}", records());
     assert!(l.accept().is_err(), "nothing connected");
-    let accepter = std::thread::spawn(move || {
-        let started = std::time::Instant::now();
-        loop {
-            match l.accept() {
-                Ok(_) => return true,
-                Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
-                    std::thread::sleep(std::time::Duration::from_millis(10))
+    // Each engine's POST, the interpreter's and then the WASM engine's (the host's `send_with_secret`).
+    let accept = |l: std::net::TcpListener| {
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            loop {
+                match l.accept() {
+                    Ok(_) => return true,
+                    Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10))
+                    }
+                    Err(_) => return false,
                 }
-                Err(_) => return false,
             }
-        }
-    });
-    let o = daemon("post.delulu");
-    assert_eq!(o.status.code(), Some(0), "{}{}", stdout(&o), stderr(&o));
-    assert!(accepter.join().unwrap(), "the POST went out: {}{}", stdout(&o), stderr(&o));
-    let rs = records();
-    assert_eq!(sends(&rs), 1, "{rs:#?}");
-    let used = rs.iter().find(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "allow");
-    assert_eq!(used.map(|r| r["authority"]["method"].clone()), Some(serde_json::json!("POST")), "{rs:#?}");
+        })
+    };
+    for (n, engine) in [(1, "interp"), (2, "wasm")] {
+        let accepter = accept(l.try_clone().unwrap());
+        let o = daemon_on("post.delulu", engine);
+        assert_eq!(o.status.code(), Some(0), "{engine}: {}{}", stdout(&o), stderr(&o));
+        assert!(accepter.join().unwrap(), "{engine}: the POST went out: {}{}", stdout(&o), stderr(&o));
+        let rs = records();
+        assert_eq!(sends(&rs), n, "{engine}: {rs:#?}");
+        let used: Vec<_> = rs
+            .iter()
+            .filter(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "allow")
+            .map(|r| r["authority"]["method"].clone())
+            .collect();
+        // The GET-only run's custody allowed the node's POST before the program's own capability refused it (RW 4.79): a
+        // `use allow` with no `send` after it. Then one for each engine's POST.
+        assert_eq!(used, vec![serde_json::json!("POST"); n + 1], "{engine}: {rs:#?}");
+    }
     for entry in std::fs::read_dir(state.join("audit")).unwrap() {
         let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
         assert!(!text.contains(CANARY), "the chain holds the bytes");

@@ -9075,3 +9075,31 @@ both secret-carrying methods to it. `--within`'s walk sees the send (the secret 
 - Mutants, each red: Q1 the pre-judgement as a GET, Q3 the walk blind to the send, Q4 the dispatch not routing the
   broker-held secret.
 - Conformance: anchor `ref.prim.http.post_with_secret`, four witnesses; 357/357.
+
+## 2026-10-23 (night, later) — the laptop: `http.post` on the WASM engine
+
+**What.** The import `delulu:cap.http_post(cap, url, headers, desc, body, file, start, end)` is in the module only where
+a `Cap[Http]` is minted and `post` is called. Its index follows `http_get_with_secret`'s, so a module without `post` is
+byte-identical to before. The host reads the URL and body, reifies the headers as `get_with_secret`'s are, asks the
+custody with the method (`custody_allows_by`, beside `custody_allows_at`, which now asks it with none) and performs the
+interpreter's own `post`. `post_with_secret` stays on the interpreter.
+
+**Evidence.**
+- `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now also runs `--engine wasm`, embedded
+  and under the daemon. The chain gains the WASM run's `POST allow` and `GET deny`.
+- `delulu build --target wasm` of a POST program wrote 1,860 bytes, and its imports name `http_get` and `http_post`.
+  So the run compiled; it did not fall back to the interpreter.
+- Mutant red: the host's gate asking with no method.
+
+**And `post_with_secret` on the WASM engine.** The host's `http_get_with_secret` body became one helper,
+`send_with_secret(caller, method, …, body_ptr: Option<i32>, …)`, with `http_get_with_secret` and a new
+`http_post_with_secret` as thin imports. The custody is asked by the method, and the body is read when its pointer is
+given. Codegen: the import, its 10-argument type, and the call. `broker_cli`
+`a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method` now runs the POST on both engines
+under the daemon, one connection and one `send` each. `build --target wasm` imports `http_post_with_secret`. Mutant
+red: the helper's custody asked with no method.
+
+**Found on the way (RW 4.79, open, LOW).** The GET-only run's custody recorded `use allow` with `method: POST`: the
+node's grant takes POST, while the program's own capability, narrower, refused the call after. The interpreter asks the
+custody before `prim` judges the capability, for every op. So the chain records a use the custody allowed and the
+program never made. Nothing is performed, and the run reports DL0904. The test counts that record and names the row.
