@@ -10,12 +10,7 @@
 use delulu_check::check_source;
 
 fn errors(src: &str) -> Vec<(String, String)> {
-    check_source(0, src)
-        .diagnostics
-        .iter()
-        .filter(|d| d.is_error())
-        .map(|d| (d.code.to_string(), d.message.clone()))
-        .collect()
+    check_source(0, src).diagnostics.iter().filter(|d| d.is_error()).map(|d| (d.code.to_string(), d.message.clone())).collect()
 }
 
 fn refused_with(src: &str, code: &str, words: &str) {

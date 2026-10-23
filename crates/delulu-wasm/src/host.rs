@@ -164,10 +164,9 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
             // `__alloc` traps this way when the memory cannot give an allocation (past WebAssembly's 4 GiB, or a growth the
             // engine refuses) — the backend emits no other out-of-bounds access — so the text names both.
             Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => MEMORY_EXHAUSTED.to_string(),
-            // The codegen traps checked `+`,`-`,`*` overflow and `%` by zero / INT_MIN%-1 via
-            // `unreachable`. The interpreter reports overflow as DL0901 and rem-by-zero as DL0902;
-            // the two are indistinguishable from the trap alone, so the common case (overflow)
-            // wins and the residual is documented in C20.
+            // The codegen traps checked `+`,`-`,`*` overflow and `INT_MIN % -1` via `unreachable`, each DL0901 on the
+            // interpreter too. `%` by zero is left to `i64.rem_s`, which traps `IntegerDivisionByZero` (DL0902, above);
+            // it used `unreachable` as well, and so read as overflow (C20's residual, closed 2026-10-24).
             Trap::UnreachableCodeReached => "DL0901: integer overflow".to_string(),
             _ => first_line(),
         },

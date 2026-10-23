@@ -44,6 +44,11 @@ fn wasm_fault_detail(src: &str) -> String {
 const DIVZERO: &str = "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(7 / 0)) }\n";
 const OVERFLOW: &str =
     "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(9223372036854775807 + 1)) }\n";
+// `%` (2026-10-24, A3 of the agent test campaign): the WASM helper trapped `% 0` with `unreachable`, which the host can
+// only read as overflow, so `7 % 0` was DL0902 on the interpreter and DL0901 on WASM. `INT_MIN % -1` is the overflow.
+const REMZERO: &str = "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(7 % 0)) }\n";
+const REMOVERFLOW: &str =
+    "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str((0 - 9223372036854775807 - 1) % (0 - 1))) }\n";
 const RECUR: &str =
     "module m\nfn cd(n: Int) -> Int { if n <= 0 { 0 } else { 1 + cd(n - 1) } }\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(cd(1000000))) }\n";
 
@@ -68,7 +73,7 @@ fn the_two_engines_agree_on_arithmetic_fault_codes() {
     // Divide-by-zero and overflow fault without deep recursion, so both engines run directly here.
     // (Recursion is exercised WASM-side below; the interpreter's DL0905 has its own Stage-9 test
     // and would need a large stack to reach — see C21 and `on_a_big_stack`.)
-    for (src, code) in [(DIVZERO, "DL0902"), (OVERFLOW, "DL0901")] {
+    for (src, code) in [(DIVZERO, "DL0902"), (OVERFLOW, "DL0901"), (REMZERO, "DL0902"), (REMOVERFLOW, "DL0901")] {
         assert_eq!(interp_fault_code(src), code, "the interpreter must fault with {code}");
         let wasm = wasm_fault_detail(src);
         assert!(wasm.contains(code), "the WASM engine must report {code} for the same fault (parity, invariant 15), got: {wasm}");

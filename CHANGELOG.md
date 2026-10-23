@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a top-level constant's value is checked, 2026-10-24
+
+- **Fixed: `let NAME[: T] = value` at module level was never checked** (CONST-UNCHECKED-1, RW 4.82). Its value is
+  now type-checked against its declared type, its names resolved, and it must be pure: a constant is evaluated
+  before `main`, holding no authority, so `let W = spawn Worker()` is refused DL0501 (it performed `Async` that
+  `authority` never named). An unannotated constant has one type at every use. **Breaking** only for a program
+  whose constant was ill-typed, unresolvable or effectful — each failed at run time or did something unreported.
+
 ## Unreleased — a generic's own parameters are rigid in its body, 2026-10-24
 
 - **Fixed (soundness): the effect row escaped through a generic function** (GENERIC-RIGID-1, D-V2-184, RW 4.81).
