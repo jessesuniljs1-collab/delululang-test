@@ -9056,3 +9056,22 @@ dimension first, so this primitive widens no grant written before it.
 
 **Found on the way:** the egress test server read only a request's head, so its body arrived unseen. It now reads to
 the head's `Content-Length`.
+
+## 2026-10-23 (night, continued) — the laptop: `http.post_with_secret`, the authenticated POST (D-V2-183)
+
+**What.** `post_with_secret(url, headers, header, secret, body)`, on the same branch and table version as `post`. The
+secret rides as `get_with_secret`'s does, and the body as `post`'s. Under the daemon, `broker_secret_send` now takes
+the method and judges the request's own method before the broker is asked for a byte. The interpreter's dispatch routes
+both secret-carrying methods to it. `--within`'s walk sees the send (the secret is argument four of both).
+
+**Evidence.**
+- Tests:
+  - egress `a_post_carries_its_secret_and_its_body_only_inside_the_audience`: the secret and the body on a POST to
+    the audience; refused outside it before anything is resolved; a 307 to another origin refused, the secret sent once;
+  - `broker_cli` `a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method`: under the daemon the
+    POST went out, the chain held the `use` with `method: POST` and one `send`, and no byte of the secret. A capability
+    minted for GET alone refused it at the call: no `send`, nothing connected;
+  - `within_cli`: `--grants` names `net=…:POST` and the secret's audience.
+- Mutants, each red: Q1 the pre-judgement as a GET, Q3 the walk blind to the send, Q4 the dispatch not routing the
+  broker-held secret.
+- Conformance: anchor `ref.prim.http.post_with_secret`, four witnesses; 357/357.

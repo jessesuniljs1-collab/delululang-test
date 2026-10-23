@@ -89,6 +89,9 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     // P9-05 (d), D-V2-183: the first request that is not a GET — `post(url, headers: Map[Str, Str], body: Str)`, judged by
     // its method against the grant's (`net=HOST:POST`; an entry naming no methods allows GET alone).
     PrimEntry { receiver: "http", method: "post", arity: 3 },
+    // and a POST carrying one secret in one header, sent only to its grant's audience (as `get_with_secret`) —
+    // `post_with_secret(url, headers, header: Str, secret: Secret[Str], body: Str)`.
+    PrimEntry { receiver: "http", method: "post_with_secret", arity: 5 },
     // Cap[Clock].
     PrimEntry { receiver: "clock", method: "now_ms", arity: 0 },
     // Root device mints + Cap[Actuator]/Cap[Sensor] (Stage 10 phase 10e, Track D).
@@ -199,7 +202,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            85,
+            86,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

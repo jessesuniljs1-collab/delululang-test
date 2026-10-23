@@ -726,7 +726,9 @@ overstate it downstream:
   keeps the POST and its body, only to the URL's own origin (elsewhere: reason `body-elsewhere`). Each hop's report
   record names its `method` when it is not a GET, and under `--broker daemon`/`--lease` the chain's `use` record does
   too, beside `url_path` (OCSF `http_request.http_method`). From a `--sandbox` guest the host performs it. Not yet
-  under `--engine wasm`, and no POST carries a secret yet.
+  under `--engine wasm`. `http.post_with_secret(url, headers, header, secret, body)` is the authenticated POST: the
+  secret as `get_with_secret` sends it (its audience only; under `--broker daemon`/`--lease` the broker's `send`), the
+  body as `post`'s; a capability minted without POST refuses it before the broker is asked for a byte.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

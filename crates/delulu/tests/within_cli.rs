@@ -1626,6 +1626,22 @@ fn a_post_is_decided_by_its_method_against_the_boundary() {
     let (code, v) = within(&g, &boundary);
     assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
     assert!(v["counterexample"]["reason"].as_str().unwrap().contains("is a `POST`"), "decided by its method: {v:#}");
+
+    // `post_with_secret`: the secret's send is asked for with its audience, as `get_with_secret`'s is.
+    let s = dir.join("send.delulu");
+    std::fs::write(
+        &s,
+        "module send\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"api.example.com:POST\"])\n    \
+         let tok = root.secret(\"A\")\n    \
+         let r = h.post_with_secret(\"https://api.example.com/v1\", Map(), \"Authorization\", tok, \"{}\")\n}\n",
+    )
+    .unwrap();
+    let s = s.to_string_lossy().to_string();
+    assert_eq!(required(&s), ["net=api.example.com:POST", "secret:A@api.example.com:443=VALUE"]);
+    let ok = vec!["net=api.example.com:POST".to_string(), "secret:A@api.example.com:443=v".to_string()];
+    assert_eq!(within(&s, &ok).1["result"], "within");
+    let get_only = vec!["net=api.example.com".to_string(), "secret:A@api.example.com:443=v".to_string()];
+    assert_eq!(within(&s, &get_only).1["result"], "exceeds");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

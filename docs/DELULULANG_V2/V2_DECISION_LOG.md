@@ -4738,7 +4738,7 @@ order, out of the judge, unparsed, a union meet, a malformed suffix dropped, the
 N1, N2, N3 and N5 were also red end to end. Z3 §2e: 9 obligations proved (50 in all). Its mutants
 `net-method-dropped` and `net-method-meet-union` each leave obligations undischarged, and CI requires both.
 
-## D-V2-183 — P9-05 (d), second slice: `Cap[Http].post(url, headers, body)`, the first request that is not a GET — judged by its method at every check, its method carried to the broker and its record, a redirect's method by its status — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+## D-V2-183 — P9-05 (d), second slice: `Cap[Http].post(url, headers, body)` and `post_with_secret`, the first requests that are not a GET — judged by its method at every check, its method carried to the broker and its record, a redirect's method by its status — TAKEN (head chef, 2026-10-23, under the owner's delegation)
 
 **Context.** RW 2.11 gave an agent a way to call an authenticated API, but only by GET, and most APIs take their writes
 by POST. D-V2-182 made the method dimension first, so that a POST could not widen any grant written before it: an
@@ -4750,6 +4750,11 @@ entry naming no methods allows GET alone.
    `get_with`'s rules, and the body is at most 1 MiB (`MAX_REQUEST_BODY`, refused before anything is resolved).
    `PRIM_TABLE_VERSION` goes from 7 to 8 (additive). Conformance anchor `ref.prim.http.post` with four witnesses
    (`ENTRENCHED_CHANGE_RECORD.md`).
+   **And `post_with_secret(url, headers, header, secret, body)`**: a POST carrying one `Secret[Str]` in one header,
+   held to `get_with_secret`'s rules. It is never declassified and is sent only to its grant's audience; under the
+   daemon the broker is asked for the bytes for the one origin (`broker_secret_send`, which now judges the request's
+   own method first, so a capability without POST refuses it before a byte is asked). Anchor
+   `ref.prim.http.post_with_secret`, four witnesses.
 2. **Judged by its method everywhere a GET is judged by its path:**
    - the runtime's first check (DL0904: "a `POST` to … is outside the methods the grant names for it");
    - every egress hop, by that hop's own method;
@@ -4768,7 +4773,7 @@ entry naming no methods allows GET alone.
 5. **One implementation for L0 and every guest:** a sandboxed guest's `post` is performed by the host, in the same
    `prim` arm.
 6. **Not yet:** `post` on the WASM engine (its custody check passes no method, and the compiler does not emit
-   `post`); a POST carrying a secret (`post_with_secret`); and PUT, PATCH, DELETE. `deploy plan` decides with
+   `post`); and PUT, PATCH, DELETE. `deploy plan` decides with
    `--within`'s verdict (D-V2-176), so it judges a POST by its method too. No test of `deploy plan` with a POST was
    written in this slice.
 

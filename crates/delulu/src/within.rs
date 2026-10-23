@@ -1077,7 +1077,7 @@ impl SendWalk<'_> {
                     self.expr(a);
                 }
                 let is_http = |t: &delulu_check::Type| matches!(t, delulu_check::Type::Cap(delulu_check::ResourceKind::Http));
-                let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret" | "post")
+                let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret" | "post" | "post_with_secret")
                     && self.types.and_then(|t| t.get(&recv.id())).is_some_and(is_http);
                 if request {
                     let url = args.first().and_then(|u| self.str_of(u));
@@ -1092,7 +1092,8 @@ impl SendWalk<'_> {
                     let method = delulu_runtime::prim::http_method_of(&name.name);
                     self.sites.push(RequestSite { url, method, at: *span });
                 }
-                if name.name == "get_with_secret" && args.len() == 4 {
+                // The secret is argument four of both (P9-05 (d), D-V2-183: `post_with_secret` adds the body after it).
+                if (name.name == "get_with_secret" && args.len() == 4) || (name.name == "post_with_secret" && args.len() == 5) {
                     let to = self
                         .str_of(&args[0])
                         .and_then(|u| delulu_runtime::egress::parse_target(&u).ok().map(|t| format!("{}:{}", t.host, t.port)));

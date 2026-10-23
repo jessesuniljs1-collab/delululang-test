@@ -5527,8 +5527,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 ### 2026-10-23 (night) — `http.post`, the first request that is not a GET (P9-05 (d), second slice, D-V2-183) (made on the laptop)
 - Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
 - Branch: `laptop/http-post` (on `laptop/net-methods` `69414e5`, #61)   Pull request: opened with this push
-- **What:** see V2_LOG's entry of the same name, D-V2-183 and `ENTRENCHED_CHANGE_RECORD.md` (the anchor
-  `ref.prim.http.post`'s four witness rows, an entrenched file).
+- **What:** see V2_LOG's entry of the same name and its continuation (`post_with_secret`), D-V2-183 and
+  `ENTRENCHED_CHANGE_RECORD.md` (the anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`, four witness
+  rows each, in an entrenched file).
 - Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/dir.rs`,
   `crates/delulu-check/src/prim_table.rs`, `crates/delulu-runtime/src/egress.rs`,
   `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-runtime/src/interp.rs`,
@@ -5543,5 +5544,5 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `skills/delulu/SKILL.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
   `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (`docs/reference/*` generated). Added, deleted, renamed: nothing.
-- **Open / next:** `post` on the WASM engine; a POST carrying a secret.
+- **Open / next:** `post` and `post_with_secret` on the WASM engine.
 - Survey and doctor (after the last edit): in the commit message.

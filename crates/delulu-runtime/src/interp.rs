@@ -1487,10 +1487,10 @@ impl Interp {
             // origin the request names, after everything that can be judged without them.
             Value::Cap(c)
                 if c.kind == ResourceKind::Http
-                    && name.name == "get_with_secret"
+                    && (name.name == "get_with_secret" || name.name == "post_with_secret")
                     && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) =>
             {
-                self.send_broker_secret(c, &argvals, span)
+                self.send_broker_secret(c, &name.name, &argvals, span)
             }
             // PS-A-01: the seam. `LocalSink` calls `prim::call_cap_method` — the same call this line
             // made before — so the local path is unchanged; a guest sends it to the host instead.
@@ -2171,12 +2171,12 @@ impl Interp {
     /// bytes for that ONE origin (`Custody::send_secret`: the node's `secret_to`, the Guard on the pair, a `send` record),
     /// and the request is made with a secret that holds them and whose audience is that origin alone — so a redirect to
     /// another origin, even one the grant names, drops it. The bytes reach the egress client; no program value holds them.
-    fn send_broker_secret(&self, c: &CapVal, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
-        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, argvals, span)?;
+    fn send_broker_secret(&self, c: &CapVal, method: &str, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, method, argvals, span)?;
         match send {
-            SecretSend::AsGiven => self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None),
+            SecretSend::AsGiven => self.effects.cap_method_pinned(c, method, argvals, span, None),
             SecretSend::Answered(v) => Ok(v),
-            SecretSend::Held(args) => self.effects.cap_method_pinned(c, "get_with_secret", &args, span, None),
+            SecretSend::Held(args) => self.effects.cap_method_pinned(c, method, &args, span, None),
         }
     }
 
@@ -2394,9 +2394,11 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
         // and the trace is printed and stored (P9-04 (a), D-V2-128).
         // `post`'s body is never shown either: the program's data, as a header's value is (P9-05 (d), D-V2-183).
-        ("Http", "get") | ("Http", "get_with") | ("Http", "get_with_secret") | ("Http", "post") => {
-            args.first().map(|v| v.display())
-        }
+        ("Http", "get")
+        | ("Http", "get_with")
+        | ("Http", "get_with_secret")
+        | ("Http", "post")
+        | ("Http", "post_with_secret") => args.first().map(|v| v.display()),
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2439,7 +2441,8 @@ pub(crate) fn custody_op_for(
         (ResourceKind::Http, "get")
         | (ResourceKind::Http, "get_with")
         | (ResourceKind::Http, "get_with_secret")
-        | (ResourceKind::Http, "post") => {
+        | (ResourceKind::Http, "post")
+        | (ResourceKind::Http, "post_with_secret") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no
@@ -2510,6 +2513,7 @@ pub enum SecretSend {
 pub fn broker_secret_send(
     custody: &mut dyn Custody,
     c: &CapVal,
+    method: &str,
     argvals: &[Value],
     span: delulu_diag::Span,
 ) -> Result<SecretSend, Fault> {
@@ -2517,7 +2521,10 @@ pub fn broker_secret_send(
         return Ok(SecretSend::AsGiven);
     };
     let url = prim::str_arg(argvals, 0, span)?;
-    if !url.starts_with("https://") || !prim::url_allowed(&url, allow) {
+    // By the request's own method (P9-05 (d), D-V2-183): a POST its capability does not take is refused by the effect, in
+    // its words, before the broker is asked for a byte.
+    let allowed = prim::url_verdict(&url, prim::http_method_of(method), allow) == delulu_broker::netscope::Verdict::Allow;
+    if !url.starts_with("https://") || !allowed {
         return Ok(SecretSend::AsGiven);
     }
     let headers = prim::headers_arg(argvals, "get_with_secret", span)?;

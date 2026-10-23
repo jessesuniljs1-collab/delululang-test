@@ -2194,6 +2194,16 @@ impl<'a> Checker<'a> {
                     self.expect_arg(args, 2, &Type::Str, span);
                     Some((Type::result(Type::Str, net), Some(Effect::Net), None))
                 }
+                // And a POST carrying one `Secret[Str]` in one header, as `get_with_secret` carries it: never declassified,
+                // sent only to the audience its grant names. The body stays the last argument, a plain `Str`.
+                "post_with_secret" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
+                    self.expect_arg(args, 2, &Type::Str, span);
+                    self.expect_arg(args, 3, &Type::Secret(Box::new(Type::Str)), span);
+                    self.expect_arg(args, 4, &Type::Str, span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
                 _ => None,
             },
             Type::Cap(ResourceKind::Clock) => match method {

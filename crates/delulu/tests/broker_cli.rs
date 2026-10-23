@@ -375,6 +375,82 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// P9-05 (d), D-V2-183: `post_with_secret` of a broker-held secret under the daemon — the bytes are asked of the broker for
+/// the one origin, as `get_with_secret`'s are, and the request leaves as a POST. The chain holds the custody's `use` of
+/// the host naming `method: POST`, then the `send`. A capability minted without POST refuses it at the call, before the
+/// broker is asked for a byte: no `send`, nothing connected.
+#[test]
+fn a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method() {
+    let base = std::env::temp_dir().join(format!("delulu_bsec_post_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    for (file, mint) in [("post.delulu", "127.0.0.1:POST"), ("getonly.delulu", "127.0.0.1")] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{mint}\"])\n    \
+             let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+             match h.post_with_secret(\"https://127.0.0.1:{port}/items\", hs, \"Authorization\", tok, \"{{}}\") {{\n        \
+             Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let secret = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
+    let daemon = |file: &str| {
+        let net = "net.special=127.0.0.1:GET,POST";
+        delulu_in(
+            &cwd,
+            &state,
+            &["run", file, "--grant", "console", "--grant", net, "--grant", &secret, "--no-prompt", "--broker", "daemon"],
+        )
+    };
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let records = || -> Vec<serde_json::Value> {
+        let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+        v["records"].as_array().expect("records").clone()
+    };
+    let sends = |rs: &[serde_json::Value]| rs.iter().filter(|r| r["action"] == "send").count();
+    // Minted for GET alone: the POST is refused at the call, and the broker is asked for nothing.
+    let o = daemon("getonly.delulu");
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("a `POST` to"), "{}{}", stdout(&o), stderr(&o));
+    assert_eq!(sends(&records()), 0, "{:#?}", records());
+    assert!(l.accept().is_err(), "nothing connected");
+    let accepter = std::thread::spawn(move || {
+        let started = std::time::Instant::now();
+        loop {
+            match l.accept() {
+                Ok(_) => return true,
+                Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
+                Err(_) => return false,
+            }
+        }
+    });
+    let o = daemon("post.delulu");
+    assert_eq!(o.status.code(), Some(0), "{}{}", stdout(&o), stderr(&o));
+    assert!(accepter.join().unwrap(), "the POST went out: {}{}", stdout(&o), stderr(&o));
+    let rs = records();
+    assert_eq!(sends(&rs), 1, "{rs:#?}");
+    let used = rs.iter().find(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "allow");
+    assert_eq!(used.map(|r| r["authority"]["method"].clone()), Some(serde_json::json!("POST")), "{rs:#?}");
+    for entry in std::fs::read_dir(state.join("audit")).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        assert!(!text.contains(CANARY), "the chain holds the bytes");
+    }
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// D-V2-174: on the WASM engine under the daemon, a run's secret is the broker's handle, as on the interpreter — the
 /// program holds an index to it, the host holds the handle — and `get_with_secret` asks the broker for the bytes for the
 /// one origin by the interpreter's own code. The same program run on each engine writes the same chain, record for

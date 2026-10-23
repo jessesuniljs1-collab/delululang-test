@@ -11,7 +11,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## Unreleased — `http.post`, 2026-10-23
+## Unreleased — `http.post` and `http.post_with_secret`, 2026-10-23
 
 - **Added: `Cap[Http].post(url, headers, body)`, the first request that is not a GET** (P9-05 (d), D-V2-183, RW 2.12).
   A program mints `root.http(["api.example.com:POST/v1/**"])`, and the operator grants the same line
@@ -22,7 +22,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   from a `--sandbox` guest (the host performs it), and under `--broker daemon` and `--lease`. There the chain's `use`
   record names the `method`, OCSF exports it as `http_request.http_method`, and a run report's hop names it.
   `authority --within` decides a POST by its method, and so does `deploy plan`, which uses the same verdict. Not yet on
-  `--engine wasm`, and no POST carries a secret yet.
+  `--engine wasm`.
+- **Added: `Cap[Http].post_with_secret(url, headers, header, secret, body)`**, an authenticated POST. The secret
+  rides in one header as `get_with_secret`'s does: never declassified, sent only to its grant's audience
+  (`--grant secret:NAME@HOST[:PORT]=…`, which `--grants` proposes). Under `--broker daemon` the broker hands over its
+  bytes for that one origin, and the chain records the POST's `use` and the `send`. A capability minted without POST
+  refuses it at the call before the broker is asked for a byte.
 - **Changed: the primitive table's version is 8** (was 7). A `.dpx` whose DIR was checked against version 7 is refused
   with DL1503 and is rebuilt, as at every earlier bump.
 
