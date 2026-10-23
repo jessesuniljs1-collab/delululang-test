@@ -5418,3 +5418,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/design/AUTHORITY_GUARD_CAPSTONE.md`, `measurements/scale/RECORD.md`, `docs/survey/*`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
 
+### 2026-10-23 (morning) — a shared type is checked once; one too large to write out is refused (RW 2.3, D-V2-179; OPAQUE-FIELD-2) (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/type-size` (on `master` `118cf51`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #55's run `39900420977` **success**; #55 landed by fast-forward, master `118cf51`.
+- **What:** the occurs check, unification and `==`'s equality walk follow each binding once; a type is written out within
+  100,000 parts (2,000,000 in all for large ones), past which `check` refuses with DL0211 (language-visible). 22 lines of
+  self-paired values took 5.8 s and doubled per line; any depth is now refused in about 0.1 s. A record holding a user
+  generic of an opaque type is refused under `==`/`str` (OPAQUE-FIELD-2, RW 2.21).
+- Files and folders: A `crates/delulu-check/tests/type_size.rs`. M `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/src/unify.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-diag/src/codes.rs`, `CHANGELOG.md`,
+  `HANDOFF.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/for-agents.md`, `docs/survey/*`. Deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+

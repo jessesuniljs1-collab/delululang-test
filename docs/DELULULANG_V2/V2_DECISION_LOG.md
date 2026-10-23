@@ -4572,3 +4572,57 @@ tests judged against a control measured beside them, both red on the old interpr
 width, no ordering of a literal. The checker's `C48` residual scan was measured rather than changed: 6,400 fields check
 in 0.18 s, linear.
 
+## D-V2-179 — RW 2.3: the checker follows a shared type once, and refuses one too large to write out (DL0211) — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** `let a1 = Pair { l: a0, r: a0 }` … `aN` checked in time doubling per line (22 lines 5.8 s, release;
+30 lines about 25 minutes by that rate). RW 2.3 had deferred a bound to an RFC because a bound is language-visible: it
+refuses programs that check today. The type is N small types through its variables, 2^(N+1) - 1 parts written out.
+Three kinds of work treated it as its tree: walks that followed bindings (the occurs check, unification, `==`'s
+equality walk, which wrote the type out again at every part it visited), and writing it out (`apply_type`: the DIR's
+side table of every node's type, a field read, a `match`, a binary operator). The first kind can be made to follow each
+binding once. The second cannot: the side table is a tree by its format, and the DIR serializes it.
+
+**Decided:**
+1. The occurs check follows each bound variable once (a set of variables explored), and unification unifies each pair
+   of variables once per call (a set of pairs met). Neither changes what is decided. The variable being bound is
+   unbound, so it is never met as a bound variable on the way. A pair met again was unified (bindings only grow, so it
+   still is) or failed, and a failure ends the call with `?`. A pair cannot meet itself inside its own binding, which
+   the occurs check rules out. The equality walk (`opaque_for`) is given the type written out once and walks it as it
+   stands.
+2. `apply_type` writes a type out within 100,000 parts (`TYPE_PARTS_LIMIT`). Types past 1,000 parts
+   (`TYPE_PARTS_FREE`) also count toward 2,000,000 for the module (`TYPE_PARTS_TOTAL`). A type past either is
+   returned with only its top resolved, and the context is marked. From then on a type is written out only within
+   1,000 parts, so the rest of the check costs what an ordinary program's does. The checker refuses a marked module
+   with **DL0211** at the expression being checked when it was marked, or at the node being settled. The settle runs in
+   the table's order; when it refuses, it is run again in node order, counting parts without writing them, from the
+   total reached before it, so every run names the same node. It does not run the reference-capability pass over types
+   settled only to their top.
+   The refusal is fail-closed: a module whose types were cut is never accepted.
+3. DL0211 ("type nests too deeply", the parser's code for a written type nested past 128 levels) is the code, not a
+   new one. Its explanation already covers a type the checker cannot finish with; it now names an inferred one too.
+
+**Why these numbers:** an ordinary program's types are tens of parts. A type of 65,535 parts (15 lines of pairs) still
+checks. The total bounds many references to one type just under the limit: 3,000 references to a 65,535-part type took
+3.4 s with a total of 20,000,000, and 0.45 s with the 2,000,000 chosen. After the first refusal the work grows with the
+program's length: 20,000 references to a 32,767-part type, 1.4 s.
+
+**What it costs an ordinary program** (release, best of five, alternating with `master` `118cf51`): 3,000 functions using
+generic records, closures, `map`, `fold`, `Map`, `Option` and `match` check in 0.391 s against 0.379 s; 10,000 in 1.141 s
+against 1.105 s, about 3%. Measured by elimination: the sets of the occurs check and unification cost nothing that shows;
+collecting parts through `Option` cost about 2% (1.167 s against 1.145 s), so they go into vectors sized up front;
+sorting the side table for a deterministic name cost about 0.4% (1.145 s against 1.141 s), and the settle now sorts only
+when it refuses. What is left is the budgeted walk.
+
+**Evidence:** `crates/delulu-check/tests/type_size.rs`, each program checked on a thread within a minute:
+- depths 16, 30 and 60 are refused once, at `a16`, and depth 15 is clean;
+- a field read at depth 40 is refused;
+- two chains compared with `==` check clean at depth 15 and are refused at 40, and with `1` against `"x"` at their
+  roots they are still a mismatch (DL0401) at 12 and at 40;
+- 200 references to a 32,767-part type are refused by the total, and 40 to an 8,191-part type are clean.
+
+Mutants: no limit and no total, 4 of 4 red; no pair cache, red; an occurs check that re-follows, 3 of 4 red; no DL0211,
+4 of 4 red; the equality walk writing out each argument again, red; the replay naming no node, red. One change I tried survived: the equality walk
+visits each argument again through its record's fields, but `visiting` cuts that off one level down. It was reverted,
+and the claim that it cost a second was struck. Release: every refused depth checks in about 0.1 s; `a22 == b22` went
+from 261 s (with the bound but without the walk fixes) to 0.1 s.
+

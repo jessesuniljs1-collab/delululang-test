@@ -8877,3 +8877,35 @@ Survey and doctor: in the commit message. Records: `measurements/scale/RECORD.md
 `HARDENING_CAMPAIGN.md` and `AUTHORITY_GUARD_CAPSTONE.md` (C55 closed), `CHANGELOG.md`, RW 2.10, HANDOFF §11.5 (a
 correctness fix can bring a cost no test measures).
 
+## 2026-10-23 (morning) — the laptop: a type shared through its variables is checked once, and one too large to write out is refused (RW 2.3, D-V2-179; OPAQUE-FIELD-2)
+
+Read since the last entry: PR #55's run `39900420977` **success**; #55 landed by fast-forward, master `118cf51`.
+
+RW 2.3 was deferred to an RFC: a bound on type size is language-visible. Re-measured on a release build:
+`let aN = Pair { l: aN-1, r: aN-1 }`, 22 lines, 5.8 s, doubling per line. The type is N small types through its
+variables. The checker expanded it in several places, each found only after fixing the one before:
+- **The DIR's side table** writes every node's type out in full. Skipping that left 0.08 s at 22, so it was most of the cost.
+- **The occurs check** followed every binding at every place (about 10%).
+- **Unification** of two such chains (`a == b`) took 261 s at 22, once the side table was bounded.
+- **`==`'s equality walk** (`opaque_for`) wrote the type out again at every part it visited.
+
+The walks now follow each binding once; their answers are unchanged, and D-V2-179 sets out why. Writing a type out is
+bounded: 100,000 parts a type, and 2,000,000 in all for types over 1,000 parts. Past either, the program is refused with
+DL0211 at the expression. Refused depths take about 0.1 s, `a40 == b40` 0.08 s, and depth 15 still checks clean.
+Ordinary programs take about 3% longer; the cost was found by elimination over six builds (D-V2-179).
+
+`crates/delulu-check/tests/type_size.rs`, four tests, each program checked on a thread within a minute. Mutants red: no
+limit, no pair cache, an occurs check that re-follows, no DL0211, the walk writing out each part again, the settle's
+replay naming no node. One change I made survived and was taken out: the walk visiting each argument again through its
+record's fields. `visiting` cuts it off one level down; it had been credited with a second that was really the per-part
+writing out.
+
+**OPAQUE-FIELD-2 (RW 2.21)**, found reading that walk. `type W { b: Box[Secret[Str]] }` checked clean under `a == b` and
+`str(a)`, and so did a `Box` of a function: a user generic named in a field had its written arguments replaced by `Unit`
+unasked. The runtime failed safe (`false`, `«secret»`). The arguments are now asked; the test is red without it.
+
+Green: `delulu-check` 6 targets, 283 passed. `delulu-diag`, `delulu-syntax`, `delulu-wasm` and `delulu-conform`: 31
+targets, 414 passed. Clippy stamped. Survey and doctor: in the commit message. Records: RW 2.3 closed and 2.21, D-V2-179,
+DL0211's explanation, the book's chapter on bounds, `for-agents.md`, `CHANGELOG.md`, HANDOFF §11.5 (a substitution makes a
+type a graph; a walk that resolves as it goes makes it a tree again).
+

@@ -294,6 +294,30 @@ mod tests {
         assert!(!plain.has_errors(), "{:?}", plain.diagnostics);
     }
 
+    /// OPAQUE-FIELD-2 (the laptop, 2026-10-23): a field whose type is a user generic, `b: Box[Secret[Str]]`, had its written
+    /// arguments replaced by `Unit` unasked, so the record holding it was admitted to `==` and `str` — which `Box[Secret[Str]]`
+    /// outside a record is refused. The runtime failed safe (two secrets or two closures compare `false`; a secret prints
+    /// `«secret»`), so `w == w` answered `false`. A `Box` of plain data in a record still compares and prints.
+    #[test]
+    fn an_opaque_argument_of_a_generic_inside_a_record_field_is_seen() {
+        let boxed = "module m\ntype Box[T] {\n  v: T,\n}\n";
+        for (field, use_) in [
+            ("Box[Secret[Str]]", "a == b"),
+            ("Box[Secret[Str]]", "str(a) == str(b)"),
+            ("Box[fn(Int) -> Int]", "a == b"),
+            ("Box[List[Option[Secret[Str]]]]", "a != b"),
+            ("Box[Box[Cap[Console]]]", "a == b"),
+        ] {
+            let src = format!("{boxed}type W {{\n  b: {field},\n}}\nfn f(a: W, b: W) -> Bool {{\n  {use_}\n}}\n");
+            let e = errors(&src);
+            assert!(e.contains(&"DL0605".to_string()) || e.contains(&"DL0604".to_string()), "{src}\n{e:?}");
+        }
+        let plain = check(&format!(
+            "{boxed}type W {{\n  b: Box[List[Str]],\n}}\nfn f(a: W, b: W) -> Str {{\n  str(a == b) + str(a)\n}}\n"
+        ));
+        assert!(!plain.has_errors(), "{:?}", plain.diagnostics);
+    }
+
     // ----- C23: no declaration may shadow a builtin type or core effect ----
     //
     // Every one of these programs was ACCEPTED before the fix, and every one of them was inert:
