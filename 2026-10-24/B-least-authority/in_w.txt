@@ -1,4 +1,4 @@
 write
-./out
-w9.txt
-control-after-junction
+.
+C:/Users/jesse/probe-outside3.txt
+x

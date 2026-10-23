@@ -1,0 +1,6 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_838f9483c4516233679526a24d51ea9c`
+custody: daemon
+sandbox: the guest is confined — one process only; memory ceiling; processor-time ceiling; killed with the host; no desktop, clipboard or global atoms; a separate identity: a per-run AppContainer with no capabilities — no network, none of the operator's files
+mode=[write] base=[./out] path=[../forbidden/sb2.txt] body=[x]
+guest: error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\sb2.txt` in scope `fs.write` (capability scope violation)

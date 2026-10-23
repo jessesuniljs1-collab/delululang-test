@@ -1,0 +1,15 @@
+#01 exit=0 mode=write base=[.] path=[forbidden/probe-wide.txt] body=[wide-ok]
+     -> OK:written
+     changed: . ./cases_wide_w.txt ./forbidden ./forbidden/probe-wide.txt ./res_long.txt ./res_wide_w.txt 
+#02 exit=0 mode=write base=[.] path=[allowed/probe-wide2.txt] body=[wide-ok]
+     -> OK:written
+     changed: ./allowed ./allowed/probe-wide2.txt ./forbidden ./forbidden/probe-wide.txt ./res_wide_w.txt 
+#03 exit=1 mode=write base=[.] path=[../probe-outside.txt] body=[x]
+     -> error[DL0904]: lease `g_e3d521bda5e61da2e2beab73c5caf811` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\probe-out
+     changed: ./allowed ./allowed/probe-wide2.txt ./res_wide_w.txt 
+#04 exit=1 mode=write base=[..] path=[probe-outside2.txt] body=[x]
+     -> error[DL0703]: filesystem write of `..` was not granted — the lease this run redeemed (node `g_e3d521bda5e61da2e2beab73c5caf811`) does not carry `fs.write=..`, and a `--lease` run takes its authorit
+     changed: ./res_wide_w.txt 
+#05 exit=1 mode=write base=[.] path=[C:/Users/jesse/probe-outside3.txt] body=[x]
+     -> error[DL0904]: lease `g_e3d521bda5e61da2e2beab73c5caf811` does not grant `C:\Users\jesse\probe-outside3.txt` in scope `fs.write` (capability scope violation)
+     changed: ./res_wide_w.txt 

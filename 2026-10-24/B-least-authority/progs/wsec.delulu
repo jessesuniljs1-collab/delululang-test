@@ -1,0 +1,20 @@
+module wsec
+
+fn main(root: Root) ! {Write, Net} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST"])
+    let tok = root.secret("TOKEN")
+    let hs = Map()
+    match c.get_with_secret("https://127.0.0.1/api/x", hs, "Authorization", tok) {
+        Ok(b) => out.println("gets ok")
+        Err(e) => out.println("gets ERR:" + str(e))
+    }
+    match c.post_with_secret("https://127.0.0.1/api/x", hs, "Authorization", tok, "body") {
+        Ok(b) => out.println("posts ok")
+        Err(e) => out.println("posts ERR:" + str(e))
+    }
+    match c.get_with_secret("https://example.com/", hs, "Authorization", tok) {
+        Ok(b) => out.println("evil ok")
+        Err(e) => out.println("evil ERR:" + str(e))
+    }
+}

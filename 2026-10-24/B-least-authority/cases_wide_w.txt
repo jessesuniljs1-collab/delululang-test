@@ -1,0 +1,5 @@
+write|.|forbidden/probe-wide.txt|wide-ok
+write|.|allowed/probe-wide2.txt|wide-ok
+write|.|../probe-outside.txt|x
+write|..|probe-outside2.txt|x
+write|.|C:/Users/jesse/probe-outside3.txt|x

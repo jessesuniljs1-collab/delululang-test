@@ -1,0 +1,13 @@
+gets ERR:Other(connection failed)
+posts ERR:Other(connection failed)
+{"seq":0,"effect":"Net","op":"get_with_secret","cap_kind":"Http","detail":"«opaque»","span":{"file":0,"start":189,"end":259}}
+{"seq":1,"effect":"Write","op":"println","cap_kind":"Console","detail":"gets ERR:Other(connection failed)","span":{"file":0,"start":320,"end":353}}
+{"seq":2,"effect":"Net","op":"post_with_secret","cap_kind":"Http","detail":"«opaque»","span":{"file":0,"start":370,"end":449}}
+{"seq":3,"effect":"Write","op":"println","cap_kind":"Console","detail":"posts ERR:Other(connection failed)","span":{"file":0,"start":511,"end":545}}
+{"seq":4,"effect":"Net","op":"get_with_secret","cap_kind":"Http","detail":"«opaque»","span":{"file":0,"start":562,"end":629}}
+{"seq":5,"effect":"Net","op":"get_with_secret.refused","cap_kind":"Http","detail":"DL0904: host of `https://example.com/` is not in the granted allowlist","span":{"file":0,"start":562,"end":629}}
+error[DL0904]: WASM engine: WASM trap: DL0904: host of `https://example.com/` is not in the granted allowlist
+  explain: delulu explain E-DL0904
+
+note: the request to `https://127.0.0.1/api/x` was not delivered: the connection could not be made [egress: connect]
+note: the request to `https://127.0.0.1/api/x` was not delivered: the connection could not be made [egress: connect]

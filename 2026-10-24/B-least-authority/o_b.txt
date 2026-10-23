@@ -1,6 +1,11 @@
 guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
-lease: running under delegated node `g_e3d521bda5e61da2e2beab73c5caf811`
+lease: running under delegated node `g_619ec6eea2f10eeebabf262ac85606b0`
 custody: daemon
-base=[.] path=[FORBID~1/secret.txt]
-OK:B-FORBIDDEN-CANARY-91c2
+base=[./a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/] path=[ok.txt]
+error[DL0703]: filesystem read of `./a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=./a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> progs/rd.delulu:15:14
+   |
+15 |     let rd = root.fs_read(base)
+   |              ^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
 

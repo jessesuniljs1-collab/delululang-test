@@ -1,0 +1,4 @@
+sandbox: the guest is confined — one process only; memory ceiling; processor-time ceiling; killed with the host; no desktop, clipboard or global atoms; a separate identity: a per-run AppContainer with no capabilities — no network, none of the operator's files
+mode=[get] scope=[127.0.0.1] url=[https://127.0.0.1/api/x]
+ERR:Other(connection failed)
+note: the request to `https://127.0.0.1/api/x` was not delivered: the connection could not be made [egress: connect]

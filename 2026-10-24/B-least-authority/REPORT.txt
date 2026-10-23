@@ -1,5 +1,5 @@
 REPORT - agent B, "least authority" (workdir: dogfood/B-least-authority)
-STATUS: IN PROGRESS - saved as I go. (REPORT.md was refused by the Write tool: "Subagents should return findings
+STATUS: FINAL (11 findings B1-B11, 44 coverage lines C01-C44, 4 access requests). (REPORT.md was refused by the Write tool: "Subagents should return findings
 as text"; the head chef then said to use REPORT.txt.)
 Drivers: batch.sh (fs read), wbatch.sh (fs write), gen.sh (both engines), nbatch.sh (network), race.sh (swap race);
 cases_*.txt, results res_*.txt, programs progs/*.delulu progs/s/*.delulu, listener.py + conn.log, rep/*.json.
@@ -24,6 +24,12 @@ B1 (medium) Lease conditions with net=127.0.0.1 can never connect: loopback need
     net.special dimension") but `grants delegate --net 127.0.0.1` accepts the dead grant, and the note does not say that a
     lease cannot carry it. Result for this campaign: only B-secret (grant condition) can reach loopback; GET-vs-POST and
     path-scope positives on B-net-get/B-net-api cannot be shown (ACCESS REQUEST AR1). Their negative side was proven (C27-C30).
+  More evidence: `$DL authority progs/lit_net.delulu --within net=127.0.0.1/api/**` -> exit 2 "bad --within grant: bad grant
+    `net=127.0.0.1/api/**` - `127.0.0.1/api/**` is a special-use address: loopback (127.0.0.0/8). A plain `net=` grant never reaches
+    one; if this program is meant to, grant it explicitl[y]..." - i.e. the grant parser REFUSES the very spelling that the delegated
+    nodes B-net-get / B-net-api / B-wide carry (net=127.0.0.1...). Delegation accepts what the grant grammar rejects.
+    Runs: B-net-get (GET / and /api/** mint), B-net-api (/api/** mint), B-wide: every in-scope loopback request ->
+    ERR:Refused [egress: special-use], conns=0; out-of-scope ones -> DL0904 / DL0703 before that.
   Reproduced: yes, every run.
 
 B2 (medium) A secret's value can be recovered by the program with NO declassify grant: Secret.map + Secret.verify is a
@@ -64,6 +70,9 @@ B4 (low) The refusal for a mint wider than the lease says `net=HOST` literally, 
           placeholder HOST, and "network host" in backticks as if it were a name. Same text for a wrong host, a wrong method and
           a missing path scope, so the reader cannot tell which dimension was too wide.
   Files: res_n4_B-net-get.txt (#03, #04, #07), res_n4_B-net-api.txt (#01-#04). Reproduced: yes.
+  Related, same placeholder: `$DL authority progs/lit_post.delulu --within console --within net.special=127.0.0.1/api/**` (exit 1) explains
+  the exceeded line `net.special=127.0.0.1:POST/api/**` with "`network host` was not granted to this program - pass `--grant net=HOST`
+  (DL0703)": wrong advice twice (the host is special-use so `net=` can never work; HOST is a placeholder).
 
 B5 (low) The same refusal on the WASM engine has no source span and prints the code twice.
   Program: progs/fsr.delulu; command: $DL run B-read progs/fsr.delulu --engine wasm (exit=1)
@@ -90,6 +99,32 @@ B8 (low, info) Refusals come in two shapes: some end the run (DL0904, exit 1: ho
   Same program, two exits: `https://example.com/` -> exit=1 DL0904; `http://127.0.0.1/` -> exit=0 ERR:Refused (cases_n2.txt).
   Documented ("Refused is deliberately opaque"; DL0904 "under every custody"), but a script that only reads the exit code
   sees a refused request as success. Reproduced: yes.
+
+B9 (medium) `authority --within` answers "within" for a program whose literal path escapes its own capability; the run then aborts DL0904.
+  Program: progs/fsr.delulu (root.fs_read("./allowed") then read_text("../forbidden/secret.txt")).
+  Commands: $DL authority progs/fsr.delulu --within console --within fs.read=./allowed ; echo "exit=$?"
+            $DL run B-read progs/fsr.delulu ; echo "exit=$?"
+  Output: authority -> "within: `fsr` asks for nothing outside the boundary - 2 request(s) in 2 dimension(s), each decided" exit=0.
+          run -> prints the allowed canary, then error[DL0904] lease ... does not grant `...\forbidden\secret.txt` ... exit=1.
+  Expected (brief): "within" but refused at run time is a finding. The escape is a string literal, so it is decidable statically
+          (compare: for a request outside a path scope `--within` does say exceeds, lit_net.delulu); it should be exceeds, or the
+          report should say that `within` covers the minted scopes only. Reproduced: yes.
+
+B10 (low) Docs contradict the binary in two places.
+  (a) for-agents.md [agents.limits] end of "Every run has a budget": "Under `--sandbox`, a flag the sandboxed run does not apply
+      (`--lease` and `--broker` among them) is refused rather than ignored; a lease runs without `--sandbox`." Observed: `$DL run B-read
+      progs/fsr.delulu --sandbox` (the wrapper adds --broker daemon --lease) runs, prints "lease: running under delegated node ...",
+      "sandbox: the guest is confined ...", reads ok.txt, and refuses the escape as "guest: error[DL0904]: lease ..." exit 1.
+      Same for B-rw writes (sb1.txt written, ../forbidden/sb2.txt denied, report `denied` lists it) and a junction write (denied).
+  (b) GETTING_STARTED.md ~line 320 ("Not yet: a --sandbox guest ... or --engine wasm (no http at all)") and for-agents.md line ~720
+      ("Not yet in a --sandbox guest ..., or under --engine wasm") for get_with_secret: progs/wsec.delulu under B-secret
+      `--engine wasm` runs get_with_secret AND post_with_secret to 127.0.0.1 (2 connections, same results as the interpreter) and refuses
+      https://example.com/ with DL0904. (The same file later says post_with_secret works on wasm since 2026-10-23.) Only Secret.map is
+      refused on wasm (DL1205). Reproduced: yes.
+
+B11 (low) Raw OS error text is handed to the program: reading a name longer than 255 characters (300 or 5000 chars) or a path with a
+    form-feed character returns `ERR:Other(The filename, directory name, or volume label syntax is incorrect. (os error 123))`, exit 0,
+    while every other refusal is opaque or a named variant. Files: res_long.txt #01-#02, o_sb_r2 (form feed from my printf). Reproduced: yes.
 
 =====================================================================================================
 COVERAGE (behaved correctly; what was tested)
@@ -158,6 +193,34 @@ C31 Secret leak channels, interpreter, B-secret (progs/sec.delulu get_with_secre
     for get_with_secret.
 C32 B-secret --sandbox: refused DL1401 "the result is a secret, which does not cross the channel" exit 1 (documented: no secret in a guest).
 C33 (see C26) expose path refused at root.declassify().
+C34 Long paths under B-read (res_long.txt): 300- and 5000-char names -> ERR:Other(os error 123) (see B11); 200 nested `d/` then ok.txt -> ERR:NotFound;
+    200 `d/` + `../../../../forbidden/secret.txt` -> NotFound; 40x `../` + forbidden/secret.txt -> DL0904 `C:\forbidden\secret.txt` (clamped
+    at the drive root, refused); base of 100 nested `a/` -> DL0703. No crash, no hang, no canary.
+C35 B-wide writes: forbidden/probe-wide.txt and allowed/probe-wide2.txt succeed (condition covers the dir; files removed afterwards); outside the dir:
+    ../probe-outside.txt DL0904, root .. DL0703, C:/Users/jesse/probe-outside3.txt DL0904; nothing created outside the workdir (`ls ..` clean).
+C36 --sandbox (level 1, AppContainer): B-rw write to out/ ok; ../forbidden/sb2.txt and `jx/sbj.txt` (junction to forbidden) denied DL0904 and listed
+    in report `denied`; read ok.txt ok; `..\forbidden\secret.txt` denied (no canary in output or report); B-secret net: 127.0.0.1 get and
+    POST connect via the HOST (conns=1 each), example.com and localhost denied DL0904 (conns=0); --sandbox-profile hostile-agent same.
+C37 --sandbox --mode audit performs nothing: B-rw fsr -> required_grants ["fs.read=./allowed","console"], outcome ran=false; B-secret sec.delulu ->
+    ["console","net=HOST","secret:TOKEN@HOST=VALUE"] (computed scope shown as HOST); `--mode audit` without --sandbox refused exit 2
+    ("`--mode` describes a sandboxed run, and this run is not one").
+C38 Static vs runtime (`authority --within`): lit_net.delulu vs net.special=127.0.0.1/api/** -> exceeds net=127.0.0.1/admin, and the run under B-net-api /
+    B-secret aborts DL0904 on exactly that request (agree); vs net.special=127.0.0.1 -> within (4 requests), run ok; lit_post.delulu (POST mint,
+    then a GET) vs a GET-only boundary -> exceeds, and the run refuses the GET with DL0904 "outside the methods" (agree); sec.delulu (computed
+    scope) -> inconclusive net=HOST / secret:TOKEN@HOST=VALUE (honest). Disagreement: B9.
+C39 Both engines agree on lit_net.delulu / lit_post.delulu under B-secret, B-net-api, B-wide, B-net-get (decisions, exit codes, connection counts).
+C40 `grants propose`: refusal DL0904 (rp.json) -> proposes=false, reason "the run was refused `DL0904`, which a grant does not answer"; refusal DL0703
+    (B-console fsr, rep/rp2.json) -> proposal `--grant fs.read=./allowed` (the call's own requirement, progs/fsr.delulu:12:14); with
+    `--node g_9ce64a...` it was FILED as `pp_0000` (pending, "an approval mints: effects={Read,Write} fs.read=[...allowed]" - note it says
+    Write because the node already holds the console); computed scope (net.delulu mint) -> no proposal, "its shape is `net=HOST`".
+    ** I filed pp_0000 for node g_9ce64adcce2010a126036dd6f21ffe64 (B-console): the head chef may reject it. **
+C41 --trace-effects under B-read: dispatch record read_text with resolved_path/scope_root, then `read_text.refused` with the DL0904 text; no canary
+    in the trace, the report or --json output (grep count 0).
+C42 `none` with a program that only mints fs_read and http (no console): DL0703 "filesystem read of `./allowed` was not granted" exit 1.
+C43 Secret leak sweep: `grep -r tok-SECRET` over the workdir: hits only in files I wrote from the brief's public prefix (in_o.txt, nbatch.sh,
+    progs/s/oracle2.delulu, this report); 0 hits in conn.log (39 connections), o_*.txt, rep/*.json, res_*.txt.
+C44 Canaries: sha256 of allowed/ok.txt and forbidden/secret.txt unchanged at the end (canary.sha); junctions and the hardlink removed; the
+    listener (127.0.0.1/::1 on 443, 8443, 4443, 80, 8080) was stopped; the DL listener saw 39 connections, all explained by allowed requests.
 
 =====================================================================================================
 ACCESS REQUESTS
@@ -166,6 +229,8 @@ AR1 B-net-get and B-net-api as GRANT conditions carrying net.special=127.0.0.1 (
     GET-vs-POST and path-scope refusals can be proven against a live listener (as leases they cannot reach loopback: B1).
 AR2 A lease (or grant condition) that carries secret TOKEN with secret_to 127.0.0.1 AND the Guard on, to see whether the Guard's
     `declassify:*` rule stops the Secret.map/verify oracle (B2) and whether lease sends of a secret record `send`.
+AR4 A grant condition naming TWO loopback hosts (net.special=127.0.0.1 and net.special=[::1]) with secret TOKEN's audience only 127.0.0.1, to prove
+    the `audience` refusal (secret not sent to a host that is in net but not in the secret's audience); B-secret has one host so it cannot be isolated.
 AR3 (nice to have) permission to create symbolic links (Windows refused mklink /D), to test the symlink spellings.
 
 =====================================================================================================
