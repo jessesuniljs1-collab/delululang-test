@@ -5428,3 +5428,62 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **What:** `channel.rs`'s test reader no longer sleeps a zero gap; RW 7.23 (b)'s `channel` test root-caused; (c) recorded; a trap in `HANDOFF.md` §11.5.
 - Files and folders: M `crates/delulu-runtime/src/channel.rs`, `crates/delulu/tests/plugin_load_cli.rs` (RW 7.23 (c) says why), `HANDOFF.md` (§11.5), `docs/REMAINING_WORK.md` (7.23), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (morning) — the launch branch takes #51-#53; the phase status catches up (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/launch-records` (on `master` `2349cff`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #53's run `39872356478` **success**, so #53 landed by fast-forward, master
+  `2349cff`. `launch/2.0.0` = **`0ef515f`**: master `05909ef..2349cff` merged in (#51-#53; one CHANGELOG section moved
+  under 2.0.0; the Survey rebuilt there, 1556 nodes, 16327 edges; clippy stamped; doctor ok; the gates green). Its release
+  dry run `39874335998` **success**; its `jobs=everything` `39874332895` **success** on 16 of 18 jobs, `test
+  (windows-latest)` and `heavy-gates` included, with `miri-slow` (delulu-check) and (delulu-broker) running. `e51b4f3`'s
+  `everything` `39865367900`: red on `test (windows-latest)`, RW 7.23 (c); its `miri-slow` (delulu-check) and (delulu-syntax) **success**, (delulu-broker) running.
+- **What:** `V2_PHASE_STATUS.md`'s REL row names the ten launch merges of 2026-10-21 to 2026-10-23.
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (morning) — a record's width no longer costs per field (RW 2.10, D-V2-178) (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/record-width` (on `master` `3334f93`)   Pull request: the one this entry rides in
+- **Read since the last entry:** `launch/2.0.0` `0ef515f`'s `jobs=everything` `39874332895` **success, 18 of 18 jobs**
+  (both `miri-slow` jobs included); `e51b4f3`'s `39865367900`: `miri-slow` (delulu-broker) **success**, the run red only on
+  RW 7.23 (c). Autosave: ran 09:31 IST, result 0; snapshot `c7eecb2` = `2349cff`'s tree, nothing to recover.
+- **What:** the interpreter finds a field of a record wider than 16 fields at its declared place, checked against the
+  name held there, and puts a literal in declared order by one lookup per field. A 1,600-field literal written out of
+  order had cost 39 ms (quadratic, since RECORD-ORDER-1); reads of the last of 1,600 fields cost 4x a 4-field record's.
+  Both now flat (`measurements/scale/RECORD.md`).
+- Files and folders: A `crates/delulu-runtime/tests/record_width.rs`. M `crates/delulu-runtime/src/interp.rs`,
+  `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/design/HARDENING_CAMPAIGN.md`,
+  `docs/design/AUTHORITY_GUARD_CAPSTONE.md`, `measurements/scale/RECORD.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (morning) — a shared type is checked once; one too large to write out is refused (RW 2.3, D-V2-179; OPAQUE-FIELD-2) (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/type-size` (on `master` `118cf51`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #55's run `39900420977` **success**; #55 landed by fast-forward, master `118cf51`.
+- **What:** the occurs check, unification and `==`'s equality walk follow each binding once; a type is written out within
+  100,000 parts (2,000,000 in all for large ones), past which `check` refuses with DL0211 (language-visible). 22 lines of
+  self-paired values took 5.8 s and doubled per line; any depth is now refused in about 0.1 s. A record holding a user
+  generic of an opaque type is refused under `==`/`str` (OPAQUE-FIELD-2, RW 2.21).
+- Files and folders: A `crates/delulu-check/tests/type_size.rs`. M `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/src/unify.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-diag/src/codes.rs`, `CHANGELOG.md`,
+  `HANDOFF.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/for-agents.md`, `docs/survey/*`. Deleted, renamed:
+  nothing.
+
+### 2026-10-23 (afternoon) — a sent secret is asked for and decided with its audience (RW 2.11, D-V2-180) (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/secret-audience` (on `master` `118cf51`)   Pull request: the one this entry rides in
+- **What:** `authority --grants` names a sent secret's audience (`secret:NAME@HOST:PORT=VALUE`); `--within` and
+  `deploy plan` decide each send against the boundary's audience (stricter: they used to approve a boundary under which
+  the run refuses the send); a `deploy plan` profile's `secrets` may name an audience. D-V2-181: `--within` and
+  `deploy plan` decide each request by its path against the boundary's `net` (stricter the same way).
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/src/within.rs`, `crates/delulu/src/deploy.rs`,
+  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/deploy_cli.rs`, `crates/delulu/tests/deploy_plan_adversarial.rs`
+  (its fixture's request `http://` → `https://`), `CHANGELOG.md`, `docs/for-agents.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+

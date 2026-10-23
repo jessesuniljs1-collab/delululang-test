@@ -196,6 +196,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
+        too_large_at: None,
     };
     // BEFORE anything lowers a type: validate the alias declarations themselves. Cycles must be
     // known first (`lower_type` expands an alias by recursing, so a cycle is a stack overflow, not a
@@ -294,8 +295,13 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // its resolved effect set (DIR §2.3). This runs after all functions are checked so that later
     // unifications are reflected in earlier nodes' types.
     let mut node_types: HashMap<NodeId, Type> = HashMap::with_capacity(checker.node_types_raw.len());
-    for (id, raw) in &checker.node_types_raw {
+    let refused_before = checker.cx.too_large();
+    let written_before = checker.cx.written();
+    for (id, (raw, _)) in &checker.node_types_raw {
         node_types.insert(*id, checker.cx.apply_type(raw));
+    }
+    if !refused_before && checker.cx.too_large() {
+        checker.too_large_at = refused_in_node_order(&checker.cx, &checker.node_types_raw, written_before);
     }
     let mut node_rows: HashMap<NodeId, Row> = HashMap::with_capacity(checker.node_row_accs.len());
     for (id, acc) in &checker.node_row_accs {
@@ -306,8 +312,29 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // over the settled types so it never participates in unification (build-order deviation 4).
     let fn_types_settled: HashMap<String, Type> =
         checker.fn_types.iter().map(|(k, v)| (k.clone(), checker.cx.apply_type(v))).collect();
-    let (rcap_diags, iso_moves) = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
-    checker.diags.extend(rcap_diags);
+    // A type too large to write out (RW 2.3, D-V2-179) refuses the program: its types were settled only to their top
+    // past the limit, and the second axis does not read them.
+    let iso_moves = if checker.cx.too_large() {
+        let mut d = Diagnostic::error(
+            "DL0211",
+            format!(
+                "a type here is too large to check: written out it has more than {} parts (or the module's large types \
+                 more than {} in all) — a value built from itself, like `Pair {{ l: a, r: a }}` at every step, doubles \
+                 its type each time; give it a recursive type (`type Tree = Leaf | Node(Tree, Tree)`) instead",
+                crate::unify::TYPE_PARTS_LIMIT,
+                crate::unify::TYPE_PARTS_TOTAL
+            ),
+        );
+        if let Some(span) = checker.too_large_at {
+            d = d.with_span(span, "this type is too large to write out");
+        }
+        checker.diags.push(d);
+        HashSet::new()
+    } else {
+        let (rcap_diags, iso_moves) = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
+        checker.diags.extend(rcap_diags);
+        iso_moves
+    };
 
     // A body's row tails settle only now; each resolves to the concrete effects it bound to.
     let performed: HashMap<String, BTreeSet<Effect>> = checker
@@ -336,6 +363,27 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     }
 }
 
+/// The node a settle refused as too large to write out (RW 2.3, D-V2-179), named the same on every run: the settle ran
+/// in the table's order, so it is run again here in node order, counting rather than writing: the first node whose type
+/// alone passes [`TYPE_PARTS_LIMIT`](crate::unify::TYPE_PARTS_LIMIT), or at which the large types, from what was
+/// written before the settle, pass [`TYPE_PARTS_TOTAL`](crate::unify::TYPE_PARTS_TOTAL).
+fn refused_in_node_order(cx: &InferCtx, raw: &HashMap<NodeId, (Type, Span)>, written_before: u64) -> Option<Span> {
+    use crate::unify::{TYPE_PARTS_FREE, TYPE_PARTS_LIMIT, TYPE_PARTS_TOTAL};
+    let mut nodes: Vec<(&NodeId, &(Type, Span))> = raw.iter().collect();
+    nodes.sort_unstable_by_key(|(id, _)| id.0);
+    let mut written = written_before;
+    for (_, (t, span)) in nodes {
+        let left = TYPE_PARTS_TOTAL.saturating_sub(written);
+        let limit = TYPE_PARTS_LIMIT.min(usize::try_from(left).unwrap_or(usize::MAX)).max(TYPE_PARTS_FREE);
+        match cx.parts_within(t, limit) {
+            None => return Some(*span),
+            Some(parts) if parts > TYPE_PARTS_FREE => written = written.saturating_add(parts as u64),
+            Some(_) => {}
+        }
+    }
+    None
+}
+
 /// Lower a **concrete** type expression (no generics in scope) against a module's declaration
 /// table — the Stage-6 entry point for plugin-manifest export signature strings (spec §2.1). This
 /// reuses the checker's own `lower_type` rule code, so a manifest signature means *exactly* what
@@ -358,6 +406,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
+        too_large_at: None,
     };
     let ty = checker.lower_type(t, &Genv::default(), &mut FnFacts::default());
     if let Some(d) = checker.diags.iter().find(|d| d.is_error()) {
@@ -396,8 +445,11 @@ struct Checker<'a> {
     /// diagnostic explains it. A variable from a generic or an unannotated binding is never here,
     /// so `fn apply[F](f: F, x: Int) { f(x) }` is still DL0404.
     poisoned: std::collections::HashSet<crate::ty::TypeVar>,
-    node_types_raw: HashMap<NodeId, Type>,
+    node_types_raw: HashMap<NodeId, (Type, Span)>,
     node_row_accs: HashMap<NodeId, RowAcc>,
+    /// Where a type was first too large to write out (RW 2.3, D-V2-179): the expression being checked, or the node
+    /// being settled, when the inference context first refused one. The program is refused there with DL0211.
+    too_large_at: Option<Span>,
 }
 
 /// Per-function-body checking context.
@@ -1284,7 +1336,7 @@ impl<'a> Checker<'a> {
         }
         ctx.pop_scope();
         // Record the block node in the DIR side tables (§2.3): its value type and accumulated row.
-        self.node_types_raw.insert(block.id, value_ty.clone());
+        self.node_types_raw.insert(block.id, (value_ty.clone(), block.span));
         self.node_row_accs.insert(block.id, acc.clone());
         (value_ty, acc)
     }
@@ -1323,7 +1375,10 @@ impl<'a> Checker<'a> {
     /// side effect — it never changes what the checker computes or reports).
     fn check_expr(&mut self, e: &Expr, ctx: &mut FnCtx) -> (Type, RowAcc) {
         let (ty, acc) = self.check_expr_inner(e, ctx);
-        self.node_types_raw.insert(e.id(), ty.clone());
+        if self.too_large_at.is_none() && self.cx.too_large() {
+            self.too_large_at = Some(e.span());
+        }
+        self.node_types_raw.insert(e.id(), (ty.clone(), e.span()));
         self.node_row_accs.insert(e.id(), acc.clone());
         (ty, acc)
     }
@@ -3566,19 +3621,22 @@ impl<'a> Checker<'a> {
 
     /// Structural opacity (R-5): Secret/Cap/Root, or a composite containing one.
     fn is_opaque(&self, t: &Type, visiting: &mut HashSet<TypeDefId>) -> bool {
-        self.opaque_for(t, false, visiting)
+        self.opaque_for(&self.cx.apply_type(t), false, visiting)
     }
 
     /// Does `t` have no structural equality — an opaque type anywhere in it, or a function (D-V2-166)? What `==`, `!=`,
     /// `assert_eq` and `List.contains` refuse with DL0605. A closure has a `str` (`<fn>`) but no equality: `Value::eq` has
     /// no answer for two of them, so `f == f` was admitted and answered `false` (EQ-FN-1).
     fn lacks_equality(&self, t: &Type) -> bool {
-        self.opaque_for(t, true, &mut HashSet::new())
+        self.opaque_for(&self.cx.apply_type(t), true, &mut HashSet::new())
     }
 
-    /// The walk behind `is_opaque` and `lacks_equality`; with `fns`, a function type counts too.
+    /// The walk behind `is_opaque` and `lacks_equality`; with `fns`, a function type counts too. `t` is written out
+    /// (`apply_type`) once, by the caller, and walked as it stands, each part once (RW 2.3): written out again at every
+    /// part, a type whose variables share their bindings was walked as its exponential tree. A variable left in it is
+    /// unbound, or stands for a part of a type too large to write out, whose program is refused (DL0211).
     fn opaque_for(&self, t: &Type, fns: bool, visiting: &mut HashSet<TypeDefId>) -> bool {
-        match self.cx.apply_type(t) {
+        match t {
             Type::Fn { .. } => fns,
             Type::Secret(_) | Type::Cap(_) | Type::Root => true,
             // R-5: ForeignPtr, PyObj, and a foreign lib handle are opaque (no str/==/serialize).
@@ -3589,22 +3647,22 @@ impl<'a> Checker<'a> {
             // Stage 7: an actor reference is opaque identity (tag) — no str, no ==, never
             // serialized. Identity comparison is a post-1.0 question, not an accident.
             Type::Actor(_, _) => true,
-            Type::List(inner) | Type::Option(inner) => self.opaque_for(&inner, fns, visiting),
+            Type::List(inner) | Type::Option(inner) => self.opaque_for(inner, fns, visiting),
             // A `Map` is opaque if EITHER side is. Added by pattern, not by instance: a new
             // composite type that forgets this arm falls into the `_` below, where opaque becomes
             // `false` and `Map[Str, Secret[Str]] == m` is silently admitted. That is the shape of
             // the skip-branch rule — write the case where the checker could not tell.
-            Type::Result(a, b) | Type::Map(a, b) => self.opaque_for(&a, fns, visiting) || self.opaque_for(&b, fns, visiting),
+            Type::Result(a, b) | Type::Map(a, b) => self.opaque_for(a, fns, visiting) || self.opaque_for(b, fns, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {
                 if args.iter().any(|a| self.opaque_for(a, fns, visiting)) {
                     return true;
                 }
-                if !visiting.insert(id) {
+                if !visiting.insert(*id) {
                     return false;
                 }
-                let def = self.table.type_def(id);
+                let def = self.table.type_def(*id);
                 let mut genv = Genv::default();
-                for (g, a) in def.generics.iter().zip(&args) {
+                for (g, a) in def.generics.iter().zip(args) {
                     genv.types.insert(g.clone(), a.clone());
                 }
                 let opaque = match &def.kind {
@@ -3614,7 +3672,7 @@ impl<'a> Checker<'a> {
                     }
                     TypeDefKind::Alias(inner) => self.type_expr_opaque(inner, &genv, fns, visiting),
                 };
-                visiting.remove(&id);
+                visiting.remove(id);
                 opaque
             }
             _ => false,
@@ -3658,6 +3716,13 @@ impl<'a> Checker<'a> {
                         return true;
                     }
                     if let Some(&id) = self.table.type_ix.get(name) {
+                        // Its written arguments are asked first, as `opaque_for` asks a type's arguments: `Box[Secret[Str]]`
+                        // and `Box[fn(Int) -> Int]` are opaque whatever `Box` declares (OPAQUE-FIELD-2: each argument stood
+                        // for `Unit` unasked, so a record holding one was admitted to `==` and `str`, which the same type
+                        // outside a record is refused).
+                        if args.iter().any(|a| self.type_expr_opaque(a, genv, fns, visiting)) {
+                            return true;
+                        }
                         let targs: Vec<Type> = args.iter().map(|_| Type::Unit).collect();
                         return self.opaque_for(&Type::Sum(id, targs), fns, &mut visiting.clone());
                     }

@@ -8871,3 +8871,108 @@ red. No production code calls `yield_now` or sleeps zero (`crates/*/src` searche
 RW 7.23 (c)'s program now prints which refusal it was given and its words; falsified by commanding 30 degrees
 against the rudder's 25: the message read ``refused: envelope: `deflect_deg` = 30 is outside the envelope [-25, 25]``.
 `plugin_load_cli`'s three lease tests: green.
+
+## 2026-10-23 (morning) — the laptop: a record's width no longer costs per field (RW 2.10, D-V2-178)
+
+Read since the last entry: `launch/2.0.0` `0ef515f`'s everything run `39874332895` **success on all 18 jobs**, its two
+`miri-slow` jobs (delulu-check, delulu-broker) included; with its release dry run `39874335998` (success) the launch tree
+is green throughout. `e51b4f3`'s `39865367900`: `miri-slow` (delulu-broker) **success**; its one red stays RW 7.23 (c).
+Autosave: the task ran at 09:31 IST, result 0; its newest snapshot `c7eecb2` holds exactly `2349cff`'s tree, nothing to
+recover.
+
+RW 2.10 (finding C55) said a field read costs time in the record's width. Re-measured before changing anything, with a
+release build of `master` and programs of 4 to 1,600 fields: reads and writes of the last field grew linearly, as
+published (0.116 s to 0.473 s for 200,000 reads, whole process). Literals were worse, and not on record:
+RECORD-ORDER-1 (2026-10-20) sorts a literal's fields into declared order, and its sort key scanned the declaration, so
+every comparison cost two scans. Written in a shuffled order, 250 literals of 1,600 fields took 9.79 s, and one of
+6,400 fields 1.1 s. `delulu check` of the same programs is linear (6,400 fields: 0.18 s).
+
+The fix (D-V2-178): `Home.records` maps each record type's field names to their declared places, built once. A literal
+looks up each field's place once (`sort_by_cached_key`, the same order as before). A read or a write in a record wider
+than 16 fields asks for the place and uses it only when the name held there is the one asked for; a narrower record,
+or a record not laid out by this module's declaration, is scanned. Release, 1,600 fields: reads 0.128 s, writes
+0.110 s, out-of-order literals 0.078 s; 4 and 20 fields unchanged. Not through the DIR, as the row had planned: that
+changes a serialized format, and an index taken on trust would misread a record built elsewhere.
+
+`crates/delulu-runtime/tests/record_width.rs`, four tests. Two time a cost against a control measured beside it, best of
+three: a 2,000-field literal written out of order against a 2,000-item list (3,662x on the old interpreter, 17x now,
+bound 100), and the last of 8,000 fields against the first, on a record built outside the timing (21.4x on the old,
+1.00 now, bound 3). A first version of the read test built the record inside the timed function; the old interpreter's
+quadratic build then hid the read cost (3.22x against a bound of 3). Two hold the answers: a 40-field record written
+in a shuffled order prints, compares, reads and writes as declared, through a function, a list and a record field; a
+record whose fields are not where the declaration puts them is read and written by name. Mutants red, each on its own
+test: the name check removed, a scan at every width, no ordering of a literal.
+
+Green: `delulu-runtime` and `delulu-wasm`, 34 targets, 532 passed, 0 failed, 2 ignored. Clippy stamped.
+Survey and doctor: in the commit message. Records: `measurements/scale/RECORD.md` (the table, before and after),
+`HARDENING_CAMPAIGN.md` and `AUTHORITY_GUARD_CAPSTONE.md` (C55 closed), `CHANGELOG.md`, RW 2.10, HANDOFF §11.5 (a
+correctness fix can bring a cost no test measures).
+
+## 2026-10-23 (morning) — the laptop: a type shared through its variables is checked once, and one too large to write out is refused (RW 2.3, D-V2-179; OPAQUE-FIELD-2)
+
+Read since the last entry: PR #55's run `39900420977` **success**; #55 landed by fast-forward, master `118cf51`.
+
+RW 2.3 was deferred to an RFC: a bound on type size is language-visible. Re-measured on a release build:
+`let aN = Pair { l: aN-1, r: aN-1 }`, 22 lines, 5.8 s, doubling per line. The type is N small types through its
+variables. The checker expanded it in several places, each found only after fixing the one before:
+- **The DIR's side table** writes every node's type out in full. Skipping that left 0.08 s at 22, so it was most of the cost.
+- **The occurs check** followed every binding at every place (about 10%).
+- **Unification** of two such chains (`a == b`) took 261 s at 22, once the side table was bounded.
+- **`==`'s equality walk** (`opaque_for`) wrote the type out again at every part it visited.
+
+The walks now follow each binding once; their answers are unchanged, and D-V2-179 sets out why. Writing a type out is
+bounded: 100,000 parts a type, and 2,000,000 in all for types over 1,000 parts. Past either, the program is refused with
+DL0211 at the expression. Refused depths take about 0.1 s, `a40 == b40` 0.08 s, and depth 15 still checks clean.
+Ordinary programs take about 3% longer; the cost was found by elimination over six builds (D-V2-179).
+
+`crates/delulu-check/tests/type_size.rs`, four tests, each program checked on a thread within a minute. Mutants red: no
+limit, no pair cache, an occurs check that re-follows, no DL0211, the walk writing out each part again, the settle's
+replay naming no node. One change I made survived and was taken out: the walk visiting each argument again through its
+record's fields. `visiting` cuts it off one level down; it had been credited with a second that was really the per-part
+writing out.
+
+**OPAQUE-FIELD-2 (RW 2.21)**, found reading that walk. `type W { b: Box[Secret[Str]] }` checked clean under `a == b` and
+`str(a)`, and so did a `Box` of a function: a user generic named in a field had its written arguments replaced by `Unit`
+unasked. The runtime failed safe (`false`, `«secret»`). The arguments are now asked; the test is red without it.
+
+Green: `delulu-check` 6 targets, 283 passed. `delulu-diag`, `delulu-syntax`, `delulu-wasm` and `delulu-conform`: 31
+targets, 414 passed. Clippy stamped. Survey and doctor: in the commit message. Records: RW 2.3 closed and 2.21, D-V2-179,
+DL0211's explanation, the book's chapter on bounds, `for-agents.md`, `CHANGELOG.md`, HANDOFF §11.5 (a substitution makes a
+type a graph; a walk that resolves as it goes makes it a tree again).
+
+## 2026-10-23 (afternoon) — the laptop: a sent secret is asked for, and decided, with its audience (RW 2.11, D-V2-180)
+
+RW 2.11 stayed open for one step: proposing the audience in `--grants`' lines. A program sending `API_TOKEN` to
+`https://api.example.com:8443/…` was given `--grant secret:API_TOKEN=VALUE` to type. Under that grant the run holds the
+secret and refuses the send: *"its grant names no audience"*. `authority --within-file` answered *within* for that
+boundary, and for one whose audience named `other.example.com:443`. `deploy plan`, which uses the same verdict
+(D-V2-176), approved both. The runtime was right every time; the static answers were not.
+
+The requirement for a secret now carries the origins of its sends, from the walk that already fed `secret_destinations`.
+The line names them (`secret:API_TOKEN@api.example.com:8443=VALUE`, `HOST` for a computed URL, `NAME` for a secret the
+source does not name). `--within` decides each send against the boundary's audience for that secret, by host and port,
+as the egress client compares. A `deploy plan` profile's `secrets` entry may name an audience, read by the run's own
+parser.
+
+Witnessed: `within_cli` `a_sent_secret_is_asked_for_and_decided_with_its_audience` and `deploy_cli`
+`a_secret_a_service_sends_is_bounded_by_its_audience`, both red on `master`'s `cli.rs`, `within.rs` and `deploy.rs`.
+Mutants red: no audience in the line, the sends not decided, the port ignored, an unnamed secret's send always within.
+A first run of the mutants without `--no-fail-fast` stopped at the first red target and left the second unread; they
+were run again with it.
+
+Green: the binary's unit tests and `cli`, `within_cli`, `deploy_cli`, `deploy_plan_adversarial`, `egress_cli`,
+`grants_cli`, `guest_cli`, `sandbox_openshell_cli`, `schema_cli`, `mcp_cli`, `lsp_cli`, `secret_verify_cli`: 13 targets,
+357 passed, 0 failed, 1 ignored. Clippy stamped. Survey and doctor: in the commit message.
+
+**The same question, asked of paths (D-V2-181).** A program minting `example.com/api/**` that requests
+`https://example.com/admin` was *within* `net=example.com/api/**`; the run refuses the request at its call (P9-05 (a)).
+`--within` decided the mint and never the requests. Each request the checker types is now decided against the boundary's
+`net` entries by the call's own reading (`prim::host_of`, `path_of`, `netscope::judge_all`), in a file, in a package (each
+module by its own types) and in `deploy plan`. Witnessed: `within_cli` `a_request_is_decided_by_its_path_against_the_boundary`
+red on the previous code, and `deploy_cli` `a_request_outside_the_profiles_path_scope_is_refused`, whose plan the previous
+code approved. Mutants red: outside-path *within*, a package's requests not wired, a computed URL always *within*, the
+unreadable-URL arm removed. A `typed` flag kept requests out of `--grants`; its mutant survived (`--grants`' walk has
+none), and it was taken out. `deploy_plan_adversarial`'s fixture requested `http://example.com`, which the run refuses
+("only `https://` is fetched"); five of its tests went red with a misleading reason. Such a URL is now refused in the
+client's words, and the fixture requests `https://example.com`, its assertions unchanged.
+

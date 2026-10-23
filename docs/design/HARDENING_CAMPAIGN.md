@@ -1765,6 +1765,10 @@ means either a per-instance map (paying memory on every narrow record) or static
 the DIR. It is linear, not quadratic, and the constant is small — the opposite of C48, which was
 accidentally quadratic *and* allocated per access. Full table in `measurements/scale/RECORD.md`.
 
+*Closed 2026-10-23 (RW 2.10, D-V2-178), with a cost this entry did not have: since RECORD-ORDER-1 (2026-10-20) a literal
+written out of declared order was put in order by a quadratic sort. Both are measured, before and after, in
+`measurements/scale/RECORD.md`.*
+
 ### C51 · The review surface could not review a real package — CLOSED (D45)
 
 `delulu authority <dir>` ran the single-package loader while `build`, `check`, `lock` and

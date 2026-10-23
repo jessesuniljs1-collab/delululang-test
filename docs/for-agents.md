@@ -385,6 +385,17 @@ it), `to` the URL literal's origin (`host:port`, the spelling an audience must n
 Either is `null` when the source does not show it (a computed URL, a secret passed in as a parameter, a name a `for`
 or a match arm rebinds) — never a guess.
 
+Since 2026-10-23 (RW 2.11, D-V2-180) those sends are part of what the program asks for. `--grants` names a sent secret's
+audience: `secret:API_TOKEN@api.example.com:8443=VALUE`, with `HOST` for a send whose URL the source computes, and
+`secret:NAME@host:port=VALUE` for a send of a secret the source does not name. A grant without the audience lets the
+program hold the secret and refuses every send of it. `--within` decides each send against the boundary's audience for its
+secret: *exceeds* when the boundary grants the secret with no audience, or with one that does not name the origin;
+*inconclusive* for a computed URL, or for a secret the source does not name that only some of the boundary's secrets may
+reach. `deploy plan` decides the same against a profile, whose `secrets` entries may name an audience as a grant does
+(`secrets = ["API_TOKEN@api.example.com:8443"]`). Each request (`get`, `get_with`, `get_with_secret` on a `Cap[Http]`) is
+decided too, by its path against the boundary's `net` entries as the call decides it (D-V2-181): a request outside a
+path-scoped entry *exceeds*, named at the request by the narrowest line that takes it (`net=example.com/admin`).
+
 **When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the
@@ -753,6 +764,13 @@ overstate it downstream:
   program emitting one nested construct per element of a large structure can. If you generate
   DeluluLang, emit a `let` binding per level rather than one deep expression, and prefer a loop over
   deeply nested blocks.
+
+  **An inferred type is capped too** (since 2026-10-23, RW 2.3, D-V2-179): written out, a type may have
+  at most 100,000 parts, and the module's large types (over 1,000 parts each) 2,000,000 in all; past
+  either, `delulu check` refuses with `DL0211` at the expression. A generator reaches it only by building
+  a value from itself step after step (`let a2 = Pair { l: a1, r: a1 }`), which doubles the type every
+  line. Give such a value a recursive type instead. Before the cap, 22 such lines took `check` 5.8 s and
+  each further line doubled it.
 
   **Deep runtime *data* is a separate axis and is now safe too.** Building a recursive value
   millions deep — `type Chain = Nil | Link(Chain)` in an accumulator loop — used to abort the host

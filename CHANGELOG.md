@@ -22,13 +22,51 @@ refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; sin
 `--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73);
 a `match` that leaves a case uncovered below its top level, or literal arms with no catch-all, is refused (DL0407,
 D-V2-172); `deploy plan` refuses a service whose paths, hosts or secrets the environment profile does not name (DL1909,
-D-V2-176).
+D-V2-176); `delulu check` refuses a type it infers that is too large to write out, over 100,000 parts (DL0211, D-V2-179);
+`authority --within` and `deploy plan` refuse a boundary under which a secret's send or a request's path is refused when the
+program runs (D-V2-180, D-V2-181).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a sent secret is asked for and decided with its audience, 2026-10-23
+
+- **Fixed: `delulu authority --grants` asked for a sent secret without the audience its sends need** (RW 2.11,
+  D-V2-180). It printed `--grant secret:API_TOKEN=VALUE`, under which the program holds the secret and every send of it
+  is refused. It now prints `--grant secret:API_TOKEN@api.example.com:8443=VALUE` (`HOST` for a computed URL).
+- **Changed (stricter): `authority --within` and `deploy plan` decide each secret send against the boundary's audience.**
+  A boundary granting the secret with no audience, or one naming another origin, now *exceeds*; both answered *within*,
+  though the run refuses the send. A `deploy plan` profile's `secrets` may name an audience:
+  `secrets = ["API_TOKEN@api.example.com:8443"]`.
+- **Changed (stricter): `authority --within` and `deploy plan` decide each request by its path** (D-V2-181). A request
+  outside the boundary's `net` path scope (`net=example.com/api/**`, a request to `/admin`) now *exceeds*, named at the
+  request; it answered *within*, judging only the capability's mint.
+
+### the checker follows a shared type once, and refuses one too large to write out, 2026-10-23
+
+- **Changed (breaking for a program whose inferred type is over 100,000 parts): `delulu check` refuses a type too large
+  to write out with DL0211** (RW 2.3, D-V2-179). A value built from itself at every step (`let a2 = Pair { l: a1,
+  r: a1 }`) doubles its type each line: 22 such lines took 5.8 s to check, and each line doubled it. Such a program is
+  now refused at the line where its type passes 100,000 parts (or the module's large types pass 2,000,000 in all), in
+  about a tenth of a second. Ordinary programs take about 3% longer to check.
+- **Fixed: the occurs check, unification and `==`'s equality check walked a type shared through its variables as its
+  full tree.** `a22 == b22` of two such chains took 261 s; now 0.1 s.
+- **Fixed: a record whose field is a user generic of an opaque type was admitted to `==` and `str`** (OPAQUE-FIELD-2,
+  RW 2.21). `type W { b: Box[Secret[Str]] }` checked clean under `a == b`; it is now DL0605, as `Box[Secret[Str]]` is
+  outside a record. No secret was exposed: the runtime answered `false` and printed `«secret»`.
+
+### a record's width no longer costs per field, 2026-10-23
+
+- **Fixed: building a record literal whose fields are written out of declared order was quadratic in the record's
+  width** (RW 2.10, D-V2-178). The interpreter put the fields in order with a sort that scanned the declaration at every
+  comparison: one literal of 6,400 fields took 1.1 s. It now looks up each field's place once; 250 literals of 1,600
+  fields went from 9.79 s to 0.078 s.
+- **Changed: reading or writing a field of a record wider than 16 fields costs the same whatever the field** (finding
+  C55, published as a limit since 2026-07). A program reading the last of 1,600 fields 200,000 times took 4.1x as long
+  as one reading a 4-field record's; now 1.1x. Records of 16 fields or fewer are scanned as before.
 
 ### a capability or a secret in a list, an option, a record or a map compiles to WASM, 2026-10-23
 

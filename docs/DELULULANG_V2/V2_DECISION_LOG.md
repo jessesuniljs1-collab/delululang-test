@@ -4561,3 +4561,154 @@ Both fail on `master`'s code (DL1201, "a list of Cap"). The `checked_ty` arms dr
 `list_parity.rs` and `record_parity.rs` had pinned a list, and a record field, of `Cap[Console]` as refused: outside the
 fragment, not unsafe. Those cases moved here. The pins now hold the root, the handle no slot holds: a list of it, a
 record field of it. Letting `Root` into a slot turns both red.
+
+## D-V2-178 — RW 2.10: a record's fields are found at their declared place, by a map checked against the name — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** the interpreter found a record's field by scanning its fields (finding C55, published as a limit in
+2026-07), and since RECORD-ORDER-1 (2026-10-20) it put a literal's fields in declared order with a sort whose every
+comparison scanned the declaration for both fields' places: quadratic in the width. RW 2.10 named the fix as static field
+indices through the DIR.
+
+**Decided:** the interpreter holds each record type's fields as a map from name to declared place (`Home.records`,
+built once per module). A literal looks up each field's place once and is sorted by it (`sort_by_cached_key`, the same
+order as before). A field read or write in a record wider than 16 fields (`SCAN_WIDTH`) asks the map for the place and
+uses it only when the field held there has the name asked for; otherwise, and for a record of 16 fields or fewer, it
+scans as before.
+
+**Why not the DIR:** a static index would change the AST and the DIR's serialized form (byte-reproducible, read by
+plugins), and the interpreter would have to trust that every record value it reads was laid out by this module's
+declaration. A record can come from a plugin's module, an actor's message or another module's closure; checking the name
+at the place makes a wrong place cost a scan, never a wrong field. Below 17 fields the scan stays: D56 measured it at
+or below the interpreter's own cost there, and two hash lookups are not cheaper.
+
+**Evidence** (release, the laptop, best of three; `measurements/scale/RECORD.md`): reading the last of 1,600 fields
+200,000 times 0.473 s → 0.128 s, a write 0.468 s → 0.110 s, 250 literals of 1,600 fields written out of order 9.79 s →
+0.078 s; at 4 fields every figure unchanged. `crates/delulu-runtime/tests/record_width.rs`, four tests: two timing
+tests judged against a control measured beside them, both red on the old interpreter (3,662x and 21.4x against bounds of
+100 and 3; 17x and 1.00 now), and two that hold the layout's answers. Mutants red: the name check removed, a scan at every
+width, no ordering of a literal. The checker's `C48` residual scan was measured rather than changed: 6,400 fields check
+in 0.18 s, linear.
+
+## D-V2-179 — RW 2.3: the checker follows a shared type once, and refuses one too large to write out (DL0211) — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** `let a1 = Pair { l: a0, r: a0 }` … `aN` checked in time doubling per line (22 lines 5.8 s, release;
+30 lines about 25 minutes by that rate). RW 2.3 had deferred a bound to an RFC because a bound is language-visible: it
+refuses programs that check today. The type is N small types through its variables, 2^(N+1) - 1 parts written out.
+Three kinds of work treated it as its tree: walks that followed bindings (the occurs check, unification, `==`'s
+equality walk, which wrote the type out again at every part it visited), and writing it out (`apply_type`: the DIR's
+side table of every node's type, a field read, a `match`, a binary operator). The first kind can be made to follow each
+binding once. The second cannot: the side table is a tree by its format, and the DIR serializes it.
+
+**Decided:**
+1. The occurs check follows each bound variable once (a set of variables explored), and unification unifies each pair
+   of variables once per call (a set of pairs met). Neither changes what is decided. The variable being bound is
+   unbound, so it is never met as a bound variable on the way. A pair met again was unified (bindings only grow, so it
+   still is) or failed, and a failure ends the call with `?`. A pair cannot meet itself inside its own binding, which
+   the occurs check rules out. The equality walk (`opaque_for`) is given the type written out once and walks it as it
+   stands.
+2. `apply_type` writes a type out within 100,000 parts (`TYPE_PARTS_LIMIT`). Types past 1,000 parts
+   (`TYPE_PARTS_FREE`) also count toward 2,000,000 for the module (`TYPE_PARTS_TOTAL`). A type past either is
+   returned with only its top resolved, and the context is marked. From then on a type is written out only within
+   1,000 parts, so the rest of the check costs what an ordinary program's does. The checker refuses a marked module
+   with **DL0211** at the expression being checked when it was marked, or at the node being settled. The settle runs in
+   the table's order; when it refuses, it is run again in node order, counting parts without writing them, from the
+   total reached before it, so every run names the same node. It does not run the reference-capability pass over types
+   settled only to their top.
+   The refusal is fail-closed: a module whose types were cut is never accepted.
+3. DL0211 ("type nests too deeply", the parser's code for a written type nested past 128 levels) is the code, not a
+   new one. Its explanation already covers a type the checker cannot finish with; it now names an inferred one too.
+
+**Why these numbers:** an ordinary program's types are tens of parts. A type of 65,535 parts (15 lines of pairs) still
+checks. The total bounds many references to one type just under the limit: 3,000 references to a 65,535-part type took
+3.4 s with a total of 20,000,000, and 0.45 s with the 2,000,000 chosen. After the first refusal the work grows with the
+program's length: 20,000 references to a 32,767-part type, 1.4 s.
+
+**What it costs an ordinary program** (release, best of five, alternating with `master` `118cf51`): 3,000 functions using
+generic records, closures, `map`, `fold`, `Map`, `Option` and `match` check in 0.391 s against 0.379 s; 10,000 in 1.141 s
+against 1.105 s, about 3%. Measured by elimination: the sets of the occurs check and unification cost nothing that shows;
+collecting parts through `Option` cost about 2% (1.167 s against 1.145 s), so they go into vectors sized up front;
+sorting the side table for a deterministic name cost about 0.4% (1.145 s against 1.141 s), and the settle now sorts only
+when it refuses. What is left is the budgeted walk.
+
+**Evidence:** `crates/delulu-check/tests/type_size.rs`, each program checked on a thread within a minute:
+- depths 16, 30 and 60 are refused once, at `a16`, and depth 15 is clean;
+- a field read at depth 40 is refused;
+- two chains compared with `==` check clean at depth 15 and are refused at 40, and with `1` against `"x"` at their
+  roots they are still a mismatch (DL0401) at 12 and at 40;
+- 200 references to a 32,767-part type are refused by the total, and 40 to an 8,191-part type are clean.
+
+Mutants: no limit and no total, 4 of 4 red; no pair cache, red; an occurs check that re-follows, 3 of 4 red; no DL0211,
+4 of 4 red; the equality walk writing out each argument again, red; the replay naming no node, red. One change I tried survived: the equality walk
+visits each argument again through its record's fields, but `visiting` cuts that off one level down. It was reverted,
+and the claim that it cost a second was struck. Release: every refused depth checks in about 0.1 s; `a22 == b22` went
+from 261 s (with the bound but without the walk fixes) to 0.1 s.
+
+## D-V2-180 — RW 2.11: a sent secret is asked for, and decided, with its audience — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** P9-04 built secret sends: `http.get_with_secret` goes only to an origin the secret's grant names in
+its audience (`secret:NAME@HOST[:PORT]=VALUE`). It left one step, proposing the audience in `--grants`' lines. Building
+that step showed two gaps.
+- `--grants` asked for `secret:API_TOKEN=VALUE`. A run granted that way holds the secret and refuses every send of it,
+  so the tool's own advice gave a program that could not do what it was written to do.
+- `--within`, and `deploy plan`, which uses its verdict (D-V2-176), answered *within* for a boundary granting the secret
+  with no audience, or with one naming another origin. A run refuses those sends, so the request was outside the
+  boundary and the verdict did not judge it. The runtime stayed fail-closed and nothing was sent.
+
+**Decided:**
+- A secret's requirement carries the origins of its sends as the source shows them (`within::secret_sends`, the walk
+  behind `secret_destinations`). Its line names them: `secret:NAME@HOST:PORT[,…]=VALUE`, with `HOST` for a computed URL.
+  A send of a secret the source does not name (a parameter, a field) is its own requirement:
+  `secret:NAME@HOST:PORT=VALUE`.
+- `--within` decides the mint by name, as before, then each send against the boundary's audience for its secret, compared
+  as the egress client compares (`parse_audience`, host and port):
+  - *exceeds* when the boundary grants the secret with no audience, or one that does not name the origin;
+  - *inconclusive* for a computed URL under an audience;
+  - for a secret the source does not name: *within* only when every secret the boundary grants may reach the origin,
+    *exceeds* when none may, *inconclusive* between.
+- A `deploy plan` profile's `secrets` entry may name its audience as a grant does (`NAME@HOST[:PORT]`). The run's own
+  parser reads it, so a malformed audience is refused as no boundary.
+
+**Language-visible:** `authority --grants` prints a different line for a program that sends a secret. `--within` and
+`deploy plan` now refuse boundaries they used to approve: ones under which the program's sends would be refused when it
+runs.
+
+**Evidence:**
+- `within_cli` `a_sent_secret_is_asked_for_and_decided_with_its_audience` covers three shapes: a literal URL (five
+  boundaries, the port included), a computed URL, and a secret passed to a helper (within, inconclusive, exceeds).
+- `deploy_cli` `a_secret_a_service_sends_is_bounded_by_its_audience`: name only refused, named audience approved,
+  malformed audience no boundary.
+- Both fail on `master`'s code. Mutants red: the line without the audience, the sends not decided, the port ignored, an
+  unnamed secret's send always within.
+
+## D-V2-181 — `--within` and `deploy plan` decide each request by its path — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** P9-05 (a) judges a request at its call against its capability's `net` entries, the path too where an
+entry names a pattern. `--within` decided only the mint. A program minting `example.com/api/**` and requesting
+`https://example.com/admin` was *within* a boundary of `net=example.com/api/**`, and `deploy plan` approved it, though the
+run refuses that request whatever the program minted. The same skipped dimension as D-V2-180, found by asking the
+question again for paths.
+
+**Decided:** each request the checker types (`Cap[Http]` receiver; `request_destinations`' walk, `within::request_sites`)
+is a requirement, `Ask::Request { url }`. It is decided against the boundary's `net` entries exactly as the call decides
+it: `prim::host_of`, `prim::path_of`, `netscope::judge_all`.
+- *exceeds* when the URL is one the egress client will not read (plain `http://`, userinfo, a malformed host), in the
+  client's own words; when the path is outside every entry for the host; when the host is in none; or when the spelling
+  is ambiguous;
+- for a computed URL, *within* when the boundary scopes no host by path (the mint decides the host), else *inconclusive*.
+
+A finding names the narrowest line that takes the request (`net=example.com/admin`) at the request's call. Requests are
+set only where a verdict is made (`authority --within` for a file and for a package, each module by its own types, and
+`deploy plan`'s `checked_package`). `--grants` is unchanged: the line to type for a request is its mint's.
+
+**Evidence:** `within_cli` `a_request_is_decided_by_its_path_against_the_boundary` (a file: outside, inside, computed, a
+whole host; a package whose request is in another module) and `deploy_cli`
+`a_request_outside_the_profiles_path_scope_is_refused`. On the previous code the first failed and the second's plan was
+approved. Mutants red: a request outside the path *within*, a package's requests not wired, a computed URL always
+*within*, the unreadable-URL arm removed. A `typed` flag kept requests out of `--grants`' lines; its mutant survived,
+because `--grants`' walk has no requests, so it was taken out.
+
+**Found on the way:** `deploy_plan_adversarial`'s fixture service requested `http://example.com`. The run refuses that
+request at its call ("only `https://` is fetched"), and the plan had been approved. The first version of this decision
+refused it with a misleading reason ("names `http`": `prim::host_of` strips only `https://`). The fixture exists to
+perform `Net`, and now requests `https://example.com`; its five tests assert what they did.
+

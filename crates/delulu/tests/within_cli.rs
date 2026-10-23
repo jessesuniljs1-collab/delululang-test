@@ -1509,3 +1509,160 @@ fn authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name
     assert_eq!((requests.len(), &requests[0]["path"]), (1, &serde_json::json!("/ping")), "{v:#}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 2.11 (D-V2-180): a secret the program sends is a request to send it to that origin, and a run refuses the send unless
+/// the grant's audience names it (P9-04 (c)). `--grants` asked for `secret:API_TOKEN=VALUE`, which lets the program hold
+/// the secret and refuses every send; `--within` answered *within* for a boundary granting the secret with no audience, or
+/// with one naming another origin. Now the line names the origin, a computed URL's as `HOST` and a secret the source does
+/// not name as `NAME`, and each send is decided against the boundary's audience for its secret.
+#[test]
+fn a_sent_secret_is_asked_for_and_decided_with_its_audience() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-audience-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = |name: &str, url: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"api.example.com\"])\n    let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+                 match h.get_with_secret({url}, hs, \"Authorization\", tok) {{\n        \
+                 Ok(body) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let grants = |extra: &str| vec!["console".to_string(), "net=api.example.com".to_string(), extra.to_string()];
+
+    let sent = program("sent", "\"https://api.example.com:8443/v1/items\"");
+    assert_eq!(required(&sent), ["console", "net=api.example.com", "secret:API_TOKEN@api.example.com:8443=VALUE"]);
+    for (secret, result, reason) in [
+        ("secret:API_TOKEN@api.example.com:8443=v", "within", ""),
+        ("secret:API_TOKEN@other.example.com,api.example.com:8443=v", "within", ""),
+        ("secret:API_TOKEN=v", "exceeds", "with no audience, so its send to `api.example.com:8443` is refused"),
+        ("secret:API_TOKEN@other.example.com=v", "exceeds", "does not name `api.example.com:8443`"),
+        ("secret:API_TOKEN@api.example.com=v", "exceeds", "(`api.example.com:443`) does not name `api.example.com:8443`"),
+    ] {
+        let (code, v) = within(&sent, &grants(secret));
+        assert_eq!((code, v["result"].as_str()), (i32::from(result != "within"), Some(result)), "{secret}: {v:#}");
+        if result != "within" {
+            assert_eq!(v["counterexample"]["grant"], "secret:API_TOKEN@api.example.com:8443=VALUE", "{v:#}");
+            assert!(v["counterexample"]["reason"].as_str().unwrap().contains(reason), "{secret}: {v:#}");
+        }
+    }
+
+    // A computed URL: the audience is the operator's to choose, and no audience decides the send until it runs.
+    let computed = program("computed", "\"https://api.example.com\" + \"/v1/items\"");
+    assert!(required(&computed).contains(&"secret:API_TOKEN@HOST=VALUE".to_string()), "{:?}", required(&computed));
+    let (code, v) = within(&computed, &grants("secret:API_TOKEN@api.example.com=v"));
+    assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "{v:#}");
+    let (code, v) = within(&computed, &grants("secret:API_TOKEN=v"));
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "no audience refuses any send: {v:#}");
+
+    // A secret the source does not name — a parameter of the function that sends it: every secret the boundary grants
+    // could be the one sent.
+    let helper = dir.join("helper.delulu");
+    std::fs::write(
+        &helper,
+        "module helper\n\nfn send(h: Cap[Http], s: Secret[Str]) -> Bool ! {Net} {\n    \
+         match h.get_with_secret(\"https://api.example.com/x\", Map(), \"Authorization\", s) {\n        \
+         Ok(body) => true\n        Err(e) => false\n    }\n}\n\nfn main(root: Root) ! {Net} {\n    \
+         let ok = send(root.http([\"api.example.com\"]), root.secret(\"A\"))\n}\n",
+    )
+    .unwrap();
+    let helper = helper.to_string_lossy().to_string();
+    assert_eq!(required(&helper), ["net=api.example.com", "secret:A=VALUE", "secret:NAME@api.example.com:443=VALUE"]);
+    let net = "net=api.example.com".to_string();
+    for (boundary, result) in [
+        (vec![net.clone(), "secret:A@api.example.com=v".to_string()], "within"),
+        (vec![net.clone(), "secret:A@api.example.com=v".to_string(), "secret:B=v".to_string()], "inconclusive"),
+        (vec![net.clone(), "secret:A=v".to_string()], "exceeds"),
+    ] {
+        let (code, v) = within(&helper, &boundary);
+        assert_eq!((code, v["result"].as_str()), (i32::from(result != "within"), Some(result)), "{boundary:?}: {v:#}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// D-V2-181: a request is judged at its call by its path where its capability's entry names a pattern (P9-05 (a)), and
+/// `--within` decided only the mint: a program minting `example.com/api/**` and requesting `https://example.com/admin`
+/// was *within* a boundary of `net=example.com/api/**`, though the run refuses the request whatever it minted. Each request
+/// is now decided against the boundary's `net` entries as the call decides it (`prim::host_of`, `path_of`,
+/// `netscope::judge_all`), named by the narrowest line that takes it, at its call; a computed URL is *inconclusive* only
+/// where the boundary scopes a host by path. `--grants` is unchanged: the line to type is the mint's. A file, a package
+/// whose request is in another module, and `deploy plan` (`deploy_cli`) decide alike.
+#[test]
+fn a_request_is_decided_by_its_path_against_the_boundary() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-request-path-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = |name: &str, url: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"example.com/api/**\"])\n    match h.get({url}) {{\n        \
+                 Ok(body) => out.println(\"got\")\n        Err(e) => out.println(\"no\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let scoped = vec!["console".to_string(), "net=example.com/api/**".to_string()];
+    let whole = vec!["console".to_string(), "net=example.com".to_string()];
+
+    let outside = program("outside", "\"https://example.com/admin?x=1\"");
+    assert_eq!(required(&outside), ["console", "net=example.com/api/**"], "a request is decided, not typed");
+    let (code, v) = within(&outside, &scoped);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert_eq!(
+        (v["counterexample"]["grant"].as_str(), v["counterexample"]["at"]["line"].as_u64()),
+        (Some("net=example.com/admin"), Some(6)),
+        "named by the narrowest line, at the request's call: {v:#}"
+    );
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("the path `/admin`"), "{v:#}");
+    assert_eq!(within(&outside, &whole).1["result"], "within", "a whole host takes every path");
+
+    let inside = program("inside", "\"https://example.com/api/v1/items\"");
+    assert_eq!(within(&inside, &scoped).1["result"], "within");
+
+    let computed = program("computed", "\"https://example.com/\" + \"api\"");
+    let (code, v) = within(&computed, &scoped);
+    assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "{v:#}");
+    assert_eq!(within(&computed, &whole).1["result"], "within", "a computed URL under whole hosts: the mint decides");
+
+    // A URL the egress client will not read is refused at its call whatever is granted, and said so in its words.
+    let plain = program("plain", "\"http://example.com/api/x\"");
+    let (code, v) = within(&plain, &whole);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("only `https://` is fetched"), "{v:#}");
+
+    // A package: the request is made in another module than the mint, by the checker's types there.
+    let pkg = dir.join("pkg");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\nnet = [\"example.com\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src/main.delulu"),
+        "module pkg\n\nimport pkg.net\n\nfn main(root: Root) ! {Net, Write} {\n    let r = ping(root.http([\"example.com/api/**\"]))\n    \
+         root.console().println(\"done\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src/net.delulu"),
+        "module pkg.net\n\npub fn ping(c: Cap[Http]) -> Result[Str, NetErr] ! {Net} {\n    c.get(\"https://example.com/admin\")\n}\n",
+    )
+    .unwrap();
+    let (code, v) = within(&pkg.to_string_lossy(), &scoped);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert_eq!(v["counterexample"]["grant"], "net=example.com/admin", "{v:#}");
+    assert!(v["counterexample"]["at"]["file"].as_str().is_some_and(|f| f.ends_with("net.delulu")), "{v:#}");
+    assert_eq!(within(&pkg.to_string_lossy(), &whole).1["result"], "within");
+    let _ = std::fs::remove_dir_all(&dir);
+}
