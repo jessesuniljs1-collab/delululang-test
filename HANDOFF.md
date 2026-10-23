@@ -1826,6 +1826,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   named only field reads. When a fix adds a loop, a sort or a lookup to a path every program takes, time it at a large
   input before landing it, and look for a scan inside a key or a comparison.
 
+- **A static verdict that judges the mint judges half the authority** (the laptop, 2026-10-23, RW 2.11, D-V2-180,
+  D-V2-181): `authority --within`, and `deploy plan` on its verdict, decided each capability-minting call and never what
+  the runtime judges at USE time. A secret's send goes only to its grant's audience, and a request's path is judged
+  against a path-scoped `net` entry. Both answered *within* for boundaries under which the run refuses, and `--grants`
+  proposed `secret:NAME=VALUE`, under which every send is refused. The runtime was fail-closed; the answers were wrong.
+  When a static tool says *within* or *approved*, list every check the runtime makes at use, and test each with a
+  boundary that grants the mint but not the use.
+
 - **A substitution makes a type a graph; any walk that resolves as it goes makes it a tree again** (the laptop,
   2026-10-23, RW 2.3): `let a1 = Pair { l: a0, r: a0 }` … `a22` is 22 small types through their variables and 4 million
   parts written out. The occurs check, unification and `==`'s equality walk each followed bindings at every place they
