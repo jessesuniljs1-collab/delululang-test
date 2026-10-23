@@ -1,0 +1,34 @@
+gen: n=100000 first=19081,17033,15269 digest=702980094
+TIME gen 3
+msort: sorted=true len=100000 min=0 max=32767 digest=390682448
+TIME msort 70
+qsort: sorted=true same_as_msort=true digest=390682448
+TIME qsort 45
+builtin sort: same_as_msort=true
+TIME builtin 142
+many dups: qsort==msort true digest=895376759
+bst: size=14902 height=33 inorder_sorted=true len=14902 digest=4093132
+bst has: true false
+TIME bst 15
+degenerate bst: size=3000 height=3000
+[ab] 2: ab,ba
+[act] 3: cat,act,tac
+[a😀] 2: 😀a,a😀
+[dgo] 2: dog,god
+[eggloo] 2: google,gogole
+[eilnst] 3: listen,silent,enlist
+[eilv] 4: evil,vile,live,veil
+[αβγ] 2: αβγ,γβα
+[日本] 2: 日本,本日
+pal [racecar] true
+pal [A man, a plan, a canal: Panama] true
+pal [] true
+pal [a] true
+pal [ab] false
+pal [été] true
+pal [日本日] true
+pal [😀😀😀] true
+pal [Was it a car or a cat I saw?] true
+pal [No lemon, no melon] true
+pal [hello] false
+pal [Ab1ba] true

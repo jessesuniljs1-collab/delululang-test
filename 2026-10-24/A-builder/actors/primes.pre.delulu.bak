@@ -1,0 +1,74 @@
+module primes
+
+actor Collector {
+    var total: Int
+    var expected: Int
+    var got: Int
+    let out: Cap[Console]
+
+    new(expected: Int, out: Cap[Console]) {
+        self.total = 0
+        self.expected = expected
+        self.got = 0
+        self.out = out
+    }
+
+    be add(lo: Int, hi: Int, part: Int) ! {Write} {
+        self.total = self.total + part
+        self.got = self.got + 1
+        self.out.println("range [" + str(lo) + "," + str(hi) + ") -> " + str(part))
+        if self.got == self.expected {
+            self.out.println("TOTAL primes = " + str(self.total))
+        }
+    }
+}
+
+fn is_prime(n: Int) -> Bool {
+    if n < 2 {
+        false
+    } else {
+        var d = 2
+        var ok = true
+        while ok && d * d <= n {
+            if n % d == 0 {
+                ok = false
+            }
+            d = d + 1
+        }
+        ok
+    }
+}
+
+fn count_range(lo: Int, hi: Int) -> Int {
+    var c = 0
+    var n = lo
+    while n < hi {
+        if is_prime(n) {
+            c = c + 1
+        }
+        n = n + 1
+    }
+    c
+}
+
+actor Worker {
+    new() {
+    }
+
+    be run(lo: Int, hi: Int, sink: tag Collector) ! {Async, Write} {
+        sink.add(lo, hi, count_range(lo, hi))
+    }
+}
+
+fn main(root: Root) ! {Async, Write} {
+    let limit = 300000
+    let parts = 8
+    let sink = spawn Collector(parts, root.console())
+    let step = limit / parts
+    var i = 0
+    while i < parts {
+        let w = spawn Worker()
+        w.run(i * step, (i + 1) * step, sink)
+        i = i + 1
+    }
+}

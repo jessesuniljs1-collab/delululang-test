@@ -1,0 +1,127 @@
+{
+  "command": "run",
+  "custody": {
+    "mode": "daemon",
+    "node": "g_340109a9014d775e40aea4ea8e6b084b"
+  },
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "egress": {
+    "not_delivered": 5,
+    "records": [
+      {
+        "delivered": false,
+        "explain": "the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`",
+        "hops": [],
+        "reason": "special-use",
+        "url": "https://127.0.0.1:18443/plain"
+      },
+      {
+        "delivered": false,
+        "explain": "the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`",
+        "hops": [],
+        "reason": "special-use",
+        "url": "https://127.0.0.1:18444/plainreply"
+      },
+      {
+        "delivered": false,
+        "explain": "the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`",
+        "hops": [],
+        "reason": "special-use",
+        "url": "https://127.0.0.1:18446/closed"
+      },
+      {
+        "delivered": false,
+        "explain": "the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`",
+        "hops": [],
+        "reason": "special-use",
+        "url": "https://127.0.0.1:18443/with-headers"
+      },
+      {
+        "delivered": false,
+        "explain": "the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`",
+        "hops": [],
+        "reason": "special-use",
+        "url": "https://127.0.0.1:18443/submit"
+      }
+    ],
+    "records_kept": 5,
+    "requests": 5
+  },
+  "outcome": {
+    "exit": 0,
+    "ran": true
+  },
+  "sandbox": {
+    "backend": "process",
+    "break_glass": false,
+    "denied": [
+      "egress `https://127.0.0.1:18443/plain` refused: special-use (the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`)",
+      "egress `https://127.0.0.1:18444/plainreply` refused: special-use (the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`)",
+      "egress `https://127.0.0.1:18446/closed` refused: special-use (the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`)",
+      "egress `https://127.0.0.1:18443/with-headers` refused: special-use (the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`)",
+      "egress `https://127.0.0.1:18443/submit` refused: special-use (the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST`)"
+    ],
+    "denied_total": 5,
+    "fully_enforced": false,
+    "generation": "840b90ca61350d14947e02ec7353405786293b3cbb44162bea9d116e6f565dc3",
+    "granted": "contained",
+    "host_guarantees": [
+      "one process only",
+      "memory ceiling",
+      "processor-time ceiling",
+      "killed with the host",
+      "no desktop, clipboard or global atoms",
+      "a separate identity: a per-run AppContainer with no capabilities — no network, none of the operator's files"
+    ],
+    "level": 1,
+    "limitations": [
+      "privilege_escalation"
+    ],
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "posture": {
+      "filesystem_reads": "none of the operator's files",
+      "filesystem_writes": "only its own per-run container folder",
+      "identity": "a per-run AppContainer",
+      "memory": "capped",
+      "network": "only the channel",
+      "new_programs": "denied",
+      "privilege_escalation": "not confined",
+      "processor_time": "capped"
+    },
+    "properties": {
+      "egress_confinement": {
+        "by": "network: only the channel",
+        "state": "established"
+      },
+      "filesystem_confinement": {
+        "by": "filesystem_writes: only its own per-run container folder; filesystem_reads: none of the operator's files",
+        "state": "established"
+      },
+      "host_loss_ends_guest": {
+        "by": "killed with the host",
+        "state": "established"
+      },
+      "privilege_floor": {
+        "by": "privilege_escalation: not confined; identity: a per-run AppContainer",
+        "state": "established"
+      },
+      "resource_ceiling": {
+        "by": "memory: capped; processor_time: capped",
+        "state": "established"
+      }
+    },
+    "requested": "contained",
+    "requested_level": 1
+  },
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

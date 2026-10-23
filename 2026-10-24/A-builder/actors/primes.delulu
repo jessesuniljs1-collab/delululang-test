@@ -17,9 +17,7 @@ actor Collector {
         self.total = self.total + part
         self.got = self.got + 1
         self.out.println("range [" + str(lo) + "," + str(hi) + ") -> " + str(part))
-        if self.got == self.expected {
-            self.out.println("TOTAL primes = " + str(self.total))
-        }
+        if self.got == self.expected { self.out.println("TOTAL primes = " + str(self.total)) }
     }
 }
 
@@ -52,6 +50,7 @@ fn count_range(lo: Int, hi: Int) -> Int {
 }
 
 actor Worker {
+
     new() {
     }
 

@@ -19,7 +19,7 @@ fn gen(n: Int, seed: Int, modulo: Int) -> List[Int] {
     var i = 0
     while i < n {
         x = lcg(x)
-        out.push((x / 65536) % modulo)
+        out.push(x / 65536 % modulo)
         i = i + 1
     }
     out
@@ -172,9 +172,7 @@ fn alnum_lower(s: Str) -> List[Str] {
     let keep = []
     for c in s.to_lower().chars() {
         let lc = c.to_lower()
-        if lc.to_upper() != lc || "0123456789".contains(lc) {
-            keep.push(lc)
-        }
+        if lc.to_upper() != lc || "0123456789".contains(lc) { keep.push(lc) }
     }
     keep
 }
@@ -184,38 +182,39 @@ fn is_pal(s: Str) -> Bool {
     cs.join("") == cs.reverse().join("")
 }
 
-fn main(root: Root) ! {Write, Clock} {
+fn main(root: Root) ! {Clock, Write} {
     let out = root.console()
     let clk = root.clock()
     var t0 = clk.now_ms()
     let data = gen(100000, 42, 1000000)
-    out.println("gen: n=" + str(data.len()) + " first=" + str(at0(data, 0)) + "," + str(at0(data, 1)) + "," + str(at0(data, 2)) + " digest=" + str(digest(data)))
+    out.println(
+        "gen: n=" + str(data.len()) + " first=" + str(at0(data, 0)) + "," + str(at0(data, 1)) + "," + str(at0(data, 2)) + " digest=" + str(digest(data)),
+    )
     var t1 = clk.now_ms()
     out.println("TIME gen " + str(t1 - t0))
-
     t0 = clk.now_ms()
     let ms = msort(data)
     t1 = clk.now_ms()
-    out.println("msort: sorted=" + str(is_sorted(ms)) + " len=" + str(ms.len()) + " min=" + str(at0(ms, 0)) + " max=" + str(at0(ms, ms.len() - 1)) + " digest=" + str(digest(ms)))
+    out.println(
+        "msort: sorted=" + str(is_sorted(ms)) + " len=" + str(ms.len()) + " min=" + str(at0(ms, 0)) + " max=" + str(at0(ms, ms.len() - 1)) + " digest=" + str(digest(ms)),
+    )
     out.println("TIME msort " + str(t1 - t0))
-
     t0 = clk.now_ms()
     let qs = qsort(data)
     t1 = clk.now_ms()
-    out.println("qsort: sorted=" + str(is_sorted(qs)) + " same_as_msort=" + str(qs == ms) + " digest=" + str(digest(qs)))
+    out.println(
+        "qsort: sorted=" + str(is_sorted(qs)) + " same_as_msort=" + str(qs == ms) + " digest=" + str(digest(qs)),
+    )
     out.println("TIME qsort " + str(t1 - t0))
-
     t0 = clk.now_ms()
     let bs = data.sort()
     t1 = clk.now_ms()
     out.println("builtin sort: same_as_msort=" + str(bs == ms))
     out.println("TIME builtin " + str(t1 - t0))
-
     let dups = gen(50000, 7, 50)
     let qd = qsort(dups)
     let md = msort(dups)
     out.println("many dups: qsort==msort " + str(qd == md) + " digest=" + str(digest(md)))
-
     t0 = clk.now_ms()
     var tree = Leaf
     for x in gen(20000, 99, 1000000) {
@@ -223,10 +222,11 @@ fn main(root: Root) ! {Write, Clock} {
     }
     let walk = inorder_list(tree)
     t1 = clk.now_ms()
-    out.println("bst: size=" + str(size(tree)) + " height=" + str(height(tree)) + " inorder_sorted=" + str(is_sorted(walk)) + " len=" + str(walk.len()) + " digest=" + str(digest(walk)))
+    out.println(
+        "bst: size=" + str(size(tree)) + " height=" + str(height(tree)) + " inorder_sorted=" + str(is_sorted(walk)) + " len=" + str(walk.len()) + " digest=" + str(digest(walk)),
+    )
     out.println("bst has: " + str(has(tree, at0(walk, 100))) + " " + str(has(tree, 1000001)))
     out.println("TIME bst " + str(t1 - t0))
-
     var chain = Leaf
     var k = 0
     while k < 3000 {
@@ -234,12 +234,50 @@ fn main(root: Root) ! {Write, Clock} {
         k = k + 1
     }
     out.println("degenerate bst: size=" + str(size(chain)) + " height=" + str(height(chain)))
-
-    let words = ["listen", "silent", "enlist", "google", "gogole", "cat", "act", "tac", "dog", "god", "evil", "vile", "live", "veil", "a", "", "ab", "ba", "αβγ", "γβα", "日本", "本日", "😀a", "a😀", "solo"]
+    let words = [
+        "listen",
+        "silent",
+        "enlist",
+        "google",
+        "gogole",
+        "cat",
+        "act",
+        "tac",
+        "dog",
+        "god",
+        "evil",
+        "vile",
+        "live",
+        "veil",
+        "a",
+        "",
+        "ab",
+        "ba",
+        "αβγ",
+        "γβα",
+        "日本",
+        "本日",
+        "😀a",
+        "a😀",
+        "solo",
+    ]
     for line in anagram_report(words) {
         out.println(line)
     }
-    let pals = ["racecar", "A man, a plan, a canal: Panama", "", "a", "ab", "été", "日本日", "😀😀😀", "Was it a car or a cat I saw?", "No lemon, no melon", "hello", "Ab1ba"]
+    let pals = [
+        "racecar",
+        "A man, a plan, a canal: Panama",
+        "",
+        "a",
+        "ab",
+        "été",
+        "日本日",
+        "😀😀😀",
+        "Was it a car or a cat I saw?",
+        "No lemon, no melon",
+        "hello",
+        "Ab1ba",
+    ]
     for p in pals {
         out.println("pal [" + p + "] " + str(is_pal(p)))
     }

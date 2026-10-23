@@ -1,0 +1,44 @@
+module mc
+
+fn main(root: Root) ! {Write, Rand, Clock} {
+    let out = root.console()
+    let r = root.rand()
+    let clk = root.clock()
+    let t0 = clk.now_ms()
+    let n = 100000
+    var inside = 0
+    var i = 0
+    while i < n {
+        let x = r.float()
+        let y = r.float()
+        if x * x + y * y <= 1.0 {
+            inside = inside + 1
+        }
+        i = i + 1
+    }
+    out.println("inside=" + str(inside) + " of " + str(n))
+    out.println("pi ~ " + str(4.0 * float(inside) / float(n)))
+
+    let counts = [0, 0, 0, 0, 0, 0, 0, 0]
+    var lo_seen = 100
+    var hi_seen = 0 - 100
+    var k = 0
+    var sum = 0
+    while k < 6000 {
+        let d = r.int(1, 6)
+        sum = sum + d
+        if d < lo_seen {
+            lo_seen = d
+        }
+        if d > hi_seen {
+            hi_seen = d
+        }
+        k = k + 1
+    }
+    out.println("dice: min=" + str(lo_seen) + " max=" + str(hi_seen) + " sum=" + str(sum))
+    out.println("single: " + str(r.int(5, 6)) + " neg: " + str(r.int(0 - 3, 0 - 1)))
+    let f = r.float()
+    out.println("float in [0,1): " + str(f >= 0.0 && f < 1.0))
+    let t1 = clk.now_ms()
+    out.println("clock: t0=" + str(t0) + " t1=" + str(t1) + " elapsed_nonneg=" + str(t1 >= t0))
+}

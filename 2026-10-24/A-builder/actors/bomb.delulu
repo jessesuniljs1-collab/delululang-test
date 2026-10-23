@@ -1,0 +1,24 @@
+module bomb
+
+actor Spawner {
+    var made: Int
+
+    new() {
+        self.made = 0
+    }
+
+    be grow(depth: Int) ! {Async} {
+        self.made = self.made + 1
+        if depth > 0 {
+            let a = spawn Spawner()
+            let b = spawn Spawner()
+            a.grow(depth - 1)
+            b.grow(depth - 1)
+        }
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let s = spawn Spawner()
+    s.grow(40)
+}

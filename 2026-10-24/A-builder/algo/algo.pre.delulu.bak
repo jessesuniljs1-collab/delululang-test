@@ -1,0 +1,246 @@
+module algo
+
+type Tree = Leaf | Node(Tree, Int, Tree)
+
+fn at0(xs: List[Int], i: Int) -> Int {
+    match xs.get(i) {
+        Some(v) => v
+        None => 0
+    }
+}
+
+fn lcg(x: Int) -> Int {
+    (x * 1103515245 + 12345) % 2147483648
+}
+
+fn gen(n: Int, seed: Int, modulo: Int) -> List[Int] {
+    let out = []
+    var x = seed
+    var i = 0
+    while i < n {
+        x = lcg(x)
+        out.push((x / 65536) % modulo)
+        i = i + 1
+    }
+    out
+}
+
+fn merge(a: List[Int], b: List[Int]) -> List[Int] {
+    let out = []
+    let na = a.len()
+    let nb = b.len()
+    var i = 0
+    var j = 0
+    while i < na && j < nb {
+        let x = at0(a, i)
+        let y = at0(b, j)
+        if x <= y {
+            out.push(x)
+            i = i + 1
+        } else {
+            out.push(y)
+            j = j + 1
+        }
+    }
+    while i < na {
+        out.push(at0(a, i))
+        i = i + 1
+    }
+    while j < nb {
+        out.push(at0(b, j))
+        j = j + 1
+    }
+    out
+}
+
+fn msort(xs: List[Int]) -> List[Int] {
+    let n = xs.len()
+    if n <= 1 {
+        xs
+    } else {
+        let mid = n / 2
+        merge(msort(xs.slice(0, mid)), msort(xs.slice(mid, n)))
+    }
+}
+
+fn qsort(xs: List[Int]) -> List[Int] {
+    let n = xs.len()
+    if n <= 1 {
+        xs
+    } else {
+        let p = at0(xs, n / 2)
+        let lo = xs.filter(fn(x: Int) -> Bool { x < p })
+        let eq = xs.filter(fn(x: Int) -> Bool { x == p })
+        let hi = xs.filter(fn(x: Int) -> Bool { x > p })
+        qsort(lo).concat(eq).concat(qsort(hi))
+    }
+}
+
+fn digest(xs: List[Int]) -> Int {
+    var h = 7
+    for x in xs {
+        h = (h * 31 + x) % 1000000007
+    }
+    h
+}
+
+fn is_sorted(xs: List[Int]) -> Bool {
+    var ok = true
+    var i = 1
+    while i < xs.len() {
+        if at0(xs, i - 1) > at0(xs, i) {
+            ok = false
+        }
+        i = i + 1
+    }
+    ok
+}
+
+fn insert(t: Tree, x: Int) -> Tree {
+    match t {
+        Leaf => Node(Leaf, x, Leaf)
+        Node(l, v, r) => {
+            if x < v {
+                Node(insert(l, x), v, r)
+            } else if x > v {
+                Node(l, v, insert(r, x))
+            } else {
+                t
+            }
+        }
+    }
+}
+
+fn size(t: Tree) -> Int {
+    match t {
+        Leaf => 0
+        Node(l, v, r) => 1 + size(l) + size(r)
+    }
+}
+
+fn height(t: Tree) -> Int {
+    match t {
+        Leaf => 0
+        Node(l, v, r) => {
+            let a = height(l)
+            let b = height(r)
+            1 + (if a > b { a } else { b })
+        }
+    }
+}
+
+fn has(t: Tree, x: Int) -> Bool {
+    match t {
+        Leaf => false
+        Node(l, v, r) => if x < v { has(l, x) } else if x > v { has(r, x) } else { true }
+    }
+}
+
+fn inorder_list(t: Tree) -> List[Int] {
+    match t {
+        Leaf => []
+        Node(l, v, r) => inorder_list(l).concat([v]).concat(inorder_list(r))
+    }
+}
+
+fn anagram_report(words: List[Str]) -> List[Str] {
+    let m: ref Map[Str, List[Str]] = Map()
+    for w in words {
+        let key = w.chars().sort().join("")
+        match m.get(key) {
+            Some(old) => m.insert(key, old.concat([w]))
+            None => m.insert(key, [w])
+        }
+    }
+    let out = []
+    for k in m.keys() {
+        match m.get(k) {
+            Some(group) => {
+                if group.len() > 1 {
+                    out.push("[" + k + "] " + str(group.len()) + ": " + group.join(","))
+                }
+            }
+            None => {
+                out.push("?")
+            }
+        }
+    }
+    out
+}
+
+fn alnum_lower(s: Str) -> List[Str] {
+    let keep = []
+    for c in s.to_lower().chars() {
+        let lc = c.to_lower()
+        if lc.to_upper() != lc || "0123456789".contains(lc) {
+            keep.push(lc)
+        }
+    }
+    keep
+}
+
+fn is_pal(s: Str) -> Bool {
+    let cs = alnum_lower(s)
+    cs.join("") == cs.reverse().join("")
+}
+
+fn main(root: Root) ! {Write, Clock} {
+    let out = root.console()
+    let clk = root.clock()
+    var t0 = clk.now_ms()
+    let data = gen(100000, 42, 1000000)
+    out.println("gen: n=" + str(data.len()) + " first=" + str(at0(data, 0)) + "," + str(at0(data, 1)) + "," + str(at0(data, 2)) + " digest=" + str(digest(data)))
+    var t1 = clk.now_ms()
+    out.println("TIME gen " + str(t1 - t0))
+
+    t0 = clk.now_ms()
+    let ms = msort(data)
+    t1 = clk.now_ms()
+    out.println("msort: sorted=" + str(is_sorted(ms)) + " len=" + str(ms.len()) + " min=" + str(at0(ms, 0)) + " max=" + str(at0(ms, ms.len() - 1)) + " digest=" + str(digest(ms)))
+    out.println("TIME msort " + str(t1 - t0))
+
+    t0 = clk.now_ms()
+    let qs = qsort(data)
+    t1 = clk.now_ms()
+    out.println("qsort: sorted=" + str(is_sorted(qs)) + " same_as_msort=" + str(qs == ms) + " digest=" + str(digest(qs)))
+    out.println("TIME qsort " + str(t1 - t0))
+
+    t0 = clk.now_ms()
+    let bs = data.sort()
+    t1 = clk.now_ms()
+    out.println("builtin sort: same_as_msort=" + str(bs == ms))
+    out.println("TIME builtin " + str(t1 - t0))
+
+    let dups = gen(50000, 7, 50)
+    let qd = qsort(dups)
+    let md = msort(dups)
+    out.println("many dups: qsort==msort " + str(qd == md) + " digest=" + str(digest(md)))
+
+    t0 = clk.now_ms()
+    var tree = Leaf
+    for x in gen(20000, 99, 1000000) {
+        tree = insert(tree, x)
+    }
+    let walk = inorder_list(tree)
+    t1 = clk.now_ms()
+    out.println("bst: size=" + str(size(tree)) + " height=" + str(height(tree)) + " inorder_sorted=" + str(is_sorted(walk)) + " len=" + str(walk.len()) + " digest=" + str(digest(walk)))
+    out.println("bst has: " + str(has(tree, at0(walk, 100))) + " " + str(has(tree, 1000001)))
+    out.println("TIME bst " + str(t1 - t0))
+
+    var chain = Leaf
+    var k = 0
+    while k < 3000 {
+        chain = insert(chain, k)
+        k = k + 1
+    }
+    out.println("degenerate bst: size=" + str(size(chain)) + " height=" + str(height(chain)))
+
+    let words = ["listen", "silent", "enlist", "google", "gogole", "cat", "act", "tac", "dog", "god", "evil", "vile", "live", "veil", "a", "", "ab", "ba", "αβγ", "γβα", "日本", "本日", "😀a", "a😀", "solo"]
+    for line in anagram_report(words) {
+        out.println(line)
+    }
+    let pals = ["racecar", "A man, a plan, a canal: Panama", "", "a", "ab", "été", "日本日", "😀😀😀", "Was it a car or a cat I saw?", "No lemon, no melon", "hello", "Ab1ba"]
+    for p in pals {
+        out.println("pal [" + p + "] " + str(is_pal(p)))
+    }
+}

@@ -1,0 +1,25 @@
+module mc_int
+
+fn main(root: Root) ! {Write, Rand, Clock} {
+    let out = root.console()
+    let r = root.rand()
+    let clk = root.clock()
+    var sum = 0
+    var k = 0
+    var hi_seen = 0
+    var lo_seen = 1000000
+    while k < 2000 {
+        let d = r.int(1, 1000000)
+        sum = sum + d
+        if d > hi_seen {
+            hi_seen = d
+        }
+        if d < lo_seen {
+            lo_seen = d
+        }
+        k = k + 1
+    }
+    out.println("sum=" + str(sum) + " lo=" + str(lo_seen) + " hi=" + str(hi_seen))
+    out.println("wide: " + str(r.int(0 - 9223372036854775807 - 1, 9223372036854775807)))
+    out.println("t=" + str(clk.now_ms()))
+}

@@ -88,6 +88,20 @@ A12 - low - A method call on a not-yet-inferred `Map` value leaks an internal ty
 A13 - low - A list built through a `ref` helper can never be handed to a `val` parameter or returned as a `List` (DL1603), so "fill it in a helper, then read it elsewhere" must be rewritten as pure recursion/concat
   File: algo/algo.delulu (first draft): `let walk = []` / `inorder(tree, walk)` (param `ref List[Int]`) / `is_sorted(walk)` (param `List[Int]`): DL1603 "cannot store `ref` (aliases as `ref`) where `val` is required (argument `xs`)" (3 diagnostics); wrapping it as `fn inorder_list(t) -> List[Int] { let acc = [] ; inorder(t, acc) ; acc }` gives DL1603 "... where `val` is required (return value)". Related to A1 (opposite direction: a never-ref-used fresh list is silently frozen, a ref-used one is refused). No documented way to convert (no copy method named in the docs).
 
+A14 - medium - Interpreter speed: merge sort of 100,000 Ints takes 28 s, quicksort (filter-based) 11 s, a 100k-step LCG generator 1 s; the same program on --engine wasm does all of it in 1 s total
+  File: algo/algo.delulu (gen 100k LCG ints; msort; qsort; builtin sort; 20k-node persistent BST; degenerate BST; anagrams; palindromes)
+  Interpreter (A-full), TIME lines printed by the program from root.clock(): gen 957 ms, msort 28020 ms, qsort 10987 ms, builtin `.sort()` 84 ms, bst 3374 ms; whole run `real` 148 s. `--engine wasm`: gen 2 ms, msort 56 ms, qsort 30 ms, builtin 100 ms, bst 10 ms; whole run 1 s; `build --target wasm` + `run algo.dwx` also 1 s. Outputs identical to Python (algo_ref.py) on interpreter, WASM and .dwx (cmp/diff empty, TIME lines removed).
+  Also actors/primes.delulu: counting primes below 300,000 by trial division in 8 actors = 9 s on the default scheduler, 43 s with --actors-threads 1 (24 s with 2, 14 s with 4), i.e. roughly 3.6 microseconds per inner-loop iteration. Actors cannot go to WASM here (A16).
+  So: "anything over 10 s on modest input" - yes on the interpreter (100k-element merge sort, 148 s total); the docs' own advice (docs/for-agents.md) is that WASM is the faster engine, which holds here by 500x but not for the Str/Map-heavy textstats (A5). Nothing tells a user which engine to pick for which workload.
+
+A15 - low - `r.int(lo, hi)` is half-open and a bad range aborts the run as DL0904 "capability scope violation"; neither is documented
+  File: mc/mc.delulu (first draft)
+  `r.int(1, 6)` x 6000 draws -> min 1, max 5 on both of two unseeded runs (6 is never produced; upper bound exclusive). `r.int(5, 5)` -> `error[DL0904]: rand.int requires lo < hi` (exit 1, run aborted, not a catchable value). `delulu explain DL0904` says "An operation reached outside its capability's SCOPE - a path outside the granted prefix, a host not on the granted list": a bad argument is not a scope violation. docs/reference/primitives.md lists `int | 2` only; neither the book nor the guide states the bound semantics.
+
+A16 - low - Actor programs: --sandbox refuses them (documented), WASM refuses an actor holding a Console capability in a field, with a message naming the field but no span
+  File: actors/primes.delulu (`actor Collector { let out: Cap[Console] ... }`)
+  `--engine wasm` -> error[DL1201]: WASM codegen does not support actor field `Collector.out` is outside the Int/actor-reference subset (exit 1). `--sandbox` -> `error: --sandbox cannot carry this program yet: it uses actors. Nothing ran.` (exit 2, as documented in for-agents.md). Both are honest refusals; recorded for the construct list.
+
 =====================================================================
 COVERAGE (behaved correctly) - each line says what was tested
 =====================================================================
