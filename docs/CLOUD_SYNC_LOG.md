@@ -5446,3 +5446,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
 
+### 2026-10-23 (afternoon) — SEND-REBIND-1 (RW 4.78); the session's last commit (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/send-rebind` (on `master` `85f6b5c`)   Pull request: opened with this push
+- **What:** see V2_LOG's entry of the same name. Files: M `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next (session ended at the owner's usage limit):** (1) this branch's CI, then land; (2) PR #58 (records) — land on
+  green; (3) `launch/2.0.0` `cab60c7`'s `everything` `39911650269` — read it, then re-cite CHECKLIST-2.0 criteria 1/3/4 from it
+  (criterion 2 re-measured 2026-10-23: 355/355, reference in sync); (4) #56's `everything` `39905652720` `miri-slow`
+  (delulu-broker); (5) `docs/CLOUD_ROUTINE.md`: the owner's setup script (saved 12:02 IST) and whether the first run shows
+  xhigh; (6) a records commit after #58 for (5).
+- Survey and doctor (after the last edit): in the commit message.

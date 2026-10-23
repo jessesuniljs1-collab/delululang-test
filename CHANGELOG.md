@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a reassigned secret is not attributed to its first value, 2026-10-23
+
+- **Fixed: `authority --grants`/`--within`/`deploy plan` attributed a send of a secret reassigned in a branch, a loop or
+  a closure to the secret first bound** (SEND-REBIND-1, RW 4.78), and could answer *within* for a boundary under which the
+  run refuses the send. Such a send is now judged as a secret the source does not name.
+
 ## Unreleased — a sent secret is asked for and decided with its audience, 2026-10-23
 
 - **Fixed: `delulu authority --grants` asked for a sent secret without the audience its sends need** (RW 2.11,
