@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 329 |
-| Rust lines | 189845 |
+| Rust lines | 189995 |
 | Rust files outside `src/` (test/bench targets) | 159 |
 | Markdown documents | 270 |
-| Markdown lines | 86269 |
+| Markdown lines | 86285 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1557 / 16535 |
+| Nodes / edges in this map | 1557 / 16536 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -383,16 +383,16 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 12993 lines
+- **Modules:** 9 files, 13116 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 265 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 344 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 6010 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 6060 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 2942 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/host.rs` | 3015 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 1142 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 | `src/reify.rs` | 449 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |

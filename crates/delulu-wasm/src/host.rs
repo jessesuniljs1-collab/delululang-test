@@ -568,8 +568,6 @@ fn seed_rng(seed: Option<u64>) -> u64 {
 //   variant `[tag:i32-le @0][field @4]` (8-byte field slot; cell 12 bytes)
 //   Result tags: Ok=0, Err=1.   IoErr tags: NotFound=0, Denied=1, Other=2.
 
-/// Read a length-prefixed guest string at `ptr`; `None` if it is out of bounds.
-
 /// `get_with_secret` and `post_with_secret` (D-V2-174; P9-05 (d), D-V2-183): `get`'s order — the record at dispatch, its
 /// detail `«opaque»` as every secret-involving record's is; the custody on the URL's host (and, for the POST, its method),
 /// unless the URL is not `https://`; then the secret judged and, if the broker holds it, its bytes asked for the one origin
@@ -688,6 +686,7 @@ fn send_with_secret(
     }
 }
 
+/// Read a length-prefixed guest string at `ptr`; `None` if it is out of bounds.
 fn read_guest_str(caller: &mut Caller<'_, HostState>, ptr: i32) -> Option<String> {
     let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
     let data = mem.data(&caller);

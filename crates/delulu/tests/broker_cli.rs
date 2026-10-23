@@ -410,8 +410,19 @@ fn a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_metho
             &cwd,
             &state,
             &[
-                "run", file, "--grant", "console", "--grant", net, "--grant", &secret, "--no-prompt", "--broker", "daemon",
-                "--engine", engine,
+                "run",
+                file,
+                "--grant",
+                "console",
+                "--grant",
+                net,
+                "--grant",
+                &secret,
+                "--no-prompt",
+                "--broker",
+                "daemon",
+                "--engine",
+                engine,
             ],
         )
     };
