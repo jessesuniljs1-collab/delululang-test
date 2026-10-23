@@ -1,0 +1,4 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_340109a9014d775e40aea4ea8e6b084b`
+custody: daemon
+note: the request to `https://127.0.0.1:99999/x` was not delivered: the URL is refused rather than normalized: the port is not a canonical number from 1 to 65535 [egress: malformed]

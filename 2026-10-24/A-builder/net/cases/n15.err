@@ -1,0 +1,10 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_340109a9014d775e40aea4ea8e6b084b`
+custody: daemon
+error[DL0904]: lease `g_340109a9014d775e40aea4ea8e6b084b` does not grant `localhost` in scope `net` (capability scope violation)
+  --> net/cases/n15.delulu:18:21
+   |
+18 |     out.println(str(c.get("https://localhost:18443/x")))
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0904
+

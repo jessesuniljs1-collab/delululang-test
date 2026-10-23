@@ -1,0 +1,2 @@
+plain http -> Err(Refused)
+other scheme -> Err(Refused)

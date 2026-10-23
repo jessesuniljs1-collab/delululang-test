@@ -1,0 +1,23 @@
+module client3
+
+fn show_get(out: Cap[Console], c: Cap[Http], url: Str) ! {Net, Write} {
+    match c.get(url) {
+        Ok(body) => out.println("GET " + url + " -> Ok(" + str(body.len()) + " chars): " + body)
+        Err(e) => out.println("GET " + url + " -> Err(" + str(e) + ")")
+    }
+}
+
+fn main(root: Root) ! {Net, Write} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST,PUT"])
+    show_get(out, c, "https://127.0.0.1:18443/plain")
+    show_get(out, c, "https://127.0.0.1:18444/plainreply")
+    show_get(out, c, "https://127.0.0.1:18446/closed")
+    let ph = Map()
+    ph.insert("Content-Type", "application/json")
+    match c.post("https://127.0.0.1:18443/submit", ph, "{\"k\": 1, \"msg\": \"h\u{e9}llo \u{1F600}\"}") {
+        Ok(body) => out.println("POST -> Ok " + body)
+        Err(e) => out.println("POST -> Err(" + str(e) + ")")
+    }
+    out.println("done")
+}

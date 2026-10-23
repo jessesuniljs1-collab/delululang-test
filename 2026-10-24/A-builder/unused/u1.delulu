@@ -1,0 +1,11 @@
+module u1
+
+fn helper(out: Cap[Console]) -> Int ! {Write, Read, Net} {
+    out.println("hi")
+    1
+}
+
+fn main(root: Root) ! {Write, Clock} {
+    let out = root.console()
+    out.println(str(helper(out)))
+}

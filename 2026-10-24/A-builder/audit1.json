@@ -1,0 +1,37 @@
+{
+  "audit": {
+    "required_grants": [
+      "fs.read=./data",
+      "fs.write=./out",
+      "console"
+    ],
+    "unsupported_surface": null
+  },
+  "command": "run",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "outcome": {
+    "exit": 0,
+    "ran": false
+  },
+  "sandbox": {
+    "backend": "none",
+    "break_glass": false,
+    "granted": "none",
+    "host_guarantees": [],
+    "level": 1,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "audit",
+    "policy_hash": "28d3318ffe70ade79585f19ea9cdd1a2078e20dbc72b4a94d39a309dc84270c9",
+    "requested": "contained",
+    "requested_level": 1
+  },
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

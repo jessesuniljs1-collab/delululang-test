@@ -1,0 +1,18 @@
+module t1
+
+fn double(n: Int) -> Int {
+    n * 2
+}
+
+test "pure double" {
+    assert_eq(double(21), 42)
+}
+
+test "fails on purpose" {
+    assert_eq(double(2), 5)
+}
+
+test "console needs a ceiling" ! {Write} {
+    let out = test_root.console()
+    out.println("hi")
+}

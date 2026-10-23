@@ -1,0 +1,51 @@
+module client2
+
+fn try_get(out: Cap[Console], c: Cap[Http], label: Str, url: Str) ! {Net, Write} {
+    match c.get(url) {
+        Ok(body) => out.println(label + " -> Ok(" + str(body.len()) + ")")
+        Err(e) => out.println(label + " -> Err(" + str(e) + ")")
+    }
+}
+
+fn try_get_with(out: Cap[Console], c: Cap[Http], label: Str, url: Str, hs: Map[Str, Str]) ! {Net, Write} {
+    match c.get_with(url, hs) {
+        Ok(body) => out.println(label + " -> Ok(" + str(body.len()) + ")")
+        Err(e) => out.println(label + " -> Err(" + str(e) + ")")
+    }
+}
+
+fn main(root: Root) ! {Net, Write} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST,PUT"])
+    try_get(out, c, "plain http", "http://127.0.0.1:18443/x")
+    try_get(out, c, "other scheme", "ftp://127.0.0.1:18443/x")
+    try_get(out, c, "wrong host", "https://localhost:18443/x")
+    try_get(out, c, "no scheme", "127.0.0.1:18443/x")
+    try_get(out, c, "empty", "")
+    try_get(out, c, "userinfo", "https://user:pw@127.0.0.1:18443/x")
+    try_get(out, c, "dotdot", "https://127.0.0.1:18443/a/../b")
+    try_get(out, c, "bad port", "https://127.0.0.1:99999/x")
+    try_get(out, c, "port 0", "https://127.0.0.1:0/x")
+    let bad = Map()
+    bad.insert("Host", "evil.example")
+    try_get_with(out, c, "Host header", "https://127.0.0.1:18443/x", bad)
+    let crlf = Map()
+    crlf.insert("X-A", "v\r\nX-Injected: 1")
+    try_get_with(out, c, "CRLF value", "https://127.0.0.1:18443/x", crlf)
+    let dup = Map()
+    dup.insert("X-A", "1")
+    dup.insert("x-a", "2")
+    try_get_with(out, c, "case-dup names", "https://127.0.0.1:18443/x", dup)
+    let sp = Map()
+    sp.insert("X A", "1")
+    try_get_with(out, c, "space in name", "https://127.0.0.1:18443/x", sp)
+    let ok = Map()
+    ok.insert("X-Fine", "yes")
+    try_get_with(out, c, "good headers", "https://127.0.0.1:18443/x", ok)
+    let get_only = root.http(["127.0.0.1"])
+    match get_only.post("https://127.0.0.1:18443/x", ok, "body") {
+        Ok(b) => out.println("post under get-only mint -> Ok")
+        Err(e) => out.println("post under get-only mint -> Err(" + str(e) + ")")
+    }
+    out.println("done")
+}

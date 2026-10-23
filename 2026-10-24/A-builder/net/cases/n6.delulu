@@ -1,0 +1,20 @@
+module n6
+
+fn main(root: Root) ! {Net, Write} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST,PUT"])
+    let ok = Map()
+    ok.insert("X-Fine", "yes")
+    let bad = Map()
+    bad.insert("Host", "evil.example")
+    let crlf = Map()
+    crlf.insert("X-A", "v\r\nX-Injected: 1")
+    let dup = Map()
+    dup.insert("X-A", "1")
+    dup.insert("x-a", "2")
+    let sp = Map()
+    sp.insert("X A", "1")
+    let get_only = root.http(["127.0.0.1"])
+    out.println(str(c.get("https://127.0.0.1:0/x")))
+    out.println("port0: after")
+}

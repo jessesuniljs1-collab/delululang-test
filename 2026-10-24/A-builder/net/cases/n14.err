@@ -1,0 +1,4 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_340109a9014d775e40aea4ea8e6b084b`
+custody: daemon
+note: the request to `https://127.0.0.1:18443/é` was not delivered: the URL is refused rather than normalized: it contains a non-ASCII byte; percent-encode it, and spell an international host in its `xn--` form [egress: malformed]

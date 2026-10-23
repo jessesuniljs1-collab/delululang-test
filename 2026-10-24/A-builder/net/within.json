@@ -1,0 +1,143 @@
+{
+  "authority": {
+    "capabilities": [
+      {
+        "kind": "Console",
+        "requested_scopes": [],
+        "scopes": [
+          "stdio"
+        ]
+      },
+      {
+        "kind": "Http",
+        "requested_scopes": [
+          "127.0.0.1:GET,POST,PUT"
+        ],
+        "scopes": []
+      }
+    ],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [
+      "Net",
+      "Write"
+    ],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "client",
+    "pure_functions": [],
+    "requested_scopes": {
+      "Http": [
+        "127.0.0.1:GET,POST,PUT"
+      ]
+    },
+    "requests": [
+      {
+        "at": {
+          "column": 11,
+          "file": "net/client.delulu",
+          "line": 4
+        },
+        "host": null,
+        "method": "get",
+        "path": null,
+        "url": null
+      },
+      {
+        "at": {
+          "column": 11,
+          "file": "net/client.delulu",
+          "line": 19
+        },
+        "host": "127.0.0.1",
+        "method": "get_with",
+        "path": "/with-headers",
+        "url": "https://127.0.0.1:18443/with-headers"
+      },
+      {
+        "at": {
+          "column": 11,
+          "file": "net/client.delulu",
+          "line": 25
+        },
+        "host": "127.0.0.1",
+        "method": "post",
+        "path": "/submit",
+        "url": "https://127.0.0.1:18443/submit"
+      }
+    ],
+    "required_grants": [
+      "console",
+      "net.special=127.0.0.1:GET,POST,PUT"
+    ],
+    "secrets": [],
+    "within": {
+      "boundary": [
+        "console",
+        "net.special=127.0.0.1"
+      ],
+      "counterexample": {
+        "at": {
+          "column": 13,
+          "file": "net/client.delulu",
+          "line": 12
+        },
+        "dimension": "net.special",
+        "grant": "net.special=127.0.0.1:GET,POST,PUT",
+        "reason": "`network host` was not granted to this program — pass `--grant net=HOST` (DL0703)",
+        "result": "exceeds"
+      },
+      "coverage": {
+        "actuator": "not-requested",
+        "clock": "not-requested",
+        "compute": "not-requested",
+        "console": "within",
+        "declassify": "not-requested",
+        "foreign.c": "not-requested",
+        "foreign.python": "not-requested",
+        "fs.read": "not-requested",
+        "fs.write": "not-requested",
+        "net": "exceeds",
+        "net.special": "exceeds",
+        "plugin": "not-requested",
+        "rand": "not-requested",
+        "secret": "not-requested",
+        "sensor": "not-requested"
+      },
+      "findings": [
+        {
+          "at": {
+            "column": 13,
+            "file": "net/client.delulu",
+            "line": 12
+          },
+          "dimension": "net.special",
+          "grant": "net.special=127.0.0.1:GET,POST,PUT",
+          "reason": "`network host` was not granted to this program — pass `--grant net=HOST` (DL0703)",
+          "result": "exceeds"
+        },
+        {
+          "at": {
+            "column": 11,
+            "file": "net/client.delulu",
+            "line": 25
+          },
+          "dimension": "net",
+          "grant": "net=127.0.0.1:POST/submit",
+          "reason": "the request to `https://127.0.0.1:18443/submit` is a `POST`, and the boundary's `net` grants that take its path on `127.0.0.1` name other methods",
+          "result": "exceeds"
+        }
+      ],
+      "requests": 5,
+      "result": "exceeds"
+    }
+  },
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
