@@ -137,9 +137,10 @@ Symbolic verification of what `attenuation_check` actually computes (`authority.
 conjunction of seven exact-set dimensions (the effect set among them; `secret_to`, each secret's
 audience, since P9-04 (d), D-V2-133), two path dimensions, the device dimension and — since PS-B-05 —
 the budget dimension — and since P9-05 (b) (D-V2-139) the `net` dimension's path patterns, whose order is proved
-sound and whose meet exact in §2d. **41 obligations, all discharged**, `RESULT: every obligation discharged`; nine
-mutants CI requires to fail (`DELULU_Z3_MUTANT`), three of them the path order's (`net-star-under-literal`,
-`net-rest-under-fixed`, `net-meet-star-wins`).
+sound and whose meet exact in §2d — and since P9-05 (d) (D-V2-182) its entries' methods, in §2e. **50 obligations,
+all discharged**, `RESULT: every obligation discharged`; eleven mutants CI requires to fail (`DELULU_Z3_MUTANT`), three
+of them the path order's (`net-star-under-literal`, `net-rest-under-fixed`, `net-meet-star-wins`) and two the methods'
+(`net-method-dropped`, `net-method-meet-union`).
 
 Until PS-B-05 the full conjunction here modelled seven set dimensions while the obligation said "all
 nine dimensions at once"; the code has eight. The laws are uniform in that number, so nothing proved

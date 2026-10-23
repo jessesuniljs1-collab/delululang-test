@@ -295,6 +295,13 @@ pub(crate) fn export(
                          grant every path on it"
                     )));
                 }
+                // P9-05 (d), D-V2-182: nor a method scope, for the same reason.
+                if delulu_broker::netscope::host_of(value) != value {
+                    return Err(Refused::Unrepresentable(format!(
+                        "`--grant {spec}` names methods; this export does not map a method scope yet, and the host alone \
+                         would grant every method on it"
+                    )));
+                }
                 let Some(h) = endpoint_host(spec, value)? else {
                     omitted.push(json!({
                         "grant": spec,

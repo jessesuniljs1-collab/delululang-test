@@ -286,3 +286,11 @@ skip branch, §11.2).
   pattern) in the broker's `⊑`, the runtime's mint and `grants diff`; the meet every entry's meet; the canonical form an
   antichain; Z3 §2d (41 obligations, three more CI mutants) and an exhaustive Rust check. Not taken: the path in the
   broker's op and record (OCSF reads `target` as the hostname) — its own slice. Next: (c)'s static half.
+  **Step (d)'s first slice built 2026-10-23 (D-V2-182), on the laptop: the methods as an order, before any primitive
+  uses one.** `net=HOST[:METHODS][/PATTERN]`, each set spelled one way (names from GET, HEAD, POST, PUT, PATCH, DELETE,
+  each once, in that order; never `:GET` alone); an entry naming none allows GET alone, so no grant written before
+  reaches more. The order and the meet in `netscope` (methods ⊆ and ∩), exact by enumeration with methods; Z3 §2e (9
+  obligations, 50 in all, two more CI mutants). Every check asks with `GET` — the first check (DL0904 in words about
+  the method), every egress hop, the broker's use check (`Denial::NetMethod`), `--within` — and the OpenShell export
+  refuses a method scope. Next: the first non-GET primitive (its conformance anchors, the method in the broker's op and
+  record, OCSF's `http_request.http_method`, a redirect's method — a 303 makes a GET), then the static half.

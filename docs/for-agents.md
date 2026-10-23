@@ -693,7 +693,9 @@ overstate it downstream:
   a grant's path pattern held on every hop (`--grant net=api.example.com/v1/**`, P9-05 (a): `*` one
   segment, `**` the rest; the program asks for the same scope, `root.http(["api.example.com/v1/**"])`;
   a path outside it, or one a server could read another way — `..`, `//`, `;`, an escaped `/` — is
-  refused at the call, DL0904, under every custody),
+  refused at the call, DL0904, under every custody), and its methods (`--grant net=api.example.com:GET,POST/v1/**`,
+  P9-05 (d), D-V2-182: named after the host in the order GET, HEAD, POST, PUT, PATCH, DELETE, each once; an entry
+  naming none allows GET alone, the one request a program makes today, so a POST-only entry refuses it, DL0904),
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).

@@ -1044,10 +1044,14 @@ fn hop(
     let t = parse_target(url)?;
     // P9-05 (a), D-V2-138: the host, and where an entry names a path pattern, this hop's path — a redirect out of the
     // granted path is refused here as one to an ungranted host is; a path a server could read two ways, before DNS.
-    match delulu_broker::netscope::judge_all(&policy.allow, &t.host, t.path()) {
+    // P9-05 (d), D-V2-182: and the method — every hop is a GET, the one request a program makes until a primitive makes
+    // another.
+    match delulu_broker::netscope::judge_all(&policy.allow, "GET", &t.host, t.path()) {
         delulu_broker::netscope::Verdict::Allow => {}
         delulu_broker::netscope::Verdict::Ambiguous(why) => return Err(Reason::Malformed(why)),
-        delulu_broker::netscope::Verdict::OtherHost | delulu_broker::netscope::Verdict::OutsidePath => {
+        delulu_broker::netscope::Verdict::OtherHost
+        | delulu_broker::netscope::Verdict::OutsidePath
+        | delulu_broker::netscope::Verdict::OtherMethod => {
             return Err(Reason::NotAllowlisted);
         }
     }

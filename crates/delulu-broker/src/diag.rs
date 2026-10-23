@@ -39,6 +39,9 @@ pub enum Denial {
     /// (`why` is `None`), or spelled so a server could read it two ways where a pattern decides (`why` says how) — P9-05,
     /// D-V2-169: the use carries its path, so the broker judges it as the runtime's first check does.
     NetPath { node: GrantId, host: String, path: String, why: Option<&'static str> },
+    /// DL0904 — a request by `method` to a host and path the node's `net` grant takes, by other methods only (P9-05 (d),
+    /// D-V2-182).
+    NetMethod { node: GrantId, host: String, path: String, method: &'static str },
     /// DL0904 — `revoke` refused because the target is neither the caller's node nor a descendant
     /// of it (spec §3.2). The caller's authority (its own subtree) does not reach the target.
     NotRevocable { caller: GrantId, target: GrantId },
@@ -115,6 +118,7 @@ impl Denial {
             Denial::Revoked { .. } => "DL1403",
             Denial::OutOfScope { .. }
             | Denial::NetPath { .. }
+            | Denial::NetMethod { .. }
             | Denial::NotRevocable { .. }
             | Denial::DeadGuardPattern { .. }
             | Denial::Proposal { .. }
@@ -258,6 +262,14 @@ impl Denial {
                 format!(
                     "the path `{path}` on `{host}` is refused under a path scope: {why} (lease `{}`; capability scope \
                      violation)",
+                    node.as_str()
+                ),
+            ),
+            Denial::NetMethod { node, host, path, method } => Diagnostic::error(
+                "DL0904",
+                format!(
+                    "a `{method}` to `{host}{path}` is outside the methods the grant names for it (lease `{}`; capability \
+                     scope violation)",
                     node.as_str()
                 ),
             ),

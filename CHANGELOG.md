@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a `net` grant names its methods, 2026-10-23
+
+- **Added: a `net` entry may name the HTTP methods it allows** (P9-05 (d), D-V2-182, RW 2.12):
+  `--grant net=api.example.com:GET,POST/v1/**`. Methods are named after the host from `GET`, `HEAD`, `POST`, `PUT`,
+  `PATCH` and `DELETE`, each once and in that order. An entry that names none allows **GET alone**, as every entry
+  has until now, so no grant reaches more than it did. A program asks for the same scope in `root.http([...])`, never
+  for a method its grant does not name. Every request is still a GET; under an entry that names POST alone it is
+  refused at its call (DL0904, in words about the method), by the egress client on every hop and by the broker.
+  `--within` and `deploy plan` decide the same way. The method set is ordered like the path patterns and proved in
+  Z3. This is the dimension a primitive other than GET needs before it can exist.
+- **Changed (stricter): a `net` entry naming a port is refused in words** (`net=api.example.com:8443`: "a `net`
+  entry names no port"). Such an entry was accepted before and never matched a request.
+- **Changed: `delulu sandbox export --to openshell` refuses a method-scoped `net` grant**, as it refuses a
+  path-scoped one: the host alone would grant every method.
+
 ## Unreleased — ctutils 0.4.5, 2026-10-23
 
 - **Security: RUSTSEC-2026-0385, published on 2026-10-23, is fixed by a patch update.** `ctutils` 0.4.2 → 0.4.5. Before

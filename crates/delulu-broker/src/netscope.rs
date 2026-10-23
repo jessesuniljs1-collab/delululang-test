@@ -26,12 +26,71 @@ pub enum Segment {
     Rest,
 }
 
-/// Split an entry at its first `/`: the host pattern, and the path pattern (with its leading `/`) when one is named.
-pub fn split(entry: &str) -> (&str, Option<&str>) {
-    match entry.find('/') {
+/// The methods an entry may name (P9-05 (d), D-V2-182), in the one order an entry writes them.
+pub const METHODS: [&str; 6] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
+
+/// What an entry that names no methods allows: `GET`, the one method a request had before an entry could name any — so
+/// no grant written before then reaches more now.
+const GET_ONLY: u8 = 1;
+
+/// A method's bit in an entry's set; `0` for a method no entry can name.
+pub fn method_bit(method: &str) -> u8 {
+    METHODS.iter().position(|m| *m == method).map_or(0, |i| 1 << i)
+}
+
+/// Parse an entry's methods as written after its host's `:` — one spelling for each set: names from [`METHODS`], each
+/// once, in its order, and never `GET` alone (what an entry naming no methods allows).
+fn parse_methods(written: &str) -> Result<u8, String> {
+    let mut set = 0u8;
+    let mut last: Option<usize> = None;
+    for m in written.split(',') {
+        let Some(i) = METHODS.iter().position(|x| *x == m) else {
+            return Err(format!("`{m}` is not a method an entry names ({}); a `net` entry names no port", METHODS.join(", ")));
+        };
+        if last.is_some_and(|l| l >= i) {
+            return Err(format!("the methods are written once each, in the order {}", METHODS.join(", ")));
+        }
+        last = Some(i);
+        set |= 1 << i;
+    }
+    if set == GET_ONLY {
+        return Err("`:GET` is what an entry naming no methods allows — write the host without it".to_string());
+    }
+    Ok(set)
+}
+
+/// An entry's three parts: its host pattern, its methods (GET alone when it names none) and its path pattern (with its
+/// leading `/`). The methods follow the host after a `:` (after the `]` of an IPv6 literal); a suffix that does not parse
+/// as methods stays part of the host, so the entry reads as it did before methods could be named — a host string no
+/// request names — and [`check_entry`] refuses it.
+pub fn read(entry: &str) -> (&str, u8, Option<&str>) {
+    let (head, path) = match entry.find('/') {
         Some(i) => (&entry[..i], Some(&entry[i..])),
         None => (entry, None),
+    };
+    let host_end = if head.starts_with('[') { head.find(']').map(|i| i + 1) } else { head.find(':') };
+    match host_end.map(|i| head.split_at(i)) {
+        Some((host, rest)) if !rest.is_empty() => match rest.strip_prefix(':').map(parse_methods) {
+            Some(Ok(methods)) => (host, methods, path),
+            _ => (head, GET_ONLY, path),
+        },
+        _ => (head, GET_ONLY, path),
     }
+}
+
+/// An entry's host pattern and path pattern (with its leading `/`) when one is named — [`read`] without the methods.
+pub fn split(entry: &str) -> (&str, Option<&str>) {
+    let (host, _, path) = read(entry);
+    (host, path)
+}
+
+/// An entry written from its parts: the methods only when they are not GET alone, in [`METHODS`]' order.
+fn render_entry(host: &str, methods: u8, path: &str) -> String {
+    if methods == GET_ONLY {
+        return format!("{host}{path}");
+    }
+    let names: Vec<&str> = METHODS.iter().enumerate().filter(|(i, _)| methods & (1 << i) != 0).map(|(_, m)| *m).collect();
+    format!("{host}:{}{path}", names.join(","))
 }
 
 /// Parse a path pattern — `/` then segments — refusing every spelling that could be read two ways.
@@ -152,33 +211,41 @@ pub enum Verdict {
     /// The entry names this host and a pattern the path is outside of (or a pattern that does not parse — an entry
     /// that reached here unparsed, a manifest's say, matches nothing).
     OutsidePath,
+    /// The entry names this host and takes this path, but not by this method (P9-05 (d), D-V2-182).
+    OtherMethod,
     /// The entry names this host and a pattern, and the path is spelled so that it could be read two ways.
     Ambiguous(&'static str),
 }
 
-/// `entry`'s verdict on a request to `host` for `path` (the URL's path, without its query or fragment).
-pub fn judge(entry: &str, host: &str, path: &str) -> Verdict {
-    let (h, p) = split(entry);
-    if !host_matches(host, h) {
+/// `entry`'s verdict on a request by `method` to `host` for `path` (the URL's path, without its query or fragment): its
+/// host, then its path, then its methods.
+pub fn judge(entry: &str, method: &str, host: &str, path: &str) -> Verdict {
+    let (h, methods, p) = read(entry);
+    // An entry naming no host (`check_entry` refuses one; a manifest's say may hold one) takes no request, not one whose
+    // URL names no host either.
+    if h.is_empty() || !host_matches(host, h) {
         return Verdict::OtherHost;
     }
-    let Some(p) = p else { return Verdict::Allow };
-    let Ok(pattern) = parse_pattern(p) else { return Verdict::OutsidePath };
-    if let Some(why) = ambiguity(path) {
-        return Verdict::Ambiguous(why);
+    if let Some(p) = p {
+        let Ok(pattern) = parse_pattern(p) else { return Verdict::OutsidePath };
+        if let Some(why) = ambiguity(path) {
+            return Verdict::Ambiguous(why);
+        }
+        if !path_matches(&pattern, path) {
+            return Verdict::OutsidePath;
+        }
     }
-    if path_matches(&pattern, path) {
-        Verdict::Allow
-    } else {
-        Verdict::OutsidePath
+    if methods & method_bit(method) == 0 {
+        return Verdict::OtherMethod;
     }
+    Verdict::Allow
 }
 
 /// The verdict of a whole allowlist: `Allow` when any entry allows, else the most telling refusal.
-pub fn judge_all<'a>(entries: impl IntoIterator<Item = &'a String>, host: &str, path: &str) -> Verdict {
+pub fn judge_all<'a>(entries: impl IntoIterator<Item = &'a String>, method: &str, host: &str, path: &str) -> Verdict {
     let mut worst = Verdict::OtherHost;
     for e in entries {
-        match judge(e, host, path) {
+        match judge(e, method, host, path) {
             Verdict::Allow => return Verdict::Allow,
             v => worst = worst.max(v),
         }
@@ -192,12 +259,18 @@ pub fn host_of(entry: &str) -> &str {
     split(entry).0
 }
 
-/// Refuse an entry the grammar does not accept: an empty host, or a path pattern that does not parse. Every parser of a
-/// `net` entry calls it — `--grant net=`, `grants delegate --net`, a lease's `--net` — so none stores what none can read.
+/// Refuse an entry the grammar does not accept: an empty host, methods that do not parse, or a path pattern that does not
+/// parse. Every parser of a `net` entry calls it — `--grant net=`, `grants delegate --net`, a lease's `--net` — so none
+/// stores what none can read.
 pub fn check_entry(entry: &str) -> Result<(), String> {
-    let (host, path) = split(entry);
-    if host.is_empty() {
+    let (host, _, path) = read(entry);
+    if host.is_empty() || host.starts_with(':') {
         return Err("it names no host (write HOST, or HOST/PREFIX/** for the paths under PREFIX)".to_string());
+    }
+    // `read` keeps a suffix that does not parse as methods in the host; say why it does not.
+    let after = if host.starts_with('[') { host.find(']').map(|i| &host[i + 1..]) } else { host.find(':').map(|i| &host[i..]) };
+    if let Some(m) = after.and_then(|rest| rest.strip_prefix(':')) {
+        parse_methods(m).map_err(|why| format!("its methods are refused: {why}"))?;
     }
     match path {
         Some(p) => parse_pattern(p).map(|_| ()).map_err(|why| format!("its path is refused: {why}")),
@@ -274,13 +347,14 @@ pub fn render(pattern: &[Segment]) -> String {
 /// Is the entry `child` within `parent`? The hosts must be the same string — a `*.SUFFIX` pattern does not contain a host
 /// under it here, as before (conservative: the order never calls more within than the matcher allows) — and then: a
 /// parent with no path reaches every path; a child with none is within only such a parent; two patterns by
-/// [`pattern_within`]. An entry whose pattern does not parse is within only an identical entry.
+/// [`pattern_within`]; and the child's methods a subset of the parent's (P9-05 (d), D-V2-182). An entry whose pattern does
+/// not parse is within only an identical entry.
 pub fn entry_within(child: &str, parent: &str) -> bool {
     if child == parent {
         return true;
     }
-    let ((ch, cp), (ph, pp)) = (split(child), split(parent));
-    if ch != ph {
+    let ((ch, cm, cp), (ph, pm, pp)) = (read(child), read(parent));
+    if ch != ph || cm & !pm != 0 {
         return false;
     }
     match (cp, pp) {
@@ -293,23 +367,24 @@ pub fn entry_within(child: &str, parent: &str) -> bool {
     }
 }
 
-/// The entry reaching exactly what both reach, or `None` when they share no path (or no host).
+/// The entry reaching exactly what both reach, or `None` when they share no path, no method (or no host).
 pub fn entry_meet(a: &str, b: &str) -> Option<String> {
     if a == b {
         return Some(a.to_string());
     }
-    let ((ah, ap), (bh, bp)) = (split(a), split(b));
-    if ah != bh {
+    let ((ah, am, ap), (bh, bm, bp)) = (read(a), read(b));
+    if ah != bh || am & bm == 0 {
         return None;
     }
-    match (ap, bp) {
-        (None, _) => Some(b.to_string()),
-        (_, None) => Some(a.to_string()),
+    let path = match (ap, bp) {
+        (None, None) => String::new(),
+        (None, Some(p)) | (Some(p), None) => p.to_string(),
         (Some(x), Some(y)) => {
             let (Ok(px), Ok(py)) = (parse_pattern(x), parse_pattern(y)) else { return None };
-            pattern_meet(&px, &py).map(|m| format!("{ah}{}", render(&m)))
+            render(&pattern_meet(&px, &py)?)
         }
-    }
+    };
+    Some(render_entry(ah, am & bm, &path))
 }
 
 /// `child ⊑ parent` for a `net` set: every child entry within some parent entry. A preorder, not an order — `{h/a/**}`
@@ -416,28 +491,40 @@ mod tests {
     #[test]
     fn an_entry_judges_its_host_then_its_path() {
         assert_eq!(
-            judge("api.example.com", "api.example.com", "/a/../b"),
+            judge("api.example.com", "GET", "api.example.com", "/a/../b"),
             Verdict::Allow,
             "a host-only grant reaches every path"
         );
-        assert_eq!(judge("api.example.com/v1/**", "api.example.com", "/v1/x"), Verdict::Allow);
-        assert_eq!(judge("api.example.com/v1/**", "api.example.com", "/v2/x"), Verdict::OutsidePath);
-        assert!(matches!(judge("api.example.com/v1/**", "api.example.com", "/v1/../v2"), Verdict::Ambiguous(_)));
-        assert_eq!(judge("api.example.com/v1/**", "evil.example.com", "/v1/x"), Verdict::OtherHost);
-        assert_eq!(judge("*.example.com/v1/**", "api.example.com", "/v1/x"), Verdict::Allow, "the host part is `host_matches`'");
-        assert_eq!(judge("*.example.com/v1/**", "example.com", "/v1/x"), Verdict::OtherHost, "C85: the apex is not under `*.`");
+        assert_eq!(judge("api.example.com/v1/**", "GET", "api.example.com", "/v1/x"), Verdict::Allow);
+        assert_eq!(judge("api.example.com/v1/**", "GET", "api.example.com", "/v2/x"), Verdict::OutsidePath);
+        assert!(matches!(judge("api.example.com/v1/**", "GET", "api.example.com", "/v1/../v2"), Verdict::Ambiguous(_)));
+        assert_eq!(judge("api.example.com/v1/**", "GET", "evil.example.com", "/v1/x"), Verdict::OtherHost);
         assert_eq!(
-            judge("api.example.com/v1/*x", "api.example.com", "/v1/ax"),
+            judge("*.example.com/v1/**", "GET", "api.example.com", "/v1/x"),
+            Verdict::Allow,
+            "the host part is `host_matches`'"
+        );
+        assert_eq!(
+            judge("*.example.com/v1/**", "GET", "example.com", "/v1/x"),
+            Verdict::OtherHost,
+            "C85: the apex is not under `*.`"
+        );
+        assert_eq!(
+            judge("api.example.com/v1/*x", "GET", "api.example.com", "/v1/ax"),
             Verdict::OutsidePath,
             "an unparsed entry matches nothing"
         );
-        assert_eq!(judge("[::1]/v1/**", "[::1]", "/v1/x"), Verdict::Allow);
+        assert_eq!(judge("[::1]/v1/**", "GET", "[::1]", "/v1/x"), Verdict::Allow);
         let list = ["a.com/x/**".to_string(), "b.com".to_string()];
-        assert_eq!(judge_all(&list, "a.com", "/y"), Verdict::OutsidePath);
-        assert_eq!(judge_all(&list, "b.com", "/y"), Verdict::Allow);
-        assert_eq!(judge_all(&list, "c.com", "/x"), Verdict::OtherHost);
+        assert_eq!(judge_all(&list, "GET", "a.com", "/y"), Verdict::OutsidePath);
+        assert_eq!(judge_all(&list, "GET", "b.com", "/y"), Verdict::Allow);
+        assert_eq!(judge_all(&list, "GET", "c.com", "/x"), Verdict::OtherHost);
         let both = ["a.com/x/**".to_string(), "a.com".to_string()];
-        assert_eq!(judge_all(&both, "a.com", "/y/../z"), Verdict::Allow, "an unrestricted entry for the host allows any path");
+        assert_eq!(
+            judge_all(&both, "GET", "a.com", "/y/../z"),
+            Verdict::Allow,
+            "an unrestricted entry for the host allows any path"
+        );
         assert_eq!(host_of("api.example.com/v1/**"), "api.example.com");
     }
 
@@ -497,7 +584,17 @@ mod tests {
     /// to the set, canonicalizing twice changes nothing, and two sets each within the other canonicalize identically.
     #[test]
     fn equivalent_net_sets_canonicalize_identically() {
-        let universe = ["h.com", "h.com/a/**", "h.com/a/b", "h.com/*/b", "h.com/b/**", "g.com", "g.com/a/*"];
+        let universe = [
+            "h.com",
+            "h.com/a/**",
+            "h.com/a/b",
+            "h.com/*/b",
+            "h.com/b/**",
+            "g.com",
+            "g.com/a/*",
+            "h.com:GET,POST",
+            "h.com:POST/a/**",
+        ];
         let subsets: Vec<std::collections::BTreeSet<String>> = (0..1u32 << universe.len())
             .map(|m| universe.iter().enumerate().filter(|(i, _)| m & (1 << i) != 0).map(|(_, e)| e.to_string()).collect())
             .collect();
@@ -543,5 +640,110 @@ mod tests {
         assert_eq!(canonicalize_set(&set(&["h.com", "h.com/v1/**", "g.com/x/*", "g.com/x/y"])), set(&["h.com", "g.com/x/*"]));
         assert_eq!(check_entry("h.com/v1/**"), Ok(()));
         assert!(check_entry("/v1/**").is_err() && check_entry("h.com/v1/").is_err() && check_entry("h.com/a/../b").is_err());
+    }
+
+    /// P9-05 (d), D-V2-182: an entry names its methods after its host, one spelling for each set; one that names none
+    /// allows GET alone, as every entry did before; a suffix that is not methods stays part of the host, so the entry
+    /// reaches no host, as it did before, and the grant's parsers refuse it in words.
+    #[test]
+    fn an_entry_names_its_methods_once_each_in_one_order() {
+        assert_eq!(read("h.com"), ("h.com", GET_ONLY, None));
+        assert_eq!(read("h.com:POST"), ("h.com", method_bit("POST"), None));
+        assert_eq!(read("h.com:GET,POST/v1/**"), ("h.com", method_bit("GET") | method_bit("POST"), Some("/v1/**")));
+        assert_eq!(read("[::1]:DELETE/x"), ("[::1]", method_bit("DELETE"), Some("/x")));
+        assert_eq!(read("[::1]/x"), ("[::1]", GET_ONLY, Some("/x")));
+        for (bad, why) in [
+            ("h.com:8443", "names no port"),
+            ("h.com:post", "not a method"),
+            ("h.com:", "not a method"),
+            ("h.com:GET", "write the host without it"),
+            ("h.com:POST,GET", "in the order"),
+            ("h.com:POST,POST", "in the order"),
+            ("h.com:GET,,POST", "not a method"),
+            ("h.com:POST:PUT", "not a method"),
+            ("h.com:CONNECT", "not a method"),
+            ("[::1]:GET/x", "write the host without it"),
+        ] {
+            let (host, methods, _) = read(bad);
+            assert!(methods == GET_ONLY && (host == bad.split('/').next().unwrap()), "{bad}: read as a host string: {host}");
+            let err = check_entry(bad).expect_err(bad);
+            assert!(err.contains(why), "{bad}: {err}");
+        }
+        assert!(check_entry(":POST").expect_err(":POST").contains("names no host"));
+        assert_eq!(judge(":POST", "POST", "", "/"), Verdict::OtherHost, "an empty host is no host, even an empty one");
+        assert_eq!(check_entry("h.com:HEAD,POST,PUT,PATCH,DELETE/v1/**"), Ok(()));
+        assert_eq!(host_of("h.com:POST/v1/**"), "h.com");
+        assert_eq!(host_of("h.com:8443"), "h.com:8443", "the broker's host check reads a malformed entry as before");
+    }
+
+    #[test]
+    fn an_entry_judges_its_host_then_its_path_then_its_method() {
+        assert_eq!(judge("h.com", "GET", "h.com", "/x"), Verdict::Allow);
+        assert_eq!(judge("h.com", "POST", "h.com", "/x"), Verdict::OtherMethod, "no methods named: GET alone");
+        assert_eq!(judge("h.com:POST", "POST", "h.com", "/x"), Verdict::Allow);
+        assert_eq!(judge("h.com:POST", "GET", "h.com", "/x"), Verdict::OtherMethod, "POST alone does not take GET");
+        assert_eq!(judge("h.com:GET,POST/v1/**", "POST", "h.com", "/v2"), Verdict::OutsidePath);
+        assert_eq!(judge("h.com:POST", "POST", "g.com", "/x"), Verdict::OtherHost);
+        assert_eq!(judge("h.com:POST", "CONNECT", "h.com", "/x"), Verdict::OtherMethod, "a method no entry names");
+        assert_eq!(judge("h.com:8443", "GET", "h.com", "/x"), Verdict::OtherHost, "a malformed entry reaches no host");
+        let list = ["h.com/v1/**".to_string(), "h.com:POST/v2/**".to_string()];
+        assert_eq!(judge_all(&list, "POST", "h.com", "/v1/x"), Verdict::OtherMethod, "the path is granted, not for POST");
+        assert_eq!(judge_all(&list, "POST", "h.com", "/v2/x"), Verdict::Allow);
+        assert_eq!(judge_all(&list, "GET", "h.com", "/v2/x"), Verdict::OtherMethod);
+        assert_eq!(judge_all(&list, "GET", "h.com", "/v3"), Verdict::OutsidePath);
+    }
+
+    /// The order and the meet with methods are EXACT on a bounded domain: every entry of a host with no path or a pattern
+    /// of up to two segments, under every non-empty set of two methods, against every request by three methods for every
+    /// path of up to three segments — `entry_within(c, p)` exactly when every request `c` takes `p` takes, and the meet
+    /// taking exactly the requests both take (`None` exactly when none).
+    #[test]
+    fn the_order_and_the_meet_with_methods_are_exact_over_a_bounded_domain() {
+        let syms = [Segment::Literal("a".into()), Segment::One];
+        // No `/**` alone: it takes what no path takes, and the order calls the host's entry within it only when both are
+        // written alike (sound, not complete, there — `entries_and_sets_are_ordered_by_host_then_path`).
+        let mut pats: Vec<String> = vec![String::new()];
+        let mut layer: Vec<Vec<Segment>> = vec![Vec::new()];
+        for _ in 0..2 {
+            layer = layer.iter().flat_map(|p| syms.iter().map(move |s| [p.clone(), vec![s.clone()]].concat())).collect();
+            for p in &layer {
+                pats.push(render(p));
+                pats.push(render(&[p.clone(), vec![Segment::Rest]].concat()));
+            }
+        }
+        let sets = [method_bit("GET"), method_bit("POST"), method_bit("GET") | method_bit("POST")];
+        let entries: Vec<String> = pats.iter().flat_map(|p| sets.map(|m| render_entry("h.com", m, p))).collect();
+        let mut paths: Vec<String> = vec![String::new(), "/".into()];
+        let mut prefixes = vec![String::new()];
+        for _ in 0..3 {
+            prefixes = prefixes.iter().flat_map(|p| ["a", "b"].map(|s| format!("{p}/{s}"))).collect();
+            paths.extend(prefixes.iter().flat_map(|p| [p.clone(), format!("{p}/")]));
+        }
+        let requests: Vec<(&str, &String)> =
+            ["GET", "POST", "PUT"].iter().flat_map(|m| paths.iter().map(move |p| (*m, p))).collect();
+        let takes = |e: &str| -> Vec<bool> { requests.iter().map(|(m, p)| judge(e, m, "h.com", p) == Verdict::Allow).collect() };
+        let mut within_pairs = 0;
+        for c in &entries {
+            assert_eq!(check_entry(c), Ok(()), "{c}");
+            for p in &entries {
+                let (tc, tp) = (takes(c), takes(p));
+                let semantic = tc.iter().zip(&tp).all(|(x, y)| !x || *y);
+                assert_eq!(entry_within(c, p), semantic, "{c} within {p}");
+                within_pairs += usize::from(semantic);
+                let both: Vec<bool> = tc.iter().zip(&tp).map(|(x, y)| *x && *y).collect();
+                match entry_meet(c, p) {
+                    Some(m) => {
+                        assert_eq!(check_entry(&m), Ok(()), "the meet is an entry: {m}");
+                        assert_eq!(takes(&m), both, "{c} ⊓ {p} = {m}");
+                    }
+                    None => assert!(both.iter().all(|x| !x), "{c} ⊓ {p} is empty, yet a request is taken by both"),
+                }
+            }
+        }
+        assert!(
+            within_pairs > entries.len() && within_pairs < entries.len() * entries.len() / 2,
+            "{within_pairs} of {} — the control",
+            entries.len().pow(2)
+        );
     }
 }
