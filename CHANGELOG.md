@@ -11,7 +11,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## Unreleased — `http.post`, 2026-10-23
+## Unreleased — `http.post` and `http.post_with_secret`, 2026-10-23
 
 - **Added: `Cap[Http].post(url, headers, body)`, the first request that is not a GET** (P9-05 (d), D-V2-183, RW 2.12).
   A program mints `root.http(["api.example.com:POST/v1/**"])`, and the operator grants the same line
@@ -22,7 +22,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   from a `--sandbox` guest (the host performs it), and under `--broker daemon` and `--lease`. There the chain's `use`
   record names the `method`, OCSF exports it as `http_request.http_method`, and a run report's hop names it.
   `authority --within` decides a POST by its method, and so does `deploy plan`, which uses the same verdict. Not yet on
-  `--engine wasm`, and no POST carries a secret yet.
+  `--engine wasm`.
+- **Added: `Cap[Http].post_with_secret(url, headers, header, secret, body)`**, an authenticated POST. The secret
+  rides in one header as `get_with_secret`'s does: never declassified, sent only to its grant's audience
+  (`--grant secret:NAME@HOST[:PORT]=…`, which `--grants` proposes). Under `--broker daemon` the broker hands over its
+  bytes for that one origin, and the chain records the POST's `use` and the `send`. A capability minted without POST
+  refuses it at the call before the broker is asked for a byte.
 - **Changed: the primitive table's version is 8** (was 7). A `.dpx` whose DIR was checked against version 7 is refused
   with DL1503 and is rebuilt, as at every earlier bump.
 
@@ -41,6 +46,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Changed: `delulu sandbox policy FILE --format openshell` refuses a method-scoped `net` grant**, as it refuses a
   path-scoped one: the host alone would grant every method.
 
+## Unreleased — a URL named by a `let` or a constant is read as its literal, 2026-10-23
+
+- **Changed: `authority --grants`, `--within` and `deploy plan` read a request's or a send's URL through a name.** A URL
+  bound once by a `let` (`let u = "https://example.com/admin"`) or by a module constant (`let API: Str = "https://…"`
+  among the module's items) is now decided by its literal, as one written at the call always was. Before, it was taken
+  as computed. Under a path-scoped boundary such a request was *inconclusive*; it is now *within* or *exceeds*, the second
+  named at the request. A sent secret's audience was proposed as `HOST`; now it is the literal's `host:port`. A name
+  that may hold another value at the call still counts as computed: one assigned in a branch, a loop or a closure, or a
+  parameter or local `let` that shadows the constant.
+
 ## Unreleased — ctutils 0.4.5, 2026-10-23
 
 - **Security: RUSTSEC-2026-0385, published on 2026-10-23, is fixed by a patch update.** `ctutils` 0.4.2 → 0.4.5. Before
@@ -49,6 +64,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   comparisons and selects that ML-DSA uses when signing (`ml-dsa` 0.1.1). Only `delulu sign --hybrid` signs with
   ML-DSA, and it needs `--unstable` as well; verifying handles public data only. `ml-kem` also links `ctutils`. Nothing
   else in the lockfile moved.
+
+## Unreleased — a reassigned secret is not attributed to its first value, 2026-10-23
+
+- **Fixed: `authority --grants`/`--within`/`deploy plan` attributed a send of a secret reassigned in a branch, a loop or
+  a closure to the secret first bound** (SEND-REBIND-1, RW 4.78), and could answer *within* for a boundary under which the
+  run refuses the send. Such a send is now judged as a secret the source does not name.
 
 ## Unreleased — a sent secret is asked for and decided with its audience, 2026-10-23
 

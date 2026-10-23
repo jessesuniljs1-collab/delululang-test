@@ -8945,6 +8945,18 @@ none), and it was taken out. `deploy_plan_adversarial`'s fixture requested `http
 ("only `https://` is fetched"); five of its tests went red with a misleading reason. Such a URL is now refused in the
 client's words, and the fixture requests `https://example.com`, its assertions unchanged.
 
+## 2026-10-23 (afternoon) — the laptop: SEND-REBIND-1, a reassigned secret's send (RW 4.78)
+
+The walk behind `secret_destinations` (and D-V2-180's verdict) restored a block's bindings at its end, undoing assignments
+inside it. `var tok = root.secret("A"); if 1 > 0 { tok = root.secret("B") }` then a send: attributed to `A`, and `--within`
+said *within* with `B` granted no audience (witnessed on `85f6b5c`'s binary). Same in a loop that assigns after it sends,
+and in a closure (closures capture by reference: `var x = 1; let f = fn() -> Int { x }; x = 2; f()` prints 2 on both
+engines). Fixed by forgetting assigned names after blocks, arms and closures, before loop bodies, and inside closures for
+names their function assigns. `within_cli` test red on master; four mutants red. Green: 8 `delulu` targets, 306 passed.
+Also read: launch `cab60c7`'s release dry run `39911653388` **success**; conformance on the launch tree 355/355, reference
+in sync. The owner saved `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and a setup script (with `|| true` and `exit 0`) in the Default
+cloud environment; not yet seen run.
+
 ## 2026-10-23 (evening) — the laptop: RUSTSEC-2026-0385, fixed by a patch update (ctutils 0.4.5)
 
 **Found by** pull request #59's CI `39929350206`: `supply-chain` red on RUSTSEC-2026-0385 against `ctutils` 0.4.2, an
@@ -8964,6 +8976,27 @@ entry does not show whether ML-DSA's code calls the affected mask functions; the
 **Evidence.** Locally `cargo deny check advisories`: `advisories ok` (exit 0), and `advisories FAILED` on the launch
 tree's 0.4.2 lockfile (the witness). `delulu-runtime` `nist_kat` 5 passed, so the signatures and keys are byte-identical
 to NIST's vectors. `--lib pqc` 11 passed, `delulu` `pqc_cli` 6 passed. Clippy stamped; the pull request's CI is the rest.
+
+## 2026-10-23 (evening) — the laptop: a URL named by a `let` or a constant is decided by its literal
+
+**Why.** D-V2-180/181 decide a send by its URL's origin and a request by its path, but the walk read a URL only where the
+call wrote it out. `let u = "https://example.com/admin"; h.get(u)` under `net=example.com/api/**` was *inconclusive*,
+though the run refuses that request; `--grants` proposed `secret:A@HOST=VALUE` for a send through such a name. Naming a
+URL once and using it is the ordinary way to write one, so the precision was the common case, not an edge.
+
+**What.** `SendWalk.vars` now maps a name to what it is known to hold, a secret or a string literal (`Held`), under the
+rules SEND-REBIND-1 just gave the secrets: a block's names end with it, a name assigned in a branch, a loop or a closure
+is forgotten. A module's constants (`let NAME: Str = "…"` among its items, `Item::Const`) are read where no local name
+shadows them, and each body's parameters now shadow them (`body(params, block)`). Another module's constant, imported,
+stays computed. A constant cannot be assigned (DL0301, checked), so nothing forgets it.
+
+**Evidence.** `within_cli` `a_url_named_by_a_let_or_a_constant_is_decided_by_its_literal`: red on the previous code (the
+`let` request *inconclusive*, not *exceeds*). Mutants, each red at its own assertion: a parameter not shadowing (K1), a
+`let`-bound literal not read (K2), constants not read (K3), a shadowing local falling through to the constant (K4), a
+literal not forgotten after a branch (K5), a send's audience from the call's literal only (K6). Green: the binary's unit
+tests and 14 `delulu` targets (`add_path_cli`, `atlas_chain`, `cli`, `cli_contract`, `deploy_cli`,
+`deploy_plan_adversarial`, `egress_cli`, `json_contract`, `mcp_cli`, `sandbox_modes_cli`, `within_cli`, `grants_cli`,
+`guest_cli`, `schema_cli`): 370 passed, 0 failed. `docs/for-agents.md` says where the literal may be written.
 
 ## 2026-10-23 (evening) — the laptop: a `net` entry names its methods (P9-05 (d), first slice, D-V2-182)
 
@@ -9023,3 +9056,22 @@ dimension first, so this primitive widens no grant written before it.
 
 **Found on the way:** the egress test server read only a request's head, so its body arrived unseen. It now reads to
 the head's `Content-Length`.
+
+## 2026-10-23 (night, continued) — the laptop: `http.post_with_secret`, the authenticated POST (D-V2-183)
+
+**What.** `post_with_secret(url, headers, header, secret, body)`, on the same branch and table version as `post`. The
+secret rides as `get_with_secret`'s does, and the body as `post`'s. Under the daemon, `broker_secret_send` now takes
+the method and judges the request's own method before the broker is asked for a byte. The interpreter's dispatch routes
+both secret-carrying methods to it. `--within`'s walk sees the send (the secret is argument four of both).
+
+**Evidence.**
+- Tests:
+  - egress `a_post_carries_its_secret_and_its_body_only_inside_the_audience`: the secret and the body on a POST to
+    the audience; refused outside it before anything is resolved; a 307 to another origin refused, the secret sent once;
+  - `broker_cli` `a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method`: under the daemon the
+    POST went out, the chain held the `use` with `method: POST` and one `send`, and no byte of the secret. A capability
+    minted for GET alone refused it at the call: no `send`, nothing connected;
+  - `within_cli`: `--grants` names `net=…:POST` and the secret's audience.
+- Mutants, each red: Q1 the pre-judgement as a GET, Q3 the walk blind to the send, Q4 the dispatch not routing the
+  broker-held secret.
+- Conformance: anchor `ref.prim.http.post_with_secret`, four witnesses; 357/357.

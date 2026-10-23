@@ -1642,10 +1642,17 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // Embedded custody holds no broker secret, as the interpreter's `EmbeddedCustody` does not: a handle met
                 // here is refused in its words, never sent empty.
                 let send = match &caller.data().custody {
-                    Some(custody) => delulu_runtime::interp::broker_secret_send(&mut **custody.borrow_mut(), &capv, &args, span),
+                    Some(custody) => delulu_runtime::interp::broker_secret_send(
+                        &mut **custody.borrow_mut(),
+                        &capv,
+                        "get_with_secret",
+                        &args,
+                        span,
+                    ),
                     None => delulu_runtime::interp::broker_secret_send(
                         &mut delulu_runtime::EmbeddedCustody::new(),
                         &capv,
+                        "get_with_secret",
                         &args,
                         span,
                     ),

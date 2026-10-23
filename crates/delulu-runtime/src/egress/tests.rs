@@ -630,6 +630,35 @@ fn aud(members: &[&str]) -> Vec<Audience> {
 /// the program addressed one origin. Back at the origin it is carried again. Each hop's record names the secret
 /// it carried, never its bytes.
 #[test]
+fn a_post_carries_its_secret_and_its_body_only_inside_the_audience() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let to = aud(&["a.example.com"]);
+    let secret = SecretHeader { header: "Authorization", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
+    let p = policy(&["a.example.com:POST", "b.example.com:POST"], &[]);
+    let post = |url: &str, t: &FakeTransport| request(&p, "POST", url, &[], Some("{}"), Some(&secret), &r, t);
+    // P9-05 (d), D-V2-183: `post_with_secret` — the secret in its header and the body, on a POST to the audience.
+    let t = FakeTransport::answering(vec![ok("made")]);
+    let (rec, body) = post("https://a.example.com/items", &t);
+    assert_eq!(body.as_deref(), Some("made"), "{:?}", rec.outcome);
+    let sent = t.sent.borrow();
+    assert_eq!((sent[0].method.as_str(), sent[0].body.as_deref()), ("POST", Some("{}")));
+    assert_eq!(sent[0].headers, hs(&[("authorization", SECRET_BYTES)]));
+    assert_eq!((rec.hops[0].secret.as_deref(), rec.hops[0].method.as_str()), (Some("API_TOKEN"), "POST"));
+    drop(sent);
+    // Outside the audience: refused before anything is resolved, the method notwithstanding.
+    let t = FakeTransport::answering(vec![ok("never")]);
+    let (rec, body) = post("https://b.example.com/items", &t);
+    assert_eq!(body, None);
+    assert_eq!(rec.outcome.unwrap_err().code(), "audience");
+    assert!(t.sent.borrow().is_empty());
+    // A 307 to another origin would carry the body (and the request) there: refused, the secret sent once, to the audience.
+    let t = FakeTransport::answering(vec![redirect(307, "https://b.example.com/x"), ok("never")]);
+    let (rec, _) = post("https://a.example.com/items", &t);
+    assert_eq!(rec.outcome, Err(Reason::BodyElsewhere));
+    assert_eq!(t.sent.borrow().len(), 1);
+}
+
+#[test]
 fn a_secret_goes_only_to_its_audience_on_the_origins_hops() {
     let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
     let allow = ["a.example.com", "b.example.com"];

@@ -5472,6 +5472,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   CHANGELOG sections, the DL0211 bound in 2.0.0's Breaking paragraph, and `--within`/`deploy plan` stricter.
 - Survey and doctor (after the last edit): in the commit message.
 
+### 2026-10-23 (afternoon) — SEND-REBIND-1 (RW 4.78); the session's last commit (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/send-rebind` (on `master` `85f6b5c`; `master` `30e714b` merged in by the next session)   Pull request: #59
+- **What:** see V2_LOG's entry of the same name. Files: M `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next (session ended at the owner's usage limit):** (1) this branch's CI, then land; (2) PR #58 (records) — landed,
+  `master` `30e714b`; (3) `launch/2.0.0` `cab60c7`'s `everything` `39911650269` — read it, then re-cite CHECKLIST-2.0 criteria 1/3/4 from it
+  (criterion 2 re-measured 2026-10-23: 355/355, reference in sync); (4) #56's `everything` `39905652720` `miri-slow`
+  (delulu-broker); (5) `docs/CLOUD_ROUTINE.md`: the owner's setup script (saved 12:02 IST) and whether the first run shows
+  xhigh; (6) a records commit after #58 for (5).
+
 ### 2026-10-23 (evening) — RUSTSEC-2026-0385: ctutils 0.4.5 (made on the laptop)
 - Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
 - Branch: `laptop/ctutils-0385` (on `master` `30e714b`)   Pull request: opened with this push
@@ -5486,6 +5497,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** land this, merge `master` into #59 and land it; then the launch merge takes #58, #59 and this, and
   CHECKLIST-2.0 criteria 1, 3 and 4 are re-cited from that tree's own `everything` run (criterion 4 gains this advisory).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (evening) — a URL named by a `let` or a constant is decided by its literal (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/send-url-let` (on `laptop/send-rebind` `6d1242c`, #59; `master` `ce25bc1` merged in after #59 landed)   Pull request: opened with that push
+- **What:** see V2_LOG's entry of the same name. `--grants`, `--within` and `deploy plan` read a send's or a request's
+  URL through a `let` or a module constant, under SEND-REBIND-1's forgetting rules. A second commit records the owner's
+  setup script for the cloud environment in `docs/CLOUD_ROUTINE.md`; no run has used it yet.
+- Files and folders: M `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`, `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/CLOUD_ROUTINE.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
 
 ### 2026-10-23 (evening) — a `net` entry names its methods (P9-05 (d), first slice, D-V2-182) (made on the laptop)
 - Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
@@ -5506,16 +5527,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 ### 2026-10-23 (night) — `http.post`, the first request that is not a GET (P9-05 (d), second slice, D-V2-183) (made on the laptop)
 - Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
 - Branch: `laptop/http-post` (on `laptop/net-methods` `69414e5`, #61)   Pull request: opened with this push
-- **What:** see V2_LOG's entry of the same name, D-V2-183 and `ENTRENCHED_CHANGE_RECORD.md` (the anchor
-  `ref.prim.http.post`'s four witness rows, an entrenched file).
-- Files and folders: M `crates/delulu-check/src/{check.rs,dir.rs,prim_table.rs}`,
-  `crates/delulu-runtime/src/{egress.rs,egress/tests.rs,interp.rs,prim.rs,trace.rs,custody.rs,channel.rs,lib.rs}`,
-  `crates/delulu-broker/src/{validate.rs,ocsf.rs}`, `crates/delulu-wasm/src/host.rs`,
-  `crates/delulu/src/{cli.rs,within.rs,schema.rs,broker_ipc.rs,broker_client.rs,brokerd.rs}`,
-  `crates/delulu/tests/{egress_cli.rs,broker_cli.rs,within_cli.rs,audit_ocsf_cli.rs}`,
-  `tests/conformance/witnesses.toml` (entrenched), `docs/reference/{README.md,coverage.md,primitives.md}` (generated),
-  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`, `docs/for-agents.md`, `skills/delulu/SKILL.md`,
-  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG.md,V2_LOG.md,V2_P9_DESIGN.md,V2_PHASE_STATUS.md}`,
-  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
-- **Open / next:** `post` on the WASM engine; a POST carrying a secret.
+- **What:** see V2_LOG's entry of the same name and its continuation (`post_with_secret`), D-V2-183 and
+  `ENTRENCHED_CHANGE_RECORD.md` (the anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`, four witness
+  rows each, in an entrenched file).
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/dir.rs`,
+  `crates/delulu-check/src/prim_table.rs`, `crates/delulu-runtime/src/egress.rs`,
+  `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-runtime/src/interp.rs`,
+  `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/trace.rs`, `crates/delulu-runtime/src/custody.rs`,
+  `crates/delulu-runtime/src/channel.rs`, `crates/delulu-runtime/src/lib.rs`, `crates/delulu-broker/src/validate.rs`,
+  `crates/delulu-broker/src/ocsf.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/src/within.rs`, `crates/delulu/src/schema.rs`, `crates/delulu/src/broker_ipc.rs`,
+  `crates/delulu/src/broker_client.rs`, `crates/delulu/src/brokerd.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/audit_ocsf_cli.rs`,
+  `tests/conformance/witnesses.toml` (entrenched), `docs/reference/README.md`, `docs/reference/coverage.md`,
+  `docs/reference/primitives.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`, `docs/for-agents.md`,
+  `skills/delulu/SKILL.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (`docs/reference/*` generated). Added, deleted, renamed: nothing.
+- **Open / next:** `post` and `post_with_secret` on the WASM engine.
 - Survey and doctor (after the last edit): in the commit message.

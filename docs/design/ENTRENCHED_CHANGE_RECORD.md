@@ -462,13 +462,13 @@ git checkout <this-commit>^ -- docs/design/DELULU_CORE.md
 cargo run -p delulu-survey -- build
 ```
 
-## 2026-10-23 — `tests/conformance/witnesses.toml`: the anchor `ref.prim.http.post`
+## 2026-10-23 — `tests/conformance/witnesses.toml`: the anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`
 
 **Changed**
 
 | | |
 |---|---|
-| Path | `tests/conformance/witnesses.toml` — four `[[witness]]` rows for the new anchor `ref.prim.http.post`, after `ref.prim.http.get_with_secret`'s four, with a three-line comment. No existing row is touched. |
+| Path | `tests/conformance/witnesses.toml` — four `[[witness]]` rows for the new anchor `ref.prim.http.post`, after `ref.prim.http.get_with_secret`'s four, with a three-line comment, and four for `ref.prim.http.post_with_secret` after them, with a two-line comment. No existing row is touched. |
 | Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
 | Campaign | V2 P9-05 (d), `REMAINING_WORK.md` 2.12; decision D-V2-183 |
 | Approved by | **the head chef, 2026-10-23, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* — the entrenched files among them, each change with its `D-V2-nn` and this record. |
@@ -477,11 +477,15 @@ cargo run -p delulu-survey -- build
 
 The coverage law (invariant 42) gives every `PRIM_TABLE` row an anchor, and `release_requires_full_coverage` demands an
 accepting and a rejecting witness for each. D-V2-183 adds the row `http.post`, and without these rows the reference would
-carry an uncovered anchor (355 of 356). The rows name the table's own two witnesses, as every primitive has
+carry uncovered anchors. D-V2-183 adds `http.post_with_secret` too, with the same four kinds of rows. The rows name
+the table's own two witnesses, as every primitive has
 (`every_listed_primitive_resolves`, `every_listed_primitive_rejects_a_five_argument_call`). They also name the egress
 client's POST, with its body kept or dropped by each redirect's status
 (`a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status`), and the judge that refuses a
-POST under an entry naming no methods (`netscope`'s `an_entry_judges_its_host_then_its_path_then_its_method`).
+POST under an entry naming no methods (`netscope`'s `an_entry_judges_its_host_then_its_path_then_its_method`). For
+`post_with_secret` they name the egress client's POST carrying its secret and body inside the audience only
+(`a_post_carries_its_secret_and_its_body_only_inside_the_audience`), and the secret refused outside its audience before
+anything is resolved (`a_secret_outside_its_audience_is_refused_before_anything_is_resolved`, the rule both share).
 
 **Why this is not an RFC**
 
@@ -493,11 +497,11 @@ methods still allows GET alone (D-V2-182), so no existing grant reaches a POST. 
 
 **Verified before the change**
 
-1. The four named tests exist and pass on the laptop: `cargo test -p delulu-check --lib prim_table` (11 passed, the
-   pinned count 85), `cargo test -p delulu-runtime --lib egress` (43 passed, 1 ignored), and
+1. The named tests exist and pass on the laptop: `cargo test -p delulu-check --lib prim_table` (11 passed, the
+   pinned count 86), `cargo test -p delulu-runtime --lib egress` (44 passed, 1 ignored), and
    `cargo test -p delulu-broker --lib netscope`.
 2. `delulu-conform --coverage` reported the one gap (`ref.prim.http.post — no accepting test, no rejecting test`)
-   before the rows and **356 of 356, 100.0%** after. `cargo test -p delulu-conform` is green. `--reference`
+   before the rows and **357 of 357, 100.0%** after both anchors' rows. `cargo test -p delulu-conform` is green. `--reference`
    regenerated `docs/reference/` (README, coverage, primitives), and `--check-reference` says in sync (24 chapters).
 
 **How to revert**

@@ -298,5 +298,6 @@ skip branch, §11.2).
   at the first check, on every egress hop (a 301/302/303 after it a GET with no body; a 307/308 keeping the body, to the
   origin the program named only), by the broker (the custody's `check_at` and the IPC's `Check` carry the method,
   absent for a GET) and by `--within`. The use's record names `method`, OCSF's `http_request.http_method`, and a run
-  report's hop names it. Conformance anchor `ref.prim.http.post`, `PRIM_TABLE_VERSION` 8. Next: `post` on the WASM
-  engine; a POST carrying a secret.
+  report's hop names it. And `post_with_secret`, the authenticated POST (the secret to its audience only, the broker's
+  `send` under the daemon). Conformance anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`,
+  `PRIM_TABLE_VERSION` 8. Next: both on the WASM engine.

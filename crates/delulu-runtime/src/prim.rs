@@ -417,14 +417,10 @@ pub(crate) fn url_verdict(url: &str, method: &str, allow: &[String]) -> delulu_b
     delulu_broker::netscope::judge_all(allow, method, host_of(url), path_of(url))
 }
 
-/// [`url_verdict`] of a GET, the request `get_with_secret` makes.
-pub(crate) fn url_allowed(url: &str, allow: &[String]) -> bool {
-    url_verdict(url, "GET", allow) == delulu_broker::netscope::Verdict::Allow
-}
-
-/// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183): `post` a POST, every other one a GET.
+/// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183): `post` and `post_with_secret` a POST,
+/// every other one a GET.
 pub fn http_method_of(method: &str) -> &'static str {
-    if method == "post" {
+    if method == "post" || method == "post_with_secret" {
         "POST"
     } else {
         "GET"
@@ -775,15 +771,20 @@ pub fn call_cap_method_pinned(
         (ResourceKind::Http, "get")
         | (ResourceKind::Http, "get_with")
         | (ResourceKind::Http, "get_with_secret")
-        | (ResourceKind::Http, "post") => {
+        | (ResourceKind::Http, "post")
+        | (ResourceKind::Http, "post_with_secret") => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
             let headers = headers_arg(args, method, span)?;
             // P9-05 (d), D-V2-183: `post(url, headers, body)` — the one request with a body, by POST.
             let verb = http_method_of(method);
-            let body = if method == "post" { Some(str_arg(args, 2, span)?) } else { None };
+            let body = match method {
+                "post" => Some(str_arg(args, 2, span)?),
+                "post_with_secret" => Some(str_arg(args, 4, span)?),
+                _ => None,
+            };
             // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in.
-            let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" {
+            let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" || method == "post_with_secret" {
                 let header = str_arg(args, 2, span)?;
                 let Some(Value::Secret(s)) = args.get(3) else {
                     return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
@@ -826,8 +827,10 @@ pub fn call_cap_method_pinned(
             if secret.as_ref().is_some_and(|(_, s)| s.handle_name().is_some()) {
                 return Err(Fault::at(
                     "DL0904",
-                    "`http.get_with_secret` of a broker-held secret reached the request without the broker's answer \
-                     (internal wiring error) — nothing was sent",
+                    format!(
+                        "`http.{method}` of a broker-held secret reached the request without the broker's answer \
+                         (internal wiring error) — nothing was sent"
+                    ),
                     span,
                 ));
             }

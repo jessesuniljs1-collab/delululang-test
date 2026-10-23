@@ -2083,6 +2083,32 @@ file = "crates/delulu-broker/src/netscope.rs"
 test = "an_entry_judges_its_host_then_its_path_then_its_method"
 kind = "negative"
 
+# And `post_with_secret` (the same decision): the table's two; the egress client's POST carrying its secret and its body
+# inside the audience only; and the secret refused outside its audience before anything is resolved, whatever the method.
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_post_carries_its_secret_and_its_body_only_inside_the_audience"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.clock.now_ms"
 file = "crates/delulu-check/src/prim_table.rs"
