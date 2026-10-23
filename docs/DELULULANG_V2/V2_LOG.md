@@ -8976,3 +8976,34 @@ none), and it was taken out. `deploy_plan_adversarial`'s fixture requested `http
 ("only `https://` is fetched"); five of its tests went red with a misleading reason. Such a URL is now refused in the
 client's words, and the fixture requests `https://example.com`, its assertions unchanged.
 
+## 2026-10-23 (afternoon) — the laptop: SEND-REBIND-1, a reassigned secret's send (RW 4.78)
+
+The walk behind `secret_destinations` (and D-V2-180's verdict) restored a block's bindings at its end, undoing assignments
+inside it. `var tok = root.secret("A"); if 1 > 0 { tok = root.secret("B") }` then a send: attributed to `A`, and `--within`
+said *within* with `B` granted no audience (witnessed on `85f6b5c`'s binary). Same in a loop that assigns after it sends,
+and in a closure (closures capture by reference: `var x = 1; let f = fn() -> Int { x }; x = 2; f()` prints 2 on both
+engines). Fixed by forgetting assigned names after blocks, arms and closures, before loop bodies, and inside closures for
+names their function assigns. `within_cli` test red on master; four mutants red. Green: 8 `delulu` targets, 306 passed.
+Also read: launch `cab60c7`'s release dry run `39911653388` **success**; conformance on the launch tree 355/355, reference
+in sync. The owner saved `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and a setup script (with `|| true` and `exit 0`) in the Default
+cloud environment; not yet seen run.
+
+## 2026-10-23 (evening) — the laptop: RUSTSEC-2026-0385, fixed by a patch update (ctutils 0.4.5)
+
+**Found by** pull request #59's CI `39929350206`: `supply-chain` red on RUSTSEC-2026-0385 against `ctutils` 0.4.2, an
+advisory published after `30e714b`'s green push run `39913548269`. The tree did not change; cargo-deny's database moved.
+The same lockfile is on `master` and `launch/2.0.0`, so both are red the same way until this update lands
+(`cargo deny check advisories` on the launch tree: `advisories FAILED`, exit 1).
+
+**What it reaches.** Before 0.4.4, `ctutils::Choice`'s mask functions, which are `const fn` and cannot use `cmov`'s
+assembly, could compile to a branch. Its `u128` comparisons branched on 32-bit targets. `ml-dsa` 0.1.1 takes its
+constant-time comparisons and selects from `ctutils` (`algebra.rs`, `hint.rs`, `signing.rs`). DeluluLang signs with
+ML-DSA only in `delulu sign --hybrid`, which also needs `--unstable` (`signing.rs`, `pqc::sign_hybrid`). Verifying handles
+only public data. `ml-kem` 0.3.2 links `ctutils` too; outside the NIST known-answer tests, nothing calls it. This
+entry does not show whether ML-DSA's code calls the affected mask functions; the update was taken regardless.
+
+**The update.** `cargo update -p ctutils`: 0.4.2 → 0.4.5, the newest 0.4. No other crate moved, none added or removed.
+
+**Evidence.** Locally `cargo deny check advisories`: `advisories ok` (exit 0), and `advisories FAILED` on the launch
+tree's 0.4.2 lockfile (the witness). `delulu-runtime` `nist_kat` 5 passed, so the signatures and keys are byte-identical
+to NIST's vectors. `--lib pqc` 11 passed, `delulu` `pqc_cli` 6 passed. Clippy stamped; the pull request's CI is the rest.
