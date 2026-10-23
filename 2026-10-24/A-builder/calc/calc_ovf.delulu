@@ -1,0 +1,303 @@
+module calc
+
+type Tok = TNum(Int) | TPlus | TMinus | TStar | TSlash | TPercent | TCaret | TLParen | TRParen | TEnd
+
+type Expr = Num(Int) | Neg(Expr) | Add(Expr, Expr) | Sub(Expr, Expr) | Mul(Expr, Expr) | Div(Expr, Expr) | Mod(Expr, Expr) | Pow(Expr, Expr)
+
+type CalcErr = Lex(Str) | Parse(Str) | DivZero | NegExp
+
+type PR { e: Expr, pos: Int }
+
+fn is_digit(c: Str) -> Bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" || c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn lex(src: Str) -> Result[List[Tok], CalcErr] {
+    let cs = src.chars()
+    let out = []
+    var problem = ""
+    var i = 0
+    while i < cs.len() {
+        match cs.get(i) {
+            Some(c) => {
+                if c == " " || c == "\t" {
+                    i = i + 1
+                } else if is_digit(c) {
+                    var j = i
+                    var digits = ""
+                    var more = true
+                    while more {
+                        match cs.get(j) {
+                            Some(d) => {
+                                if is_digit(d) {
+                                    digits = digits + d
+                                    j = j + 1
+                                } else {
+                                    more = false
+                                }
+                            }
+                            None => {
+                                more = false
+                            }
+                        }
+                    }
+                    match parse_int(digits) {
+                        Some(n) => out.push(TNum(n))
+                        None => {
+                            problem = "number too large: " + digits
+                            j = cs.len()
+                        }
+                    }
+                    i = j
+                } else if c == "+" {
+                    out.push(TPlus)
+                    i = i + 1
+                } else if c == "-" {
+                    out.push(TMinus)
+                    i = i + 1
+                } else if c == "*" {
+                    out.push(TStar)
+                    i = i + 1
+                } else if c == "/" {
+                    out.push(TSlash)
+                    i = i + 1
+                } else if c == "%" {
+                    out.push(TPercent)
+                    i = i + 1
+                } else if c == "^" {
+                    out.push(TCaret)
+                    i = i + 1
+                } else if c == "(" {
+                    out.push(TLParen)
+                    i = i + 1
+                } else if c == ")" {
+                    out.push(TRParen)
+                    i = i + 1
+                } else {
+                    problem = "bad character `" + c + "`"
+                    i = cs.len()
+                }
+            }
+            None => {
+                i = cs.len()
+            }
+        }
+    }
+    out.push(TEnd)
+    if problem.len() > 0 { Err(Lex(problem)) } else { Ok(out) }
+}
+
+fn tok_at(ts: List[Tok], p: Int) -> Tok {
+    match ts.get(p) {
+        Some(t) => t
+        None => TEnd
+    }
+}
+
+// expr := term (('+' | '-') term)*
+fn parse_expr(ts: List[Tok], pos: Int) -> Result[PR, CalcErr] {
+    let first = parse_term(ts, pos)?
+    var acc = first.e
+    var p = first.pos
+    var go = true
+    while go {
+        match tok_at(ts, p) {
+            TPlus => {
+                let r = parse_term(ts, p + 1)?
+                acc = Add(acc, r.e)
+                p = r.pos
+            }
+            TMinus => {
+                let r = parse_term(ts, p + 1)?
+                acc = Sub(acc, r.e)
+                p = r.pos
+            }
+            _ => {
+                go = false
+            }
+        }
+    }
+    Ok(PR { e: acc, pos: p })
+}
+
+// term := unary (('*' | '/' | '%') unary)*
+fn parse_term(ts: List[Tok], pos: Int) -> Result[PR, CalcErr] {
+    let first = parse_unary(ts, pos)?
+    var acc = first.e
+    var p = first.pos
+    var go = true
+    while go {
+        match tok_at(ts, p) {
+            TStar => {
+                let r = parse_unary(ts, p + 1)?
+                acc = Mul(acc, r.e)
+                p = r.pos
+            }
+            TSlash => {
+                let r = parse_unary(ts, p + 1)?
+                acc = Div(acc, r.e)
+                p = r.pos
+            }
+            TPercent => {
+                let r = parse_unary(ts, p + 1)?
+                acc = Mod(acc, r.e)
+                p = r.pos
+            }
+            _ => {
+                go = false
+            }
+        }
+    }
+    Ok(PR { e: acc, pos: p })
+}
+
+// unary := '-' unary | power
+fn parse_unary(ts: List[Tok], pos: Int) -> Result[PR, CalcErr] {
+    match tok_at(ts, pos) {
+        TMinus => {
+            let r = parse_unary(ts, pos + 1)?
+            Ok(PR { e: Neg(r.e), pos: r.pos })
+        }
+        _ => parse_power(ts, pos)
+    }
+}
+
+// power := atom ('^' unary)?
+fn parse_power(ts: List[Tok], pos: Int) -> Result[PR, CalcErr] {
+    let base = parse_atom(ts, pos)?
+    match tok_at(ts, base.pos) {
+        TCaret => {
+            let ex = parse_unary(ts, base.pos + 1)?
+            Ok(PR { e: Pow(base.e, ex.e), pos: ex.pos })
+        }
+        _ => Ok(base)
+    }
+}
+
+fn parse_atom(ts: List[Tok], pos: Int) -> Result[PR, CalcErr] {
+    match tok_at(ts, pos) {
+        TNum(n) => Ok(PR { e: Num(n), pos: pos + 1 })
+        TLParen => {
+            let inner = parse_expr(ts, pos + 1)?
+            match tok_at(ts, inner.pos) {
+                TRParen => Ok(PR { e: inner.e, pos: inner.pos + 1 })
+                _ => Err(Parse("expected `)`"))
+            }
+        }
+        TEnd => Err(Parse("unexpected end of input"))
+        _ => Err(Parse("unexpected token"))
+    }
+}
+
+fn power(b: Int, e: Int) -> Int {
+    if b == 0 {
+        if e == 0 { 1 } else { 0 }
+    } else if b == 1 {
+        1
+    } else if b == 0 - 1 {
+        if e % 2 == 0 { 1 } else { 0 - 1 }
+    } else {
+        var acc = 1
+        var i = 0
+        while i < e {
+            acc = acc * b
+            i = i + 1
+        }
+        acc
+    }
+}
+
+fn eval(e: Expr) -> Result[Int, CalcErr] {
+    match e {
+        Num(n) => Ok(n)
+        Neg(a) => {
+            let x = eval(a)?
+            Ok(0 - x)
+        }
+        Add(a, b) => {
+            let x = eval(a)?
+            let y = eval(b)?
+            Ok(x + y)
+        }
+        Sub(a, b) => {
+            let x = eval(a)?
+            let y = eval(b)?
+            Ok(x - y)
+        }
+        Mul(a, b) => {
+            let x = eval(a)?
+            let y = eval(b)?
+            Ok(x * y)
+        }
+        Div(a, b) => {
+            let x = eval(a)?
+            let y = eval(b)?
+            if y == 0 { Err(DivZero) } else { Ok(x / y) }
+        }
+        Mod(a, b) => {
+            let x = eval(a)?
+            let y = eval(b)?
+            if y == 0 { Err(DivZero) } else { Ok(x % y) }
+        }
+        Pow(a, b) => {
+            let x = eval(a)?
+            let y = eval(b)?
+            if y < 0 { Err(NegExp) } else { Ok(power(x, y)) }
+        }
+    }
+}
+
+fn calc(src: Str) -> Result[Int, CalcErr] {
+    let ts = lex(src)?
+    let r = parse_expr(ts, 0)?
+    match tok_at(ts, r.pos) {
+        TEnd => eval(r.e)
+        _ => Err(Parse("trailing input"))
+    }
+}
+
+fn kind(e: CalcErr) -> Str {
+    match e {
+        Lex(m) => "lex"
+        Parse(m) => "parse"
+        DivZero => "divzero"
+        NegExp => "negexp"
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let rd = root.fs_read("./exprs")
+    match rd.read_text("overflow_list.txt") {
+        Ok(text) => {
+            let lines = text.split("\n")
+            var n = lines.len()
+            match lines.get(n - 1) {
+                Some(last) => {
+                    if last == "" {
+                        n = n - 1
+                    }
+                }
+                None => {
+                    n = 0
+                }
+            }
+            var i = 0
+            while i < n {
+                match lines.get(i) {
+                    Some(line) => {
+                        match calc(line) {
+                            Ok(v) => out.println(line + " => " + str(v))
+                            Err(e) => out.println(line + " => ERR " + kind(e))
+                        }
+                    }
+                    None => {
+                        i = n
+                    }
+                }
+                i = i + 1
+            }
+        }
+        Err(e) => out.println("cannot read overflow_list.txt: " + str(e))
+    }
+}

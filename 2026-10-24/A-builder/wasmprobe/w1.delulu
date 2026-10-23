@@ -1,0 +1,16 @@
+module wasmprobe.w1
+
+type Tok = TNum(Int) | TPlus | TEnd
+
+fn lex() -> List[Tok] {
+    let out = []
+    out.push(TNum(1))
+    out.push(TPlus)
+    out.push(TEnd)
+    out
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    c.println(str(lex().len()))
+}

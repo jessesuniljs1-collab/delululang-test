@@ -1,0 +1,2 @@
+mode=[gets] scope=[127.0.0.1] url=[https://127.0.0.1/api/x] header=[Authorization]
+ERR:Other(connection failed)

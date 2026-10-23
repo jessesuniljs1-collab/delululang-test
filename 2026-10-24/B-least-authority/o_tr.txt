@@ -1,0 +1,16 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_619ec6eea2f10eeebabf262ac85606b0`
+custody: daemon
+OK:B-ALLOWED-CANARY-7f3a
+
+{"seq":0,"effect":"Read","op":"read_text","cap_kind":"FsRead","detail":"ok.txt","span":{"file":0,"start":299,"end":321},"resolved_path":"C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\allowed\\ok.txt","scope_root":"C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\allowed"}
+{"seq":1,"effect":"Write","op":"println","cap_kind":"Console","detail":"OK:B-ALLOWED-CANARY-7f3a\n","span":{"file":0,"start":105,"end":127}}
+{"seq":2,"effect":"Read","op":"read_text","cap_kind":"FsRead","detail":"../forbidden/secret.txt","span":{"file":0,"start":337,"end":376},"resolved_path":"C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\forbidden\\secret.txt","scope_root":"C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\allowed"}
+{"seq":3,"effect":"Read","op":"read_text.refused","cap_kind":"FsRead","detail":"DL0904: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\forbidden\\secret.txt` in scope `fs.read` (capability scope violation)","span":{"file":0,"start":337,"end":376}}
+error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt` in scope `fs.read` (capability scope violation)
+  --> progs/fsr.delulu:14:10
+   |
+14 |     show(rd.read_text("../forbidden/secret.txt"), out)
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0904
+

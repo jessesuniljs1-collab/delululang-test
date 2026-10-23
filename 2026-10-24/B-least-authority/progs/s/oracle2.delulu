@@ -1,0 +1,18 @@
+module oracle2
+
+fn probe(tok: Secret[Str], prefix: Str) -> Bool ! {Declassify} {
+    let a = tok.map(fn(s: Str) -> Str { if s.starts_with(prefix) { "Y" } else { "N" } })
+    let known = tok.map(fn(s: Str) -> Str { "Y" })
+    a.verify(known)
+}
+
+fn main(root: Root) ! {Write, Declassify} {
+    let out = root.console()
+    let tok = root.secret("TOKEN")
+    let alphabet = "-_.:/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    var found = 0
+    for ch in alphabet.chars() {
+        if probe(tok, "tok-SECRET" + ch) { found = found + 1 }
+    }
+    out.println("candidates-matching-next-char=" + str(found))
+}

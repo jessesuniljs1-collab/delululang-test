@@ -1,0 +1,1 @@
+error: `--mode` describes a sandboxed run, and this run is not one. Nothing ran, because a flag that is silently ignored reads exactly like a flag that was applied. Add `--sandbox`, or drop `--mode`.

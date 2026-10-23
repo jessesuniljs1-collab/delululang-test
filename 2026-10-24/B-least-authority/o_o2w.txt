@@ -1,0 +1,3 @@
+error[DL1205]: secret contents cannot enter WASM guest memory (`Secret.map(f)` runs the program's function on the secret's bytes, in the guest); it runs on the interpreter — omit `--engine wasm` to run it on the interpreter
+  explain: delulu explain E-DL1205
+

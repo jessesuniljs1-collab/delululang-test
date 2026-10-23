@@ -1,0 +1,9 @@
+get|127.0.0.1|https://127.0.0.1/api/x||
+get|127.0.0.1|https://127.0.0.1/admin||
+post|127.0.0.1:POST|https://127.0.0.1/api/x|hi|
+post|127.0.0.1:GET,POST|https://127.0.0.1/api/x|hi|
+get|127.0.0.1/api/**|https://127.0.0.1/api/x||
+get|127.0.0.1/api/**|https://127.0.0.1/admin||
+get|127.0.0.1:GET,POST/api/**|https://127.0.0.1/api/x||
+get|127.0.0.1|https://example.com/||
+get|example.com|https://example.com/||

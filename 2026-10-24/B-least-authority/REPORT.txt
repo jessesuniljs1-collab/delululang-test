@@ -1,0 +1,177 @@
+REPORT - agent B, "least authority" (workdir: dogfood/B-least-authority)
+STATUS: IN PROGRESS - saved as I go. (REPORT.md was refused by the Write tool: "Subagents should return findings
+as text"; the head chef then said to use REPORT.txt.)
+Drivers: batch.sh (fs read), wbatch.sh (fs write), gen.sh (both engines), nbatch.sh (network), race.sh (swap race);
+cases_*.txt, results res_*.txt, programs progs/*.delulu progs/s/*.delulu, listener.py + conn.log, rep/*.json.
+All stdin-driven probes use console readline (interpreter only: --engine wasm says DL1201 for .readline).
+
+=====================================================================================================
+FINDINGS
+=====================================================================================================
+
+B1 (medium) Lease conditions with net=127.0.0.1 can never connect: loopback needs net.special, a lease cannot carry it,
+    and the refusal tells a lease user to use a flag the lease run refuses.
+  Program: progs/net.delulu (stdin: mode, scope, url, body). Listener on 127.0.0.1:443 saw 0 connections for every case.
+  Command: printf 'get\n127.0.0.1\nhttps://127.0.0.1/api/x\n\n' > in_n.txt; $DL run B-net-get progs/net.delulu < in_n.txt
+           (same for B-net-api with scope 127.0.0.1/api/** and for B-wide: res_n4_B-net-get.txt, res_n4_B-net-api.txt, res_n4_B-wide.txt)
+  Output (exit=0): ERR:Refused
+    note: the request to `https://127.0.0.1/api/x` was not delivered: the host is, or resolved to, a special-use address
+    (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use]
+  Expected: conditions described as "HTTPS to 127.0.0.1" let an allowed GET connect (then fail TLS = NetErr).
+  Observed: refused before connecting, because the node holds net=127.0.0.1 but no net.special. The remedy printed is the
+    flag a --lease run refuses ("a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)").
+    Docs record the limit (V2_LOG.md line 798: "A LEASED run cannot reach a special-use range: the broker's node has no
+    net.special dimension") but `grants delegate --net 127.0.0.1` accepts the dead grant, and the note does not say that a
+    lease cannot carry it. Result for this campaign: only B-secret (grant condition) can reach loopback; GET-vs-POST and
+    path-scope positives on B-net-get/B-net-api cannot be shown (ACCESS REQUEST AR1). Their negative side was proven (C27-C30).
+  Reproduced: yes, every run.
+
+B2 (medium) A secret's value can be recovered by the program with NO declassify grant: Secret.map + Secret.verify is a
+    chosen-prefix oracle (documented design limit, QUESTIONS.md 1.7 - but the "sent only to 127.0.0.1" restriction and the
+    absent `declassify` grant do not stop it). Severity: critical by the brief's definition (secret's value leaves the
+    audience), documented as a limit - head chef to rule.
+  Program: progs/s/oracle.delulu (stdin prefix), progs/s/oracle2.delulu (loops candidates for the NEXT character).
+  Commands: $DL run B-secret progs/s/oracle.delulu < in_o.txt  (prefix "tok-SECRET", "tok-SECRETx_no_such", "zzz")
+            $DL run B-secret progs/s/oracle2.delulu ; echo "exit=$?"
+  Output: prefix=[tok-SECRET] startswith=true / prefix=[tok-SECRETx_no_such] startswith=false / prefix=[zzz] startswith=false (exit 0 each);
+          oracle2: `candidates-matching-next-char=1` exit=0 - it recovered one character of the secret beyond the prefix I was
+          told (I did not print or record the character). Looping over positions recovers the whole value in one run.
+  Why it works: tok.map(fn(s) { if s.starts_with(prefix) {"Y"} else {"N"} }).verify(tok.map(fn(s) {"Y"})) - the closure sees the
+          plaintext, verify returns a Bool. The row says `Declassify` and `delulu authority` prints
+          "exposure: TOKEN declassifiable -> files/console", but the RUN needs no `--grant declassify` (B-secret has none).
+  Expected (brief): the program must not learn the value; at minimum a run using verify/map on a secret should need the
+          declassify grant, like expose does (root.declassify() IS refused: DL0703 "`declassify` was not granted", C33).
+  --engine wasm: refused DL1205 "secret contents cannot enter WASM guest memory" exit=1 (engines disagree: interpreter runs it).
+  Under a lease (B-read / B-wide, no secret) the run is refused at root.secret (DL0703); whether the Guard's
+  `declassify:*` rule stops verify under a lease with a secret could not be tested (AR2).
+  grep -c tok-SECRET on every output file: 0 hits (the literal prefix is in my program source only).
+  Reproduced: yes (3 runs).
+
+B3 (medium) Net grants have no port dimension: net.special=127.0.0.1 (and the secret audience "127.0.0.1") reach EVERY port.
+  Program: progs/sec.delulu; command: ./nbatch.sh B-secret cases_n2.txt (cases 16-19)
+  Output: https://127.0.0.1:8443/, :4443/, :80/, :443/ each -> CONNS=1 on the listener (ClientHello len=233), result
+          ERR:Other(connection failed). Only malformed ports (0, 65536, abc) are refused ("not a canonical number").
+  Expected: a condition described as "HTTPS to 127.0.0.1" and "TOKEN sent only to 127.0.0.1" could be read as port 443;
+          least authority would let the operator name the port (the grammar net=HOST[:METHODS][/PATH] has no place for one,
+          because ':' introduces methods). Any local service speaking TLS on any port (and anything accepting the TLS
+          ClientHello bytes, including a plain-TCP service) is reachable, and the secret is audience-matched on host only.
+  Reproduced: yes. (Docs: `secret:NAME@HOST[:PORT]` CAN name a port; `net=` cannot - asymmetry.)
+
+B4 (low) The refusal for a mint wider than the lease says `net=HOST` literally, not the host/methods the program asked for.
+  Output (B-net-get, program minted "127.0.0.1:POST"): "error[DL0703]: `network host` was not granted to this program - the lease
+          this run redeemed (node g_...) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone"
+  Expected: like the fs messages ("does not carry `fs.read=./allowed`") name the request: `net=127.0.0.1:POST`. Observed: the
+          placeholder HOST, and "network host" in backticks as if it were a name. Same text for a wrong host, a wrong method and
+          a missing path scope, so the reader cannot tell which dimension was too wide.
+  Files: res_n4_B-net-get.txt (#03, #04, #07), res_n4_B-net-api.txt (#01-#04). Reproduced: yes.
+
+B5 (low) The same refusal on the WASM engine has no source span and prints the code twice.
+  Program: progs/fsr.delulu; command: $DL run B-read progs/fsr.delulu --engine wasm (exit=1)
+  WASM: "error[DL0904]: WASM engine: WASM trap: DL0904: lease `g_...` does not grant `...\forbidden\secret.txt` in scope `fs.read`
+         (capability scope violation)" + "explain: delulu explain E-DL0904" - no "--> file:line" block.
+  Interpreter: "error[DL0904]: lease ... does not grant ..." with "--> progs/fsr.delulu:14:10" and a caret.
+  Decisions and exit codes agree in all 23 cases of cases_g1.txt (C20). Reproduced: yes.
+
+B6 (low) Error text quotes paths Debug-escaped: every backslash doubled.
+  Programs: progs/rd.delulu (cases_read2.txt #16-#19: base `\\?\C:\...` and UNC) and progs/sec.delulu (cases_n2.txt #43).
+  Output: "path `\\\\?\\C:\\Users\\jesse\\...\\allowed` is refused: a `\\?\` or `\\.\` prefix bypasses ..." and
+          "the request to `https://127.0.0.1/api\\x` was not delivered: ... contains a backslash".
+  Expected the path as the user typed it. Also inconsistent: the same `\\?\` prefix as a PATH (not root) argument is refused with a
+  different reason ("lease ... does not grant `\\?\C:\...`", cases_read1.txt #9, cases_w1.txt #15). Refused either way. Reproduced: yes.
+
+B7 (low) Wrong reason for non-https schemes: "only `https://` is fetched; there is no plain-HTTP path".
+  Program: progs/sec.delulu; ./nbatch.sh B-secret cases_n2.txt (cases 14, 32-34, 45-47)
+  Inputs refused with that sentence: `HTTPS://127.0.0.1/api/x` (it IS https, upper case), `https:127.0.0.1/api/x`,
+  `//127.0.0.1/api/x`, `127.0.0.1/api/x`, `file:///C:/Windows/win.ini`, `ftp://127.0.0.1/`, and the empty URL.
+  All safe (0 connections, ERR:Refused, exit 0) but the explanation is wrong for each of them. Reproduced: yes.
+
+B8 (low, info) Refusals come in two shapes: some end the run (DL0904, exit 1: host not in allowlist, path outside a path scope,
+    scope escape) and some are returned as a value (ERR:Refused, exit 0: special-use, scheme, userinfo, port, backslash).
+  Same program, two exits: `https://example.com/` -> exit=1 DL0904; `http://127.0.0.1/` -> exit=0 ERR:Refused (cases_n2.txt).
+  Documented ("Refused is deliberately opaque"; DL0904 "under every custody"), but a script that only reads the exit code
+  sees a refused request as success. Reproduced: yes.
+
+=====================================================================================================
+COVERAGE (behaved correctly; what was tested)
+=====================================================================================================
+C01 hello (console only) runs under B-console, B-read, B-rw, B-wide, exit 0; under `none`: DL0703 "`console` was not granted" exit 1.
+C02 B-console cannot mint root.fs_read("./allowed"): DL0703 "does not carry `fs.read=./allowed`" exit 1; console print+readline work under it.
+C03 B-read/B-rw/B-wide read allowed/ok.txt -> B-ALLOWED-CANARY-7f3a exit 0 (interpreter and --engine wasm).
+C04 B-read, 31 path spellings vs a capability rooted at ./allowed (cases_read1.txt): `..\forbidden\secret.txt`, `./../forbidden/..`,
+    `sub/../../forbidden/..`, absolute with / and with \, `..\FORBIDDEN\SECRET.TXT`, 8.3 `..\FORBID~1\secret.txt` and all-8.3 absolute,
+    `\\?\C:\...`, `\\localhost\C$\...`: ALL refused DL0904 exit 1; forbidden canary text in no output.
+C05 B-read: `ok.txt.`, `ok.txt ` (real trailing space, cat -A verified), `ok.txt:hidden`, `ok.txt::$DATA`, NUL, CON, COM1, con.txt -> DL0904
+    with a specific reason (dot/space stripped / alternate data stream / reserved device name).
+C06 B-read: "" and "." -> ERR:Denied (value, exit 0); "..", "/", "\", "C:", "C:forbidden\secret.txt" -> DL0904; OK.TXT, ./ok.txt,
+    sub/../ok.txt, sub\..\ok.txt, ok.txt/ and an absolute path INSIDE allowed/ read the allowed canary (in-scope spellings accepted).
+C07 B-read: minting wider than the lease (.., ., ./forbidden, forbidden, ./allowed/.., ./allowed\..\forbidden, absolute forbidden dir,
+    8.3 forbidden dir, "", C:\, /) -> DL0703 at mint, exit 1 (cases_read2.txt).
+C08 B-read: other spellings of the GRANTED dir (allowed, allowed/, ./ALLOWED, absolute, 8.3 B-LEAS~1\allowed) are accepted and read ok.txt;
+    ./allowed. , ./allowed::$DATA, \\?\...\allowed, UNC form of allowed -> DL0904.
+C09 B-read: a capability rooted at ./allowed/sub cannot read ../ok.txt ("escapes the granted scope") - attenuation inside the lease works.
+C10 B-read with a junction allowed\j -> forbidden (mklink /J): j/secret.txt, j\secret.txt, J/SECRET.TXT, j, sub/../j/secret.txt -> DL0904
+    "escapes the granted scope"; root ./allowed/j -> DL0703; j/../ok.txt normalised lexically to allowed/ok.txt (allowed canary).
+    Junction removed afterwards.
+C11 Symbolic links: mklink /D and mklink (file) refused by Windows ("not enough privilege") - symlinks could NOT be tested.
+C12 Hardlink allowed\hl.txt -> forbidden\secret.txt (mklink /H, made by me outside the program): B-read read hl.txt and printed
+    B-FORBIDDEN-CANARY-91c2, exit 0. This is the DOCUMENTED hardlink boundary (QUESTIONS.md 314, DEPLOYMENT.md 539), not a new
+    defect; it needs someone able to create files in the granted dir. Link removed; sha256 of both canaries re-verified (canary.sha)
+    after every write battery - unchanged.
+C13 B-rw: write_text and append_text into out/ work; absolute path inside out/ works; a/../w6.txt and ../out/w7.txt land in out/ only.
+C14 B-rw refusals, no file created outside out/ (find -newer after each case): ../allowed/evil.txt, ..\forbidden\probe5.txt,
+    ../forbidden/new.txt, absolute forbidden path, ../FORBID~1/new4.txt -> DL0904; write capability on ./allowed, ./forbidden, .., . ->
+    DL0703 at mint; w3.txt:ads, w3.txt::$DATA, NUL, con.txt, w4.txt. -> DL0904; "" and "." -> ERR:Denied.
+C15 No directory creation possible: write_text("sub/deep/w2.txt") -> ERR:NotFound (no implicit mkdir; the language has no mkdir primitive).
+C16 Junctions INSIDE out/ (out\jx -> forbidden, out\ja -> allowed): writes via jx/, jx\, JX/, ja/, append to jx/secret.txt, replacing jx
+    itself -> all DL0904 "escapes the granted scope"; root ./out/jx -> DL0703; forbidden/ and allowed/ unchanged; control write ok.
+C17 Swap race, write: capability minted on ./out/dir, program blocked on console input, out/dir swapped for a junction to forbidden/,
+    program then wrote probe-race.txt -> DL0904 "escapes the granted scope" exit 1; forbidden/ unchanged (race.sh, o_race.txt).
+C18 Swap race, read: capability on ./allowed (B-read), allowed/ replaced by a junction to forbidden/, read_text("secret.txt") -> DL0904
+    exit 1, no canary text. Directories restored afterwards.
+C19 B-wide fs: reads forbidden/secret.txt and allowed/ok.txt (expected: condition covers the dir); still refused outside the workdir:
+    ../nonexistent-probe.txt DL0904, root .. DL0703, C:/Windows/win.ini DL0904, root C:/Windows DL0703, ..\..\Windows\win.ini DL0904.
+C20 Interpreter vs --engine wasm: 23 fs cases under B-rw (cases_g1.txt, gen.sh): identical decisions + exit codes in all.
+C21 B-secret positive control: get, get_with_secret, post, post_with_secret to https://127.0.0.1/api/x connect (listener: TLS ClientHello, 233
+    bytes, no SNI for an IP) and return ERR:Other(connection failed) (a NetErr), exit 0. POST through a capability minted GET-only ->
+    DL0904 "a `POST` ... is outside the methods the grant names" with 0 connections.
+C22 B-secret: https://example.com/ via get and get_with_secret -> DL0904 "host ... is not in the granted allowlist", 0 connections.
+C23 B-secret URL spellings, 0 connections each (cases_n2.txt, 48 cases): localhost, LOCALHOST, 127.1, 2130706433, 0x7f000001, 0177.0.0.1,
+    127.000.000.001, [::1], [::ffff:127.0.0.1], 127.0.0.1. (trailing dot), 0.0.0.0, 127.0.0.2, fullwidth digits, %31%32%37.0.0.1,
+    127.0.0.1%00.example.com, 127.0.0.1.example.com, "127.0.0.1 /", https:///127.0.0.1/, 127.0.0.1:443@example.com, 127.0.0.1@example.com,
+    127.0.0.1\@example.com, example.com#@127.0.0.1, example.com?@127.0.0.1 -> DL0904 not in allowlist.
+C24 a@127.0.0.1 and user:pw@127.0.0.1 -> ERR:Refused [egress: userinfo]; http:// and the other schemes -> Refused [egress: scheme];
+    ports 0 / 65536 / abc -> Refused "not a canonical number"; backslash in path -> Refused; all 0 connections.
+C25 B-secret paths with no path scope connect (1 connection each): /api/x?q=1#frag, /api/../admin, /api/%2e%2e/admin, //api/x, /API/x, /admin
+    (a grant with no path pattern covers every path - expected).
+C26 Secret misuse is refused STATICALLY (dl check, progs/s/*.delulu): str(tok) DL0604; tok==tok DL0605; "x"+tok DL0602; get(tok) / header
+    name tok / post body tok DL0602; Map holding a Secret passed to get_with: DL0401; tok.len() DL0405; List.contains on secrets DL0605;
+    str(list of secrets) DL0604; a printing closure in Secret.map DL0603 (needs pure function). "v=${tok}" has no interpolation: prints the
+    literal text `v=${tok}` (no secret). root.declassify() at run time under B-secret: DL0703 "`declassify` was not granted".
+C27 B-net-get: mint broader than the lease (POST, GET+POST) -> DL0703 at mint; mint 127.0.0.1/api/** + GET /admin -> DL0904 "path ... is
+    outside every path the grant names" (0 connections); example.com with mint example.com -> DL0703, with mint 127.0.0.1 -> DL0904.
+C28 B-net-api: mint 127.0.0.1 (wider than /api/**) -> DL0703; mint 127.0.0.1/api/** + /admin -> DL0904 "the path `/admin` is outside every
+    path the grant names for its host `127.0.0.1` (lease g_...)"; example.com -> DL0703. 0 connections in all.
+C29 B-wide net: example.com -> DL0904 "lease ... does not grant `example.com` in scope `net`"; /admin under a path-scoped mint -> DL0904.
+C30 B-console, B-read, none: any http mint -> DL0703 (none: console refused first). 0 connections.
+C31 Secret leak channels, interpreter, B-secret (progs/sec.delulu get_with_secret / post_with_secret): --trace-effects (stdout and --trace-out),
+    --json, --report-out (rep/r1..r5.json), conn.log: `grep tok-SECRET` = 0 hits in every file. The trace shows `"detail":"«opaque»"`
+    for get_with_secret.
+C32 B-secret --sandbox: refused DL1401 "the result is a secret, which does not cross the channel" exit 1 (documented: no secret in a guest).
+C33 (see C26) expose path refused at root.declassify().
+
+=====================================================================================================
+ACCESS REQUESTS
+=====================================================================================================
+AR1 B-net-get and B-net-api as GRANT conditions carrying net.special=127.0.0.1 (GET) and net.special=127.0.0.1:GET,POST/api/** (+console), so
+    GET-vs-POST and path-scope refusals can be proven against a live listener (as leases they cannot reach loopback: B1).
+AR2 A lease (or grant condition) that carries secret TOKEN with secret_to 127.0.0.1 AND the Guard on, to see whether the Guard's
+    `declassify:*` rule stops the Secret.map/verify oracle (B2) and whether lease sends of a secret record `send`.
+AR3 (nice to have) permission to create symbolic links (Windows refused mklink /D), to test the symlink spellings.
+
+=====================================================================================================
+DISCLOSURES
+=====================================================================================================
+- I printed the first 60 lines of the `dl` wrapper (cat $DL | head -60) at the start; the gate then refused a later command that tried to
+  read further into the authority directory. No keys or tokens were read.
+- `cmd //c "dir /x .."` listed the NAMES of sibling agent directories (A-builder, C-zero-authority, _hc, ...); I opened none.
+- The Write tool refused REPORT.md; this file is REPORT.txt as the head chef instructed.

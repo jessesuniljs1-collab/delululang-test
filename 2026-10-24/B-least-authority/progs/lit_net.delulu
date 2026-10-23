@@ -1,0 +1,14 @@
+module lit_net
+
+fn main(root: Root) ! {Write, Net} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1/api/**"])
+    match c.get("https://127.0.0.1/admin") {
+        Ok(b) => out.println("ok")
+        Err(e) => out.println("err")
+    }
+    match c.get("https://127.0.0.1/api/x") {
+        Ok(b) => out.println("ok")
+        Err(e) => out.println("err")
+    }
+}

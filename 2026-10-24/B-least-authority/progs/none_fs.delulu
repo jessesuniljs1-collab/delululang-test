@@ -1,0 +1,10 @@
+module none_fs
+
+fn main(root: Root) ! {Read, Net} {
+    let rd = root.fs_read("./allowed")
+    match rd.read_text("ok.txt") {
+        Ok(t) => t.len()
+        Err(e) => 0
+    }
+    let c = root.http(["127.0.0.1"])
+}

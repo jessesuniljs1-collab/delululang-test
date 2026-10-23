@@ -1,0 +1,3 @@
+proposal — the narrowest grant for the refused call (DL0703 at progs/fsr.delulu:12:14) — that call's own requirement, read from the source:
+  --grant fs.read=./allowed
+filed as `pp_0000` with the broker — nothing is granted until it is answered: `delulu grants approve pp_0000 --parent <the approver's node>` (a new lease for the re-run) or `delulu grants reject pp_0000 --reason ".."`

@@ -1,0 +1,110 @@
+Agent A (the builder) - REPORT   (REPORT.md was refused by the Write tool; head chef said to use REPORT.txt)
+
+Workdir: .../scratchpad/dogfood/A-builder . $DL = .../scratchpad/authority/bin/dl . Conditions used: A-full, A-console, none.
+Exit codes below were read directly (not after a pipe) unless marked.
+
+=====================================================================
+FINDINGS
+=====================================================================
+
+A1 - medium - A `let` list/Map passed once to an ordinary function parameter silently becomes `val`; the later push/insert is refused with DL1604 pointing only at the write, while the guide says the call is DL1603
+  Files: probe/p4.delulu (v3 Map, v4 and v5 List), probe/p3.delulu
+  Command: $DL check probe/p4.delulu   (exit 1)
+  Shape (v5): `let xs = [1, 2]` / `let n = len_of(xs)` / `xs.push(4)` with `fn len_of(xs: List[Int]) -> Int { xs.len() }` (parameter has no capability keyword).
+  Output:
+    error[DL1604]: cannot write a map entry (insert) through a `val` receiver - writes require `iso`, `trn`, or `ref`   --> probe/p4.delulu:15:5
+    error[DL1604]: cannot write a list element (push) through a `val` receiver ...   --> probe/p4.delulu:23:5
+    error[DL1604]: cannot write a list element (push) through a `val` receiver ...   --> probe/p4.delulu:30:5
+    3 error(s)
+  Expected: docs/GETTING_STARTED.md section 10: "DL1603 `ref` where `val` is required - a let-bound list is `ref`; parameters default to `val`", i.e. the CALL is refused (as it was in my first textstats draft for a Map that had already gone through a `ref` parameter: `DL1603 cannot store ref (aliases as ref) where val is required (argument m)` at the call).
+  Observed: the call is ACCEPTED, the variable is silently downgraded to val for the rest of its scope (even though the callee only reads), and the error lands on a later statement. Single span (the write), none at the call that caused it, no repair. `delulu explain DL1604` talks only about box/tag receivers, never about a variable frozen by an earlier call.
+  Same family: `let used: Map[Str, Bool] = Map()` then `used.insert(..)` gives DL1604 "val receiver" - an annotation without a capability keyword makes the binding val and nothing in the message says so.
+  Reproduced: yes (3 shapes, repeated runs). I worked around it by declaring helper params `ref` (but then a val argument is refused) or by never passing a mutated list to a helper.
+
+A2 - high - The checker's own repair for DL1001 (insert_dependency_pin) produces a manifest that does not parse (DL1004); the Stage-2 spec example has the same invalid TOML; no shipped example shows a working dependency manifest
+  Files: pkgs/ratapp/delulu.toml (now in the working dotted-table form), pkgs/ratlib
+  Steps: delulu.toml with `[dependencies]` + `ratlib = { path = "../ratlib" }`.
+    $DL check pkgs/ratapp  (exit 1) ->
+      error[DL1001]: dependency `ratlib` has no authority pin - accepting its authority [] must be an explicit decision
+      14 | ratlib = { path = "../ratlib" }   ^ add a `[dependencies.<name>.authority]` pin
+      repair: insert_dependency_pin (suggest)  [widens authority - review before applying]
+    --json repair edit: insert "\n[dependencies.ratlib.authority]\neffects = []\n" at end of file (byte 195).
+    Writing exactly that (inline-table dep + the appended table) then gives (exit 1):
+      error[DL1004]: could not parse `delulu.toml`: invalid table header
+        dotted key `dependencies.ratlib` attempted to extend non-table type (inline table)
+        --> delulu.toml:16:1  [dependencies.ratlib.authority]
+  Expected: applying the suggested repair yields a manifest that checks. Observed: it cannot, TOML forbids extending an inline table. Only `[dependencies.ratlib]` + `path = "../ratlib"` followed by `[dependencies.ratlib.authority]` works (then: ok: `ratapp` checked clean (2 package(s), 3 module(s); authority within manifest and pins)). docs/design/STAGE2_SPECIFICATION.md 3.2 shows `mathkit = { path = ... }` followed by `[dependencies.mathkit.authority]` - same invalid combination. No file under examples/ has a dependency and `delulu new` does not show one.
+  Reproduced: yes (2 runs).
+
+A3 - medium - Modulo by zero: interpreter reports DL0902 division by zero, WASM engine reports DL0901 integer overflow
+  File: ovf/o8.delulu (`str(id(1) % id(0))`); control ovf/o7.delulu (`/`: both engines DL0902)
+  Commands: $DL run A-console ovf/o8.delulu ; same with --engine wasm
+  interp exit=1: error[DL0902]: division by zero (ovf/o8.delulu:12:31)
+  wasm   exit=1: error[DL0901]: WASM engine: WASM trap: DL0901: integer overflow
+  Expected: same code on both engines. `min % -1` is DL0901 on both (correct). Reproduced: yes.
+
+A4 - low - Call-depth bound differs by engine (interpreter 9,999 frames; WASM between 12,000 and 30,000)
+  File: ovf/rr.delulu / ovf/o11.delulu (`fn rec(n) { if n == 0 { 0 } else { 1 + rec(n - 1) } }`)
+  Exit codes interp/wasm: rec(9998) 0/0, rec(9999) 1/0, rec(10000) 1/0, rec(12000) 1/0, rec(30000) 1/1 (WASM: DL0905 "guest stack exhausted").
+  interp message: error[DL0905]: recursion depth exceeded. The 10,000 bound is documented for the interpreter only; the WASM bound is a stack size nobody states, so the same input works as .dwx and is refused interpreted. Reproduced: yes.
+
+A5 - medium - textstats over a 2 MB file: 6.3 s on the interpreter but 16.8 s on --engine wasm (16.3 s as a .dwx)
+  File: textstats/textstats_w.delulu (8 files incl. data/big.txt = 2,097,194 bytes, ~310k words, 38 distinct; every token counted into two Maps)
+  Commands (A-full): interpreter real 6.293s ; --engine wasm real 16.778s ; run textstats/tsw.dwx real 16.290s ; --sandbox real 7.229s. Output byte-identical in all four.
+  Expected: WASM documented as the faster engine (Study C 9.8x-15.7x vs C, interpreter 8.9x-489x). Observed: 2.7x SLOWER than the interpreter on a Str/Map-heavy workload, and past the 10 s line. Reproduced: yes (wasm 16.8 s, dwx 16.3 s).
+
+A6 - low - `"a" < "b"` is rejected with "arithmetic expects Int or Float"; Str has no pairwise ordering although `List[Str].sort()` orders by code point
+  File: probe/p2.delulu (first draft; 3 comparisons gave 6 diagnostics), re-check with a one-liner if needed
+  Output: error[DL0401]: arithmetic expects Int or Float: expected `Int`, found `Str` (per operand). A comparison is not arithmetic, and nothing says Str has no `<`. `sort()` of ["b","a","é","z","Z","U+FF21","😀","U+FFFF","aa","a "] gave [Z, a, "a ", aa, b, z, é, U+FF21, U+FFFF, 😀] = code point order (correct, not UTF-16 order). Reproduced: yes.
+
+A7 - low - `.list_dir` has no WASM lowering, so a directory-walking program cannot be a .dwx (clear refusal, no silent fallback)
+  File: textstats/textstats.delulu
+  $DL run A-full textstats/textstats.delulu --engine wasm -> error[DL1201]: WASM codegen does not support the method `.list_dir` - omit `--engine wasm` ... (exit 1)
+  $DL build textstats/textstats.delulu --target wasm -o textstats/ts.dwx -> same code, "can't be built to a .dwx yet" (exit 1). read_text/write_text DO work on WASM.
+
+A8 - low - Human `delulu authority` hides the requested scopes that `--json` shows
+  File: textstats/textstats.delulu. Human: `- FsRead   (scope granted at runtime)` / `- FsWrite  (scope granted at runtime)`. JSON: requested_scopes {"FsRead":["./data"],"FsWrite":["./out"]}, required_grants ["fs.read=./data","fs.write=./out","console"]. A reader of the human report cannot see which directories the program asks for.
+
+A9 - medium - There is no `return`; using it yields 11 diagnostics, 10 of them cascade noise, and none says the language has no early return
+  File: first draft of calc/calc.delulu (line `None => return Err(Lex("number too large: " + digits))`), reproduced in text from the run
+  $DL check (exit 1): DL0202 "expected an expression, found `return`" (accurate, but does not say `return` does not exist), then DL0201 expected `)`, DL0205 expected a pattern, 4x DL0401 match arms must have the same type, DL0405 "`Option` has no variant `Err`", DL0403 "variant `Err` binds 0 field(s), pattern has 1", DL0401 "`+` on strings requires both sides Str: expected Str, found Int" - 11 error(s), all from one token. The last few are plainly wrong statements about the program (Option has no variant Err; digits is a Str).
+  Expected: one diagnostic naming the missing construct (or a clean parse recovery). Reproducible by re-adding the line.
+
+A10 - medium - WASM engine refuses the idiomatic `let out = []` + `out.push(<sum-type value>)`; the message has no span and the checker already knows the type
+  Files: wasmprobe/w1.delulu (List[Tok]), w2 (inside Result), w6 (all-unit-variant sum), calc/calc.delulu (whole program refused)
+  $DL run A-console wasmprobe/w1.delulu --engine wasm -> error[DL1201]: WASM codegen does not support an empty list whose element type the backend was not given - omit `--engine wasm` ... (exit 1; no file/line). Interpreter: prints 3, exit 0. Same with $DL build calc/calc.delulu --target wasm.
+  `type Tok = TNum(Int) | TPlus | TEnd`, `fn lex() -> List[Tok] { let out = [] ; out.push(TNum(1)) ; ... out }`.
+  Works: annotated `let out: ref List[Tok] = []` (w4), seeded `let out = [TNum(1)]`-style literal (w5), and empty lists of Str (textstats). docs/for-agents.md says a List of sums compiles with all fifteen methods; the empty-literal case is not mentioned and the refusal names no line. With the annotation calc runs identically on WASM (see coverage). Reproduced: yes (w1, w2, w6, calc).
+
+=====================================================================
+COVERAGE (behaved correctly) - each line says what was tested
+=====================================================================
+ 1. textstats (textstats/textstats.delulu): per-file + total lines/words/chars/unique and top-10 for 8 files: ASCII, Unicode (Cyrillic, Greek, CJK, Arabic, Hindi, emoji, ZWJ family, combining marks, fullwidth, dotted I, final sigma, ligature), empty, CRLF, one 239,841-char line, 2 MB (310k words), no trailing newline, nested dir; out/report.txt byte-identical to the independent Python computation (ts_ref.py -> ts_ref.txt, cmp exit 0).
+ 2. Str.len counts code points (13 for "héllo 世界 😀 e+U+0301"); slice is by code points and clamps (no panic on out-of-range, inverted or negative bounds); to_upper/to_lower are Unicode; "".split("\n") is 1 piece; -7 % 3 = -1, -7 / 2 = -3 (probe/p1.delulu, p5).
+ 3. list_dir returns sorted names without marking directories; list_dir on a plain file gives Err; read_text of a missing file gives Err(NotFound); read_text("../gen.py") aborts the run with DL0904 "path escapes the granted scope" (exit 1, nothing read).
+ 4. CRLF source files are accepted by check and run; fmt rewrites to LF; formatting twice = once (cmp identical); the formatted program checks and gives identical output; `fmt --check` exits 1 on unformatted then 0 (textstats, calc, both packages).
+ 5. textstats_w.delulu (no list_dir): interpreter, --engine wasm, `build --target wasm` + `run x.dwx` give byte-identical stdout and out/report.txt; --sandbox (level 1, AppContainer) identical stdout; report.json outcome {exit 0, ran true}, denied_total 0, limitations ['privilege_escalation'], posture.identity "a per-run AppContainer".
+ 6. --trace-effects (textstats_w): 8 Read/read_text records with resolved_path and scope_root, then Write println, Write write_text(out/report.txt), Write println; stdout unchanged. calc: 74 records (read_text, then one println per expression) with correct details.
+ 7. Refusals: A-console on textstats: DL0703 "filesystem read of ./data was not granted - the lease ... does not carry fs.read=./data ..." and out/ stayed empty (ls checked); `none`: DL0703 "console was not granted ... pass --grant console", exit 1, out/ empty; same refusals under --engine wasm ("WASM trap: DL0703 ..."). calc under A-console: DL0703 for ./exprs; under none: DL0703 console. All exit 1.
+ 8. ratlib (lib, 2 modules ratlib + ratlib.bigint, 6 pure tests): check clean; `$DL test ratlib` 6 passed (also --json: passed 6, failed 0; and --seed 7). One test first FAILED because MY expected constant for fib(100) was wrong (Python: 354224848179261915075) - not a defect.
+ 9. ratapp (bin depending on ratlib, multi-package run): output equals Python Fractions/int computation (rat_ref.py -> rat_ref.txt, cmp 0) incl. H(30)=9304682830147/2329089562800, 100!, fib(500), 2^1000, 300!, 12345678901234567890^3; identical with --engine wasm, build --target wasm + run .dwx, --sandbox, and A-console; `none` -> DL0703 console not granted.
+10. `$DL lock ratapp` wrote delulu.lock; `build ratapp --locked` ok; `build ratapp` ok; `authority ratapp --json`: effects ["Write"], Console stdio, 23 pure fns; `authority ratlib`: "effects: (none - provably pure)"; `check ratapp ratlib` (two package paths) is refused with "`check` takes one path ... refused rather than silently ignored", as documented.
+11. calc (calc/calc.delulu - tokenizer, recursive-descent parser, evaluator; sum types, Result, `?`): 72 expressions from exprs/list.txt (precedence, associativity incl. right-assoc ^, unary minus chains, truncating / and %, 50-deep parens, 20-term sums, tabs, i64 limits, malformed: unbalanced parens, trailing operator, `+1`, `**`, `2 3`, `()`, empty line, `3(4)`, illegal characters, `1_000`, fullwidth digits, literal 9223372036854775808, 2^-1, divide/modulo by zero) -> stdout byte-identical to Python (calc_ref.py's own ast-based evaluator; cmp exit 0), including error kinds lex/parse/divzero/negexp.
+12. calc: interpreter = sandbox = formatted version; with the `let out: ref List[Tok] = []` annotation (calc/calc_a.delulu): --engine wasm and build + run .dwx are byte-identical to the interpreter. A result overflowing i64 (`99999999999 * 99999999999 / 99999999999`) aborts with DL0901 at the Mul (exit 1), WASM gives the same via DL1201 only because of A10 (not re-run with annotation).
+13. calc deep input (interp vs WASM with annotation, exit codes and stdout compared): 500-deep parens ok/ok; 2,000- and 5,000-deep parens -> DL0905 on both (exit 1, clean message, no crash); 5,000 unary minus chain, 5,000-term sums, 2,000-term ^ chain ok on both with identical stdout; 5,000-term ^ chain DL0905 on both.
+14. Arithmetic edge cases agree on both engines (probe/p5.delulu, diff empty): parse_int("+5")=Some(5), " 5"=Some(5), "007"=Some(7), "9223372036854775808"=None, i64 min parses, "٣"/"0x10"/"1_000"/""/"1.5" = None; Float: 0.1+0.2=0.30000000000000004, 1/0=inf, 0/0=NaN, 1e21 prints 1000000000000000000000.0, 1e-7 prints 0.0000001, int(NaN)=0, int(1e30)=i64 max, NaN==NaN false.
+15. Overflow/zero traps, exit 1 on both engines with the same code: max+1, max*2, min-1, min/-1, min%-1, 0-min -> DL0901; 1/0 -> DL0902; float 1.0/0.0 -> inf on both. (mod-by-zero code differs: A3.)
+16. Interpreter DL0905 bound is exactly where docs say (9,998 frames ok, 9,999 refused).
+17. The `?` operator, nested `match` returning from arms, `var` in `while` loops, records of (Expr, Int), recursive sum types 5,000 deep as data all worked on the interpreter.
+
+=====================================================================
+ACCESS REQUESTS
+=====================================================================
+ - None so far (A-full sufficient). Effectful tests would need a [test-authority] ceiling: not attempted yet.
+
+=====================================================================
+STATUS (updated as I go)
+=====================================================================
+ Done: 1 textstats, 2 library + bin packages, 3 expression interpreter.
+ Not yet: 4 actors pipeline, 5 data structures/timing, 6 Monte Carlo (Clock/Rand/--seed/--clock), 7 HTTP client vs local listener.
+ Notes: stderr of every wrapped run starts with "guard: on ...", "lease: running under delegated node ...", "custody: daemon" - wrapper/broker output, not program output.

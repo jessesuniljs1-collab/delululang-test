@@ -1,0 +1,10 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_619ec6eea2f10eeebabf262ac85606b0`
+custody: daemon
+error[DL0703]: secret `TOKEN` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `secret:TOKEN`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> progs/s/oracle.delulu:19:15
+   |
+19 |     let tok = root.secret("TOKEN")
+   |               ^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

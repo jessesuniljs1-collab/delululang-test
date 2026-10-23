@@ -15,6 +15,7 @@ fn is_digit(c: Str) -> Bool {
 fn lex(src: Str) -> Result[List[Tok], CalcErr] {
     let cs = src.chars()
     let out = []
+    var problem = ""
     var i = 0
     while i < cs.len() {
         match cs.get(i) {
@@ -42,7 +43,10 @@ fn lex(src: Str) -> Result[List[Tok], CalcErr] {
                     }
                     match parse_int(digits) {
                         Some(n) => out.push(TNum(n))
-                        None => return Err(Lex("number too large: " + digits))
+                        None => {
+                            problem = "number too large: " + digits
+                            j = cs.len()
+                        }
                     }
                     i = j
                 } else if c == "+" {
@@ -70,7 +74,8 @@ fn lex(src: Str) -> Result[List[Tok], CalcErr] {
                     out.push(TRParen)
                     i = i + 1
                 } else {
-                    return Err(Lex("bad character `" + c + "`"))
+                    problem = "bad character `" + c + "`"
+                    i = cs.len()
                 }
             }
             None => {
@@ -79,7 +84,7 @@ fn lex(src: Str) -> Result[List[Tok], CalcErr] {
         }
     }
     out.push(TEnd)
-    Ok(out)
+    if problem.len() > 0 { Err(Lex(problem)) } else { Ok(out) }
 }
 
 fn tok_at(ts: List[Tok], p: Int) -> Tok {

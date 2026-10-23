@@ -1,0 +1,16 @@
+module wasmprobe.w3
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    let cs = "abc".chars()
+    let out = []
+    var i = 0
+    while i < cs.len() {
+        match cs.get(i) {
+            Some(ch) => out.push(ch)
+            None => i = 99
+        }
+        i = i + 1
+    }
+    c.println(str(out.len()))
+}

@@ -1,5 +1,5 @@
 get
-127.0.0.1:GET,POST
-https://
+example.com
+https://example.com/
 
 

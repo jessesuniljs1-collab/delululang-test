@@ -1,0 +1,9 @@
+module s3_concat
+
+fn main(root: Root) ! {Write, Net, Declassify} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST"])
+    let tok = root.secret("TOKEN")
+    let hs = Map()
+    out.println("x" + tok)
+}

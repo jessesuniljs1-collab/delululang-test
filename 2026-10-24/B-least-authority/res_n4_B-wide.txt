@@ -1,0 +1,18 @@
+#01 exit=0 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1/api/x` was not delivered: the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use] 
+#02 exit=0 CONNS=0  url=[https://127.0.0.1/admin] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1/admin` was not delivered: the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use] 
+#03 exit=0 CONNS=0  url=[https://127.0.0.1/api/x] mode=post
+     -> ERR:Refused note: the request to `https://127.0.0.1/api/x` was not delivered: the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use] 
+#04 exit=0 CONNS=0  url=[https://127.0.0.1/api/x] mode=post
+     -> ERR:Refused note: the request to `https://127.0.0.1/api/x` was not delivered: the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use] 
+#05 exit=0 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1/api/x` was not delivered: the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use] 
+#06 exit=1 CONNS=0  url=[https://127.0.0.1/admin] mode=get
+     -> error[DL0904]: the path of `https://127.0.0.1/admin` is outside every path the grant names for its host 
+#07 exit=0 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> ERR:Refused note: the request to `https://127.0.0.1/api/x` was not delivered: the host is, or resolved to, a special-use address (loopback (127.0.0.0/8)); a host reaches one only when it is granted with `--grant net.special=HOST` [egress: special-use] 
+#08 exit=1 CONNS=0  url=[https://example.com/] mode=get
+     -> error[DL0904]: lease `g_e3d521bda5e61da2e2beab73c5caf811` does not grant `example.com` in scope `net` (capability scope violation) 
+#09 exit=1 CONNS=0  url=[https://example.com/] mode=get
+     -> error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_e3d521bda5e61da2e2beab73c5caf811`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused 

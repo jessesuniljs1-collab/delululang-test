@@ -1,0 +1,111 @@
+{
+  "command": "run",
+  "custody": {
+    "mode": "embedded",
+    "node": null
+  },
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL1401",
+      "explanation_id": "E-DL1401",
+      "message": "the result is a secret, which does not cross the channel",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 500,
+            "col": 35,
+            "line": 19
+          },
+          "file": "progs/sec.delulu",
+          "label": "refused by the host here",
+          "start": {
+            "byte": 480,
+            "col": 15,
+            "line": 19
+          }
+        }
+      ]
+    }
+  ],
+  "egress": {
+    "not_delivered": 0,
+    "records": [],
+    "records_kept": 0,
+    "requests": 0
+  },
+  "outcome": {
+    "exit": 1,
+    "ran": true
+  },
+  "sandbox": {
+    "backend": "process",
+    "break_glass": false,
+    "denied": [
+      "DL1401 on `root.secret`: the result is a secret, which does not cross the channel"
+    ],
+    "denied_total": 1,
+    "fully_enforced": false,
+    "generation": "36fb348f6ba90e8d58f84ae6d34cae5b8c3948466ab5173594fc88eb18ddf287",
+    "granted": "contained",
+    "host_guarantees": [
+      "one process only",
+      "memory ceiling",
+      "processor-time ceiling",
+      "killed with the host",
+      "no desktop, clipboard or global atoms",
+      "a separate identity: a per-run AppContainer with no capabilities — no network, none of the operator's files"
+    ],
+    "level": 1,
+    "limitations": [
+      "privilege_escalation"
+    ],
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "posture": {
+      "filesystem_reads": "none of the operator's files",
+      "filesystem_writes": "only its own per-run container folder",
+      "identity": "a per-run AppContainer",
+      "memory": "capped",
+      "network": "only the channel",
+      "new_programs": "denied",
+      "privilege_escalation": "not confined",
+      "processor_time": "capped"
+    },
+    "properties": {
+      "egress_confinement": {
+        "by": "network: only the channel",
+        "state": "established"
+      },
+      "filesystem_confinement": {
+        "by": "filesystem_writes: only its own per-run container folder; filesystem_reads: none of the operator's files",
+        "state": "established"
+      },
+      "host_loss_ends_guest": {
+        "by": "killed with the host",
+        "state": "established"
+      },
+      "privilege_floor": {
+        "by": "privilege_escalation: not confined; identity: a per-run AppContainer",
+        "state": "established"
+      },
+      "resource_ceiling": {
+        "by": "memory: capped; processor_time: capped",
+        "state": "established"
+      }
+    },
+    "requested": "contained",
+    "requested_level": 1
+  },
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}

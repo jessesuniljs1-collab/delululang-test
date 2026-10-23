@@ -1,0 +1,9 @@
+module s6_body
+
+fn main(root: Root) ! {Write, Net, Declassify} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST"])
+    let tok = root.secret("TOKEN")
+    let hs = Map()
+    match c.post("https://127.0.0.1/", hs, tok) { Ok(b) => out.println("ok") Err(e) => out.println("err") }
+}

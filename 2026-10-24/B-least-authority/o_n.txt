@@ -1,8 +1,11 @@
-mode=[get] scope=[127.0.0.1:GET,POST] url=[https://] header=[]
-error[DL0904]: host of `https://` is not in the granted allowlist
-  --> progs/sec.delulu:43:15
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_e3d521bda5e61da2e2beab73c5caf811`
+custody: daemon
+mode=[get] scope=[example.com] url=[https://example.com/]
+error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_e3d521bda5e61da2e2beab73c5caf811`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> progs/net.delulu:17:13
    |
-43 |         match c.get(url) {
-   |               ^^^^^^^^^^ runtime fault here
-  explain: delulu explain E-DL0904
+17 |     let c = root.http(scope.split(";"))
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
 

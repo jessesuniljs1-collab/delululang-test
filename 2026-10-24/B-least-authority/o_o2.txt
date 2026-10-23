@@ -1,0 +1,1 @@
+candidates-matching-next-char=1

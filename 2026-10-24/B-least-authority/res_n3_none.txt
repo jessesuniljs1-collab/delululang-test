@@ -1,0 +1,10 @@
+#01 exit=1 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> error[DL0703]: `console` was not granted to this program — pass `--grant console` 
+#02 exit=1 CONNS=0  url=[https://127.0.0.1/api/x] mode=post
+     -> error[DL0703]: `console` was not granted to this program — pass `--grant console` 
+#03 exit=1 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> error[DL0703]: `console` was not granted to this program — pass `--grant console` 
+#04 exit=1 CONNS=0  url=[https://example.com/] mode=get
+     -> error[DL0703]: `console` was not granted to this program — pass `--grant console` 
+#05 exit=1 CONNS=0  url=[https://example.com/] mode=get
+     -> error[DL0703]: `console` was not granted to this program — pass `--grant console` 

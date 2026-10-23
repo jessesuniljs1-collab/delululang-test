@@ -1,0 +1,37 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+OK:B-ALLOWED-CANARY-7f3a
+
+{
+  "command": "run",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0904",
+      "explanation_id": "E-DL0904",
+      "message": "lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\forbidden\\secret.txt` in scope `fs.read` (capability scope violation)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 376,
+            "col": 49,
+            "line": 14
+          },
+          "file": "progs/fsr.delulu",
+          "label": "runtime fault here",
+          "start": {
+            "byte": 337,
+            "col": 10,
+            "line": 14
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}

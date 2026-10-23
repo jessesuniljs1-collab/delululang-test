@@ -1,0 +1,9 @@
+module s5_hname
+
+fn main(root: Root) ! {Write, Net, Declassify} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST"])
+    let tok = root.secret("TOKEN")
+    let hs = Map()
+    match c.get_with_secret("https://127.0.0.1/", hs, tok, tok) { Ok(b) => out.println("ok") Err(e) => out.println("err") }
+}

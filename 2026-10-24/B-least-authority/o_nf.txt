@@ -1,0 +1,7 @@
+error[DL0703]: filesystem read of `./allowed` was not granted — pass `--grant fs.read=./allowed`
+  --> progs/none_fs.delulu:4:14
+   |
+ 4 |     let rd = root.fs_read("./allowed")
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

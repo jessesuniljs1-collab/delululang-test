@@ -1,0 +1,21 @@
+module oracle
+
+fn rl(out: Cap[Console]) -> Str ! {Read} {
+    match out.readline() {
+        Ok(s) => s
+        Err(e) => "<EOF>"
+    }
+}
+
+fn probe(tok: Secret[Str], prefix: Str) -> Bool ! {Declassify} {
+    let a = tok.map(fn(s: Str) -> Str { if s.starts_with(prefix) { "Y" } else { "N" } })
+    let known = tok.map(fn(s: Str) -> Str { "Y" })
+    a.verify(known)
+}
+
+fn main(root: Root) ! {Read, Write, Declassify} {
+    let out = root.console()
+    let prefix = rl(out)
+    let tok = root.secret("TOKEN")
+    out.println("prefix=[" + prefix + "] startswith=" + str(probe(tok, prefix)))
+}

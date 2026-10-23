@@ -1,0 +1,10 @@
+#01 exit=1 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_9ce64adcce2010a126036dd6f21ffe64`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone 
+#02 exit=1 CONNS=0  url=[https://127.0.0.1/api/x] mode=post
+     -> error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_9ce64adcce2010a126036dd6f21ffe64`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone 
+#03 exit=1 CONNS=0  url=[https://127.0.0.1/api/x] mode=get
+     -> error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_9ce64adcce2010a126036dd6f21ffe64`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone 
+#04 exit=1 CONNS=0  url=[https://example.com/] mode=get
+     -> error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_9ce64adcce2010a126036dd6f21ffe64`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone 
+#05 exit=1 CONNS=0  url=[https://example.com/] mode=get
+     -> error[DL0703]: `network host` was not granted to this program — the lease this run redeemed (node `g_9ce64adcce2010a126036dd6f21ffe64`) does not carry `net=HOST`, and a `--lease` run takes its authority from its delegation alone 

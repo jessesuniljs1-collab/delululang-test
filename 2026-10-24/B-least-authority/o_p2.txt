@@ -1,0 +1,10 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_9ce64adcce2010a126036dd6f21ffe64`
+custody: daemon
+error[DL0703]: filesystem read of `./allowed` was not granted — the lease this run redeemed (node `g_9ce64adcce2010a126036dd6f21ffe64`) does not carry `fs.read=./allowed`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> progs/fsr.delulu:12:14
+   |
+12 |     let rd = root.fs_read("./allowed")
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

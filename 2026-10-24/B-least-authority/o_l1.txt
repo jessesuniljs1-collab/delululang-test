@@ -1,0 +1,11 @@
+mode=[gets] scope=[127.0.0.1] url=[https://127.0.0.1/api/x] header=[Authorization]
+ERR:Other(connection failed)
+{"seq":0,"effect":"Read","op":"readline","cap_kind":"Console","detail":null,"span":{"file":0,"start":65,"end":79}}
+{"seq":1,"effect":"Read","op":"readline","cap_kind":"Console","detail":null,"span":{"file":0,"start":65,"end":79}}
+{"seq":2,"effect":"Read","op":"readline","cap_kind":"Console","detail":null,"span":{"file":0,"start":65,"end":79}}
+{"seq":3,"effect":"Read","op":"readline","cap_kind":"Console","detail":null,"span":{"file":0,"start":65,"end":79}}
+{"seq":4,"effect":"Read","op":"readline","cap_kind":"Console","detail":null,"span":{"file":0,"start":65,"end":79}}
+{"seq":5,"effect":"Write","op":"println","cap_kind":"Console","detail":"mode=[gets] scope=[127.0.0.1] url=[https://127.0.0.1/api/x] header=[Authorization]","span":{"file":0,"start":328,"end":425}}
+{"seq":6,"effect":"Net","op":"get_with_secret","cap_kind":"Http","detail":"«opaque»","span":{"file":0,"start":596,"end":634}}
+{"seq":7,"effect":"Write","op":"println","cap_kind":"Console","detail":"ERR:Other(connection failed)","span":{"file":0,"start":725,"end":753}}
+note: the request to `https://127.0.0.1/api/x` was not delivered: the connection could not be made [egress: connect]

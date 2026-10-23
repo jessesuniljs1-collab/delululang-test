@@ -1,0 +1,3 @@
+mode=[posts] scope=[127.0.0.1:GET,POST] url=[https://127.0.0.1/api/x] header=[Authorization]
+ERR:Other(connection failed)
+note: the request to `https://127.0.0.1/api/x` was not delivered: the connection could not be made [egress: connect]

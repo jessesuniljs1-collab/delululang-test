@@ -1,0 +1,15 @@
+module lit_post
+
+fn main(root: Root) ! {Write, Net} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:POST/api/**"])
+    let hs = Map()
+    match c.post("https://127.0.0.1/api/x", hs, "b") {
+        Ok(b) => out.println("ok")
+        Err(e) => out.println("err")
+    }
+    match c.get("https://127.0.0.1/api/x") {
+        Ok(b) => out.println("ok")
+        Err(e) => out.println("err")
+    }
+}

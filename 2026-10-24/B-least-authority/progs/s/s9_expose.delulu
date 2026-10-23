@@ -1,0 +1,10 @@
+module s9_expose
+
+fn main(root: Root) ! {Write, Net, Declassify} {
+    let out = root.console()
+    let c = root.http(["127.0.0.1:GET,POST"])
+    let tok = root.secret("TOKEN")
+    let hs = Map()
+    let d = root.declassify()
+    out.println(tok.expose(d))
+}
