@@ -217,11 +217,20 @@ fn validate(
         // and the egress client share (`netscope::judge_all`) — so the chain never records `allow` for a path the grant
         // does not reach. The host is within some entry (above); an entry for this host that names no pattern reaches
         // every path.
+        // P9-05 (d), D-V2-182: and by its method — a GET, the one request a program makes until a primitive makes another.
         if let (Op::Net, Some(path)) = (op, url_path) {
             let refused = |why| Denial::NetPath { node: node_id.clone(), host: arg.to_string(), path: path.to_string(), why };
-            match crate::netscope::judge_all(&authority.scopes.net, arg, path) {
+            match crate::netscope::judge_all(&authority.scopes.net, "GET", arg, path) {
                 crate::netscope::Verdict::Allow => {}
                 crate::netscope::Verdict::Ambiguous(why) => return Err(refused(Some(why))),
+                crate::netscope::Verdict::OtherMethod => {
+                    return Err(Denial::NetMethod {
+                        node: node_id.clone(),
+                        host: arg.to_string(),
+                        path: path.to_string(),
+                        method: "GET",
+                    })
+                }
                 crate::netscope::Verdict::OutsidePath | crate::netscope::Verdict::OtherHost => return Err(refused(None)),
             }
         }

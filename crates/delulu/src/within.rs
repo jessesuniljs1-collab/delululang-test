@@ -299,11 +299,19 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                 }
                 Some(u) => {
                     let (host, path) = (delulu_runtime::prim::host_of(u), delulu_runtime::prim::path_of(u));
-                    match delulu_broker::netscope::judge_all(&root.net, host, path) {
+                    // Every request is a GET until a primitive makes another (P9-05 (d), D-V2-182).
+                    match delulu_broker::netscope::judge_all(&root.net, "GET", host, path) {
                         Verdict::Allow => (Outcome::Within, String::new()),
                         Verdict::OtherHost => {
                             (Outcome::Exceeds, format!("the request to `{u}` names `{host}`, which no `net` grant of the boundary names"))
                         }
+                        Verdict::OtherMethod => (
+                            Outcome::Exceeds,
+                            format!(
+                                "the request to `{u}` is a `GET`, and the boundary's `net` grants that take its path on `{host}` \
+                                 name other methods"
+                            ),
+                        ),
                         Verdict::OutsidePath => (
                             Outcome::Exceeds,
                             format!(
@@ -315,11 +323,18 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                     }
                 }
                 // A computed URL goes to a host its capability was minted for, which the mint decides; only a path
-                // pattern in the boundary leaves the request itself undecided.
-                None if root.net.iter().all(|e| !e.contains('/')) => (Outcome::Within, String::new()),
+                // pattern in the boundary, or an entry that takes no GET (D-V2-182), leaves the request itself undecided.
+                None if root.net.iter().all(|e| {
+                    let (_, methods, path) = delulu_broker::netscope::read(e);
+                    path.is_none() && methods & delulu_broker::netscope::method_bit("GET") != 0
+                }) =>
+                {
+                    (Outcome::Within, String::new())
+                }
                 None => (
                     Outcome::Inconclusive,
-                    "the source computes the URL, and the boundary scopes a host by path, which is decided at the call"
+                    "the source computes the URL, and the boundary scopes a host by path or by method, which is decided at \
+                     the call"
                         .to_string(),
                 ),
             }
@@ -1104,6 +1119,10 @@ mod tests {
             "api.example.com/v1/items/x",
             "api.example.com/v2/**",
             "api.example.com/**",
+            // P9-05 (d), D-V2-182: and method-scoped ones.
+            "api.example.com:POST",
+            "api.example.com:GET,POST/v1/**",
+            "api.example.com:POST/v1/items/x",
         ];
         let names = ["API_KEY", "DB_PASS"];
         // A small deterministic generator (xorshift) — inputs generated, not written (§11.2).
