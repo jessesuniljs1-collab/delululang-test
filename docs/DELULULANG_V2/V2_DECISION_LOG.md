@@ -4572,3 +4572,40 @@ tests judged against a control measured beside them, both red on the old interpr
 width, no ordering of a literal. The checker's `C48` residual scan was measured rather than changed: 6,400 fields check
 in 0.18 s, linear.
 
+## D-V2-180 — RW 2.11: a sent secret is asked for, and decided, with its audience — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** P9-04 built secret sends: `http.get_with_secret` goes only to an origin the secret's grant names in
+its audience (`secret:NAME@HOST[:PORT]=VALUE`). It left one step, proposing the audience in `--grants`' lines. Building
+that step showed two gaps.
+- `--grants` asked for `secret:API_TOKEN=VALUE`. A run granted that way holds the secret and refuses every send of it,
+  so the tool's own advice gave a program that could not do what it was written to do.
+- `--within`, and `deploy plan`, which uses its verdict (D-V2-176), answered *within* for a boundary granting the secret
+  with no audience, or with one naming another origin. A run refuses those sends, so the request was outside the
+  boundary and the verdict did not judge it. The runtime stayed fail-closed and nothing was sent.
+
+**Decided:**
+- A secret's requirement carries the origins of its sends as the source shows them (`within::secret_sends`, the walk
+  behind `secret_destinations`). Its line names them: `secret:NAME@HOST:PORT[,…]=VALUE`, with `HOST` for a computed URL.
+  A send of a secret the source does not name (a parameter, a field) is its own requirement:
+  `secret:NAME@HOST:PORT=VALUE`.
+- `--within` decides the mint by name, as before, then each send against the boundary's audience for its secret, compared
+  as the egress client compares (`parse_audience`, host and port):
+  - *exceeds* when the boundary grants the secret with no audience, or one that does not name the origin;
+  - *inconclusive* for a computed URL under an audience;
+  - for a secret the source does not name: *within* only when every secret the boundary grants may reach the origin,
+    *exceeds* when none may, *inconclusive* between.
+- A `deploy plan` profile's `secrets` entry may name its audience as a grant does (`NAME@HOST[:PORT]`). The run's own
+  parser reads it, so a malformed audience is refused as no boundary.
+
+**Language-visible:** `authority --grants` prints a different line for a program that sends a secret. `--within` and
+`deploy plan` now refuse boundaries they used to approve: ones under which the program's sends would be refused when it
+runs.
+
+**Evidence:**
+- `within_cli` `a_sent_secret_is_asked_for_and_decided_with_its_audience` covers three shapes: a literal URL (five
+  boundaries, the port included), a computed URL, and a secret passed to a helper (within, inconclusive, exceeds).
+- `deploy_cli` `a_secret_a_service_sends_is_bounded_by_its_audience`: name only refused, named audience approved,
+  malformed audience no boundary.
+- Both fail on `master`'s code. Mutants red: the line without the audience, the sends not decided, the port ignored, an
+  unnamed secret's send always within.
+

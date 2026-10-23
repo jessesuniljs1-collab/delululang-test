@@ -3635,6 +3635,8 @@ pub(crate) struct ScopeWalk {
     pub(crate) hidden_at: BTreeMap<String, delulu_diag::Span>,
     pub(crate) mint_at: BTreeMap<String, delulu_diag::Span>,
     pub(crate) sites: Vec<MintSite>,
+    /// Each `http.get_with_secret`, with its secret and destination as far as the source shows them (RW 2.11, D-V2-180).
+    pub(crate) sends: Vec<crate::within::SecretSend>,
 }
 
 /// One capability-minting call (P9-03): where it is, the kind it mints, the literal scopes it writes, and whether it asks for
@@ -3844,6 +3846,7 @@ pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> Scope
         hidden_at: BTreeMap::new(),
         mint_at: BTreeMap::new(),
         sites: Vec::new(),
+        sends: crate::within::secret_sends(modules),
     };
     for m in modules {
         for item in &m.items {
@@ -3897,6 +3900,12 @@ pub(crate) enum Ask {
     Hidden { method: &'static str },
     /// A foreign C library by its logical name; the binary's path is the operator's grant data.
     ForeignLib(String),
+    /// A secret by its grant name, with the origin of every send of it the source shows (`None` for a computed URL):
+    /// the mint decides the name, and each send is refused unless the grant's audience names its origin (P9-04 (c);
+    /// RW 2.11, D-V2-180).
+    Secret { name: String, to: Vec<Option<String>> },
+    /// A send of a secret the source does not name (a parameter, a field), to the origin it shows (`None`: computed).
+    SecretSend { to: Option<String> },
     /// A Python import: a module the program imports, or a pattern its manifest allows.
     PythonImport { name: String, pattern: bool },
     /// Python, with no import the source or the manifest names.
@@ -4066,15 +4075,36 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     if effects.iter().any(|e| e == "Declassify") {
         push(&mut out, "declassify".into(), Ask::Mint { method: "declassify", arg: None }, mint_at("Declassify"));
     }
+    // A secret the program sends carries the audience its sends need (RW 2.11, D-V2-180): a grant without one lets the
+    // program hold the secret and refuses every send of it (P9-04 (c)), so the line names each origin the source shows, and
+    // `HOST` for a send whose URL it computes.
+    let secret_line = |name: &str, to: &[Option<String>]| {
+        if to.is_empty() {
+            format!("secret:{name}=VALUE")
+        } else {
+            let members: Vec<&str> = to.iter().map(|t| t.as_deref().unwrap_or("HOST")).collect();
+            format!("secret:{name}@{}=VALUE", members.join(","))
+        }
+    };
+    let sent_to = |secret: Option<&str>| {
+        let mut to: Vec<Option<String>> = Vec::new();
+        for send in walk.sends.iter().filter(|s| s.secret.as_deref() == secret) {
+            if !to.contains(&send.to) {
+                to.push(send.to.clone());
+            }
+        }
+        to
+    };
     for s in report["secrets"].as_array().cloned().unwrap_or_default() {
         if let Some(name) = s.as_str() {
-            push(
-                &mut out,
-                format!("secret:{name}=VALUE"),
-                Ask::Mint { method: "secret", arg: Some(name.to_string()) },
-                lit_at("Secret", name),
-            );
+            let to = sent_to(Some(name));
+            push(&mut out, secret_line(name, &to), Ask::Secret { name: name.to_string(), to }, lit_at("Secret", name));
         }
+    }
+    // A send of a secret the source does not name: the line names the destination, and the operator the secret.
+    for to in sent_to(None) {
+        let at = walk.sends.iter().find(|s| s.secret.is_none() && s.to == to).map(|s| s.at);
+        push(&mut out, secret_line("NAME", std::slice::from_ref(&to)), Ask::SecretSend { to }, at);
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
     // and the list named no secret at all.

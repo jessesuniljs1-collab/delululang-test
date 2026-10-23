@@ -17,7 +17,8 @@
 //! - **capability scopes and foreign holes** (RW 6.6, 2026-10-22) — every request the service makes,
 //!   in the `--grant` grammar, decided against the profile's boundary by `delulu authority --within`'s
 //!   own verdict (`within.rs`): the runtime's mint for each path, host and secret, the boundary's
-//!   `foreign.c` and `foreign.python`. The boundary is the profile's `fs.read`, `fs.write`, `net`,
+//!   `foreign.c` and `foreign.python`, and each secret's sends against its audience (`secrets = ["NAME@HOST:PORT"]`,
+//!   D-V2-180). The boundary is the profile's `fs.read`, `fs.write`, `net`,
 //!   `secrets`, `foreign.c` and `foreign.python`, with `console`, `clock`, `rand` and `declassify`
 //!   where its effects grant `Write`, `Clock`, `Rand` and `Declassify`. A request the source does not
 //!   show (a computed path) is *inconclusive* unless the profile grants none of its kind, and an
@@ -40,7 +41,8 @@ const PROFILE_CANNOT_GRANT: &[&str] = &["net.special", "plugin roots", "devices 
 /// The environment profile as a boundary in the `--grant` grammar — the form `delulu authority --within` decides against —
 /// and the lines it was built from. Paths, hosts and Python patterns go through `Grants::add`, the parser `run --grant` uses,
 /// so a profile is read as a run's grants would be (a special-use host under `net` is refused, D-NE-28). Secrets and
-/// `foreign.c` libraries are matched by name; the profile says which may be held, never with what value or binary.
+/// `foreign.c` libraries are matched by name; the profile says which may be held, never with what value or binary, and for
+/// a secret where it may be sent (`NAME@HOST[:PORT]`, D-V2-180).
 fn profile_boundary(profile: &Manifest) -> Result<(Grants, Vec<String>), String> {
     let mut boundary = Grants::default();
     let mut lines: Vec<String> = Vec::new();
@@ -56,9 +58,12 @@ fn profile_boundary(profile: &Manifest) -> Result<(Grants, Vec<String>), String>
     for line in &lines {
         boundary.add(line).map_err(|e| format!("`{line}` is not a boundary this profile can give: {e}"))?;
     }
-    for name in &profile.secrets {
-        boundary.secrets.insert(name.clone(), String::new());
-        lines.push(format!("secret:{name}"));
+    // A secret is named, and may carry its audience as a grant does, `NAME@HOST[:PORT][,…]` (RW 2.11, D-V2-180): the run's
+    // own parser reads it, so a service that sends the secret is decided against the origins it may reach.
+    for entry in &profile.secrets {
+        let line = format!("secret:{entry}=");
+        boundary.add(&line).map_err(|e| format!("`secret:{entry}` is not a boundary this profile can give: {e}"))?;
+        lines.push(format!("secret:{entry}"));
     }
     for lib in &profile.foreign_c {
         boundary.foreign_c.insert(lib.clone(), String::new());

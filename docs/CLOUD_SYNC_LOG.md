@@ -5418,3 +5418,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/design/AUTHORITY_GUARD_CAPSTONE.md`, `measurements/scale/RECORD.md`, `docs/survey/*`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
 
+### 2026-10-23 (afternoon) — a sent secret is asked for and decided with its audience (RW 2.11, D-V2-180) (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/secret-audience` (on `master` `118cf51`)   Pull request: the one this entry rides in
+- **What:** `authority --grants` names a sent secret's audience (`secret:NAME@HOST:PORT=VALUE`); `--within` and
+  `deploy plan` decide each send against the boundary's audience (stricter: they used to approve a boundary under which
+  the run refuses the send); a `deploy plan` profile's `secrets` may name an audience.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/src/within.rs`, `crates/delulu/src/deploy.rs`,
+  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/deploy_cli.rs`, `CHANGELOG.md`, `docs/for-agents.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
