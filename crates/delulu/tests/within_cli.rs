@@ -1586,6 +1586,49 @@ fn a_sent_secret_is_asked_for_and_decided_with_its_audience() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// P9-05 (d), D-V2-183: `http.post` is a request by POST. The program mints `example.com:POST`; `--grants` names that
+/// line. `--within` decides the mint and the request by their methods: a boundary naming no methods for the host (GET
+/// alone) *exceeds* at the mint, and so does one whose entries take the path by other methods only. A boundary naming
+/// POST is *within*.
+#[test]
+fn a_post_is_decided_by_its_method_against_the_boundary() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-post-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("post.delulu");
+    std::fs::write(
+        &f,
+        "module post\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"example.com:POST\"])\n    match h.post(\"https://example.com/hooks\", Map(), \"{}\") {\n        \
+         Ok(body) => out.println(\"sent\")\n        Err(e) => out.println(\"no\")\n    }\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    assert_eq!(required(&f), ["console", "net=example.com:POST"]);
+    let grants = |net: &str| vec!["console".to_string(), format!("net={net}")];
+    let (code, v) = within(&f, &grants("example.com"));
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "GET alone: {v:#}");
+    let (code, v) = within(&f, &grants("example.com:GET"));
+    assert_eq!(code, 2, "`:GET` is refused as a spelling: {v:#}");
+    assert_eq!(within(&f, &grants("example.com:POST")).1["result"], "within");
+    assert_eq!(within(&f, &grants("example.com:GET,POST/hooks")).1["result"], "exceeds", "the mint names every path");
+
+    // The request itself, by its method: a POST to `/admin`, where the boundary takes that path by GET alone.
+    let g = dir.join("admin.delulu");
+    std::fs::write(
+        &g,
+        "module admin\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"example.com:POST/api/**\"])\n    \
+         let r = h.post(\"https://example.com/admin\", Map(), \"{}\")\n}\n",
+    )
+    .unwrap();
+    let g = g.to_string_lossy().to_string();
+    let boundary = vec!["net=example.com:POST/api/**".to_string(), "net=example.com/admin".to_string()];
+    let (code, v) = within(&g, &boundary);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("is a `POST`"), "decided by its method: {v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// D-V2-181: a request is judged at its call by its path where its capability's entry names a pattern (P9-05 (a)), and
 /// `--within` decided only the mint: a program minting `example.com/api/**` and requesting `https://example.com/admin`
 /// was *within* a boundary of `net=example.com/api/**`, though the run refuses the request whatever it minted. Each request

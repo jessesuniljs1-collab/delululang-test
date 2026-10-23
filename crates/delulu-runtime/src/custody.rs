@@ -51,8 +51,9 @@ pub trait Custody {
     /// [`Custody::check`] for a use that names its request path — a network use's URL path, without its query (P9-05,
     /// D-V2-169): a custody that records uses judges it and carries it in the record; one that records nothing (embedded,
     /// whose `prim` check judges the path) has nowhere to carry it, so the default asks `check`.
-    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
-        let _ = url_path;
+    /// `method` is a network use's HTTP method when it is not a GET (P9-05 (d), D-V2-183), judged and recorded beside the path.
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
+        let _ = (url_path, method);
         self.check(op, arg)
     }
 
@@ -213,11 +214,11 @@ impl Custody for PluginUseCustody {
         }
         self.host.borrow_mut().check(op, arg)
     }
-    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
         if let Err(d) = self.gate() {
             return CustodyDecision::Deny(d);
         }
-        self.host.borrow_mut().check_at(op, arg, url_path)
+        self.host.borrow_mut().check_at(op, arg, url_path, method)
     }
     fn expose(&mut self, name: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
         self.gate()?;

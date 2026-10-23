@@ -272,6 +272,63 @@ fn a_method_scoped_grant_takes_only_its_methods() {
     assert!(out(&o).contains("names no port"), "{}", out(&o));
 }
 
+/// A program that POSTs a body to `url` through `post` (P9-05 (d), D-V2-183).
+fn poster(dir: &Path, hosts: &str, url: &str) {
+    std::fs::write(
+        dir.join("post.delulu"),
+        format!(
+            "module post\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+             let out = root.console()\n    \
+             let h = root.http([\"{hosts}\"])\n    \
+             let hs = Map()\n    \
+             hs.insert(\"Content-Type\", \"application/json\")\n    \
+             match h.post(\"{url}\", hs, \"{{}}\") {{\n        \
+             Ok(body) => out.println(\"delivered\")\n        \
+             Err(e) => out.println(\"not delivered\")\n    \
+             }}\n}}\n"
+        ),
+    )
+    .unwrap();
+}
+
+/// P9-05 (d), D-V2-183: `http.post`, end to end on loopback, at L0 and from a guest — the host performs it. Under an
+/// entry naming POST it leaves as TLS; under one naming no methods (GET alone) it is refused DL0904 at the call, in words
+/// about its method, and nothing connects; and the run report names the hop's method.
+#[test]
+fn a_post_leaves_under_a_grant_that_names_post_and_no_other() {
+    for sandbox in [false, true] {
+        let run = |dir: &Path, grant: &str| {
+            let grant = format!("net.special={grant}");
+            let mut args =
+                vec!["run", "post.delulu", "--grant", "console", "--grant", grant.as_str(), "--report-out", "rep.json"];
+            if sandbox {
+                args.push("--sandbox");
+            }
+            delulu(dir, &args)
+        };
+        let dir = tmp(if sandbox { "post-in-guest" } else { "post-in-l0" });
+        let (port, seen) = listen(Duration::from_secs(20));
+        poster(&dir, "127.0.0.1:POST", &format!("https://127.0.0.1:{port}/items"));
+        let o = run(&dir, "127.0.0.1:POST");
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
+        let rep: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
+        assert_eq!(rep["egress"]["records"][0]["hops"][0]["method"], "POST", "sandbox={sandbox}: {rep}");
+
+        let dir = tmp(if sandbox { "post-out-guest" } else { "post-out-l0" });
+        let (port, seen) = listen(Duration::from_secs(3));
+        poster(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/items"));
+        let o = run(&dir, "127.0.0.1");
+        assert!(
+            out(&o).contains("DL0904") && out(&o).contains("a `POST` to"),
+            "sandbox={sandbox}: refused at the call by its method:\n{}",
+            out(&o)
+        );
+        assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}: nothing connected");
+    }
+}
+
 /// A program that fetches `url` with `headers` through `get_with` (P9-04 (a), D-V2-128).
 fn fetcher_with(dir: &Path, hosts: &str, url: &str, headers: &[(&str, &str)]) {
     let inserts: String = headers.iter().map(|(n, v)| format!("    hs.insert(\"{n}\", \"{v}\")\n")).collect();

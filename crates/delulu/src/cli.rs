@@ -3920,8 +3920,8 @@ pub(crate) enum Ask {
     SecretSend { to: Option<String> },
     /// A request, by its URL literal (`None`: computed), judged at its call against its capability's `net` entries, its
     /// path too where an entry names a pattern (P9-05 (a); D-V2-181). Decided by a verdict; the line an operator types for
-    /// it is its mint's.
-    Request { url: Option<String> },
+    /// it is its mint's. By its HTTP `method` (P9-05 (d), D-V2-183: `post` a POST, every other request a GET).
+    Request { url: Option<String>, method: &'static str },
     /// A Python import: a module the program imports, or a pattern its manifest allows.
     PythonImport { name: String, pattern: bool },
     /// Python, with no import the source or the manifest names.
@@ -4124,11 +4124,15 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     }
     // Each request, when the caller set them (D-V2-181): named by the narrowest `net` line that takes it.
     for site in &walk.requests {
+        // A POST is named with its method; a GET needs none (an entry naming no methods allows GET alone).
+        let methods = if site.method == "GET" { String::new() } else { format!(":{}", site.method) };
         let grant = match site.url.as_deref() {
-            Some(u) => format!("net={}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u)),
-            None => "net=HOST/PATH".to_string(),
+            Some(u) => {
+                format!("net={}{methods}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u))
+            }
+            None => format!("net=HOST{methods}/PATH"),
         };
-        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone() }, at: Some(site.at) });
+        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone(), method: site.method }, at: Some(site.at) });
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
     // and the list named no secret at all.

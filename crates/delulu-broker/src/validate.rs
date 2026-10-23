@@ -163,7 +163,8 @@ impl GuardedDecision {
 
 /// Validate an op against a node's authority + effective state. Shared by the live path and the
 /// snapshot path; the caller decides the data source (live tree vs frozen snapshot). `url_path` is a
-/// network use's request path, when its caller sends one (P9-05, D-V2-169).
+/// network use's request path, when its caller sends one (P9-05, D-V2-169); `method` its HTTP method, `None` a GET
+/// (P9-05 (d), D-V2-183).
 fn validate(
     node_id: &GrantId,
     eff: EffState,
@@ -171,6 +172,7 @@ fn validate(
     op: Op,
     arg: Option<&str>,
     url_path: Option<&str>,
+    method: Option<&str>,
 ) -> Result<(), Denial> {
     // 1. Liveness (spec §4.3).
     match eff {
@@ -217,10 +219,11 @@ fn validate(
         // and the egress client share (`netscope::judge_all`) — so the chain never records `allow` for a path the grant
         // does not reach. The host is within some entry (above); an entry for this host that names no pattern reaches
         // every path.
-        // P9-05 (d), D-V2-182: and by its method — a GET, the one request a program makes until a primitive makes another.
+        // P9-05 (d), D-V2-182/183: and by its method — the custody's, or a GET where it names none.
         if let (Op::Net, Some(path)) = (op, url_path) {
             let refused = |why| Denial::NetPath { node: node_id.clone(), host: arg.to_string(), path: path.to_string(), why };
-            match crate::netscope::judge_all(&authority.scopes.net, "GET", arg, path) {
+            let method = method.unwrap_or("GET");
+            match crate::netscope::judge_all(&authority.scopes.net, method, arg, path) {
                 crate::netscope::Verdict::Allow => {}
                 crate::netscope::Verdict::Ambiguous(why) => return Err(refused(Some(why))),
                 crate::netscope::Verdict::OtherMethod => {
@@ -228,7 +231,7 @@ fn validate(
                         node: node_id.clone(),
                         host: arg.to_string(),
                         path: path.to_string(),
-                        method: "GET",
+                        method: crate::netscope::METHODS.iter().find(|m| **m == method).copied().unwrap_or("an unnamed method"),
                     })
                 }
                 crate::netscope::Verdict::OutsidePath | crate::netscope::Verdict::OtherHost => return Err(refused(None)),
@@ -254,7 +257,22 @@ impl Broker {
     /// `use` record reads it so (the OCSF export's `dst_endpoint.hostname`, an egress refusal's record, `audit query`).
     /// Ignored for any other op.
     pub fn check_use_at(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>, url_path: Option<&str>) -> GuardedDecision {
+        self.check_use_by(node_id, op, arg, url_path, None)
+    }
+
+    /// [`Broker::check_use_at`] by the request's HTTP `method` (P9-05 (d), D-V2-183): `None` is a GET, the request every
+    /// use was before a primitive made another. A method that is not a GET is judged against the node's entries and named in
+    /// the use's record (`method`, beside `url_path`), so the chain says a POST was a POST.
+    pub fn check_use_by(
+        &mut self,
+        node_id: &GrantId,
+        op: Op,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+    ) -> GuardedDecision {
         let url_path = url_path.filter(|_| op == Op::Net);
+        let method = method.filter(|m| op == Op::Net && *m != "GET");
         let now = self.effective_now();
         // PS-E-06 (D-V2-80): a use's record names its effect, in the payload slot under a self-describing
         // key — as a revocation's carries its bound (spec §11, chunk-5 deviation 3). Without it a record
@@ -264,6 +282,9 @@ impl Broker {
             let mut p = serde_json::json!({ "op": op.wire_name() });
             if let Some(path) = url_path {
                 p["url_path"] = serde_json::json!(path);
+            }
+            if let Some(m) = method {
+                p["method"] = serde_json::json!(m);
             }
             Some(p)
         };
@@ -288,7 +309,7 @@ impl Broker {
             }
         };
         // 1. Normal authorization: liveness + effect + scope (unchanged — the guard sits ON TOP).
-        if let Err(d) = validate(node_id, eff, &authority, op, arg, url_path) {
+        if let Err(d) = validate(node_id, eff, &authority, op, arg, url_path, method) {
             if op.class() == OpClass::Synchronous {
                 let seq = self.consume_seq();
                 self.record_op(
@@ -497,7 +518,7 @@ impl Snapshot {
         let Some(sn) = self.nodes.get(node_id) else {
             return Decision::Deny(Denial::UnknownNode { node: node_id.clone() });
         };
-        match validate(node_id, sn.eff, &sn.authority, op, arg, None) {
+        match validate(node_id, sn.eff, &sn.authority, op, arg, None, None) {
             Ok(()) => Decision::Allow { audit_seq: None },
             Err(d) => Decision::Deny(d),
         }
@@ -652,6 +673,43 @@ mod tests {
         // Another op's path is not a request path.
         assert!(b.check_use_at(&node, Op::FsWrite, Some("./out/a"), Some("/v2")).decision.is_allow());
         assert!(sink.records().pop().unwrap().authority.unwrap().get("url_path").is_none());
+    }
+
+    /// P9-05 (d), D-V2-183: a network use names its method when it is not a GET, and is judged by it against the node's
+    /// entries — a POST under an entry naming no methods (GET alone) is refused in words about its method, and taken under
+    /// one naming POST — and its record names it (`method`, beside `url_path`), allowed or refused. A GET's record is
+    /// what it always was.
+    #[test]
+    fn a_net_use_is_judged_by_its_method_and_a_post_is_recorded_as_one() {
+        let sink = crate::audit::MemSink::new();
+        let mut b = broker_with_clock(Rc::new(ManualClock::new(1000))).with_sink(Box::new(sink.clone()));
+        let node = b.issue(
+            holder(),
+            Authority::new(
+                eff(&["Net"]),
+                Scopes { net: names(&["api.example.com/v1/**", "hooks.example.org:POST"]), ..Default::default() },
+            ),
+            None,
+        );
+        for (host, method, allowed) in [
+            ("api.example.com", None, true),
+            ("api.example.com", Some("POST"), false),
+            ("hooks.example.org", Some("POST"), true),
+            ("hooks.example.org", None, false),
+            ("hooks.example.org", Some("PUT"), false),
+        ] {
+            let d = b.check_use_by(&node, Op::Net, Some(host), Some("/v1/x"), method).decision;
+            assert_eq!(d.is_allow(), allowed, "{method:?} {host}: {d:?}");
+            let payload = sink.records().pop().unwrap().authority.unwrap();
+            assert_eq!(payload.get("method").and_then(|m| m.as_str()), method, "{method:?} {host}");
+            if let (false, Decision::Deny(d)) = (allowed, d) {
+                assert_eq!(d.code(), "DL0904");
+                assert!(d.to_diagnostic().message.contains("outside the methods the grant names"), "{d:?}");
+            }
+        }
+        // `GET` named outright is a GET: recorded as one, with no `method`.
+        assert!(b.check_use_by(&node, Op::Net, Some("api.example.com"), Some("/v1/x"), Some("GET")).decision.is_allow());
+        assert!(sink.records().pop().unwrap().authority.unwrap().get("method").is_none());
     }
 
     /// P8-04: a device refusal is recorded only for a node the tree holds, and its reason is bounded

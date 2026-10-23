@@ -273,7 +273,9 @@ pub fn event(rec: &AuditRecord, labels: &Labels) -> Value {
             // when the use named one (P9-05, D-V2-169), is the payload's `url_path` — OCSF's `http_request.url.path`, beside
             // the host it was asked of; never the query.
             let host = rec.target.clone().unwrap_or_default();
-            let mut request = json!({ "http_method": "GET" });
+            // P9-05 (d), D-V2-183: the use's method when it named one that is not a GET (`method`), else a GET.
+            let method = rec.authority.as_ref().and_then(|a| a.get("method")).and_then(|m| m.as_str()).unwrap_or("GET");
+            let mut request = json!({ "http_method": method });
             if let Some(path) = rec.authority.as_ref().and_then(|a| a.get("url_path")).and_then(|p| p.as_str()) {
                 request["url"] = json!({ "hostname": host, "path": path });
             }

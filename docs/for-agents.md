@@ -716,6 +716,15 @@ overstate it downstream:
   `declassify:NAME@host:port` — one for another destination does not buy it; a rule or permit on the secret's NAME
   (`declassify:NAME`) covers every send of it, and a seal on it refuses them all (D-V2-137). Not yet in a
   `--sandbox` guest (DL1401: no secret crosses the channel), or under `--engine wasm`.
+  `http.post(url, headers, body)` (P9-05 (d), D-V2-183) is the one request that is not a GET: the program mints
+  `root.http(["api.example.com:POST/v1/**"])` and the operator grants the same (`--grant net=api.example.com:POST/v1/**`;
+  `--grants` prints it). Under an entry naming no methods it is refused at the call, DL0904, *"a `POST` to … is outside
+  the methods the grant names"*. Its headers follow `get_with`'s rules, and its body is at most 1 MiB (reason
+  `request-too-large`). A 301, 302 or 303 after it is followed as a GET with no body, judged as a GET; a 307 or 308
+  keeps the POST and its body, only to the URL's own origin (elsewhere: reason `body-elsewhere`). Each hop's report
+  record names its `method` when it is not a GET, and under `--broker daemon`/`--lease` the chain's `use` record does
+  too, beside `url_path` (OCSF `http_request.http_method`). From a `--sandbox` guest the host performs it. Not yet
+  under `--engine wasm`, and no POST carries a secret yet.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

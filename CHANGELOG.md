@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `http.post`, 2026-10-23
+
+- **Added: `Cap[Http].post(url, headers, body)`, the first request that is not a GET** (P9-05 (d), D-V2-183, RW 2.12).
+  A program mints `root.http(["api.example.com:POST/v1/**"])`, and the operator grants the same line
+  (`--grant net=api.example.com:POST/v1/**`). Under a grant naming no methods (GET alone) the POST is refused at its
+  call (DL0904, in words about its method), and nothing connects. Its headers follow `get_with`'s rules; its body is at
+  most 1 MiB. After a POST, a 301, 302 or 303 is followed as a GET with no body and judged as one. A 307 or 308 keeps
+  the POST and its body, to the URL's own origin only; a redirect elsewhere is refused. The same checks run at L0,
+  from a `--sandbox` guest (the host performs it), and under `--broker daemon` and `--lease`. There the chain's `use`
+  record names the `method`, OCSF exports it as `http_request.http_method`, and a run report's hop names it.
+  `authority --within` decides a POST by its method, and so does `deploy plan`, which uses the same verdict. Not yet on
+  `--engine wasm`, and no POST carries a secret yet.
+- **Changed: the primitive table's version is 8** (was 7). A `.dpx` whose DIR was checked against version 7 is refused
+  with DL1503 and is rebuilt, as at every earlier bump.
+
 ## Unreleased — a `net` grant names its methods, 2026-10-23
 
 - **Added: a `net` entry may name the HTTP methods it allows** (P9-05 (d), D-V2-182, RW 2.12):

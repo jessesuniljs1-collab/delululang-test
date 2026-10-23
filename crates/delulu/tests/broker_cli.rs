@@ -608,6 +608,66 @@ fn a_pattern_net_grant_is_honored_under_the_daemon_as_embedded() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// P9-05 (d), D-V2-183: a POST is judged by its method under the daemon as embedded. Granted
+/// `net.special=*.example.invalid:POST/v1/**` (`.invalid` never resolves, so nothing leaves the machine), a POST under
+/// `/v1` reaches the egress client under both custodies and from a sandboxed guest; a GET there is refused DL0904 at the
+/// call, in words about its method. The daemon's chain names the POST's `method` beside its `url_path`, allowed; the
+/// GET's use names none and is refused.
+#[test]
+fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
+    let base = std::env::temp_dir().join(format!("delulu_bpost_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let scope = "*.example.invalid:POST/v1/**";
+    for (file, call) in [
+        ("post.delulu", "post(\"https://api.example.invalid/v1/items\", Map(), \"{}\")"),
+        ("get.delulu", "get(\"https://api.example.invalid/v1/items\")"),
+    ] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{scope}\"])\n    \
+             match h.{call} {{\n        Ok(b) => out.println(\"answered\")\n        Err(e) => out.println(\"not answered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let grant = format!("net.special={scope}");
+    let run = |file: &str, extra: &[&str]| {
+        let mut args = vec!["run", file, "--grant", "console", "--grant", grant.as_str(), "--no-prompt"];
+        args.extend_from_slice(extra);
+        delulu_in(&cwd, &state, &args)
+    };
+    let check = |extra: &[&str]| {
+        let o = run("post.delulu", extra);
+        assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not answered\n"), "{extra:?}: {}", stderr(&o));
+        assert!(!stderr(&o).contains("DL0904"), "{extra:?}: {}", stderr(&o));
+        let o = run("get.delulu", extra);
+        assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside the methods"), "{extra:?}: {}", stderr(&o));
+        assert!(!stdout(&o).contains("answered"), "{extra:?}: the program never got an answer: {}", stdout(&o));
+    };
+    check(&[]);
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    check(&["--broker", "daemon"]);
+    check(&["--broker", "daemon", "--sandbox"]);
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let uses: Vec<(Option<String>, String)> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        // The broker's own judgement of each use names its path (the egress refusal's record after a refused one does not).
+        .filter(|r| r["target"] == "api.example.invalid" && r["authority"].get("url_path").is_some())
+        .map(|r| (r["authority"]["method"].as_str().map(str::to_string), r["decision"].as_str().unwrap().to_string()))
+        .collect();
+    let (post, get) = ((Some("POST".to_string()), "allow".to_string()), (None, "deny".to_string()));
+    assert_eq!(uses, [post.clone(), get.clone(), post, get], "the interpreter's two runs, then the guest's: {v:#}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// P9-05 (a), D-V2-138: a path-scoped `net` grant means the same under the daemon as embedded — NET-WILDCARD-1's question
 /// asked of a path. Granted `net.special=*.example.invalid/v1/**` (`.invalid` never resolves, so nothing leaves the
 /// machine), a request under `/v1` reaches the egress client under both custodies, and the daemon's chain holds the host's

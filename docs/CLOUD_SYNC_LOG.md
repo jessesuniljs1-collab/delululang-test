@@ -5502,3 +5502,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - **Open / next:** the first non-GET primitive (P9-05 (d)'s second slice).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (night) — `http.post`, the first request that is not a GET (P9-05 (d), second slice, D-V2-183) (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/http-post` (on `laptop/net-methods` `69414e5`, #61)   Pull request: opened with this push
+- **What:** see V2_LOG's entry of the same name, D-V2-183 and `ENTRENCHED_CHANGE_RECORD.md` (the anchor
+  `ref.prim.http.post`'s four witness rows, an entrenched file).
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/dir.rs`,
+  `crates/delulu-check/src/prim_table.rs`, `crates/delulu-runtime/src/egress.rs`,
+  `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-runtime/src/interp.rs`,
+  `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/trace.rs`, `crates/delulu-runtime/src/custody.rs`,
+  `crates/delulu-runtime/src/channel.rs`, `crates/delulu-runtime/src/lib.rs`, `crates/delulu-broker/src/validate.rs`,
+  `crates/delulu-broker/src/ocsf.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/src/within.rs`, `crates/delulu/src/schema.rs`, `crates/delulu/src/broker_ipc.rs`,
+  `crates/delulu/src/broker_client.rs`, `crates/delulu/src/brokerd.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/audit_ocsf_cli.rs`,
+  `tests/conformance/witnesses.toml` (entrenched), `docs/reference/README.md`, `docs/reference/coverage.md`,
+  `docs/reference/primitives.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`, `docs/for-agents.md`,
+  `skills/delulu/SKILL.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (`docs/reference/*` generated). Added, deleted, renamed: nothing.
+- **Open / next:** `post` on the WASM engine; a POST carrying a secret.
+- Survey and doctor (after the last edit): in the commit message.

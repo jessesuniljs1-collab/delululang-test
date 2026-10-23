@@ -189,7 +189,7 @@ impl BrokerClientCustody {
     /// One broker round-trip per use, against LIVE tree state + the Guard (spec §4.1, addendum §2.4).
     /// A `warn`-tier / bypassed-guarded allow carries an agent-side note, surfaced once per rule per
     /// run (addendum §2.6/§2.7).
-    fn synchronous_check(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+    fn synchronous_check(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
         let resp = match rpc(
             &self.state_dir,
             ReqBody::Check {
@@ -197,6 +197,7 @@ impl BrokerClientCustody {
                 op: op.wire_name().to_string(),
                 arg: arg.map(str::to_string),
                 url_path: url_path.map(str::to_string),
+                method: method.map(str::to_string),
             },
         ) {
             Ok(r) => r,
@@ -379,14 +380,14 @@ impl Drop for RunNode {
 
 impl Custody for BrokerClientCustody {
     fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
-        self.check_at(op, arg, None)
+        self.check_at(op, arg, None, None)
     }
 
     /// P9-05, D-V2-169: a network use is synchronous, so its path rides its round-trip — the daemon judges it against the
     /// node's grant and names it in the use's record. An epoch-class op names none.
-    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
         match op.class() {
-            OpClass::Synchronous => self.synchronous_check(op, arg, url_path),
+            OpClass::Synchronous => self.synchronous_check(op, arg, url_path, method),
             OpClass::Epoch => {
                 // Validate against the cached snapshot, refreshed at most every epoch_ms (spec §4.1).
                 // Revocation reaches epoch-class ops within ≤ one interval — the honest §4.2 bound,
@@ -401,7 +402,7 @@ impl Custody for BrokerClientCustody {
                 // refreshed above, so the routing decision is at most one epoch stale (the stated
                 // policy-change bound). Ungated epoch ops keep local snapshot validation.
                 if self.op_is_guarded(op) {
-                    return self.synchronous_check(op, arg, url_path);
+                    return self.synchronous_check(op, arg, url_path, method);
                 }
                 let Some((_, snap)) = &self.cache else {
                     return CustodyDecision::Deny(dl1401("epoch snapshot unavailable"));
