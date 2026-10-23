@@ -754,13 +754,6 @@ overstate it downstream:
   DeluluLang, emit a `let` binding per level rather than one deep expression, and prefer a loop over
   deeply nested blocks.
 
-  **An inferred type is capped too** (since 2026-10-23, RW 2.3, D-V2-179): written out, a type may have
-  at most 100,000 parts, and the module's large types (over 1,000 parts each) 2,000,000 in all; past
-  either, `delulu check` refuses with `DL0211` at the expression. A generator reaches it only by building
-  a value from itself step after step (`let a2 = Pair { l: a1, r: a1 }`), which doubles the type every
-  line. Give such a value a recursive type instead. Before the cap, 22 such lines took `check` 5.8 s and
-  each further line doubled it.
-
   **Deep runtime *data* is a separate axis and is now safe too.** Building a recursive value
   millions deep — `type Chain = Nil | Link(Chain)` in an accumulator loop — used to abort the host
   during teardown *after* the program had finished, with no diagnostic. Value teardown is iterative

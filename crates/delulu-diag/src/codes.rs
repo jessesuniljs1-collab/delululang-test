@@ -879,13 +879,7 @@ pub fn code_explain(code: &str) -> Option<String> {
              nesting depth, so a ~96 KB signature made `delulu check` — the loop an agent runs on \
              every edit — unresponsive for a minute, and a deeper one hung (red-team finding \
              P20-R3). No real type nests past a handful of levels; if generated code needs more, \
-             name the inner type with a `type` alias. The checker also refuses, with this code, a \
-             type it INFERS that is too large to write out: more than 100,000 parts, or more than \
-             2,000,000 for the module's large types in all (RW 2.3, D-V2-179). A value built from \
-             itself at every step — `let a1 = Pair { l: a0, r: a0 }`, then `a2` from `a1` — doubles \
-             its type each time: 22 such lines took 5.8 s to check, and each line doubled it. Give \
-             such a value a recursive type (`type Tree = Leaf | Node(Tree, Tree)`), \
-             whose size does not grow with the value.",
+             name the inner type with a `type` alias.",
         "DL0212" => "A pattern nested deeper than the parser will follow (128 levels) — for example \
              `Some(Some(…Some(y)…))` thousands deep. Pattern parsing is recursive like expression \
              parsing, so unbounded nesting is unbounded stack use; the expression guard (DL0210) does \

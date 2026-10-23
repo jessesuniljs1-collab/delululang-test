@@ -1826,14 +1826,6 @@ Added in V2 (2026-09-17 → 2026-09-28):
   named only field reads. When a fix adds a loop, a sort or a lookup to a path every program takes, time it at a large
   input before landing it, and look for a scan inside a key or a comparison.
 
-- **A substitution makes a type a graph; any walk that resolves as it goes makes it a tree again** (the laptop,
-  2026-10-23, RW 2.3): `let a1 = Pair { l: a0, r: a0 }` … `a22` is 22 small types through their variables and 4 million
-  parts written out. The occurs check, unification and `==`'s equality walk each followed bindings at every place they
-  stood, and `opaque_for` wrote the type out again at every part it visited, so each was exponential, and each was found
-  only after fixing the one before (5.8 s, then 261 s for `a == b`). A walk over a type follows each variable once, or is
-  given the type written out once (`apply_type`, within its limit) and walks it as it stands. Time a twin, a field read
-  and an `==` of the shape, not only the shape.
-
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

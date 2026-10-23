@@ -1378,11 +1378,7 @@ DeluluLang **does not claim**, ever:
 
   The same shape then turned up three more times, which is the part worth telling: the bound was on
   *expressions* only, and **types** (`DL0211`), **patterns** (`DL0212`) and **blocks** (`DL0213`)
-  each had to be found and bounded separately. One fix does not close a class. A fifth came on
-  2026-10-23, in what the checker *infers* rather than what the parser reads: thirty lines of
-  `let a1 = Pair { l: a0, r: a0 }`, each pairing the last value with itself, name a type of two
-  billion parts. Twenty-two such lines took 5.8 seconds to check and each line doubled it. A type
-  too large to write out is now refused with `DL0211` too, in a fifth of a second.
+  each had to be found and bounded separately. One fix does not close a class.
 
 - **A runtime that cannot be crashed.** Until 2026-08-10 it could be, and by a program that had
   already *finished*: a recursive value a few million deep aborted the host while being torn down,
