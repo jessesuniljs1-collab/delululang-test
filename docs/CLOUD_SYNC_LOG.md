@@ -5401,3 +5401,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
   deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (morning) — a record's width no longer costs per field (RW 2.10, D-V2-178) (made on the laptop)
+- Session: `https://claude.ai/code/session_01E8XZYvoqTfgpQSgPDMfdcn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/record-width` (on `master` `3334f93`)   Pull request: the one this entry rides in
+- **Read since the last entry:** `launch/2.0.0` `0ef515f`'s `jobs=everything` `39874332895` **success, 18 of 18 jobs**
+  (both `miri-slow` jobs included); `e51b4f3`'s `39865367900`: `miri-slow` (delulu-broker) **success**, the run red only on
+  RW 7.23 (c). Autosave: ran 09:31 IST, result 0; snapshot `c7eecb2` = `2349cff`'s tree, nothing to recover.
+- **What:** the interpreter finds a field of a record wider than 16 fields at its declared place, checked against the
+  name held there, and puts a literal in declared order by one lookup per field. A 1,600-field literal written out of
+  order had cost 39 ms (quadratic, since RECORD-ORDER-1); reads of the last of 1,600 fields cost 4x a 4-field record's.
+  Both now flat (`measurements/scale/RECORD.md`).
+- Files and folders: A `crates/delulu-runtime/tests/record_width.rs`. M `crates/delulu-runtime/src/interp.rs`,
+  `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/design/HARDENING_CAMPAIGN.md`,
+  `docs/design/AUTHORITY_GUARD_CAPSTONE.md`, `measurements/scale/RECORD.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+

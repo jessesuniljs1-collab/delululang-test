@@ -1820,6 +1820,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   100 ms. CI saw it once; 32 busy loops on the laptop turned it red 98 times in 100. When a timing test fails only on
   Windows, look for a zero or near-zero sleep, a `yield`, or a spin, before blaming the runner.
 
+- **A correctness fix can bring a cost no test measures** (the laptop, 2026-10-23, RW 2.10): RECORD-ORDER-1 put a
+  literal's fields in declared order with `sort_by_key(|f| order.iter().position(..))`, a scan inside every comparison,
+  so a 6,400-field literal took 1.1 s to build. Every test of the fix was a narrow record, and the published limit C55
+  named only field reads. When a fix adds a loop, a sort or a lookup to a path every program takes, time it at a large
+  input before landing it, and look for a scan inside a key or a comparison.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
