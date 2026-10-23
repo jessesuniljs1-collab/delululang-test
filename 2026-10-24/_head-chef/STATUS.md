@@ -43,7 +43,12 @@ authority dir so rebuilds of the checkout never change what the agents run.
 | A — the builder | `sonnet` (Sonnet 5.5) | `A-builder` | A-full, A-console, none | `_briefs/COMMON.md` + `_briefs/A.md` |
 | B — least authority | `sonnet` (Sonnet 5.5) | `B-least-authority` | B-* , none | `_briefs/COMMON.md` + `_briefs/B.md` |
 | C — zero authority | `haiku` (Haiku 5.5) | `C-zero-authority` | none, C-none, C-console, C-clockrand | `_briefs/COMMON.md` + `_briefs/C.md` |
-Each writes `REPORT.md` in its workdir as it goes. Their findings are unverified until the head chef re-runs them
+**Models actually run, read from the transcripts' own `model` fields (2026-10-24 01:15 IST):** A `claude-sonnet-5-5`
+(252 messages so far), B `claude-sonnet-5-5` (230), C `claude-haiku-5-5` (155), the gate test `claude-haiku-5-5` (13).
+Transcripts: `~/.claude/projects/D--nelan-DeluluLang/eb34182b-…/subagents/agent-<id>.jsonl`, copied by the saver (the
+session's task `.output` files are empty stubs — the first saves copied those, fixed 01:14 IST).
+Each writes `REPORT.md` in its workdir as it goes (the sub-agent Write tool refused a report file: C's report was saved by
+the head chef from its final message; B wrote `REPORT.txt`). Their findings are unverified until the head chef re-runs them
 against the binary; nothing reaches the repository before that.
 
 ## Saving (nothing lost)

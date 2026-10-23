@@ -2,3 +2,11 @@ gen: n=100000 first=19081,17033,15269 digest=702980094
 TIME gen 957
 msort: sorted=true len=100000 min=0 max=32767 digest=390682448
 TIME msort 28020
+qsort: sorted=true same_as_msort=true digest=390682448
+TIME qsort 10987
+builtin sort: same_as_msort=true
+TIME builtin 84
+many dups: qsort==msort true digest=895376759
+bst: size=14902 height=33 inorder_sorted=true len=14902 digest=4093132
+bst has: true false
+TIME bst 3374

@@ -76,6 +76,18 @@ A10 - medium - WASM engine refuses the idiomatic `let out = []` + `out.push(<sum
   `type Tok = TNum(Int) | TPlus | TEnd`, `fn lex() -> List[Tok] { let out = [] ; out.push(TNum(1)) ; ... out }`.
   Works: annotated `let out: ref List[Tok] = []` (w4), seeded `let out = [TNum(1)]`-style literal (w5), and empty lists of Str (textstats). docs/for-agents.md says a List of sums compiles with all fifteen methods; the empty-literal case is not mentioned and the refusal names no line. With the annotation calc runs identically on WASM (see coverage). Reproduced: yes (w1, w2, w6, calc).
 
+A11 - low/medium - With the default actor scheduler, three runs under the same `--seed 7` print the collector's lines in different orders; only `--actors-threads 1` is reproducible
+  File: actors/primes.delulu (8 Worker actors each count primes in a range and send the count to a Collector actor that prints "range [lo,hi) -> n" per arrival, then TOTAL)
+  Commands (A-full): `$DL run A-full actors/primes.delulu --seed 7 > out` three times -> md5 prefixes e534467c, 93ed0815, 1a4bfcbe (all exit 0; TOTAL primes = 25997 every time; only line order differs). Unseeded run and `--seed 99` happened to give e534467c. `--actors-threads 1`, `2`, `4` each gave e534467c (1 run each, 43 s, 24 s, 14 s; default 9 s).
+  Expected: docs/for-agents.md [agents.determinism] says "`delulu run --seed N --clock fixed:MS` fixes randomness and time" and asks to report nondeterminism; STAGE7 guide does not say that actor interleaving is outside --seed. Observed: --seed does not make an actor program's output reproducible unless the user also knows to pass `--actors-threads 1`. The final TOTAL is correct and identical every time (25997 = pi(300000), checked with Python). Reproduced: yes (3 differing outputs for the same seed).
+
+A12 - low - A method call on a not-yet-inferred `Map` value leaks an internal type variable: "type `'t9` has no method `concat`"
+  File: algo/algo.delulu (first draft), shape: `let m = Map()` ... `match m.get(key) { Some(old) => m.insert(key, old.concat([w])) ... None => m.insert(key, [w]) }`
+  $DL check (exit 1): error[DL0405]: type `'t9` has no method `concat` --> algo/algo.delulu:155:44 (`old.concat([w])`). Fix that worked: annotate `let m: ref Map[Str, List[Str]] = Map()`. The message shows an internal inference variable and does not say "annotate the Map's type"; the type is determined by the `None` arm two lines later.
+
+A13 - low - A list built through a `ref` helper can never be handed to a `val` parameter or returned as a `List` (DL1603), so "fill it in a helper, then read it elsewhere" must be rewritten as pure recursion/concat
+  File: algo/algo.delulu (first draft): `let walk = []` / `inorder(tree, walk)` (param `ref List[Int]`) / `is_sorted(walk)` (param `List[Int]`): DL1603 "cannot store `ref` (aliases as `ref`) where `val` is required (argument `xs`)" (3 diagnostics); wrapping it as `fn inorder_list(t) -> List[Int] { let acc = [] ; inorder(t, acc) ; acc }` gives DL1603 "... where `val` is required (return value)". Related to A1 (opposite direction: a never-ref-used fresh list is silently frozen, a ref-used one is refused). No documented way to convert (no copy method named in the docs).
+
 =====================================================================
 COVERAGE (behaved correctly) - each line says what was tested
 =====================================================================
