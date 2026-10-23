@@ -714,6 +714,22 @@ wins, and you should update the memory to match.
   after it is released (not Haiku 4.5 meanwhile).
   `docs/CLOUD_ROUTINE.md`, `AGENTS.md`, `CLAUDE.md` and §11.3 were brought up to the cloud docs the same
   evening.
+- **When agents test DeluluLang, the head chef holds the authority** (owner, 2026-10-24: *"While running agents for
+  testing DeluluLang, U will be having delulu authority, Only u should be able to change anything that agents can do,
+  Agent themselves shouldn't able to change access"*). The setup that held: a broker with strict anchored roots, its
+  keys, root certificate and Guard owner code in a head-chef-only directory; one `--multi` lease per test condition (a
+  `--lease` run refuses any local `--grant` by itself); a wrapper that is the agents' only way to run delulu and refuses
+  every authority flag; and a Claude Code PreToolUse hook (in the checkout's untracked `.claude/settings.local.json`)
+  that refuses any subagent call reaching the authority, naming a grant or lease, running delulu directly, or touching
+  accounts, settings or the repository. A subagent's hook input carries `agent_id`; the main session's does not.
+  Falsify the gate with a small agent before trusting it, and judge it by its own log. Residual: same OS account,
+  pattern-based; the boundary against a determined process is a second account (`docs/DEPLOYMENT.md` Tier 2).
+- **Save everything agents do as they go** (owner, 2026-10-24: *"save everything agents are doing to storage. My usage
+  limits will hit faster when running agents. I don't want anything to be lost"*). A timer outside Claude (Task
+  Scheduler) mirrors the agents' workdirs to `D:\nelan\dogfood-campaign\mirror\`, copies their transcripts to
+  `D:\nelan\DeluluLang-agent-transcripts\` (local only: a transcript holds reasoning), and pushes a filtered snapshot
+  to `autosave/dogfood` (no keys, tokens, owner code or test secret; never merged; no CI). Write every brief to a file
+  at launch, and tell each agent to write findings to disk the moment they are confirmed.
 
 ### 11.2 Working rules the project has paid for
 
@@ -1237,6 +1253,14 @@ spells the same thing?**
   - When a type gains a variant, grep for `_ =>` in every walk over it. Better, make those walks exhaustive, so adding a
     variant is a compile error in each.
   - Search key: `_ => {}` in a `match` on `Value`, `Ty`, `TyDesc`, `MsgValue`.
+- **GENERIC-RIGID-1 — the effect row escaped through a generic** (2026-10-24, D-V2-184; found by a Haiku 5.5 test
+  agent holding no authority). A generic's parameters were flexible inference variables inside its own body, so
+  `coerce[A, B](x: A) -> B { x }` made an effectful closure pure, and a function `authority` called pure printed. Inside
+  the body that declares them, `T` and `e` are rigid: the caller picks them, and the body must hold for every pick. Never
+  soften this to "the body may refine a generic". Search key: `make_genv` / `make_body_genv`, `fresh_rigid_type`.
+- **A laundering witness must parse** (2026-10-24). F-3, F-3b and F-4 had two statements on one line (DL0209) since
+  they were written, and met their codes through the parser's recovery. A refusal from a repaired program proves nothing
+  about the program the test names. `rejects_with` now asserts no DL01xx or DL02xx.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1878,6 +1902,14 @@ git history, past fixes. Record what was *non-obvious*: the reasoning, the trap,
   `/3` found the guarantee held in ~85 attempts and 700 fuzzed frames — and seven real defects AROUND it
   (waiting, reporting, text, pipes). Brief a tester to attack the guarantee and to list every oddity.
   Give it a frozen COPY of the binary outside the repository, so the head chef can keep building.
+- **The agent test campaign of 2026-10-24.** These held: a frozen binary copy; conditions as leases the head chef
+  delegates; a wrapper plus a hook gate; one Sonnet 5.5 builder, one Sonnet 5.5 boundary prober and one Haiku 5.5
+  zero-authority attacker. The Haiku agent found the critical (GENERIC-RIGID-1) in 69 tool calls. What surprised:
+  a sub-agent's Write tool refused its report file, so it must write `REPORT.txt` or the head chef must save its final
+  message. The session's task `.output` files are empty stubs; the transcripts are
+  `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`. The gate passed the wrapper's own path, so an
+  agent could `head` the wrapper; its lease tokens stayed behind the gate. Read each transcript's `model` field to name
+  the model an agent actually ran.
 
 ### 11.8 What building and running DeluluLang V2 taught
 

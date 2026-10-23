@@ -4786,3 +4786,37 @@ tested. End to end at L0 and from a guest: `egress_cli` `a_post_leaves_under_a_g
 (TLS out under `:POST`; DL0904 in words about the method under a host-only grant, nothing connects; the report's hop
 names POST). `within_cli` `a_post_is_decided_by_its_method_against_the_boundary` covers the mint and a request decided
 by its method. Mutants: see V2_LOG.
+
+## D-V2-184 — A generic's own type and row parameters are rigid inside its body (GENERIC-RIGID-1); a laundering witness must parse — TAKEN (head chef, 2026-10-24, under the owner's delegation)
+
+**Context.** The owner commissioned agents to build and run DeluluLang programs under conditions the head chef holds
+(2026-10-24). The zero-authority agent (Haiku 5.5) found the effect row escapable through a generic. The checker gave a
+function's generics fresh inference variables for its own body (`make_genv`, "fresh inference variables for this
+checking pass"), so the body could decide them: `T := Int`, `e := {}`. A caller then instantiated them again. So
+`coerce[A, B](x: A) -> B { x }` laundered an effectful closure into a pure type, and a pure function printed. The head
+chef reproduced it against the current binary: `check` exit 0 with "`main` declares effect `Write` it never performs",
+and the run printed under a console grant. It is the P16 class, the effect row escaping, through a door the laundering
+suite never tried.
+
+**Decision.**
+1. **Rigid variables.** `InferCtx` marks a variable rigid (`fresh_rigid_type`, `fresh_rigid_row_var`). Unification never
+   binds a rigid variable. A flexible variable meeting one is bound to it. A rigid type meeting any other type, or a
+   different rigid one, is a mismatch. A rigid row tail is never closed. A flexible tail meeting it is bound to the rigid
+   tail plus the effects it lacks, and only when it holds no effect the rigid side does not.
+2. **Where.** `check_fn` gives the body rigid generics, and so does `check_actor` for its members' bodies. Call sites
+   (`instantiate_fn`) and `spawn` still instantiate flexible ones: the caller picks, and the body holds for every pick.
+3. **Messages** name the parameter the author wrote (`expected T, found Int`; `fn() -> Unit !{e}`). `TypeNames` gains
+   default `type_var_name` and `row_var_name`, and the checker supplies the rigid generics' names.
+4. **The laundering suite** (`crates/delulu-check/tests/laundering.rs`, entrenched) gains five witnesses. Its
+   `rejects_with` refuses a witness that does not lex or parse (any DL01xx or DL02xx). F-3, F-3b and F-4 had written two
+   statements on one line (DL0209) since they were written, and passed through the parser's recovery. Each is repaired,
+   and each is still refused with its own code. Recorded in `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Why this hardens, and redefines nothing.** A generic signature promises its result for every `T` and `e` a caller
+picks, and every call site already instantiated them so. Only the body was checked against one choice of its own. No
+program the rule always meant to accept is refused: `delulu-check` and the conformance suite pass unchanged, and so
+does the stdlib's `Promise[T, e]`. A program that relied on the hole is refused DL0401 (no new code).
+
+**Evidence.** `laundering` 17 passed (12 before). Mutants red: the type guard dropped (three witnesses), the closed-row
+guard dropped, actor generics flexible. Agent C's programs (`p2_09`…`p2_13`, `p3_01`…`p3_03`) are refused DL0401.
+Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.

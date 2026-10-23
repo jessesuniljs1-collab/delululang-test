@@ -9130,3 +9130,27 @@ and `secret_audiences`, so the two cannot drift.
 **And.** `toolchain --json` described `net` as `net=HOST[/PATH]` a day after D-V2-182 gave it methods. `GRANT_FORMS`
 now says `net=HOST[:METHODS][/PATH]` for `net` and `net.special`, with the default (no methods: GET alone). Its
 example names two methods and still parses (`broker` grant-form tests, 12 passed).
+
+## 2026-10-24 — the laptop: the effect row escaped through a generic; a generic's parameters are rigid in its body (GENERIC-RIGID-1, D-V2-184)
+
+**Found by the agent test campaign.** The owner asked for agents to build and test DeluluLang under access conditions
+only the head chef can change. The head chef ran a broker with strict anchored roots and delegated one lease per
+condition. A wrapper (`dl`) was the agents' only way to run delulu, and a Claude Code PreToolUse gate refused any agent
+call that would change access. The gate was falsified first by a test agent, and judged by its own log. Agents: A, the
+builder (Sonnet 5.5); B, least authority (Sonnet 5.5); C, zero authority (Haiku 5.5). Models read from the transcripts.
+C's programs `coerce[A, B](x: A) -> B { x }` and `hide[e](…) -> fn() -> Unit { f }` printed under a console grant while
+`check` said `main` never performed `Write`. The head chef reproduced both on the current binary.
+
+**Cause.** `check_fn` gave the body fresh *flexible* variables for its generics (`make_genv`). The body unified `T` with
+`Int`, or closed `e` to `{}`, and each call site instantiated them afresh. `check_actor` did the same for actor generics.
+
+**Fixed.** Rigid variables (D-V2-184): never bound; a flexible variable meeting one is bound to it; a rigid row tail is
+never closed. The body sees rigid generics; call sites and `spawn` see flexible ones. Messages name `T` and `e`.
+
+**And the laundering suite's own witnesses.** Writing the new witnesses showed that F-3, F-3b and F-4 never parsed: two
+statements on one line, DL0209, passed through recovery. `rejects_with` now refuses a witness that does not parse. The
+three are repaired, and each is still refused with its own code.
+
+**Evidence.** `laundering` 17 passed. Mutants red: the type guard dropped, the closed-row guard dropped, actor generics
+flexible. Agent C's eleven generic programs are now refused DL0401.
+Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.

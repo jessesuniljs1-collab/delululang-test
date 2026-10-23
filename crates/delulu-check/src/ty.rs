@@ -355,6 +355,17 @@ impl Type {
 pub trait TypeNames {
     /// The declared name of `id`, or `None` if this table does not hold it.
     fn type_name(&self, id: TypeDefId) -> Option<&str>;
+
+    /// The name the author wrote for a type variable — a generic parameter of the body being checked (`T`), which is
+    /// rigid there (GENERIC-RIGID-1). `None` prints the variable as `'tN`, an inference variable nobody named.
+    fn type_var_name(&self, _v: u32) -> Option<&str> {
+        None
+    }
+
+    /// The name the author wrote for a row variable (`e`), as [`TypeNames::type_var_name`]; `None` prints `'rN`.
+    fn row_var_name(&self, _v: u32) -> Option<&str> {
+        None
+    }
 }
 
 /// A [`TypeNames`] that knows no names, for the few printers with no declaration table in reach —
@@ -449,7 +460,18 @@ impl fmt::Display for Shown<'_> {
                 }
                 write!(f, ") -> {}", ret.show(n))?;
                 if !row.is_pure() {
-                    write!(f, " {row}")?;
+                    match row.tail.and_then(|RowVar(v)| n.row_var_name(v)) {
+                        // A named tail: the row as `Row`'s Display writes it, with the author's name for the tail.
+                        Some(name) => {
+                            f.write_str(" !{")?;
+                            for (i, e) in row.effects.iter().enumerate() {
+                                write!(f, "{}{e}", if i > 0 { ", " } else { "" })?;
+                            }
+                            let bar = if row.effects.is_empty() { "" } else { " | " };
+                            write!(f, "{bar}{name}}}")?;
+                        }
+                        None => write!(f, " {row}")?,
+                    }
                 }
                 Ok(())
             }
@@ -466,7 +488,10 @@ impl fmt::Display for Shown<'_> {
                 f.write_str(name)?;
                 write_args(f, args, n)
             }
-            Type::Var(TypeVar(v)) => write!(f, "'t{v}"),
+            Type::Var(TypeVar(v)) => match n.type_var_name(*v) {
+                Some(name) => f.write_str(name),
+                None => write!(f, "'t{v}"),
+            },
         }
     }
 }

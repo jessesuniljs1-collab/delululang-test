@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 329 |
-| Rust lines | 190155 |
+| Rust lines | 190367 |
 | Rust files outside `src/` (test/bench targets) | 159 |
 | Markdown documents | 270 |
-| Markdown lines | 86337 |
+| Markdown lines | 86487 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1557 / 16554 |
+| Nodes / edges in this map | 1557 / 16592 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -192,12 +192,12 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 15988 lines
+- **Modules:** 18 files, 16124 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 4205 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 4260 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1452 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 863 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
@@ -212,8 +212,8 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/rcap_check.rs` | 1757 | The reference-capability checking PASS (Stage 7, phases 7c–7f) — the second checking axis. |
 | `src/rcaps.rs` | 737 | Reference-capability core (Stage 7, spec §3) — Pony's production-proven system, adopted |
 | `src/resolve.rs` | 676 | Name resolution (spec §5): build the declaration table for a module, detect duplicates |
-| `src/ty.rs` | 472 | The representation of authority in the type system (spec §6.1). |
-| `src/unify.rs` | 470 | Inference context and unification (spec §6.2, audit R-3/R-3b). |
+| `src/ty.rs` | 497 | The representation of authority in the type system (spec §6.1). |
+| `src/unify.rs` | 526 | Inference context and unification (spec §6.2, audit R-3/R-3b). |
 
 ### `delulu-conform`
 

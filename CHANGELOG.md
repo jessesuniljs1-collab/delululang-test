@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a generic's own parameters are rigid in its body, 2026-10-24
+
+- **Fixed (soundness): the effect row escaped through a generic function** (GENERIC-RIGID-1, D-V2-184, RW 4.81).
+  Inside its own body a generic's type and row parameters could be decided by the body: `fn forge[T](x: Int) -> T
+  { x }` checked, and `coerce[A, B](x: A) -> B { x }` or `hide[e](f: fn() -> Unit ! e) -> fn() -> Unit { f }` made
+  an effectful closure pure, so a function `authority` listed as pure printed at run time. A generic's parameters
+  are now rigid in its body (and an actor's in its members): the body must hold for every type and row a caller
+  picks. **Breaking** only for a program that relied on the hole: its body is refused DL0401, naming the parameter
+  (`expected T, found Int`).
+
 ## Unreleased — a certificate carries every dimension a delegation can, 2026-10-24
 
 - **Fixed: under strict anchored roots, a lease can hold a broker-held secret** (CERT-SECRET-1, RW 4.80). `grants
