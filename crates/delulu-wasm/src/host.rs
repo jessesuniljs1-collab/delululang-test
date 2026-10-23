@@ -350,7 +350,8 @@ impl HostState {
             }
         }
         let Some(custody) = &self.custody else { return true };
-        match custody.borrow_mut().check_at(op, arg, url_path) {
+        // The WASM engine makes GET requests only: `post` is not compiled there yet (P9-05 (d), D-V2-183).
+        match custody.borrow_mut().check_at(op, arg, url_path, None) {
             CustodyDecision::Allow => true,
             CustodyDecision::Deny(d) => {
                 self.refused = Some(format!("{}: {}", d.code, d.message));

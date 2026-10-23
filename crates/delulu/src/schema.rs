@@ -352,7 +352,7 @@ fn defs() -> Value {
                 // P9-05 (c), D-V2-140's static half: present only when the program makes a request.
                 ("requests", arr(obj(
                     &[
-                        ("method", en(&["get", "get_with", "get_with_secret"])),
+                        ("method", en(&["get", "get_with", "get_with_secret", "post"])),
                         ("url", nullable("string")),
                         ("host", nullable("string")),
                         ("path", nullable("string")),

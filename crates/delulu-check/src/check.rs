@@ -2186,6 +2186,14 @@ impl<'a> Checker<'a> {
                     self.expect_arg(args, 3, &Type::Secret(Box::new(Type::Str)), span);
                     Some((Type::result(Type::Str, net), Some(Effect::Net), None))
                 }
+                // P9-05 (d), D-V2-183: a POST with headers and a body. The URL stays argument ONE (as `get_with`'s), and
+                // the request is judged by its method against the grant's methods at every check the URL is.
+                "post" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
+                    self.expect_arg(args, 2, &Type::Str, span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
                 _ => None,
             },
             Type::Cap(ResourceKind::Clock) => match method {

@@ -412,13 +412,23 @@ pub fn request_path(url: &str) -> &str {
 
 /// P9-05 (a), D-V2-138: the capability's verdict on `url` — its host against each entry's host pattern, and where an entry
 /// names a path pattern, the path against it (`delulu_broker::netscope`, the reading the egress client and the broker
-/// share). Every request is a GET until a primitive makes another (P9-05 (d), D-V2-182).
-pub(crate) fn url_verdict(url: &str, allow: &[String]) -> delulu_broker::netscope::Verdict {
-    delulu_broker::netscope::judge_all(allow, "GET", host_of(url), path_of(url))
+/// share) — and the request's `method` against each entry's methods (P9-05 (d), D-V2-182/183).
+pub(crate) fn url_verdict(url: &str, method: &str, allow: &[String]) -> delulu_broker::netscope::Verdict {
+    delulu_broker::netscope::judge_all(allow, method, host_of(url), path_of(url))
 }
 
+/// [`url_verdict`] of a GET, the request `get_with_secret` makes.
 pub(crate) fn url_allowed(url: &str, allow: &[String]) -> bool {
-    url_verdict(url, allow) == delulu_broker::netscope::Verdict::Allow
+    url_verdict(url, "GET", allow) == delulu_broker::netscope::Verdict::Allow
+}
+
+/// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183): `post` a POST, every other one a GET.
+pub fn http_method_of(method: &str) -> &'static str {
+    if method == "post" {
+        "POST"
+    } else {
+        "GET"
+    }
 }
 
 /// Does `host` fall under the allowlist pattern `pat` — exact, or `*.suffix` on a dot boundary?
@@ -762,10 +772,16 @@ pub fn call_cap_method_pinned(
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
+        (ResourceKind::Http, "get")
+        | (ResourceKind::Http, "get_with")
+        | (ResourceKind::Http, "get_with_secret")
+        | (ResourceKind::Http, "post") => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
             let headers = headers_arg(args, method, span)?;
+            // P9-05 (d), D-V2-183: `post(url, headers, body)` — the one request with a body, by POST.
+            let verb = http_method_of(method);
+            let body = if method == "post" { Some(str_arg(args, 2, span)?) } else { None };
             // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in.
             let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" {
                 let header = str_arg(args, 2, span)?;
@@ -780,7 +796,7 @@ pub fn call_cap_method_pinned(
                 crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
                 return Ok(Value::err(net_err("Refused")));
             }
-            match url_verdict(&url, allow) {
+            match url_verdict(&url, verb, allow) {
                 delulu_broker::netscope::Verdict::Allow => {}
                 delulu_broker::netscope::Verdict::OtherHost => {
                     return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
@@ -795,7 +811,7 @@ pub fn call_cap_method_pinned(
                 delulu_broker::netscope::Verdict::OtherMethod => {
                     return Err(Fault::at(
                         "DL0904",
-                        format!("a `GET` to `{url}` is outside the methods the grant names for it"),
+                        format!("a `{verb}` to `{url}` is outside the methods the grant names for it"),
                         span,
                     ));
                 }
@@ -831,7 +847,15 @@ pub fn call_cap_method_pinned(
                 }),
                 _ => None,
             };
-            Ok(answer_value(crate::egress::get_for_program_with_secret(&url, &headers, carried.as_ref(), allow, special)))
+            Ok(answer_value(crate::egress::request_for_program(
+                verb,
+                &url,
+                &headers,
+                body.as_deref(),
+                carried.as_ref(),
+                allow,
+                special,
+            )))
         }
         (ResourceKind::Clock, "now_ms") => {
             let ms = FIXED_CLOCK

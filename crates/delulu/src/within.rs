@@ -285,7 +285,7 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                 ),
             }
         }
-        Ask::Request { url } => {
+        Ask::Request { url, method } => {
             // D-V2-181: a request is judged at its call against its capability's entries, the path too where an entry
             // names a pattern (P9-05 (a)); a request outside every entry of the boundary is refused whatever the program
             // minted. Read as the call reads it: `prim::host_of`, `prim::path_of`, `netscope::judge_all`.
@@ -299,8 +299,8 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                 }
                 Some(u) => {
                     let (host, path) = (delulu_runtime::prim::host_of(u), delulu_runtime::prim::path_of(u));
-                    // Every request is a GET until a primitive makes another (P9-05 (d), D-V2-182).
-                    match delulu_broker::netscope::judge_all(&root.net, "GET", host, path) {
+                    // By its method (P9-05 (d), D-V2-182/183).
+                    match delulu_broker::netscope::judge_all(&root.net, method, host, path) {
                         Verdict::Allow => (Outcome::Within, String::new()),
                         Verdict::OtherHost => {
                             (Outcome::Exceeds, format!("the request to `{u}` names `{host}`, which no `net` grant of the boundary names"))
@@ -308,8 +308,8 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                         Verdict::OtherMethod => (
                             Outcome::Exceeds,
                             format!(
-                                "the request to `{u}` is a `GET`, and the boundary's `net` grants that take its path on `{host}` \
-                                 name other methods"
+                                "the request to `{u}` is a `{method}`, and the boundary's `net` grants that take its path on \
+                                 `{host}` name other methods"
                             ),
                         ),
                         Verdict::OutsidePath => (
@@ -326,7 +326,7 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                 // pattern in the boundary, or an entry that takes no GET (D-V2-182), leaves the request itself undecided.
                 None if root.net.iter().all(|e| {
                     let (_, methods, path) = delulu_broker::netscope::read(e);
-                    path.is_none() && methods & delulu_broker::netscope::method_bit("GET") != 0
+                    path.is_none() && methods & delulu_broker::netscope::method_bit(method) != 0
                 }) =>
                 {
                     (Outcome::Within, String::new())
@@ -752,6 +752,8 @@ pub(crate) struct SecretSend {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RequestSite {
     pub(crate) url: Option<String>,
+    /// The request's HTTP method (P9-05 (d), D-V2-183).
+    pub(crate) method: &'static str,
     pub(crate) at: Span,
 }
 
@@ -920,7 +922,7 @@ impl SendWalk<'_> {
                     self.expr(a);
                 }
                 let is_http = |t: &delulu_check::Type| matches!(t, delulu_check::Type::Cap(delulu_check::ResourceKind::Http));
-                let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret")
+                let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret" | "post")
                     && self.types.and_then(|t| t.get(&recv.id())).is_some_and(is_http);
                 if request {
                     let url = match args.first() {
@@ -935,7 +937,8 @@ impl SendWalk<'_> {
                         "path": target.as_ref().map(|t| t.path().to_string()),
                         "at": at_json(self.map, Some(*span)),
                     }));
-                    self.sites.push(RequestSite { url, at: *span });
+                    let method = delulu_runtime::prim::http_method_of(&name.name);
+                    self.sites.push(RequestSite { url, method, at: *span });
                 }
                 if name.name == "get_with_secret" && args.len() == 4 {
                     let to = match &args[0] {

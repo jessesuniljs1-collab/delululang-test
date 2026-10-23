@@ -23,7 +23,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   Z3. This is the dimension a primitive other than GET needs before it can exist.
 - **Changed (stricter): a `net` entry naming a port is refused in words** (`net=api.example.com:8443`: "a `net`
   entry names no port"). Such an entry was accepted before and never matched a request.
-- **Changed: `delulu sandbox export --to openshell` refuses a method-scoped `net` grant**, as it refuses a
+- **Changed: `delulu sandbox policy FILE --format openshell` refuses a method-scoped `net` grant**, as it refuses a
   path-scoped one: the host alone would grant every method.
 
 ## Unreleased — ctutils 0.4.5, 2026-10-23

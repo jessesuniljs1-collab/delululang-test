@@ -8964,3 +8964,24 @@ entry does not show whether ML-DSA's code calls the affected mask functions; the
 **Evidence.** Locally `cargo deny check advisories`: `advisories ok` (exit 0), and `advisories FAILED` on the launch
 tree's 0.4.2 lockfile (the witness). `delulu-runtime` `nist_kat` 5 passed, so the signatures and keys are byte-identical
 to NIST's vectors. `--lib pqc` 11 passed, `delulu` `pqc_cli` 6 passed. Clippy stamped; the pull request's CI is the rest.
+
+## 2026-10-23 (evening) — the laptop: a `net` entry names its methods (P9-05 (d), first slice, D-V2-182)
+
+**Why now.** The next feature an agent needs is a request other than GET: most APIs take a POST. Under today's grammar,
+that primitive would let every `net=HOST` grant ever written POST, PUT or DELETE on its host, so the method dimension
+comes first.
+
+**What.** `net=HOST[:METHODS][/PATTERN]`; none named = GET alone; one spelling per set. The order (subset) and meet
+(intersection) are in `netscope`, beside the paths'. Every check asks with GET, and the broker gains
+`Denial::NetMethod` (DL0904). `--within` decides a computed URL as *within* only when every boundary entry takes GET
+on every path. The OpenShell export refuses a method scope. A port in an entry, accepted before and matching nothing,
+is now refused in words, while the broker's host check still reads such an entry as one host string, so a malformed
+suffix gains no match. An entry naming no host now takes no request (it took one whose URL named no host;
+latent: such a URL is refused earlier). See D-V2-182.
+
+**Evidence.** Witnessed red on the previous code: `egress_cli` `a_method_scoped_grant_takes_only_its_methods` ("host … is
+not in the granted allowlist") and `sandbox_openshell_cli`'s method case (exit 0). Mutants N1 to N6 were red in the
+`netscope` unit tests, and N1, N2, N3 and N5 end to end as well. Z3 §2e: 9 obligations proved, 50 in all, and the
+mutants `net-method-dropped` and `net-method-meet-union` each caught. CI's teeth step now names 11 mutants.
+`delulu-broker` `netscope` 10 passed; the `delulu` binary's `within` unit tests 8 passed, the agreement test
+generating method entries.

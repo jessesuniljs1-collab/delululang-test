@@ -1343,7 +1343,8 @@ impl Interp {
         let mut fetch_allowed: Option<String> = None;
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             let url_path = custody_path_for(op, &argvals);
-            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path) {
+            let method = custody_method_for(op, &name.name);
+            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path, method) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
                 // means the program asked for something it never held; this one can also mean an
@@ -2392,7 +2393,10 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
         // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
         // and the trace is printed and stored (P9-04 (a), D-V2-128).
-        ("Http", "get") | ("Http", "get_with") | ("Http", "get_with_secret") => args.first().map(|v| v.display()),
+        // `post`'s body is never shown either: the program's data, as a header's value is (P9-05 (d), D-V2-183).
+        ("Http", "get") | ("Http", "get_with") | ("Http", "get_with_secret") | ("Http", "post") => {
+            args.first().map(|v| v.display())
+        }
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2432,7 +2436,10 @@ pub(crate) fn custody_op_for(
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
         (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => Some((CustodyOp::FsRead, fs_arg(c))),
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => Some((CustodyOp::FsWrite, fs_arg(c))),
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
+        (ResourceKind::Http, "get")
+        | (ResourceKind::Http, "get_with")
+        | (ResourceKind::Http, "get_with_secret")
+        | (ResourceKind::Http, "post") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no
@@ -2539,6 +2546,16 @@ pub fn broker_secret_send(
 pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {
     match (op, argvals.first()) {
         (CustodyOp::Net, Some(Value::Str(url))) => Some(prim::request_path(url)),
+        _ => None,
+    }
+}
+
+/// The HTTP method a network use names for its custody to judge and record (P9-05 (d), D-V2-183): `POST` for `post`,
+/// `None` for a GET — the request every use was before, whose round-trip and record stay as they were.
+pub(crate) fn custody_method_for(op: CustodyOp, method: &str) -> Option<&'static str> {
+    match (op, prim::http_method_of(method)) {
+        (CustodyOp::Net, "GET") => None,
+        (CustodyOp::Net, verb) => Some(verb),
         _ => None,
     }
 }

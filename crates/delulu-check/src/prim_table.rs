@@ -86,6 +86,9 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     // P9-04 (b)/(c), D-V2-131: a secret in one header, sent only to its grant's audience —
     // `get_with_secret(url, headers: Map[Str, Str], header: Str, secret: Secret[Str])`.
     PrimEntry { receiver: "http", method: "get_with_secret", arity: 4 },
+    // P9-05 (d), D-V2-183: the first request that is not a GET — `post(url, headers: Map[Str, Str], body: Str)`, judged by
+    // its method against the grant's (`net=HOST:POST`; an entry naming no methods allows GET alone).
+    PrimEntry { receiver: "http", method: "post", arity: 3 },
     // Cap[Clock].
     PrimEntry { receiver: "clock", method: "now_ms", arity: 0 },
     // Root device mints + Cap[Actuator]/Cap[Sensor] (Stage 10 phase 10e, Track D).

@@ -5486,3 +5486,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** land this, merge `master` into #59 and land it; then the launch merge takes #58, #59 and this, and
   CHECKLIST-2.0 criteria 1, 3 and 4 are re-cited from that tree's own `everything` run (criterion 4 gains this advisory).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (evening) — a `net` entry names its methods (P9-05 (d), first slice, D-V2-182) (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/net-methods` (on `master` `269237d`)   Pull request: opened with this push
+- **What:** see V2_LOG's entry of the same name and D-V2-182. `net=HOST[:METHODS][/PATTERN]`, none named = GET alone;
+  the order, the meet, the judge, every check asking with GET, Z3 §2e, the OpenShell export's refusal.
+- Files and folders: M `crates/delulu-broker/src/netscope.rs`, `crates/delulu-broker/src/validate.rs`,
+  `crates/delulu-broker/src/diag.rs`, `crates/delulu-runtime/src/egress.rs`, `crates/delulu-runtime/src/prim.rs`,
+  `crates/delulu/src/within.rs`, `crates/delulu/src/openshell.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `crates/delulu/tests/sandbox_openshell_cli.rs`, `docs/design/models/authority_algebra.py`,
+  `docs/design/models/README.md`, `docs/MATHEMATICS.md`, `.github/workflows/ci.yml` (11 Z3 mutants), `CHANGELOG.md`,
+  `docs/for-agents.md`, `skills/delulu/SKILL.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** the first non-GET primitive (P9-05 (d)'s second slice).
+- Survey and doctor (after the last edit): in the commit message.
