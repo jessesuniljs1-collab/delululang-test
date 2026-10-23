@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the checker follows a shared type once, and refuses one too large to write out, 2026-10-23
+
+- **Changed (breaking for a program whose inferred type is over 100,000 parts): `delulu check` refuses a type too large
+  to write out with DL0211** (RW 2.3, D-V2-179). A value built from itself at every step (`let a2 = Pair { l: a1,
+  r: a1 }`) doubles its type each line: 22 such lines took 5.8 s to check, and each line doubled it. Such a program is
+  now refused at the line where its type passes 100,000 parts (or the module's large types pass 2,000,000 in all), in
+  about 0.17 s. Ordinary programs check as before.
+- **Fixed: the occurs check, unification and `==`'s equality check walked a type shared through its variables as its
+  full tree.** `a22 == b22` of two such chains took 261 s; now 0.1 s.
+- **Fixed: a record whose field is a user generic of an opaque type was admitted to `==` and `str`** (OPAQUE-FIELD-2,
+  RW 2.21). `type W { b: Box[Secret[Str]] }` checked clean under `a == b`; it is now DL0605, as `Box[Secret[Str]]` is
+  outside a record. No secret was exposed: the runtime answered `false` and printed `«secret»`.
+
 ## Unreleased — a record's width no longer costs per field, 2026-10-23
 
 - **Fixed: building a record literal whose fields are written out of declared order was quadratic in the record's

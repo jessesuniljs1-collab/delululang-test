@@ -187,7 +187,9 @@ impl InferCtx {
     /// the occurs check rules out.
     fn unify_in(&mut self, a: &Type, b: &Type, met: &mut HashSet<(u32, u32)>) -> Result<(), UnifyError> {
         if let (Type::Var(TypeVar(x)), Type::Var(TypeVar(y))) = (a, b) {
-            if x == y || !met.insert((*x, *y)) {
+            // Only two bound variables lead anywhere a later pair can repeat; an unbound one is bound here and now.
+            let bound = |v: &u32| self.type_bindings[*v as usize].is_some();
+            if x == y || (bound(x) && bound(y) && !met.insert((*x, *y))) {
                 return Ok(());
             }
         }
@@ -317,14 +319,14 @@ impl InferCtx {
     }
 
     fn occurs_type(&self, v: u32, t: &Type) -> bool {
-        self.occurs_in(v, t, &mut std::collections::HashSet::new())
+        self.occurs_in(v, t, &mut HashSet::new())
     }
 
     /// Whether the unbound variable `v` occurs in `t`, each bound variable followed once (RW 2.3): `explored` holds each
     /// variable whose binding has been searched without finding `v`. A binding is shared by every place its variable
     /// stands, so `let a1 = Pair { l: a0, r: a0 }` … `a22` is a type of 22 nodes through its variables and ~4 million
     /// written out; followed at every place, each `let`'s check walked the whole tree, and 22 lines took 5.8 s.
-    fn occurs_in(&self, v: u32, t: &Type, explored: &mut std::collections::HashSet<u32>) -> bool {
+    fn occurs_in(&self, v: u32, t: &Type, explored: &mut HashSet<u32>) -> bool {
         match t {
             Type::Var(TypeVar(w)) => {
                 if *w == v {

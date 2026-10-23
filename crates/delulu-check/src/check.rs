@@ -297,15 +297,16 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     //
     // In node order, so that when a type is too large to write out (RW 2.3) the node named is the same on every run.
     let mut node_types: HashMap<NodeId, Type> = HashMap::with_capacity(checker.node_types_raw.len());
-    let mut settle_order: Vec<&NodeId> = checker.node_types_raw.keys().collect();
-    settle_order.sort_unstable_by_key(|id| id.0);
-    for id in settle_order {
-        let (raw, span) = &checker.node_types_raw[id];
+    let mut settle_order: Vec<(&NodeId, &(Type, Span))> = checker.node_types_raw.iter().collect();
+    settle_order.sort_unstable_by_key(|(id, _)| id.0);
+    let mut too_large_at = checker.too_large_at;
+    for (id, (raw, span)) in settle_order {
         node_types.insert(*id, checker.cx.apply_type(raw));
-        if checker.too_large_at.is_none() && checker.cx.too_large() {
-            checker.too_large_at = Some(*span);
+        if too_large_at.is_none() && checker.cx.too_large() {
+            too_large_at = Some(*span);
         }
     }
+    checker.too_large_at = too_large_at;
     let mut node_rows: HashMap<NodeId, Row> = HashMap::with_capacity(checker.node_row_accs.len());
     for (id, acc) in &checker.node_row_accs {
         node_rows.insert(*id, checker.resolve_row_acc(acc));
