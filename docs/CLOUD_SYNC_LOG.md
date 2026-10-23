@@ -5557,3 +5557,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - **Open / next:** the launch merge of #61 to #63 and this; RW 4.79 (judge the capability before the custody).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — a certificate carries every dimension a delegation can (CERT-SECRET-1, RW 4.80); `net` form names methods (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found while setting up an agent test campaign (Sonnet 5.5 and Haiku 5.5 sous-chefs, running under leases the head chef delegated; their findings are not in this change).
+- Branch: `laptop/cert-secret` (on `laptop/wasm-post` `41f1dc6`, PR #64)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/federation_cli.rs`, `crates/delulu-runtime/src/broker.rs`,
+  `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** the agent campaign's findings, verified against the binary; the launch merge of #61 to #64 and this.
+- Survey and doctor (after the last edit): in the commit message.

@@ -1535,7 +1535,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (prints a lease token; a budget left unnamed is the parent's, and a `run --lease` is held to it;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a secret is sent only to the origins its `--secret-to` names — none is nowhere)\n\
      \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. [--budget mem=N,cpu=S] --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (every dimension `delegate` names: under strict anchored roots a root enters only this way)\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..\n\
      \x20 delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —\n\
@@ -7840,15 +7842,63 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     0
 }
 
-/// `delulu grants certify --subject HEX --effects E,.. [--device D].. --ttl 1h [--key F]
-/// [--parent-cert F] [--out F]`
+/// `--secret NAME` as `grants delegate` and `grants certify` read it: a grant NAMES a secret the broker holds and never
+/// carries its value. `NAME=VALUE` was accepted once and stored as a name no program could ever mint (agent pass 2).
+fn secret_name_flag(v: &str, who: &str) -> Result<(), String> {
+    match v.split_once('=') {
+        None => Ok(()),
+        Some((name, _)) => Err(format!(
+            "error: `--secret {v}`: {who} names a secret the broker already holds — `--secret {name}`. Store its value \
+             first with `delulu secrets set {name} VALUE`."
+        )),
+    }
+}
+
+/// `--secret-to NAME@HOST[:PORT]` as `grants delegate` and `grants certify` read it (P9-04 (d), D-V2-133): each audience
+/// member is read by the egress client's own parser (`parse_audience` — the spelling a request's origin is compared in at
+/// send time) and kept in its canonical form, so the broker's exact-set `⊑` compares one spelling. A pair for a secret
+/// `secrets` does not name would grant reach to nothing: refused in words, never dropped.
+fn secret_audiences(secrets: &[String], pairs: &[String], who: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::with_capacity(pairs.len());
+    for pair in pairs {
+        let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
+            return Err(format!(
+                "error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to"
+            ));
+        };
+        if !secrets.iter().any(|s| s == name) {
+            return Err(format!(
+                "error: `--secret-to {pair}` names the secret `{name}`, which {who} does not — add `--secret {name}` (an \
+                 audience is where a delegated secret may go)"
+            ));
+        }
+        match delulu_runtime::egress::parse_audience(member) {
+            Ok(a) => out.push(format!("{name}@{a}")),
+            Err(e) => return Err(format!("error: bad --secret-to `{pair}`: {e}")),
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// `delulu grants certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H].. [--secret N]..
+/// [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P].. [--device D]..
+/// [--budget mem=N,cpu=S] --ttl 1h [--key F] [--parent-cert F] [--out F]`
 ///
 /// Mint one grant certificate. **Offline by design** — no daemon, no tree, no network. The ground
 /// segment can run this on an air-gapped machine and hand the result to a spacecraft over whatever
 /// link exists.
+///
+/// It writes every dimension `grants delegate` can (CERT-SECRET-1, 2026-10-24): under strict anchored roots a root enters
+/// only by adopting a certificate (DL1421), so a dimension `certify` could not write was one no lease on that broker could
+/// ever hold — a broker-held secret among them.
 fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
     let mut effects: Vec<String> = Vec::new();
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut secrets, mut secret_to, mut declassify) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut foreign_c, mut foreign_python) = (Vec::new(), Vec::new());
+    let mut budget: Option<String> = None;
     let mut device: Vec<String> = Vec::new();
     let (mut subject, mut ttl, mut key, mut parent_cert, mut out) = (None, None, None, None, None);
     // RFC 0001 F4: how long the holder may run WITHOUT a contact receipt. Absent = the
@@ -7874,6 +7924,25 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
                 return 2;
             }
             net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret") {
+            if let Err(why) = secret_name_flag(&v, "a certificate") {
+                eprintln!("{why}");
+                return 2;
+            }
+            secrets.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret-to") {
+            secret_to.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--declassify") {
+            declassify.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-c") {
+            foreign_c.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-python") {
+            foreign_python.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--budget") {
+            if budget.replace(v).is_some() {
+                eprintln!("error: `--budget` is given twice; a certificate has one budget");
+                return 2;
+            }
         } else if let Some(v) = flag_value(args, &mut i, "--subject") {
             subject = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
@@ -8012,6 +8081,21 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             }
         }
     }
+    let secret_to = match secret_audiences(&secrets, &secret_to, "this certificate") {
+        Ok(v) => v,
+        Err(why) => {
+            eprintln!("{why}");
+            return 2;
+        }
+    };
+    let budget = match budget.as_deref().map(delulu_broker::BudgetScope::parse) {
+        None => None,
+        Some(Ok(b)) => Some(b),
+        Some(Err(e)) => {
+            eprintln!("error: bad --budget: {e}\n  form: mem=BYTES,cpu=SECONDS (both named, both above zero)");
+            return 2;
+        }
+    };
     let now = now_millis();
     let authority = delulu_broker::Authority::new(
         effects.iter().filter_map(|e| Effect::core_from_name(e)),
@@ -8019,8 +8103,13 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             fs_read: fs_read.into_iter().collect(),
             fs_write: fs_write.into_iter().collect(),
             net: net.into_iter().collect(),
+            secrets: secrets.into_iter().collect(),
+            secret_to: secret_to.into_iter().collect(),
+            declassify: declassify.into_iter().collect(),
+            foreign_c: foreign_c.into_iter().collect(),
+            foreign_python: foreign_python.into_iter().collect(),
             device: device_canon.into_iter().map(|d| (d.device.clone(), d)).collect(),
-            ..Default::default()
+            budget,
         },
     );
     // Catch a widening at MINT time rather than letting the holder discover it at use time. The
@@ -8381,14 +8470,8 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             }
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
-            // A delegation NAMES a secret the broker holds; it never carries the value. `NAME=VALUE`
-            // was accepted and stored as a name no program could ever mint (agent pass 2).
-            if v.contains('=') {
-                let name = v.split('=').next().unwrap_or_default();
-                eprintln!(
-                    "error: `--secret {v}`: a delegation names a secret the broker already holds — \
-                     `--secret {name}`. Store its value first with `delulu secrets set {name} VALUE`."
-                );
+            if let Err(why) = secret_name_flag(&v, "a delegation") {
+                eprintln!("{why}");
                 return 2;
             }
             secrets.push(v);
@@ -8466,31 +8549,12 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // request's origin is compared in at send time) and sent in its canonical form, so the broker's exact-set `⊑`
     // compares one spelling. A pair for a secret this delegation does not name would grant reach to nothing: refused
     // in words here, and dropped by the broker's canonicalization if it ever arrived.
-    let secret_to = {
-        let mut out = Vec::with_capacity(secret_to.len());
-        for pair in &secret_to {
-            let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
-                eprintln!("error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to");
-                return 2;
-            };
-            if !secrets.iter().any(|s| s == name) {
-                eprintln!(
-                    "error: `--secret-to {pair}` names the secret `{name}`, which this delegation does not — add `--secret {name}` \
-                     (an audience is where a delegated secret may go)"
-                );
-                return 2;
-            }
-            match delulu_runtime::egress::parse_audience(member) {
-                Ok(a) => out.push(format!("{name}@{a}")),
-                Err(e) => {
-                    eprintln!("error: bad --secret-to `{pair}`: {e}");
-                    return 2;
-                }
-            }
+    let secret_to = match secret_audiences(&secrets, &secret_to, "this delegation") {
+        Ok(v) => v,
+        Err(why) => {
+            eprintln!("{why}");
+            return 2;
         }
-        out.sort();
-        out.dedup();
-        out
     };
     // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
     // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-
