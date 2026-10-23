@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sent secret is asked for and decided with its audience, 2026-10-23
+
+- **Fixed: `delulu authority --grants` asked for a sent secret without the audience its sends need** (RW 2.11,
+  D-V2-180). It printed `--grant secret:API_TOKEN=VALUE`, under which the program holds the secret and every send of it
+  is refused. It now prints `--grant secret:API_TOKEN@api.example.com:8443=VALUE` (`HOST` for a computed URL).
+- **Changed (stricter): `authority --within` and `deploy plan` decide each secret send against the boundary's audience.**
+  A boundary granting the secret with no audience, or one naming another origin, now *exceeds*; both answered *within*,
+  though the run refuses the send. A `deploy plan` profile's `secrets` may name an audience:
+  `secrets = ["API_TOKEN@api.example.com:8443"]`.
+- **Changed (stricter): `authority --within` and `deploy plan` decide each request by its path** (D-V2-181). A request
+  outside the boundary's `net` path scope (`net=example.com/api/**`, a request to `/admin`) now *exceeds*, named at the
+  request; it answered *within*, judging only the capability's mint.
+
 ## Unreleased — a record's width no longer costs per field, 2026-10-23
 
 - **Fixed: building a record literal whose fields are written out of declared order was quadratic in the record's

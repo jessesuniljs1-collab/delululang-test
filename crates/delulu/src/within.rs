@@ -257,7 +257,10 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                 Some(t) => {
                     let naming = audiences.iter().filter(|a| a.is_some_and(|a| names(a, t) == Some(true))).count();
                     if naming == 0 {
-                        (Outcome::Exceeds, format!("a secret is sent to `{t}`, and no secret the boundary grants may be sent there"))
+                        (
+                            Outcome::Exceeds,
+                            format!("a secret is sent to `{t}`, and no secret the boundary grants may be sent there"),
+                        )
                     } else if naming == audiences.len() {
                         (Outcome::Within, String::new())
                     } else {
@@ -278,6 +281,39 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                     Outcome::Inconclusive,
                     "the source shows neither which secret is sent nor where; the boundary lets some go to the origins \
                      their audiences name, decided only when the program runs"
+                        .to_string(),
+                ),
+            }
+        }
+        Ask::Request { url } => {
+            // D-V2-181: a request is judged at its call against its capability's entries, the path too where an entry
+            // names a pattern (P9-05 (a)); a request outside every entry of the boundary is refused whatever the program
+            // minted. Read as the call reads it: `prim::host_of`, `prim::path_of`, `netscope::judge_all`.
+            use delulu_broker::netscope::Verdict;
+            match url {
+                Some(u) => {
+                    let (host, path) = (delulu_runtime::prim::host_of(u), delulu_runtime::prim::path_of(u));
+                    match delulu_broker::netscope::judge_all(&root.net, host, path) {
+                        Verdict::Allow => (Outcome::Within, String::new()),
+                        Verdict::OtherHost => {
+                            (Outcome::Exceeds, format!("the request to `{u}` names `{host}`, which no `net` grant of the boundary names"))
+                        }
+                        Verdict::OutsidePath => (
+                            Outcome::Exceeds,
+                            format!(
+                                "the request to `{u}` asks for the path `{}`, outside every `net` grant the boundary gives `{host}`",
+                                delulu_runtime::prim::request_path(u)
+                            ),
+                        ),
+                        Verdict::Ambiguous(why) => (Outcome::Exceeds, format!("the request to `{u}` is refused at its call: {why}")),
+                    }
+                }
+                // A computed URL goes to a host its capability was minted for, which the mint decides; only a path
+                // pattern in the boundary leaves the request itself undecided.
+                None if root.net.iter().all(|e| !e.contains('/')) => (Outcome::Within, String::new()),
+                None => (
+                    Outcome::Inconclusive,
+                    "the source computes the URL, and the boundary scopes a host by path, which is decided at the call"
                         .to_string(),
                 ),
             }
@@ -669,7 +705,15 @@ pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Au
 /// collection's element — and is never guessed: a name a later `let`, assignment, `for`, lambda parameter or match
 /// binding rebinds is forgotten from there on, so a stale binding cannot attribute a different value.
 pub(crate) fn secret_destinations(modules: &[&delulu_syntax::ast::Module], map: &SourceMap) -> Vec<Json> {
-    let mut w = SendWalk { map, vars: BTreeMap::new(), out: Vec::new(), types: None, requests: Vec::new(), sends: Vec::new() };
+    let mut w = SendWalk {
+        map,
+        vars: BTreeMap::new(),
+        out: Vec::new(),
+        types: None,
+        requests: Vec::new(),
+        sends: Vec::new(),
+        sites: Vec::new(),
+    };
     w.modules(modules);
     w.out
 }
@@ -683,11 +727,45 @@ pub(crate) struct SecretSend {
     pub(crate) at: Span,
 }
 
+/// One request as the source shows it (P9-05 (c)): the URL literal (`None` when the source computes it) and the call.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RequestSite {
+    pub(crate) url: Option<String>,
+    pub(crate) at: Span,
+}
+
+/// [`request_destinations`] as data, for the requirement list (D-V2-181): what `--within` decides each request by.
+pub(crate) fn request_sites(
+    module: &delulu_syntax::ast::Module,
+    types: &std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>,
+) -> Vec<RequestSite> {
+    let map = SourceMap::new();
+    let mut w = SendWalk {
+        map: &map,
+        vars: BTreeMap::new(),
+        out: Vec::new(),
+        types: Some(types),
+        requests: Vec::new(),
+        sends: Vec::new(),
+        sites: Vec::new(),
+    };
+    w.modules(&[module]);
+    w.sites
+}
+
 /// [`secret_destinations`] as data, for the requirement list (RW 2.11, D-V2-180): what `--grants` names as each secret's
 /// audience, and what `--within` decides each send by.
 pub(crate) fn secret_sends(modules: &[&delulu_syntax::ast::Module]) -> Vec<SecretSend> {
     let map = SourceMap::new();
-    let mut w = SendWalk { map: &map, vars: BTreeMap::new(), out: Vec::new(), types: None, requests: Vec::new(), sends: Vec::new() };
+    let mut w = SendWalk {
+        map: &map,
+        vars: BTreeMap::new(),
+        out: Vec::new(),
+        types: None,
+        requests: Vec::new(),
+        sends: Vec::new(),
+        sites: Vec::new(),
+    };
     w.modules(modules);
     w.sends
 }
@@ -702,8 +780,15 @@ pub(crate) fn request_destinations(
     types: &std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>,
     map: &SourceMap,
 ) -> Vec<Json> {
-    let mut w =
-        SendWalk { map, vars: BTreeMap::new(), out: Vec::new(), types: Some(types), requests: Vec::new(), sends: Vec::new() };
+    let mut w = SendWalk {
+        map,
+        vars: BTreeMap::new(),
+        out: Vec::new(),
+        types: Some(types),
+        requests: Vec::new(),
+        sends: Vec::new(),
+        sites: Vec::new(),
+    };
     w.modules(&[module]);
     w.requests
 }
@@ -745,6 +830,7 @@ struct SendWalk<'a> {
     types: Option<&'a std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>>,
     requests: Vec<Json>,
     sends: Vec<SecretSend>,
+    sites: Vec<RequestSite>,
 }
 
 impl SendWalk<'_> {
@@ -828,6 +914,7 @@ impl SendWalk<'_> {
                         "path": target.as_ref().map(|t| t.path().to_string()),
                         "at": at_json(self.map, Some(*span)),
                     }));
+                    self.sites.push(RequestSite { url, at: *span });
                 }
                 if name.name == "get_with_secret" && args.len() == 4 {
                     let to = match &args[0] {

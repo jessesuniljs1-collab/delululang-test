@@ -3448,7 +3448,8 @@ fn cmd_authority(rest: &[String]) -> i32 {
     }
     let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
     if asks_within {
-        return authority_within(&map, &[&checked.module], report, &opts);
+        let requests = crate::within::request_sites(&checked.module, &checked.result.node_types);
+        return authority_within(&map, &[&checked.module], requests, report, &opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -3467,7 +3468,13 @@ fn cmd_authority(rest: &[String]) -> i32 {
 /// boundary? The boundary is parsed by `Grants::add`, the parser `run --grant` uses, and is only ever
 /// checked against: nothing here grants it. The verdict is `within.rs`'s; exit 0 for *within* and 1 for
 /// any other answer, which the report names (`--json` carries it under `authority.within`).
-fn authority_within(map: &SourceMap, modules: &[&delulu_syntax::ast::Module], mut report: Json, opts: &Opts) -> i32 {
+fn authority_within(
+    map: &SourceMap,
+    modules: &[&delulu_syntax::ast::Module],
+    requests: Vec<crate::within::RequestSite>,
+    mut report: Json,
+    opts: &Opts,
+) -> i32 {
     let mut lines: Vec<String> = opts.within.clone();
     if let Some(f) = &opts.within_file {
         if std::path::Path::new(f).is_dir() {
@@ -3491,7 +3498,8 @@ fn authority_within(map: &SourceMap, modules: &[&delulu_syntax::ast::Module], mu
             return 2;
         }
     }
-    let walk = requested_scopes(modules);
+    let mut walk = requested_scopes(modules);
+    walk.requests = requests;
     let (reqs, unsupported) = requirements(&report, &walk);
     let v = crate::within::verdict(&reqs, &unsupported, &boundary);
     let code = if v.outcome == crate::within::Outcome::Within { 0 } else { 1 };
@@ -3635,6 +3643,11 @@ pub(crate) struct ScopeWalk {
     pub(crate) hidden_at: BTreeMap<String, delulu_diag::Span>,
     pub(crate) mint_at: BTreeMap<String, delulu_diag::Span>,
     pub(crate) sites: Vec<MintSite>,
+    /// Each `http.get_with_secret`, with its secret and destination as far as the source shows them (RW 2.11, D-V2-180).
+    pub(crate) sends: Vec<crate::within::SecretSend>,
+    /// Each request, by the checker's type at its call (`within::request_sites`), set only by a caller that decides a verdict
+    /// and holds the types — empty for `--grants`, whose line for a request is its mint's (D-V2-181).
+    pub(crate) requests: Vec<crate::within::RequestSite>,
 }
 
 /// One capability-minting call (P9-03): where it is, the kind it mints, the literal scopes it writes, and whether it asks for
@@ -3844,6 +3857,8 @@ pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> Scope
         hidden_at: BTreeMap::new(),
         mint_at: BTreeMap::new(),
         sites: Vec::new(),
+        sends: crate::within::secret_sends(modules),
+        requests: Vec::new(),
     };
     for m in modules {
         for item in &m.items {
@@ -3897,6 +3912,16 @@ pub(crate) enum Ask {
     Hidden { method: &'static str },
     /// A foreign C library by its logical name; the binary's path is the operator's grant data.
     ForeignLib(String),
+    /// A secret by its grant name, with the origin of every send of it the source shows (`None` for a computed URL):
+    /// the mint decides the name, and each send is refused unless the grant's audience names its origin (P9-04 (c);
+    /// RW 2.11, D-V2-180).
+    Secret { name: String, to: Vec<Option<String>> },
+    /// A send of a secret the source does not name (a parameter, a field), to the origin it shows (`None`: computed).
+    SecretSend { to: Option<String> },
+    /// A request, by its URL literal (`None`: computed), judged at its call against its capability's `net` entries, its
+    /// path too where an entry names a pattern (P9-05 (a); D-V2-181). Decided by a verdict; the line an operator types for
+    /// it is its mint's.
+    Request { url: Option<String> },
     /// A Python import: a module the program imports, or a pattern its manifest allows.
     PythonImport { name: String, pattern: bool },
     /// Python, with no import the source or the manifest names.
@@ -4066,15 +4091,44 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     if effects.iter().any(|e| e == "Declassify") {
         push(&mut out, "declassify".into(), Ask::Mint { method: "declassify", arg: None }, mint_at("Declassify"));
     }
+    // A secret the program sends carries the audience its sends need (RW 2.11, D-V2-180): a grant without one lets the
+    // program hold the secret and refuses every send of it (P9-04 (c)), so the line names each origin the source shows, and
+    // `HOST` for a send whose URL it computes.
+    let secret_line = |name: &str, to: &[Option<String>]| {
+        if to.is_empty() {
+            format!("secret:{name}=VALUE")
+        } else {
+            let members: Vec<&str> = to.iter().map(|t| t.as_deref().unwrap_or("HOST")).collect();
+            format!("secret:{name}@{}=VALUE", members.join(","))
+        }
+    };
+    let sent_to = |secret: Option<&str>| {
+        let mut to: Vec<Option<String>> = Vec::new();
+        for send in walk.sends.iter().filter(|s| s.secret.as_deref() == secret) {
+            if !to.contains(&send.to) {
+                to.push(send.to.clone());
+            }
+        }
+        to
+    };
     for s in report["secrets"].as_array().cloned().unwrap_or_default() {
         if let Some(name) = s.as_str() {
-            push(
-                &mut out,
-                format!("secret:{name}=VALUE"),
-                Ask::Mint { method: "secret", arg: Some(name.to_string()) },
-                lit_at("Secret", name),
-            );
+            let to = sent_to(Some(name));
+            push(&mut out, secret_line(name, &to), Ask::Secret { name: name.to_string(), to }, lit_at("Secret", name));
         }
+    }
+    // A send of a secret the source does not name: the line names the destination, and the operator the secret.
+    for to in sent_to(None) {
+        let at = walk.sends.iter().find(|s| s.secret.is_none() && s.to == to).map(|s| s.at);
+        push(&mut out, secret_line("NAME", std::slice::from_ref(&to)), Ask::SecretSend { to }, at);
+    }
+    // Each request, when the caller set them (D-V2-181): named by the narrowest `net` line that takes it.
+    for site in &walk.requests {
+        let grant = match site.url.as_deref() {
+            Some(u) => format!("net={}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u)),
+            None => "net=HOST/PATH".to_string(),
+        };
+        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone() }, at: Some(site.at) });
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
     // and the list named no secret at all.
@@ -5602,7 +5656,7 @@ pub(crate) struct CheckedPackage {
 /// dependency as one that "does not check cleanly". `None` when the package does not check clean.
 pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let path = std::path::Path::new(dir);
-    let (program, name, map, modules) = if path.join("delulu.toml").is_file() {
+    let (program, name, map, modules, units) = if path.join("delulu.toml").is_file() {
         let ws = resolve_workspace(dir);
         let program = check_workspace(&ws);
         if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 {
@@ -5614,7 +5668,8 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
             .or_else(|| ws.root_pkg().map(|p| p.name.clone()))
             .unwrap_or_else(|| "package".to_string());
         let modules: Vec<delulu_syntax::ast::Module> = ws.modules.iter().map(|m| m.unit.module.clone()).collect();
-        (program, name, ws.source_map, modules)
+        let units: Vec<String> = ws.modules.iter().map(|m| m.unit.name.clone()).collect();
+        (program, name, ws.source_map, modules, units)
     } else {
         let pkg = load_package(dir);
         let program = check_program(&pkg);
@@ -5623,11 +5678,15 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
         }
         let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
         let modules: Vec<delulu_syntax::ast::Module> = pkg.modules.iter().map(|m| m.module.clone()).collect();
-        (program, name, pkg.source_map, modules)
+        let units: Vec<String> = pkg.modules.iter().map(|m| m.name.clone()).collect();
+        (program, name, pkg.source_map, modules, units)
     };
     let report = program_authority(&program, &name, &scopes_in_dir(path));
     let refs: Vec<&delulu_syntax::ast::Module> = modules.iter().collect();
-    let (requirements, unsupported) = requirements(&report, &requested_scopes(&refs));
+    let unit_refs: Vec<&str> = units.iter().map(String::as_str).collect();
+    let mut walk = requested_scopes(&refs);
+    walk.requests = package_request_sites(&program, &refs, &unit_refs);
+    let (requirements, unsupported) = requirements(&report, &walk);
     Some(CheckedPackage { report, requirements, unsupported, map })
 }
 
@@ -5693,6 +5752,23 @@ fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
     emit_authority(&program, &name, dir, &pkg.source_map, (&modules, &units), opts)
 }
 
+/// A package's requests, each module's by its own node types, keyed by its unit as the check keyed them (node ids are per
+/// module) — what `--within` and `deploy plan` decide each request by (D-V2-181).
+fn package_request_sites(
+    program: &delulu_check::Program,
+    modules: &[&delulu_syntax::ast::Module],
+    units: &[&str],
+) -> Vec<crate::within::RequestSite> {
+    modules
+        .iter()
+        .zip(units)
+        .flat_map(|(m, unit)| match program.node_types.get(*unit) {
+            Some(types) => crate::within::request_sites(m, types),
+            None => Vec::new(),
+        })
+        .collect()
+}
+
 /// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
 /// One function so the two loaders above cannot drift into reporting different things.
 fn emit_authority(
@@ -5725,7 +5801,7 @@ fn emit_authority(
     }
     // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
     if !opts.within.is_empty() || opts.within_file.is_some() {
-        return authority_within(map, modules, report, opts);
+        return authority_within(map, modules, package_request_sites(program, modules, units), report, opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));

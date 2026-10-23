@@ -385,6 +385,17 @@ it), `to` the URL literal's origin (`host:port`, the spelling an audience must n
 Either is `null` when the source does not show it (a computed URL, a secret passed in as a parameter, a name a `for`
 or a match arm rebinds) — never a guess.
 
+Since 2026-10-23 (RW 2.11, D-V2-180) those sends are part of what the program asks for. `--grants` names a sent secret's
+audience: `secret:API_TOKEN@api.example.com:8443=VALUE`, with `HOST` for a send whose URL the source computes, and
+`secret:NAME@host:port=VALUE` for a send of a secret the source does not name. A grant without the audience lets the
+program hold the secret and refuses every send of it. `--within` decides each send against the boundary's audience for its
+secret: *exceeds* when the boundary grants the secret with no audience, or with one that does not name the origin;
+*inconclusive* for a computed URL, or for a secret the source does not name that only some of the boundary's secrets may
+reach. `deploy plan` decides the same against a profile, whose `secrets` entries may name an audience as a grant does
+(`secrets = ["API_TOKEN@api.example.com:8443"]`). Each request (`get`, `get_with`, `get_with_secret` on a `Cap[Http]`) is
+decided too, by its path against the boundary's `net` entries as the call decides it (D-V2-181): a request outside a
+path-scoped entry *exceeds*, named at the request by the narrowest line that takes it (`net=example.com/admin`).
+
 **When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the

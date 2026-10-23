@@ -8877,3 +8877,36 @@ Survey and doctor: in the commit message. Records: `measurements/scale/RECORD.md
 `HARDENING_CAMPAIGN.md` and `AUTHORITY_GUARD_CAPSTONE.md` (C55 closed), `CHANGELOG.md`, RW 2.10, HANDOFF §11.5 (a
 correctness fix can bring a cost no test measures).
 
+## 2026-10-23 (afternoon) — the laptop: a sent secret is asked for, and decided, with its audience (RW 2.11, D-V2-180)
+
+RW 2.11 stayed open for one step: proposing the audience in `--grants`' lines. A program sending `API_TOKEN` to
+`https://api.example.com:8443/…` was given `--grant secret:API_TOKEN=VALUE` to type. Under that grant the run holds the
+secret and refuses the send: *"its grant names no audience"*. `authority --within-file` answered *within* for that
+boundary, and for one whose audience named `other.example.com:443`. `deploy plan`, which uses the same verdict
+(D-V2-176), approved both. The runtime was right every time; the static answers were not.
+
+The requirement for a secret now carries the origins of its sends, from the walk that already fed `secret_destinations`.
+The line names them (`secret:API_TOKEN@api.example.com:8443=VALUE`, `HOST` for a computed URL, `NAME` for a secret the
+source does not name). `--within` decides each send against the boundary's audience for that secret, by host and port,
+as the egress client compares. A `deploy plan` profile's `secrets` entry may name an audience, read by the run's own
+parser.
+
+Witnessed: `within_cli` `a_sent_secret_is_asked_for_and_decided_with_its_audience` and `deploy_cli`
+`a_secret_a_service_sends_is_bounded_by_its_audience`, both red on `master`'s `cli.rs`, `within.rs` and `deploy.rs`.
+Mutants red: no audience in the line, the sends not decided, the port ignored, an unnamed secret's send always within.
+A first run of the mutants without `--no-fail-fast` stopped at the first red target and left the second unread; they
+were run again with it.
+
+Green: the binary's unit tests and `cli`, `within_cli`, `deploy_cli`, `deploy_plan_adversarial`, `egress_cli`,
+`grants_cli`, `guest_cli`, `sandbox_openshell_cli`, `schema_cli`, `mcp_cli`, `lsp_cli`, `secret_verify_cli`: 13 targets,
+357 passed, 0 failed, 1 ignored. Clippy stamped. Survey and doctor: in the commit message.
+
+**The same question, asked of paths (D-V2-181).** A program minting `example.com/api/**` that requests
+`https://example.com/admin` was *within* `net=example.com/api/**`; the run refuses the request at its call (P9-05 (a)).
+`--within` decided the mint and never the requests. Each request the checker types is now decided against the boundary's
+`net` entries by the call's own reading (`prim::host_of`, `path_of`, `netscope::judge_all`), in a file, in a package (each
+module by its own types) and in `deploy plan`. Witnessed: `within_cli` `a_request_is_decided_by_its_path_against_the_boundary`
+red on the previous code, and `deploy_cli` `a_request_outside_the_profiles_path_scope_is_refused`, whose plan the previous
+code approved. Mutants red: outside-path *within*, a package's requests not wired, a computed URL always *within*. A
+`typed` flag kept requests out of `--grants`; its mutant survived (`--grants`' walk has none), and it was taken out.
+

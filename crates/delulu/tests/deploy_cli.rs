@@ -370,3 +370,69 @@ fn a_secret_is_bounded_by_name_and_a_special_use_host_is_no_boundary() {
     assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
     assert!(stderr(&o).contains("`net=127.0.0.1` is not a boundary this profile can give"), "{}", stderr(&o));
 }
+
+/// RW 2.11 (D-V2-180): a service that sends a secret needs a profile whose secret names the origin it is sent to, as a run's
+/// grant must (P9-04 (c)) — `secrets = ["NAME@HOST:PORT"]`, read by the run's own parser. A profile naming the secret alone
+/// approved it, though every send would be refused; and an audience the parser refuses is no boundary at all.
+#[test]
+fn a_secret_a_service_sends_is_bounded_by_its_audience() {
+    let dir = tmp("audience");
+    let svc = dir.join("sender");
+    std::fs::create_dir_all(svc.join("src")).unwrap();
+    std::fs::write(
+        svc.join("delulu.toml"),
+        "[package]\nname = \"sender\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        svc.join("src/main.delulu"),
+        "module sender\n\nfn main(root: Root) ! {Net, Write} {\n  let out = root.console()\n  \
+         let h = root.http([\"api.example.com\"])\n  let tok = root.secret(\"API_TOKEN\")\n  \
+         match h.get_with_secret(\"https://api.example.com:8443/v1\", Map(), \"Authorization\", tok) {\n    \
+         Ok(b) => out.println(\"sent\")\n    Err(e) => out.println(\"not sent\")\n  }\n}\n",
+    )
+    .unwrap();
+    let svc_arg = format!("sender={}", svc.to_string_lossy());
+    let env = |name: &str, secret: &str| {
+        profile(&dir, name, &format!("effects = [\"Net\", \"Write\"]\nnet = [\"api.example.com\"]\nsecrets = [\"{secret}\"]\n"))
+    };
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &env("named.toml", "API_TOKEN")]);
+    assert_eq!(o.status.code(), Some(1), "{}{}", stdout(&o), stderr(&o));
+    assert!(stderr(&o).contains("secret:API_TOKEN@api.example.com:8443") && stderr(&o).contains("no audience"), "{}", stderr(&o));
+    let o =
+        delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &env("aimed.toml", "API_TOKEN@api.example.com:8443")]);
+    assert!(o.status.success(), "{}{}", stdout(&o), stderr(&o));
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &env("bad.toml", "API_TOKEN@api.example.com/v1")]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("is not a boundary this profile can give"), "{}", stderr(&o));
+}
+
+/// D-V2-181: a service's request is decided by its path against the profile's `net`, as the run decides it at the call: a
+/// service requesting `/admin` on a capability minted for `example.com/api/**` is refused under a profile of
+/// `net = ["example.com/api/**"]` (approved before: its mint, and its manifest's `net`, are within), and approved under the
+/// whole host.
+#[test]
+fn a_request_outside_the_profiles_path_scope_is_refused() {
+    let dir = tmp("request_path");
+    let svc = dir.join("caller");
+    std::fs::create_dir_all(svc.join("src")).unwrap();
+    std::fs::write(
+        svc.join("delulu.toml"),
+        "[package]\nname = \"caller\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\nnet = [\"example.com/api/**\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        svc.join("src/main.delulu"),
+        "module caller\n\nfn main(root: Root) ! {Net, Write} {\n  let h = root.http([\"example.com/api/**\"])\n  \
+         match h.get(\"https://example.com/admin\") {\n    Ok(b) => root.console().println(\"got\")\n    \
+         Err(e) => root.console().println(\"no\")\n  }\n}\n",
+    )
+    .unwrap();
+    let svc_arg = format!("caller={}", svc.to_string_lossy());
+    let env = |name: &str, net: &str| profile(&dir, name, &format!("effects = [\"Net\", \"Write\"]\nnet = [\"{net}\"]\n"));
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &env("scoped.toml", "example.com/api/**")]);
+    assert_eq!(o.status.code(), Some(1), "{}{}", stdout(&o), stderr(&o));
+    assert!(stderr(&o).contains("net=example.com/admin") && stderr(&o).contains("src/main.delulu:5"), "{}", stderr(&o));
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &env("whole.toml", "example.com")]);
+    assert!(o.status.success(), "{}{}", stdout(&o), stderr(&o));
+}
