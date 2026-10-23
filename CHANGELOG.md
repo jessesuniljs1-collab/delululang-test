@@ -11,6 +11,33 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a top-level constant's value is checked, 2026-10-24
+
+- **Fixed: `let NAME[: T] = value` at module level was never checked** (CONST-UNCHECKED-1, RW 4.82). Its value is
+  now type-checked against its declared type, its names resolved, and it must be pure: a constant is evaluated
+  before `main`, holding no authority, so `let W = spawn Worker()` is refused DL0501 (it performed `Async` that
+  `authority` never named). An unannotated constant has one type at every use. **Breaking** only for a program
+  whose constant was ill-typed, unresolvable or effectful — each failed at run time or did something unreported.
+
+## Unreleased — a generic's own parameters are rigid in its body, 2026-10-24
+
+- **Fixed (soundness): the effect row escaped through a generic function** (GENERIC-RIGID-1, D-V2-184, RW 4.81).
+  Inside its own body a generic's type and row parameters could be decided by the body: `fn forge[T](x: Int) -> T
+  { x }` checked, and `coerce[A, B](x: A) -> B { x }` or `hide[e](f: fn() -> Unit ! e) -> fn() -> Unit { f }` made
+  an effectful closure pure, so a function `authority` listed as pure printed at run time. A generic's parameters
+  are now rigid in its body (and an actor's in its members): the body must hold for every type and row a caller
+  picks. **Breaking** only for a program that relied on the hole: its body is refused DL0401, naming the parameter
+  (`expected T, found Int`).
+
+## Unreleased — a certificate carries every dimension a delegation can, 2026-10-24
+
+- **Fixed: under strict anchored roots, a lease can hold a broker-held secret** (CERT-SECRET-1, RW 4.80). `grants
+  certify` now takes `--secret`, `--secret-to`, `--declassify`, `--foreign-c`, `--foreign-python` and `--budget`, as
+  `grants delegate` does. A root enters a strict broker only through a certificate, so before this no delegation
+  under it could name a secret (DL0802). A certificate names a secret and never carries its value (`--secret
+  NAME=VALUE` is refused); the broker that adopts it holds the bytes (`delulu secrets set`).
+- **Fixed: `toolchain --json` describes `net` and `net.special` with their methods** (`HOST[:METHODS][/PATH]`, D-V2-182).
+
 ## Unreleased — `http.post` and `http.post_with_secret` on the WASM engine, 2026-10-23
 
 - **Added: `Cap[Http].post` compiles to WebAssembly** (`--engine wasm`, `build --target wasm`). The host performs it by
