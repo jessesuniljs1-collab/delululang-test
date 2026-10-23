@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a certificate carries every dimension a delegation can, 2026-10-24
+
+- **Fixed: under strict anchored roots, a lease can hold a broker-held secret** (CERT-SECRET-1, RW 4.80). `grants
+  certify` now takes `--secret`, `--secret-to`, `--declassify`, `--foreign-c`, `--foreign-python` and `--budget`, as
+  `grants delegate` does. A root enters a strict broker only through a certificate, so before this no delegation
+  under it could name a secret (DL0802). A certificate names a secret and never carries its value (`--secret
+  NAME=VALUE` is refused); the broker that adopts it holds the bytes (`delulu secrets set`).
+- **Fixed: `toolchain --json` describes `net` and `net.special` with their methods** (`HOST[:METHODS][/PATH]`, D-V2-182).
+
 ## Unreleased — `http.post` and `http.post_with_secret` on the WASM engine, 2026-10-23
 
 - **Added: `Cap[Http].post` compiles to WebAssembly** (`--engine wasm`, `build --target wasm`). The host performs it by

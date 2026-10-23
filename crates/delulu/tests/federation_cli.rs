@@ -508,12 +508,23 @@ fn the_ground_side_mints_credentials_with_no_broker_running() {
 fn a_strict_broker_delegates_the_secret_its_certificate_carries() {
     let f = setup("secret");
     // A value never travels in a certificate: a secret is named, and the broker that adopts it holds its bytes.
-    let o = f.certify(&["--subject", &f.vehicle_pub, "--effects", "Net", "--secret", "TOKEN=abc", "--ttl", "20m", "--key", &f.gk()]);
+    let o =
+        f.certify(&["--subject", &f.vehicle_pub, "--effects", "Net", "--secret", "TOKEN=abc", "--ttl", "20m", "--key", &f.gk()]);
     assert_eq!(o.status.code(), Some(2), "a certificate never carries a secret's value: {}", stderr(&o));
     assert!(stderr(&o).contains("`--secret TOKEN`"), "and the refusal says what to write: {}", stderr(&o));
     // An audience for a secret the certificate does not name would reach nothing: refused in words, not dropped.
-    let o =
-        f.certify(&["--subject", &f.vehicle_pub, "--effects", "Net", "--secret-to", "TOKEN@127.0.0.1", "--ttl", "20m", "--key", &f.gk()]);
+    let o = f.certify(&[
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Net",
+        "--secret-to",
+        "TOKEN@127.0.0.1",
+        "--ttl",
+        "20m",
+        "--key",
+        &f.gk(),
+    ]);
     assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
     assert!(stderr(&o).contains("add `--secret TOKEN`"), "{}", stderr(&o));
 
