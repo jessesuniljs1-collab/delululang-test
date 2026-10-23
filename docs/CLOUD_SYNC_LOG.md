@@ -5423,9 +5423,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Branch: `laptop/secret-audience` (on `master` `118cf51`)   Pull request: the one this entry rides in
 - **What:** `authority --grants` names a sent secret's audience (`secret:NAME@HOST:PORT=VALUE`); `--within` and
   `deploy plan` decide each send against the boundary's audience (stricter: they used to approve a boundary under which
-  the run refuses the send); a `deploy plan` profile's `secrets` may name an audience.
+  the run refuses the send); a `deploy plan` profile's `secrets` may name an audience. D-V2-181: `--within` and
+  `deploy plan` decide each request by its path against the boundary's `net` (stricter the same way).
 - Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/src/within.rs`, `crates/delulu/src/deploy.rs`,
-  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/deploy_cli.rs`, `CHANGELOG.md`, `docs/for-agents.md`,
+  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/deploy_cli.rs`, `crates/delulu/tests/deploy_plan_adversarial.rs`
+  (its fixture's request `http://` → `https://`), `CHANGELOG.md`, `docs/for-agents.md`,
   `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

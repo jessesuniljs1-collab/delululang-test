@@ -20,6 +20,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   A boundary granting the secret with no audience, or one naming another origin, now *exceeds*; both answered *within*,
   though the run refuses the send. A `deploy plan` profile's `secrets` may name an audience:
   `secrets = ["API_TOKEN@api.example.com:8443"]`.
+- **Changed (stricter): `authority --within` and `deploy plan` decide each request by its path** (D-V2-181). A request
+  outside the boundary's `net` path scope (`net=example.com/api/**`, a request to `/admin`) now *exceeds*, named at the
+  request; it answered *within*, judging only the capability's mint.
 
 ## Unreleased — a record's width no longer costs per field, 2026-10-23
 

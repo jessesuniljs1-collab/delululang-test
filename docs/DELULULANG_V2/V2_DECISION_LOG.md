@@ -4609,3 +4609,35 @@ runs.
 - Both fail on `master`'s code. Mutants red: the line without the audience, the sends not decided, the port ignored, an
   unnamed secret's send always within.
 
+## D-V2-181 — `--within` and `deploy plan` decide each request by its path — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** P9-05 (a) judges a request at its call against its capability's `net` entries, the path too where an
+entry names a pattern. `--within` decided only the mint. A program minting `example.com/api/**` and requesting
+`https://example.com/admin` was *within* a boundary of `net=example.com/api/**`, and `deploy plan` approved it, though the
+run refuses that request whatever the program minted. The same skipped dimension as D-V2-180, found by asking the
+question again for paths.
+
+**Decided:** each request the checker types (`Cap[Http]` receiver; `request_destinations`' walk, `within::request_sites`)
+is a requirement, `Ask::Request { url }`. It is decided against the boundary's `net` entries exactly as the call decides
+it: `prim::host_of`, `prim::path_of`, `netscope::judge_all`.
+- *exceeds* when the URL is one the egress client will not read (plain `http://`, userinfo, a malformed host), in the
+  client's own words; when the path is outside every entry for the host; when the host is in none; or when the spelling
+  is ambiguous;
+- for a computed URL, *within* when the boundary scopes no host by path (the mint decides the host), else *inconclusive*.
+
+A finding names the narrowest line that takes the request (`net=example.com/admin`) at the request's call. Requests are
+set only where a verdict is made (`authority --within` for a file and for a package, each module by its own types, and
+`deploy plan`'s `checked_package`). `--grants` is unchanged: the line to type for a request is its mint's.
+
+**Evidence:** `within_cli` `a_request_is_decided_by_its_path_against_the_boundary` (a file: outside, inside, computed, a
+whole host; a package whose request is in another module) and `deploy_cli`
+`a_request_outside_the_profiles_path_scope_is_refused`. On the previous code the first failed and the second's plan was
+approved. Mutants red: a request outside the path *within*, a package's requests not wired, a computed URL always
+*within*, the unreadable-URL arm removed. A `typed` flag kept requests out of `--grants`' lines; its mutant survived,
+because `--grants`' walk has no requests, so it was taken out.
+
+**Found on the way:** `deploy_plan_adversarial`'s fixture service requested `http://example.com`. The run refuses that
+request at its call ("only `https://` is fetched"), and the plan had been approved. The first version of this decision
+refused it with a misleading reason ("names `http`": `prim::host_of` strips only `https://`). The fixture exists to
+perform `Net`, and now requests `https://example.com`; its five tests assert what they did.
+

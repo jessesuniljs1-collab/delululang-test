@@ -83,14 +83,14 @@ fn write_service(dir: &Path, module: &str, effects: &[&str]) {
         ["Net"] => (
             "! {Net} ",
             "  let h = root.http([\"example.com\"])\n  \
-             match h.get(\"http://example.com\") { Ok(_) => {}, Err(_) => {} }\n"
+             match h.get(\"https://example.com\") { Ok(_) => {}, Err(_) => {} }\n"
                 .to_string(),
         ),
         ["Net", "Write"] => (
             "! {Write, Net} ",
             "  let c = root.console()\n  c.println(\"up\")\n  \
              let h = root.http([\"example.com\"])\n  \
-             match h.get(\"http://example.com\") { Ok(_) => {}, Err(_) => {} }\n"
+             match h.get(\"https://example.com\") { Ok(_) => {}, Err(_) => {} }\n"
                 .to_string(),
         ),
         other => panic!("write_service: unsupported effect combination {other:?}"),

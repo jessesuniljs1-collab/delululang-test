@@ -1585,3 +1585,84 @@ fn a_sent_secret_is_asked_for_and_decided_with_its_audience() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// D-V2-181: a request is judged at its call by its path where its capability's entry names a pattern (P9-05 (a)), and
+/// `--within` decided only the mint: a program minting `example.com/api/**` and requesting `https://example.com/admin`
+/// was *within* a boundary of `net=example.com/api/**`, though the run refuses the request whatever it minted. Each request
+/// is now decided against the boundary's `net` entries as the call decides it (`prim::host_of`, `path_of`,
+/// `netscope::judge_all`), named by the narrowest line that takes it, at its call; a computed URL is *inconclusive* only
+/// where the boundary scopes a host by path. `--grants` is unchanged: the line to type is the mint's. A file, a package
+/// whose request is in another module, and `deploy plan` (`deploy_cli`) decide alike.
+#[test]
+fn a_request_is_decided_by_its_path_against_the_boundary() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-request-path-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = |name: &str, url: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"example.com/api/**\"])\n    match h.get({url}) {{\n        \
+                 Ok(body) => out.println(\"got\")\n        Err(e) => out.println(\"no\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let scoped = vec!["console".to_string(), "net=example.com/api/**".to_string()];
+    let whole = vec!["console".to_string(), "net=example.com".to_string()];
+
+    let outside = program("outside", "\"https://example.com/admin?x=1\"");
+    assert_eq!(required(&outside), ["console", "net=example.com/api/**"], "a request is decided, not typed");
+    let (code, v) = within(&outside, &scoped);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert_eq!(
+        (v["counterexample"]["grant"].as_str(), v["counterexample"]["at"]["line"].as_u64()),
+        (Some("net=example.com/admin"), Some(6)),
+        "named by the narrowest line, at the request's call: {v:#}"
+    );
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("the path `/admin`"), "{v:#}");
+    assert_eq!(within(&outside, &whole).1["result"], "within", "a whole host takes every path");
+
+    let inside = program("inside", "\"https://example.com/api/v1/items\"");
+    assert_eq!(within(&inside, &scoped).1["result"], "within");
+
+    let computed = program("computed", "\"https://example.com/\" + \"api\"");
+    let (code, v) = within(&computed, &scoped);
+    assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "{v:#}");
+    assert_eq!(within(&computed, &whole).1["result"], "within", "a computed URL under whole hosts: the mint decides");
+
+    // A URL the egress client will not read is refused at its call whatever is granted, and said so in its words.
+    let plain = program("plain", "\"http://example.com/api/x\"");
+    let (code, v) = within(&plain, &whole);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("only `https://` is fetched"), "{v:#}");
+
+    // A package: the request is made in another module than the mint, by the checker's types there.
+    let pkg = dir.join("pkg");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\nnet = [\"example.com\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src/main.delulu"),
+        "module pkg\n\nimport pkg.net\n\nfn main(root: Root) ! {Net, Write} {\n    let r = ping(root.http([\"example.com/api/**\"]))\n    \
+         root.console().println(\"done\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src/net.delulu"),
+        "module pkg.net\n\npub fn ping(c: Cap[Http]) -> Result[Str, NetErr] ! {Net} {\n    c.get(\"https://example.com/admin\")\n}\n",
+    )
+    .unwrap();
+    let (code, v) = within(&pkg.to_string_lossy(), &scoped);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert_eq!(v["counterexample"]["grant"], "net=example.com/admin", "{v:#}");
+    assert!(v["counterexample"]["at"]["file"].as_str().is_some_and(|f| f.ends_with("net.delulu")), "{v:#}");
+    assert_eq!(within(&pkg.to_string_lossy(), &whole).1["result"], "within");
+    let _ = std::fs::remove_dir_all(&dir);
+}

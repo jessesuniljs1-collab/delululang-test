@@ -8901,3 +8901,15 @@ Green: the binary's unit tests and `cli`, `within_cli`, `deploy_cli`, `deploy_pl
 `grants_cli`, `guest_cli`, `sandbox_openshell_cli`, `schema_cli`, `mcp_cli`, `lsp_cli`, `secret_verify_cli`: 13 targets,
 357 passed, 0 failed, 1 ignored. Clippy stamped. Survey and doctor: in the commit message.
 
+**The same question, asked of paths (D-V2-181).** A program minting `example.com/api/**` that requests
+`https://example.com/admin` was *within* `net=example.com/api/**`; the run refuses the request at its call (P9-05 (a)).
+`--within` decided the mint and never the requests. Each request the checker types is now decided against the boundary's
+`net` entries by the call's own reading (`prim::host_of`, `path_of`, `netscope::judge_all`), in a file, in a package (each
+module by its own types) and in `deploy plan`. Witnessed: `within_cli` `a_request_is_decided_by_its_path_against_the_boundary`
+red on the previous code, and `deploy_cli` `a_request_outside_the_profiles_path_scope_is_refused`, whose plan the previous
+code approved. Mutants red: outside-path *within*, a package's requests not wired, a computed URL always *within*, the
+unreadable-URL arm removed. A `typed` flag kept requests out of `--grants`; its mutant survived (`--grants`' walk has
+none), and it was taken out. `deploy_plan_adversarial`'s fixture requested `http://example.com`, which the run refuses
+("only `https://` is fetched"); five of its tests went red with a misleading reason. Such a URL is now refused in the
+client's words, and the fixture requests `https://example.com`, its assertions unchanged.
+
