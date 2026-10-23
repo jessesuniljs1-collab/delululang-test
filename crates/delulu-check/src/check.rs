@@ -197,6 +197,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
         too_large_at: None,
+        var_names: VarNames::default(),
     };
     // BEFORE anything lowers a type: validate the alias declarations themselves. Cycles must be
     // known first (`lower_type` expands an alias by recursing, so a cycle is a stack overflow, not a
@@ -407,6 +408,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
         too_large_at: None,
+        var_names: VarNames::default(),
     };
     let ty = checker.lower_type(t, &Genv::default(), &mut FnFacts::default());
     if let Some(d) = checker.diags.iter().find(|d| d.is_error()) {
@@ -450,6 +452,34 @@ struct Checker<'a> {
     /// Where a type was first too large to write out (RW 2.3, D-V2-179): the expression being checked, or the node
     /// being settled, when the inference context first refused one. The program is refused there with DL0211.
     too_large_at: Option<Span>,
+    /// The names the author wrote for the rigid generics of the bodies checked (GENERIC-RIGID-1), so a mismatch names
+    /// `T` and `e` rather than `'t0` and `'r0`.
+    var_names: VarNames,
+}
+
+/// Rigid generics' declared names, by variable number (GENERIC-RIGID-1).
+#[derive(Default)]
+struct VarNames {
+    types: HashMap<u32, String>,
+    rows: HashMap<u32, String>,
+}
+
+/// The declaration table's names, and the rigid generics' names beside them, for printing a type.
+struct NamesWithVars<'a> {
+    table: &'a DeclTable,
+    vars: &'a VarNames,
+}
+
+impl crate::ty::TypeNames for NamesWithVars<'_> {
+    fn type_name(&self, id: crate::ty::TypeDefId) -> Option<&str> {
+        self.table.type_name(id)
+    }
+    fn type_var_name(&self, v: u32) -> Option<&str> {
+        self.vars.types.get(&v).map(String::as_str)
+    }
+    fn row_var_name(&self, v: u32) -> Option<&str> {
+        self.vars.rows.get(&v).map(String::as_str)
+    }
 }
 
 /// Per-function-body checking context.
@@ -501,7 +531,7 @@ impl<'a> Checker<'a> {
         let Some(sig) = self.table.fns.get(&f.name.name).cloned() else {
             return;
         };
-        let genv = self.make_genv(&sig);
+        let genv = self.make_body_genv(&sig);
 
         // Lower the signature.
         let param_types: Vec<Type> = f.params.iter().map(|p| self.lower_type(&p.ty, &genv, &mut FnFacts::default())).collect();
@@ -573,16 +603,17 @@ impl<'a> Checker<'a> {
         let Some(adef) = self.table.actors.get(&a.name.name).cloned() else { return };
 
         // Actor generics: row-kinded when they appear as a row tail anywhere in a member
-        // signature (the Promise[T] + `! e` pattern), type-kinded otherwise.
+        // signature (the Promise[T] + `! e` pattern), type-kinded otherwise. Rigid in the members' bodies, as a
+        // function's are in its own (GENERIC-RIGID-1): `spawn` picks them, the body holds for every pick.
         let row_kinded = actor_row_kinded_generics(&adef);
         let mut genv = Genv::default();
         let mut targs: Vec<Type> = Vec::new();
         for g in &adef.generics {
             if row_kinded.contains(g) {
-                let v = self.cx.fresh_row_var();
+                let v = self.rigid_row_named(g);
                 genv.rows.insert(g.clone(), v);
             } else {
-                let v = self.cx.fresh_type();
+                let v = self.rigid_type_named(g);
                 genv.types.insert(g.clone(), v.clone());
                 targs.push(v);
             }
@@ -1028,15 +1059,39 @@ impl<'a> Checker<'a> {
     }
 
     fn make_genv(&mut self, sig: &FnSig) -> Genv {
+        self.genv_for(sig, false)
+    }
+
+    /// The generics of the function whose BODY is being checked: rigid (GENERIC-RIGID-1, D-V2-184). The caller picks
+    /// `T` and `e`; the body must hold for every choice, so it may not decide either — not `T := Int`, not `e := {}`.
+    fn make_body_genv(&mut self, sig: &FnSig) -> Genv {
+        self.genv_for(sig, true)
+    }
+
+    fn rigid_type_named(&mut self, name: &str) -> Type {
+        let t = self.cx.fresh_rigid_type();
+        if let Type::Var(crate::ty::TypeVar(v)) = t {
+            self.var_names.types.insert(v, name.to_string());
+        }
+        t
+    }
+
+    fn rigid_row_named(&mut self, name: &str) -> RowVar {
+        let v = self.cx.fresh_rigid_row_var();
+        self.var_names.rows.insert(v.0, name.to_string());
+        v
+    }
+
+    fn genv_for(&mut self, sig: &FnSig, rigid: bool) -> Genv {
         let mut genv = Genv::default();
         for g in &sig.generics {
             match sig.gkinds.get(g).copied().unwrap_or(GKind::Type) {
                 GKind::Type => {
-                    let v = self.cx.fresh_type();
+                    let v = if rigid { self.rigid_type_named(g) } else { self.cx.fresh_type() };
                     genv.types.insert(g.clone(), v);
                 }
                 GKind::Row => {
-                    let v = self.cx.fresh_row_var();
+                    let v = if rigid { self.rigid_row_named(g) } else { self.cx.fresh_row_var() };
                     genv.rows.insert(g.clone(), v);
                 }
             }
@@ -3758,7 +3813,7 @@ impl<'a> Checker<'a> {
     /// Every message that shows a type goes through here. A `Record`/`Sum` is stored as a table
     /// index, so without the table the printer can only say `T11` — which is what C12 was.
     fn ty(&self, t: &Type) -> String {
-        t.show(self.table).to_string()
+        t.show(&NamesWithVars { table: self.table, vars: &self.var_names }).to_string()
     }
 
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span, msg: &str) {

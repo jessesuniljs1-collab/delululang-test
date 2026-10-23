@@ -377,15 +377,16 @@ impl InferCtx {
                 }
             }
             (Some(rv), None) => {
-                // {A | rv} = B (closed). Equality requires A ⊆ B; bind rv := B \ A.
-                if !ra.effects.is_subset(&rb.effects) {
+                // {A | rv} = B (closed). Equality requires A ⊆ B; bind rv := B \ A. A rigid rv is no closed row
+                // (GENERIC-RIGID-1): `e` is whatever the caller's closure performs, so the body may not close it.
+                if !ra.effects.is_subset(&rb.effects) || self.rigid_row(rv) {
                     return Err(if expanded { UnifyError::RowConflict } else { UnifyError::RowMismatch });
                 }
                 let remainder: BTreeSet<Effect> = rb.effects.difference(&ra.effects).cloned().collect();
                 self.bind_row(rv, Row::closed(remainder))
             }
             (None, Some(rv)) => {
-                if !rb.effects.is_subset(&ra.effects) {
+                if !rb.effects.is_subset(&ra.effects) || self.rigid_row(rv) {
                     return Err(if expanded { UnifyError::RowConflict } else { UnifyError::RowMismatch });
                 }
                 let remainder: BTreeSet<Effect> = ra.effects.difference(&rb.effects).cloned().collect();
@@ -398,6 +399,17 @@ impl InferCtx {
                     } else {
                         Err(UnifyError::RowConflict)
                     }
+                } else if self.rigid_row(rv) || self.rigid_row(sv) {
+                    // A rigid tail stays; only a flexible one is bound, to the rigid side's tail and the effects the
+                    // flexible side lacks. The flexible side's own extra effects would have to be inside the rigid
+                    // tail, which the body cannot know: a mismatch. Two different rigid tails never meet.
+                    let (fixed, flex, fixed_effects, flex_effects) =
+                        if self.rigid_row(rv) { (rv, sv, &ra.effects, &rb.effects) } else { (sv, rv, &rb.effects, &ra.effects) };
+                    if self.rigid_row(flex) || !flex_effects.is_subset(fixed_effects) {
+                        return Err(if expanded { UnifyError::RowConflict } else { UnifyError::RowMismatch });
+                    }
+                    let remainder: BTreeSet<Effect> = fixed_effects.difference(flex_effects).cloned().collect();
+                    self.bind_row(flex, Row { effects: remainder, tail: Some(fixed) })
                 } else {
                     // {A | rv} = {B | sv}: introduce a fresh shared tail.
                     let fresh = self.fresh_row_var();
