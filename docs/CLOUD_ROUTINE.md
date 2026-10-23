@@ -88,8 +88,22 @@ starting Claude Code with its own `--settings` file. The owner then set `CLAUDE_
 routine's cloud environment ("Default", `env_012Mxeiw6zvfyxPy9ZEEFf3p`; interactive cloud sessions in that environment
 get it too). **The first run after that date says in its sync-log entry which effort the session showed.** If it is
 still `medium`, the platform sets it, and the entry says so. The same log said "No setup script configured", so each
-run installs the toolchain on its first `cargo` call; the owner may add one (`rustup toolchain install 1.96.1 --profile
-minimal -c clippy -c rustfmt`, then `cargo fetch --locked`).
+run installed the toolchain on its first `cargo` call. **The owner added one the same day** (12:02 IST, the Default
+environment's setup script):
+
+```bash
+#!/bin/bash
+rustup toolchain install 1.96.1 --profile minimal -c clippy -c rustfmt || true
+for d in "$PWD" /home/user/delululang-test; do
+  if [ -f "$d/Cargo.toml" ]; then (cd "$d" && cargo fetch --locked) || true; break; fi
+done
+exit 0
+```
+
+Per the cloud environment's documentation (read 2026-10-23), a setup script that exits non-zero stops the session from
+starting, so every step ends in `|| true` and the script in `exit 0`. Its result is cached once the session has run for
+about five minutes, and it runs again when the script changes or after about seven days. A run's log shows whether it
+ran. The first run after 2026-10-23 records that in its sync-log entry, with the effort.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
