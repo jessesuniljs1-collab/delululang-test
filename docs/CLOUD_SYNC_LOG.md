@@ -5592,3 +5592,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** WASM `% 0` reports overflow (A3); `--within` and a use path escaping its capability (B9); a dependency
   pin repair that writes invalid TOML (A2); `--report-out` under `--sandbox` (A18); the remaining campaign papercuts.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — `% 0` faults alike on both engines (RW 4.83); three stale doc passages (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign (A3, B10).
+- Branch: `laptop/wasm-rem` (on `laptop/const-check` `0f79ac4`, PR #67)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `docs/for-agents.md`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
+  `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
+- Survey and doctor (after the last edit): in the commit message.
