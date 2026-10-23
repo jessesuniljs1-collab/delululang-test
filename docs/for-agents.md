@@ -725,8 +725,8 @@ overstate it downstream:
   `request-too-large`). A 301, 302 or 303 after it is followed as a GET with no body, judged as a GET; a 307 or 308
   keeps the POST and its body, only to the URL's own origin (elsewhere: reason `body-elsewhere`). Each hop's report
   record names its `method` when it is not a GET, and under `--broker daemon`/`--lease` the chain's `use` record does
-  too, beside `url_path` (OCSF `http_request.http_method`). From a `--sandbox` guest the host performs it. Not yet
-  under `--engine wasm`. `http.post_with_secret(url, headers, header, secret, body)` is the authenticated POST: the
+  too, beside `url_path` (OCSF `http_request.http_method`). From a `--sandbox` guest the host performs it, and under
+  `--engine wasm` (since 2026-10-23) the WASM host does, its custody asked by the method. `http.post_with_secret(url, headers, header, secret, body)` is the authenticated POST: the
   secret as `get_with_secret` sends it (its audience only; under `--broker daemon`/`--lease` the broker's `send`), the
   body as `post`'s; a capability minted without POST refuses it before the broker is asked for a byte.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,

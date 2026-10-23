@@ -301,3 +301,6 @@ skip branch, §11.2).
   report's hop names it. And `post_with_secret`, the authenticated POST (the secret to its audience only, the broker's
   `send` under the daemon). Conformance anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`,
   `PRIM_TABLE_VERSION` 8. Next: both on the WASM engine.
+  **And `post` on the WASM engine, the same day:** the import `delulu:cap.http_post(cap, url, headers, desc, body, …)`,
+  performed by the interpreter's own `post`; the host's gate asks the custody by its method (`custody_allows_by`).
+  Next: `post_with_secret` on the WASM engine.

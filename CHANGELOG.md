@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `http.post` on the WASM engine, 2026-10-23
+
+- **Added: `Cap[Http].post` compiles to WebAssembly** (`--engine wasm`, `build --target wasm`). The host performs it by
+  the interpreter's own `post`, and its gate asks the custody by its method, as the interpreter's does: under
+  `--broker daemon` the chain records the POST's `use` with its `method`. `post_with_secret` stays on the interpreter.
+
 ## Unreleased — `http.post` and `http.post_with_secret`, 2026-10-23
 
 - **Added: `Cap[Http].post(url, headers, body)`, the first request that is not a GET** (P9-05 (d), D-V2-183, RW 2.12).

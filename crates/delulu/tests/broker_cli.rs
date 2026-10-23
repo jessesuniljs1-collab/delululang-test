@@ -686,9 +686,9 @@ fn a_pattern_net_grant_is_honored_under_the_daemon_as_embedded() {
 
 /// P9-05 (d), D-V2-183: a POST is judged by its method under the daemon as embedded. Granted
 /// `net.special=*.example.invalid:POST/v1/**` (`.invalid` never resolves, so nothing leaves the machine), a POST under
-/// `/v1` reaches the egress client under both custodies and from a sandboxed guest; a GET there is refused DL0904 at the
-/// call, in words about its method. The daemon's chain names the POST's `method` beside its `url_path`, allowed; the
-/// GET's use names none and is refused.
+/// `/v1` reaches the egress client under both custodies, from a sandboxed guest and on the WASM engine; a GET there is
+/// refused DL0904 at the call, in words about its method. The daemon's chain names the POST's `method` beside its
+/// `url_path`, allowed; the GET's use names none and is refused.
 #[test]
 fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
     let base = std::env::temp_dir().join(format!("delulu_bpost_{}", std::process::id()));
@@ -722,11 +722,14 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
         assert!(!stdout(&o).contains("answered"), "{extra:?}: the program never got an answer: {}", stdout(&o));
     };
     check(&[]);
+    check(&["--engine", "wasm"]);
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let guard = DaemonGuard { state: state.clone() };
     check(&["--broker", "daemon"]);
     check(&["--broker", "daemon", "--sandbox"]);
+    // The WASM host's gate asks its custody by the method too (`custody_allows_by`).
+    check(&["--broker", "daemon", "--engine", "wasm"]);
     let audit_dir = state.join("audit").to_string_lossy().to_string();
     let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
@@ -739,7 +742,11 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
         .map(|r| (r["authority"]["method"].as_str().map(str::to_string), r["decision"].as_str().unwrap().to_string()))
         .collect();
     let (post, get) = ((Some("POST".to_string()), "allow".to_string()), (None, "deny".to_string()));
-    assert_eq!(uses, [post.clone(), get.clone(), post, get], "the interpreter's two runs, then the guest's: {v:#}");
+    assert_eq!(
+        uses,
+        [post.clone(), get.clone(), post.clone(), get.clone(), post, get],
+        "the interpreter's two runs, then the guest's, then the WASM engine's: {v:#}"
+    );
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }

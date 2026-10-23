@@ -9075,3 +9075,18 @@ both secret-carrying methods to it. `--within`'s walk sees the send (the secret 
 - Mutants, each red: Q1 the pre-judgement as a GET, Q3 the walk blind to the send, Q4 the dispatch not routing the
   broker-held secret.
 - Conformance: anchor `ref.prim.http.post_with_secret`, four witnesses; 357/357.
+
+## 2026-10-23 (night, later) — the laptop: `http.post` on the WASM engine
+
+**What.** The import `delulu:cap.http_post(cap, url, headers, desc, body, file, start, end)` is in the module only where
+a `Cap[Http]` is minted and `post` is called. Its index follows `http_get_with_secret`'s, so a module without `post` is
+byte-identical to before. The host reads the URL and body, reifies the headers as `get_with_secret`'s are, asks the
+custody with the method (`custody_allows_by`, beside `custody_allows_at`, which now asks it with none) and performs the
+interpreter's own `post`. `post_with_secret` stays on the interpreter.
+
+**Evidence.**
+- `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now also runs `--engine wasm`, embedded
+  and under the daemon. The chain gains the WASM run's `POST allow` and `GET deny`.
+- `delulu build --target wasm` of a POST program wrote 1,860 bytes, and its imports name `http_get` and `http_post`.
+  So the run compiled; it did not fall back to the interpreter.
+- Mutant red: the host's gate asking with no method.
