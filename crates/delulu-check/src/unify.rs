@@ -125,12 +125,8 @@ impl InferCtx {
             Type::List(inner) => Type::List(Box::new(self.apply_within(&inner, left)?)),
             Type::Option(inner) => Type::Option(Box::new(self.apply_within(&inner, left)?)),
             Type::Map(k, v) => Type::Map(Box::new(self.apply_within(&k, left)?), Box::new(self.apply_within(&v, left)?)),
-            Type::Result(o, e) => {
-                Type::Result(Box::new(self.apply_within(&o, left)?), Box::new(self.apply_within(&e, left)?))
-            }
-            Type::Record(id, args) => {
-                Type::Record(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?)
-            }
+            Type::Result(o, e) => Type::Result(Box::new(self.apply_within(&o, left)?), Box::new(self.apply_within(&e, left)?)),
+            Type::Record(id, args) => Type::Record(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
             Type::Sum(id, args) => Type::Sum(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
             Type::Fn { params, ret, row } => Type::Fn {
                 params: params.iter().map(|p| self.apply_within(p, left)).collect::<Option<_>>()?,
@@ -139,9 +135,7 @@ impl InferCtx {
             },
             Type::Secret(inner) => Type::Secret(Box::new(self.apply_within(&inner, left)?)),
             Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_within(&inner, left)?)),
-            Type::Actor(name, args) => {
-                Type::Actor(name, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?)
-            }
+            Type::Actor(name, args) => Type::Actor(name, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
             other => other,
         })
     }

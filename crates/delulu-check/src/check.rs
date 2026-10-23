@@ -3643,12 +3643,9 @@ impl<'a> Checker<'a> {
                     return false;
                 }
                 let def = self.table.type_def(*id);
-                // No argument is opaque, so the definition's fields are asked only what they add: each parameter stands
-                // for `Unit`, which adds nothing, and an argument is not walked again for every field that names its
-                // parameter (RW 2.3: twice per `Pair` level, so `a == b` of two 14-level pairs took a second).
                 let mut genv = Genv::default();
-                for g in &def.generics {
-                    genv.types.insert(g.clone(), Type::Unit);
+                for (g, a) in def.generics.iter().zip(args) {
+                    genv.types.insert(g.clone(), a.clone());
                 }
                 let opaque = match &def.kind {
                     TypeDefKind::Record(fields) => fields.iter().any(|(_, ft)| self.type_expr_opaque(ft, &genv, fns, visiting)),
