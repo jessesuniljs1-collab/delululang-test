@@ -196,6 +196,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
+        too_large_at: None,
     };
     // BEFORE anything lowers a type: validate the alias declarations themselves. Cycles must be
     // known first (`lower_type` expands an alias by recursing, so a cycle is a stack overflow, not a
@@ -293,9 +294,17 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // node type through the final substitution, and collapse each node's raw effect accumulator to
     // its resolved effect set (DIR §2.3). This runs after all functions are checked so that later
     // unifications are reflected in earlier nodes' types.
+    //
+    // In node order, so that when a type is too large to write out (RW 2.3) the node named is the same on every run.
     let mut node_types: HashMap<NodeId, Type> = HashMap::with_capacity(checker.node_types_raw.len());
-    for (id, raw) in &checker.node_types_raw {
+    let mut settle_order: Vec<&NodeId> = checker.node_types_raw.keys().collect();
+    settle_order.sort_unstable_by_key(|id| id.0);
+    for id in settle_order {
+        let (raw, span) = &checker.node_types_raw[id];
         node_types.insert(*id, checker.cx.apply_type(raw));
+        if checker.too_large_at.is_none() && checker.cx.too_large() {
+            checker.too_large_at = Some(*span);
+        }
     }
     let mut node_rows: HashMap<NodeId, Row> = HashMap::with_capacity(checker.node_row_accs.len());
     for (id, acc) in &checker.node_row_accs {
@@ -306,8 +315,29 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // over the settled types so it never participates in unification (build-order deviation 4).
     let fn_types_settled: HashMap<String, Type> =
         checker.fn_types.iter().map(|(k, v)| (k.clone(), checker.cx.apply_type(v))).collect();
-    let (rcap_diags, iso_moves) = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
-    checker.diags.extend(rcap_diags);
+    // A type too large to write out (RW 2.3, D-V2-179) refuses the program: its types were settled only to their top
+    // past the limit, and the second axis does not read them.
+    let iso_moves = if checker.cx.too_large() {
+        let mut d = Diagnostic::error(
+            "DL0211",
+            format!(
+                "a type here is too large to check: written out it has more than {} parts (or the module's large types \
+                 more than {} in all) — a value built from itself, like `Pair {{ l: a, r: a }}` at every step, doubles \
+                 its type each time; give it a recursive type (`type Tree = Leaf | Node(Tree, Tree)`) instead",
+                crate::unify::TYPE_PARTS_LIMIT,
+                crate::unify::TYPE_PARTS_TOTAL
+            ),
+        );
+        if let Some(span) = checker.too_large_at {
+            d = d.with_span(span, "this type is too large to write out");
+        }
+        checker.diags.push(d);
+        HashSet::new()
+    } else {
+        let (rcap_diags, iso_moves) = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
+        checker.diags.extend(rcap_diags);
+        iso_moves
+    };
 
     // A body's row tails settle only now; each resolves to the concrete effects it bound to.
     let performed: HashMap<String, BTreeSet<Effect>> = checker
@@ -358,6 +388,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
+        too_large_at: None,
     };
     let ty = checker.lower_type(t, &Genv::default(), &mut FnFacts::default());
     if let Some(d) = checker.diags.iter().find(|d| d.is_error()) {
@@ -396,8 +427,11 @@ struct Checker<'a> {
     /// diagnostic explains it. A variable from a generic or an unannotated binding is never here,
     /// so `fn apply[F](f: F, x: Int) { f(x) }` is still DL0404.
     poisoned: std::collections::HashSet<crate::ty::TypeVar>,
-    node_types_raw: HashMap<NodeId, Type>,
+    node_types_raw: HashMap<NodeId, (Type, Span)>,
     node_row_accs: HashMap<NodeId, RowAcc>,
+    /// Where a type was first too large to write out (RW 2.3, D-V2-179): the expression being checked, or the node
+    /// being settled, when the inference context first refused one. The program is refused there with DL0211.
+    too_large_at: Option<Span>,
 }
 
 /// Per-function-body checking context.
@@ -1284,7 +1318,7 @@ impl<'a> Checker<'a> {
         }
         ctx.pop_scope();
         // Record the block node in the DIR side tables (§2.3): its value type and accumulated row.
-        self.node_types_raw.insert(block.id, value_ty.clone());
+        self.node_types_raw.insert(block.id, (value_ty.clone(), block.span));
         self.node_row_accs.insert(block.id, acc.clone());
         (value_ty, acc)
     }
@@ -1323,7 +1357,10 @@ impl<'a> Checker<'a> {
     /// side effect — it never changes what the checker computes or reports).
     fn check_expr(&mut self, e: &Expr, ctx: &mut FnCtx) -> (Type, RowAcc) {
         let (ty, acc) = self.check_expr_inner(e, ctx);
-        self.node_types_raw.insert(e.id(), ty.clone());
+        if self.too_large_at.is_none() && self.cx.too_large() {
+            self.too_large_at = Some(e.span());
+        }
+        self.node_types_raw.insert(e.id(), (ty.clone(), e.span()));
         self.node_row_accs.insert(e.id(), acc.clone());
         (ty, acc)
     }

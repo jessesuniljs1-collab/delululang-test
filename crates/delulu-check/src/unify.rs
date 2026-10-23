@@ -7,7 +7,8 @@
 //! - **R-3b:** a row variable that would receive conflicting closed bindings is a *conflict*
 //!   (mapped to DL0504 by the checker), never a union-merge.
 
-use std::collections::BTreeSet;
+use std::cell::Cell;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::ty::{Effect, Row, RowVar, Type, TypeVar};
 
@@ -25,15 +26,39 @@ pub enum UnifyError {
     Occurs,
 }
 
+/// The most parts one type may have written out (RW 2.3, D-V2-179). A binding is shared by every place its variable
+/// stands, so a type of a few nodes through its variables can be exponentially large written out: `let a1 = Pair { l:
+/// a0, r: a0 }` … `a22` is ~4 million parts, and every walk that wrote one out doubled with each line (22 lines, 5.8 s).
+/// A type past this is written out only to its top, and the program is refused (DL0211).
+pub const TYPE_PARTS_LIMIT: usize = 100_000;
+
+/// A type written out in more parts than this counts toward [`TYPE_PARTS_TOTAL`]; one this small is written out
+/// whatever the total, and is all a walk writes out once a type has been refused.
+pub const TYPE_PARTS_FREE: usize = 1_000;
+
+/// The most parts the module's large types (past [`TYPE_PARTS_FREE`]) may have written out in all: the bound on many
+/// references to one type just under [`TYPE_PARTS_LIMIT`].
+pub const TYPE_PARTS_TOTAL: u64 = 20_000_000;
+
 /// The inference substitution: bindings for type and row variables.
 pub struct InferCtx {
     type_bindings: Vec<Option<Type>>,
     row_bindings: Vec<Option<Row>>,
+    /// Parts written out so far by types past [`TYPE_PARTS_FREE`].
+    written: Cell<u64>,
+    /// Whether a type was too large to write out (`TYPE_PARTS_LIMIT`, `TYPE_PARTS_TOTAL`); the checker refuses the
+    /// program when one was.
+    too_large: Cell<bool>,
 }
 
 impl InferCtx {
     pub fn new() -> Self {
-        InferCtx { type_bindings: Vec::new(), row_bindings: Vec::new() }
+        InferCtx { type_bindings: Vec::new(), row_bindings: Vec::new(), written: Cell::new(0), too_large: Cell::new(false) }
+    }
+
+    /// Whether a type has been too large to write out (RW 2.3): the checker refuses the program with DL0211.
+    pub fn too_large(&self) -> bool {
+        self.too_large.get()
     }
 
     pub fn fresh_type(&mut self) -> Type {
@@ -66,25 +91,59 @@ impl InferCtx {
         cur
     }
 
-    /// Fully substitute a type (for final reporting/side tables).
+    /// Fully substitute a type (for final reporting/side tables), within [`TYPE_PARTS_LIMIT`] and
+    /// [`TYPE_PARTS_TOTAL`]. A type past either is returned with only its top resolved and marks the context
+    /// [`too_large`](Self::too_large), so the program is refused; from then on a type is written out only within
+    /// [`TYPE_PARTS_FREE`], which keeps the rest of the check as cheap as an ordinary program's.
     pub fn apply_type(&self, t: &Type) -> Type {
-        match self.resolve_type_shallow(t) {
-            Type::List(inner) => Type::List(Box::new(self.apply_type(&inner))),
-            Type::Option(inner) => Type::Option(Box::new(self.apply_type(&inner))),
-            Type::Map(k, v) => Type::Map(Box::new(self.apply_type(&k)), Box::new(self.apply_type(&v))),
-            Type::Result(o, e) => Type::Result(Box::new(self.apply_type(&o)), Box::new(self.apply_type(&e))),
-            Type::Record(id, args) => Type::Record(id, args.iter().map(|a| self.apply_type(a)).collect()),
-            Type::Sum(id, args) => Type::Sum(id, args.iter().map(|a| self.apply_type(a)).collect()),
+        let budget = if self.too_large.get() {
+            TYPE_PARTS_FREE
+        } else {
+            let total_left = TYPE_PARTS_TOTAL.saturating_sub(self.written.get());
+            TYPE_PARTS_LIMIT.min(usize::try_from(total_left).unwrap_or(usize::MAX)).max(TYPE_PARTS_FREE)
+        };
+        let mut left = budget;
+        match self.apply_within(t, &mut left) {
+            Some(full) => {
+                let parts = budget - left;
+                if parts > TYPE_PARTS_FREE {
+                    self.written.set(self.written.get().saturating_add(parts as u64));
+                }
+                full
+            }
+            None => {
+                self.too_large.set(true);
+                self.resolve_type_shallow(t)
+            }
+        }
+    }
+
+    /// `t` written out in at most `left` parts; `None` when it needs more.
+    fn apply_within(&self, t: &Type, left: &mut usize) -> Option<Type> {
+        *left = left.checked_sub(1)?;
+        Some(match self.resolve_type_shallow(t) {
+            Type::List(inner) => Type::List(Box::new(self.apply_within(&inner, left)?)),
+            Type::Option(inner) => Type::Option(Box::new(self.apply_within(&inner, left)?)),
+            Type::Map(k, v) => Type::Map(Box::new(self.apply_within(&k, left)?), Box::new(self.apply_within(&v, left)?)),
+            Type::Result(o, e) => {
+                Type::Result(Box::new(self.apply_within(&o, left)?), Box::new(self.apply_within(&e, left)?))
+            }
+            Type::Record(id, args) => {
+                Type::Record(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?)
+            }
+            Type::Sum(id, args) => Type::Sum(id, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?),
             Type::Fn { params, ret, row } => Type::Fn {
-                params: params.iter().map(|p| self.apply_type(p)).collect(),
-                ret: Box::new(self.apply_type(&ret)),
+                params: params.iter().map(|p| self.apply_within(p, left)).collect::<Option<_>>()?,
+                ret: Box::new(self.apply_within(&ret, left)?),
                 row: self.apply_row(&row),
             },
-            Type::Secret(inner) => Type::Secret(Box::new(self.apply_type(&inner))),
-            Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_type(&inner))),
-            Type::Actor(name, args) => Type::Actor(name, args.iter().map(|a| self.apply_type(a)).collect()),
+            Type::Secret(inner) => Type::Secret(Box::new(self.apply_within(&inner, left)?)),
+            Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_within(&inner, left)?)),
+            Type::Actor(name, args) => {
+                Type::Actor(name, args.iter().map(|a| self.apply_within(a, left)).collect::<Option<_>>()?)
+            }
             other => other,
-        }
+        })
     }
 
     /// Resolve a row: expand bound tail variables, accumulating their effects. Returns the
@@ -124,6 +183,20 @@ impl InferCtx {
     // ----- unification -----------------------------------------------------
 
     pub fn unify_type(&mut self, a: &Type, b: &Type) -> Result<(), UnifyError> {
+        self.unify_in(a, b, &mut HashSet::new())
+    }
+
+    /// `unify_type`, each pair of variables unified once per call (RW 2.3). A variable stands for its binding at every
+    /// place it occurs, so two types of a few nodes through their variables (`a22` and a twin built the same way) were
+    /// unified as the exponential trees they are written out. A pair met again either was unified (bindings only grow,
+    /// so it still is) or failed, and a failure ends the call; a pair cannot meet itself inside its own binding, which
+    /// the occurs check rules out.
+    fn unify_in(&mut self, a: &Type, b: &Type, met: &mut HashSet<(u32, u32)>) -> Result<(), UnifyError> {
+        if let (Type::Var(TypeVar(x)), Type::Var(TypeVar(y))) = (a, b) {
+            if x == y || !met.insert((*x, *y)) {
+                return Ok(());
+            }
+        }
         let a = self.resolve_type_shallow(a);
         let b = self.resolve_type_shallow(b);
         match (&a, &b) {
@@ -148,24 +221,24 @@ impl InferCtx {
             | (Type::Str, Type::Str)
             | (Type::Unit, Type::Unit)
             | (Type::Root, Type::Root) => Ok(()),
-            (Type::List(x), Type::List(y)) => self.unify_type(x, y),
-            (Type::Option(x), Type::Option(y)) => self.unify_type(x, y),
+            (Type::List(x), Type::List(y)) => self.unify_in(x, y, met),
+            (Type::Option(x), Type::Option(y)) => self.unify_in(x, y, met),
             (Type::Map(k1, v1), Type::Map(k2, v2)) => {
-                self.unify_type(k1, k2)?;
-                self.unify_type(v1, v2)
+                self.unify_in(k1, k2, met)?;
+                self.unify_in(v1, v2, met)
             }
             (Type::Result(x1, x2), Type::Result(y1, y2)) => {
-                self.unify_type(x1, y1)?;
-                self.unify_type(x2, y2)
+                self.unify_in(x1, y1, met)?;
+                self.unify_in(x2, y2, met)
             }
-            (Type::Secret(x), Type::Secret(y)) => self.unify_type(x, y),
+            (Type::Secret(x), Type::Secret(y)) => self.unify_in(x, y, met),
             (Type::ForeignPtr, Type::ForeignPtr) | (Type::PyObj, Type::PyObj) => Ok(()),
             (Type::Foreign(x), Type::Foreign(y)) if x == y => Ok(()),
             // Actor references (Stage 7) are nominal by name; their type arguments unify
             // structurally (a `Cell[Int]` reference is not a `Cell[Str]` reference).
             (Type::Actor(x, a1), Type::Actor(y, a2)) if x == y && a1.len() == a2.len() => {
                 for (p, q) in a1.iter().zip(a2.iter()) {
-                    self.unify_type(p, q)?;
+                    self.unify_in(p, q, met)?;
                 }
                 Ok(())
             }
@@ -173,14 +246,14 @@ impl InferCtx {
             // inference position: `let p: Plugin[Contained] = load(…)` pins the `C` that `load`
             // returned as a fresh variable (deviation 4). `Verified`/`Contained` are nominal and
             // NEVER unify with each other — the class is exact, never coerced (invariant 29).
-            (Type::Plugin(x), Type::Plugin(y)) => self.unify_type(x, y),
+            (Type::Plugin(x), Type::Plugin(y)) => self.unify_in(x, y, met),
             (Type::Verified, Type::Verified) | (Type::Contained, Type::Contained) => Ok(()),
             (Type::Cap(x), Type::Cap(y)) if x == y => Ok(()),
             (Type::Record(id1, a1), Type::Record(id2, a2)) | (Type::Sum(id1, a1), Type::Sum(id2, a2))
                 if id1 == id2 && a1.len() == a2.len() =>
             {
                 for (x, y) in a1.iter().zip(a2) {
-                    self.unify_type(x, y)?;
+                    self.unify_in(x, y, met)?;
                 }
                 Ok(())
             }
@@ -188,9 +261,9 @@ impl InferCtx {
                 if p1.len() == p2.len() =>
             {
                 for (x, y) in p1.iter().zip(p2) {
-                    self.unify_type(x, y)?;
+                    self.unify_in(x, y, met)?;
                 }
-                self.unify_type(r1, r2)?;
+                self.unify_in(r1, r2, met)?;
                 // Row positions unify by equality (R-3): no subsumption, either variance.
                 self.unify_row(row1, row2)
             }
@@ -250,25 +323,21 @@ impl InferCtx {
     }
 
     fn occurs_type(&self, v: u32, t: &Type) -> bool {
-        self.occurs_in(v, t, &mut vec![false; self.type_bindings.len()])
+        self.occurs_in(v, t, &mut std::collections::HashSet::new())
     }
 
-    /// Whether the unbound variable `v` occurs in `t`, each bound variable followed once (RW 2.3): `explored[w]` marks a
+    /// Whether the unbound variable `v` occurs in `t`, each bound variable followed once (RW 2.3): `explored` holds each
     /// variable whose binding has been searched without finding `v`. A binding is shared by every place its variable
     /// stands, so `let a1 = Pair { l: a0, r: a0 }` … `a22` is a type of 22 nodes through its variables and ~4 million
     /// written out; followed at every place, each `let`'s check walked the whole tree, and 22 lines took 5.8 s.
-    fn occurs_in(&self, v: u32, t: &Type, explored: &mut [bool]) -> bool {
+    fn occurs_in(&self, v: u32, t: &Type, explored: &mut std::collections::HashSet<u32>) -> bool {
         match t {
             Type::Var(TypeVar(w)) => {
                 if *w == v {
                     return true;
                 }
-                let w = *w as usize;
-                match &self.type_bindings[w] {
-                    Some(bound) if !explored[w] => {
-                        explored[w] = true;
-                        self.occurs_in(v, bound, explored)
-                    }
+                match &self.type_bindings[*w as usize] {
+                    Some(bound) if explored.insert(*w) => self.occurs_in(v, bound, explored),
                     _ => false,
                 }
             }
