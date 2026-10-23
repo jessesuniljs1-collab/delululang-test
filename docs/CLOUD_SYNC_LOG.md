@@ -5387,3 +5387,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **What:** `channel.rs`'s test reader no longer sleeps a zero gap; RW 7.23 (b)'s `channel` test root-caused; (c) recorded; a trap in `HANDOFF.md` §11.5.
 - Files and folders: M `crates/delulu-runtime/src/channel.rs`, `crates/delulu/tests/plugin_load_cli.rs` (RW 7.23 (c) says why), `HANDOFF.md` (§11.5), `docs/REMAINING_WORK.md` (7.23), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (morning) — the launch branch takes #51-#53; the phase status catches up (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/launch-records` (on `master` `2349cff`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #53's run `39872356478` **success**, so #53 landed by fast-forward, master
+  `2349cff`. `launch/2.0.0` = **`0ef515f`**: master `05909ef..2349cff` merged in (#51-#53; one CHANGELOG section moved
+  under 2.0.0; the Survey rebuilt there, 1556 nodes, 16327 edges; clippy stamped; doctor ok; the gates green). Its release
+  dry run `39874335998` **success**; its `jobs=everything` `39874332895` **success** on 16 of 18 jobs, `test
+  (windows-latest)` and `heavy-gates` included, with `miri-slow` (delulu-check) and (delulu-broker) running. `e51b4f3`'s
+  `everything` `39865367900`: red on `test (windows-latest)`, RW 7.23 (c); its `miri-slow` (delulu-check) and (delulu-syntax) **success**, (delulu-broker) running.
+- **What:** `V2_PHASE_STATUS.md`'s REL row names the ten launch merges of 2026-10-21 to 2026-10-23.
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
