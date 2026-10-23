@@ -3603,19 +3603,22 @@ impl<'a> Checker<'a> {
 
     /// Structural opacity (R-5): Secret/Cap/Root, or a composite containing one.
     fn is_opaque(&self, t: &Type, visiting: &mut HashSet<TypeDefId>) -> bool {
-        self.opaque_for(t, false, visiting)
+        self.opaque_for(&self.cx.apply_type(t), false, visiting)
     }
 
     /// Does `t` have no structural equality — an opaque type anywhere in it, or a function (D-V2-166)? What `==`, `!=`,
     /// `assert_eq` and `List.contains` refuse with DL0605. A closure has a `str` (`<fn>`) but no equality: `Value::eq` has
     /// no answer for two of them, so `f == f` was admitted and answered `false` (EQ-FN-1).
     fn lacks_equality(&self, t: &Type) -> bool {
-        self.opaque_for(t, true, &mut HashSet::new())
+        self.opaque_for(&self.cx.apply_type(t), true, &mut HashSet::new())
     }
 
-    /// The walk behind `is_opaque` and `lacks_equality`; with `fns`, a function type counts too.
+    /// The walk behind `is_opaque` and `lacks_equality`; with `fns`, a function type counts too. `t` is written out
+    /// (`apply_type`) once, by the caller, and walked as it stands, each part once (RW 2.3): written out again at every
+    /// part, a type whose variables share their bindings was walked as its exponential tree. A variable left in it is
+    /// unbound, or stands for a part of a type too large to write out, whose program is refused (DL0211).
     fn opaque_for(&self, t: &Type, fns: bool, visiting: &mut HashSet<TypeDefId>) -> bool {
-        match self.cx.apply_type(t) {
+        match t {
             Type::Fn { .. } => fns,
             Type::Secret(_) | Type::Cap(_) | Type::Root => true,
             // R-5: ForeignPtr, PyObj, and a foreign lib handle are opaque (no str/==/serialize).
@@ -3626,23 +3629,26 @@ impl<'a> Checker<'a> {
             // Stage 7: an actor reference is opaque identity (tag) — no str, no ==, never
             // serialized. Identity comparison is a post-1.0 question, not an accident.
             Type::Actor(_, _) => true,
-            Type::List(inner) | Type::Option(inner) => self.opaque_for(&inner, fns, visiting),
+            Type::List(inner) | Type::Option(inner) => self.opaque_for(inner, fns, visiting),
             // A `Map` is opaque if EITHER side is. Added by pattern, not by instance: a new
             // composite type that forgets this arm falls into the `_` below, where opaque becomes
             // `false` and `Map[Str, Secret[Str]] == m` is silently admitted. That is the shape of
             // the skip-branch rule — write the case where the checker could not tell.
-            Type::Result(a, b) | Type::Map(a, b) => self.opaque_for(&a, fns, visiting) || self.opaque_for(&b, fns, visiting),
+            Type::Result(a, b) | Type::Map(a, b) => self.opaque_for(a, fns, visiting) || self.opaque_for(b, fns, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {
                 if args.iter().any(|a| self.opaque_for(a, fns, visiting)) {
                     return true;
                 }
-                if !visiting.insert(id) {
+                if !visiting.insert(*id) {
                     return false;
                 }
-                let def = self.table.type_def(id);
+                let def = self.table.type_def(*id);
+                // No argument is opaque, so the definition's fields are asked only what they add: each parameter stands
+                // for `Unit`, which adds nothing, and an argument is not walked again for every field that names its
+                // parameter (RW 2.3: twice per `Pair` level, so `a == b` of two 14-level pairs took a second).
                 let mut genv = Genv::default();
-                for (g, a) in def.generics.iter().zip(&args) {
-                    genv.types.insert(g.clone(), a.clone());
+                for g in &def.generics {
+                    genv.types.insert(g.clone(), Type::Unit);
                 }
                 let opaque = match &def.kind {
                     TypeDefKind::Record(fields) => fields.iter().any(|(_, ft)| self.type_expr_opaque(ft, &genv, fns, visiting)),
@@ -3651,7 +3657,7 @@ impl<'a> Checker<'a> {
                     }
                     TypeDefKind::Alias(inner) => self.type_expr_opaque(inner, &genv, fns, visiting),
                 };
-                visiting.remove(&id);
+                visiting.remove(id);
                 opaque
             }
             _ => false,
@@ -3695,6 +3701,13 @@ impl<'a> Checker<'a> {
                         return true;
                     }
                     if let Some(&id) = self.table.type_ix.get(name) {
+                        // Its written arguments are asked first, as `opaque_for` asks a type's arguments: `Box[Secret[Str]]`
+                        // and `Box[fn(Int) -> Int]` are opaque whatever `Box` declares (OPAQUE-FIELD-2: each argument stood
+                        // for `Unit` unasked, so a record holding one was admitted to `==` and `str`, which the same type
+                        // outside a record is refused).
+                        if args.iter().any(|a| self.type_expr_opaque(a, genv, fns, visiting)) {
+                            return true;
+                        }
                         let targs: Vec<Type> = args.iter().map(|_| Type::Unit).collect();
                         return self.opaque_for(&Type::Sum(id, targs), fns, &mut visiting.clone());
                     }

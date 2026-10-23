@@ -38,7 +38,7 @@ pub const TYPE_PARTS_FREE: usize = 1_000;
 
 /// The most parts the module's large types (past [`TYPE_PARTS_FREE`]) may have written out in all: the bound on many
 /// references to one type just under [`TYPE_PARTS_LIMIT`].
-pub const TYPE_PARTS_TOTAL: u64 = 20_000_000;
+pub const TYPE_PARTS_TOTAL: u64 = 2_000_000;
 
 /// The inference substitution: bindings for type and row variables.
 pub struct InferCtx {
