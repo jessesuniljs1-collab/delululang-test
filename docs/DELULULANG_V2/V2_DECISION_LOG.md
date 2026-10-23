@@ -4695,3 +4695,45 @@ request at its call ("only `https://` is fetched"), and the plan had been approv
 refused it with a misleading reason ("names `http`": `prim::host_of` strips only `https://`). The fixture exists to
 perform `Net`, and now requests `https://example.com`; its five tests assert what they did.
 
+
+## D-V2-182 — P9-05 (d), first slice: a `net` entry names its methods — `HOST[:METHODS][/PATTERN]`, one spelling for each set, none named = GET alone; ordered by subset and met by intersection everywhere the entry is read — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**Context.** RW 2.12: a `net` grant could not limit the methods a program may use on a host. That was moot while
+`http` could only GET, and it stops being moot with the first primitive that makes another request: added to today's
+grammar, such a primitive would let every `net=HOST` grant ever written POST, PUT or DELETE there. That would widen
+what existing grants mean, which the semver-authority law forbids. So the dimension comes first, with no primitive
+yet that needs it (D-V2-55, `V2_OPENSHELL_STUDY.md` §4.12).
+
+**Decision.**
+1. **The grammar.** `net=HOST[:METHODS][/PATTERN]`, METHODS names from `GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+   `DELETE`, separated by `,`. Each set has one spelling: each name once, in that order, and never `GET` alone. An
+   entry naming no methods allows **GET alone**, the one request a program has made, so no grant reaches more than it
+   did. After an IPv6 literal the methods follow its `]`. The design's `:GET,POST/repos/**` spelling is kept.
+2. **A suffix that is not methods stays in the host** (`netscope::read`). `h.com:8443` reads as before, a host
+   string no request names, so the broker's host check matches it no more than it did. Every grant parser refuses it
+   through `check_entry`, in words: "a `net` entry names no port".
+3. **The order and the meet.** `entry_within`: the same host string, the child's methods a subset of the parent's,
+   then the paths as D-V2-139. `entry_meet`: the methods intersected (none in common: no meet), then the paths. The
+   canonical form (an antichain) is unchanged; a single spelling per set keeps equivalent sets identical.
+4. **The judge.** `judge(entry, method, host, path)`: the host, then the path, then the method.
+   `Verdict::OtherMethod` ranks after `OutsidePath`, since "this path is granted, not by this method" is the more
+   telling refusal. Every caller asks with `GET` until a primitive makes another request: the runtime's first check
+   (DL0904, worded about the method), every egress hop, the broker's use check (a new `Denial::NetMethod`, DL0904,
+   no new code) and `--within`. Under `--within`, a computed URL is *within* only when every boundary entry takes
+   GET on every path. The OpenShell export refuses a method scope, as it refuses a path scope: the host alone would
+   grant every method there.
+5. **Hardened on the way.** An entry naming no host takes no request, not even one whose URL names no host
+   (`host_matches("", "")` was true; such a URL is refused earlier, so this was latent).
+6. **Not yet:** the primitive, the method in the broker's op and record, OCSF's `http_request.http_method`, a
+   redirect's method (a 303 turns a POST into a GET), and the static half (`authority --json` `requests`' method,
+   `--grants` proposing it).
+
+**Evidence.** `netscope` tests: the grammar (11 refused spellings, each in its words; a malformed suffix read as a
+host), the judge, and the order and the meet EXACT with methods over a bounded domain. The canonical-form universe
+gained two method entries, and the `--within` agreement test generates three. `egress_cli`
+`a_method_scoped_grant_takes_only_its_methods` runs at L0 and from a guest. It failed on the previous code ("host
+… is not in the granted allowlist": the methods were read as part of the host). `sandbox_openshell_cli` failed on
+the previous code too (exit 0, a document printed). Mutants N1 to N6 were red in the unit tests: methods out of the
+order, out of the judge, unparsed, a union meet, a malformed suffix dropped, the default allowing every method.
+N1, N2, N3 and N5 were also red end to end. Z3 §2e: 9 obligations proved (50 in all). Its mutants
+`net-method-dropped` and `net-method-meet-union` each leave obligations undischarged, and CI requires both.

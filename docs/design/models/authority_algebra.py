@@ -9,7 +9,7 @@ the result to the whole conjunction `attenuation_check` actually computes:
 
     child ⊑ parent  ==  effects ⊆
                      ∧ fs_read, fs_write   path-descendant cover
-                     ∧ net                entries ⊆ by host string, then path-pattern containment (§2d)
+                     ∧ net                entries ⊆ by host string, methods ⊆, then path-pattern containment (§2d, §2e)
                      ∧ secrets, secret_to, declassify, foreign_c, foreign_python   exact-set ⊆
                      ∧ device             per-device interval containment
                      ∧ budget             componentwise ≤ on (memory, processor time); absent = TOP
@@ -25,6 +25,9 @@ Each dimension is modelled from the code, not from the prose:
   * net paths       — `netscope.rs` (P9-05 (b), D-V2-139): an entry `HOST/PATTERN`, its pattern's segments a literal,
                       `*` or a final `**`; `pattern_within` and `pattern_meet` modelled from the code and proved
                       SOUND against what the patterns match, the meet exact (§2d)
+  * net methods     — `netscope.rs` (P9-05 (d), D-V2-182): an entry `HOST[:METHODS][/PATTERN]`, its methods a set
+                      of six (none named: GET alone); `entry_within` and `entry_meet` proved SOUND against the
+                      requests an entry takes, by method and path, the meet exact (§2e)
   * secret_to       — `authority.rs` (P9-04 (d), D-V2-133): each secret's audience, a set of
                       `NAME@host:port` pairs, ordered by inclusion like every exact-set dimension —
                       plus the one rule the others lack, a pair lives only beside its NAME in
@@ -74,6 +77,8 @@ MUTANTS = {
     "net-star-under-literal": "a `*` segment is called within a literal one (it matches other segments)",
     "net-rest-under-fixed": "a pattern ending `**` is called within one of the same fixed segments and no `**`",
     "net-meet-star-wins": "the meet of `*` and a literal is `*` (a widening meet)",
+    "net-method-dropped": "an entry's methods are left out of its order (a POST entry within a GET one)",
+    "net-method-meet-union": "the meet of two entries' methods is their UNION (a widening meet)",
 }
 MUTANT = os.environ.get("DELULU_Z3_MUTANT", "")
 if MUTANT and MUTANT not in MUTANTS:
@@ -414,6 +419,88 @@ prove("meet within both                a⊓b within a ∧ a⊓b within b",
 prove("meet is GLB                     c within a ∧ c within b → a⊓b exists ∧ c within a⊓b",
       Implies(And(pwf(PA), pwf(PB), pwf(PC), pwithin(PC, PA), pwithin(PC, PB)), And(POK, pwithin(PC, PM))),
       pvars(PA) + pvars(PB) + pvars(PC))
+
+print()
+print("=" * 78)
+print("(2e) NET METHODS — netscope.rs `entry_within` / `entry_meet` with methods (P9-05 (d), D-V2-182)")
+print("     an entry of one host: a set of the six methods (none named: GET alone), and no path or a pattern of §2d")
+print("     a request: one of the six methods, or a seventh no entry names, and a path of §2d")
+print("=" * 78)
+
+NM = 6
+GET_ONLY = 1
+
+def ent(n):
+    return {"m": BitVec(f"{n}_m", NM), "has": Bool(f"{n}_has"), "p": pat(f"{n}_p")}
+
+def evars(x):
+    return [x["m"], x["has"]] + pvars(x["p"])
+
+def ewf(x):
+    """An entry the grammar accepts: a non-empty method set; a pattern well formed where one is named."""
+    return And(x["m"] != 0, Implies(x["has"], pwf(x["p"])))
+
+def req(n):
+    return {"k": Int(f"{n}_k"), "y": path(f"{n}_y")}
+
+def rvars(r):
+    return [r["k"]] + pathvars(r["y"])
+
+def rwf(r):
+    return And(r["k"] >= 0, r["k"] <= NM, pathwf(r["y"]))
+
+def takes(x, r):
+    """`judge` is Allow: the path under the pattern (or no pattern), and the request's method in the set — a seventh
+    method (k = NM) is in none."""
+    in_set = Or(*[And(r["k"] == i, has_bit(x["m"], i)) for i in range(NM)])
+    return And(Or(Not(x["has"]), pmatch(x["p"], r["y"])), in_set)
+
+def has_bit(v, i):
+    return (v & BitVecVal(1 << i, NM)) != 0
+
+def ewithin(c, p):
+    """`entry_within` for one host: the child's methods a subset of the parent's; a parent with no path takes every
+    path; a child with none is within only such a parent; two patterns by §2d's order."""
+    methods = True if MUTANT == "net-method-dropped" else (c["m"] & ~p["m"]) == 0
+    paths = If(Not(p["has"]), True, And(c["has"], pwithin(c["p"], p["p"])))
+    return And(methods, paths)
+
+def emeet(a, b):
+    """`entry_meet`: the methods intersected (none in common: no meet), and the paths as §2d meets them."""
+    pok, pm = pmeet(a["p"], b["p"])
+    m = (a["m"] | b["m"]) if MUTANT == "net-method-meet-union" else (a["m"] & b["m"])
+    ok = And(m != 0, Or(Not(a["has"]), Not(b["has"]), pok))
+    mp = {"n": If(Not(a["has"]), b["p"]["n"], If(Not(b["has"]), a["p"]["n"], pm["n"])),
+          "s": [If(Not(a["has"]), b["p"]["s"][i], If(Not(b["has"]), a["p"]["s"][i], pm["s"][i])) for i in range(L)],
+          "r": If(Not(a["has"]), b["p"]["r"], If(Not(b["has"]), a["p"]["r"], pm["r"]))}
+    return ok, {"m": m, "has": Or(a["has"], b["has"]), "p": mp}
+
+EA, EB, EC, ER = ent("EA"), ent("EB"), ent("EC"), req("ER")
+EOK, EM = emeet(EA, EB)
+prove("entry within reflexive          wf x → x within x", Implies(ewf(EA), ewithin(EA, EA)), evars(EA))
+prove("entry within transitive         a within b ∧ b within c → a within c",
+      Implies(And(ewf(EA), ewf(EB), ewf(EC), ewithin(EA, EB), ewithin(EB, EC)), ewithin(EA, EC)),
+      evars(EA) + evars(EB) + evars(EC))
+prove("entry within SOUND              c within p ∧ c takes a request → p takes it",
+      Implies(And(ewf(EA), ewf(EB), rwf(ER), ewithin(EA, EB), takes(EA, ER)), takes(EB, ER)),
+      evars(EA) + evars(EB) + rvars(ER))
+prove("entry meet exact (no wider)     a⊓b takes a request → a and b both take it",
+      Implies(And(ewf(EA), ewf(EB), rwf(ER), EOK, takes(EM, ER)), And(takes(EA, ER), takes(EB, ER))),
+      evars(EA) + evars(EB) + rvars(ER))
+prove("entry meet exact (no narrower)  a and b both take a request → a⊓b exists and takes it",
+      Implies(And(ewf(EA), ewf(EB), rwf(ER), takes(EA, ER), takes(EB, ER)), And(EOK, takes(EM, ER))),
+      evars(EA) + evars(EB) + rvars(ER))
+prove("entry meet within both          a⊓b within a ∧ a⊓b within b",
+      Implies(And(ewf(EA), ewf(EB), EOK), And(ewf(EM), ewithin(EM, EA), ewithin(EM, EB))), evars(EA) + evars(EB))
+prove("entry meet is GLB               c within a ∧ c within b → a⊓b exists ∧ c within a⊓b",
+      Implies(And(ewf(EA), ewf(EB), ewf(EC), ewithin(EC, EA), ewithin(EC, EB)), And(EOK, ewithin(EC, EM))),
+      evars(EA) + evars(EB) + evars(EC))
+# The laws above hold of any product, so they are discharged with the methods left out of the order; these name the
+# dimension's own refusals, as the budget's and the audience's obligations do in §3.
+prove("an entry naming no methods takes GET alone   m = GET → no other method's request",
+      Implies(And(ewf(EA), rwf(ER), EA["m"] == GET_ONLY, ER["k"] != 0), Not(takes(EA, ER))), evars(EA) + rvars(ER))
+prove("a child taking a method its parent does not is never within it",
+      Implies(And(ewf(EA), ewf(EB), (EA["m"] & ~EB["m"]) != 0), Not(ewithin(EA, EB))), evars(EA) + evars(EB))
 
 print()
 print("=" * 78)
