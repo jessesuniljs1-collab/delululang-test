@@ -719,6 +719,8 @@ pub(crate) fn secret_destinations(modules: &[&delulu_syntax::ast::Module], map: 
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        mutated: Default::default(),
+        consts: BTreeMap::new(),
     };
     w.modules(modules);
     w.out
@@ -754,6 +756,8 @@ pub(crate) fn request_sites(
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        mutated: Default::default(),
+        consts: BTreeMap::new(),
     };
     w.modules(&[module]);
     w.sites
@@ -771,6 +775,8 @@ pub(crate) fn secret_sends(modules: &[&delulu_syntax::ast::Module]) -> Vec<Secre
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        mutated: Default::default(),
+        consts: BTreeMap::new(),
     };
     w.modules(modules);
     w.sends
@@ -794,6 +800,8 @@ pub(crate) fn request_destinations(
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        mutated: Default::default(),
+        consts: BTreeMap::new(),
     };
     w.modules(&[module]);
     w.requests
@@ -804,19 +812,33 @@ impl SendWalk<'_> {
         use delulu_syntax::ast::Item;
         let w = self;
         for m in modules {
+            // A module's own constants written as a string literal; another module's, imported, stay computed.
+            w.consts = m
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Const(c) => match &c.value {
+                        delulu_syntax::ast::Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(s), .. } => {
+                            Some((c.name.name.clone(), s.clone()))
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect();
             for item in &m.items {
                 match item {
                     // Each body is a block, and a block's names end with it: a parameter, which no `let` in the body
-                    // bound, is never attributed.
-                    Item::Fn(f) => w.block(&f.body),
-                    Item::Test(t) => w.block(&t.body),
+                    // bound, is never attributed, and shadows a constant of its name.
+                    Item::Fn(f) => w.body(&f.params, &f.body),
+                    Item::Test(t) => w.body(&[], &t.body),
                     Item::Actor(a) => {
-                        w.block(&a.ctor.body);
+                        w.body(&a.ctor.params, &a.ctor.body);
                         for b in &a.behaviors {
-                            w.block(&b.body);
+                            w.body(&b.params, &b.body);
                         }
                         for f in &a.fns {
-                            w.block(&f.body);
+                            w.body(&f.params, &f.body);
                         }
                     }
                     _ => {}
@@ -826,26 +848,133 @@ impl SendWalk<'_> {
     }
 }
 
-/// The walk behind [`secret_destinations`]: `vars` maps a name in scope to the secret it is known to hold (`None`: a
-/// name known NOT to be one the source shows), restored at each block's end. With the checker's `types`, it also records
-/// each request ([`request_destinations`]).
+/// What the source shows a name holds where it is read.
+#[derive(Clone, Debug)]
+enum Held {
+    /// The secret of this grant name.
+    Secret(String),
+    /// This string literal: a URL a request or a send names through a `let` or a `const`.
+    Str(String),
+}
+
+/// The walk behind [`secret_destinations`]: `vars` maps a name in scope to what it is known to hold (`None`: a name known
+/// to hold nothing the source shows), restored at each block's end. With the checker's `types`, it also records each
+/// request ([`request_destinations`]).
 struct SendWalk<'a> {
     map: &'a SourceMap,
-    vars: BTreeMap<String, Option<String>>,
+    vars: BTreeMap<String, Option<Held>>,
+    /// The module's constants written as a string literal, read where no local name shadows them.
+    consts: BTreeMap<String, String>,
     out: Vec<Json>,
     types: Option<&'a std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>>,
     requests: Vec<Json>,
     sends: Vec<SecretSend>,
     sites: Vec<RequestSite>,
+    /// Every name the body being walked assigns anywhere (`assigned`): what a closure in it reads as unknown, since it may
+    /// run after any of those assignments (SEND-REBIND-1).
+    mutated: std::collections::BTreeSet<String>,
+}
+
+/// Every name `b` assigns (`x = …`), at any depth: its blocks, loops, arms and closures (SEND-REBIND-1).
+fn assigned(b: &delulu_syntax::ast::Block) -> std::collections::BTreeSet<String> {
+    use delulu_syntax::ast::{Expr, LValue, Stmt};
+    fn block(b: &delulu_syntax::ast::Block, out: &mut std::collections::BTreeSet<String>) {
+        for s in &b.stmts {
+            match s {
+                Stmt::Let { value, .. } => expr(value, out),
+                Stmt::Assign { target, value, .. } => {
+                    if let LValue::Var(name) = target {
+                        out.insert(name.name.clone());
+                    }
+                    expr(value, out);
+                }
+                Stmt::While { cond, body, .. } => {
+                    expr(cond, out);
+                    block(body, out);
+                }
+                Stmt::For { iter, body, .. } => {
+                    expr(iter, out);
+                    block(body, out);
+                }
+                Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => expr(e, out),
+                Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            }
+        }
+    }
+    fn expr(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
+        match e {
+            Expr::Method { recv, args, .. } => {
+                expr(recv, out);
+                args.iter().for_each(|a| expr(a, out));
+            }
+            Expr::List { items, .. } => items.iter().for_each(|a| expr(a, out)),
+            Expr::Record { fields, .. } => fields.iter().for_each(|(_, v)| expr(v, out)),
+            Expr::Call { callee, args, .. } => {
+                expr(callee, out);
+                args.iter().for_each(|a| expr(a, out));
+            }
+            Expr::Field { recv, .. } | Expr::Unary { operand: recv, .. } | Expr::Try { inner: recv, .. } => expr(recv, out),
+            Expr::Index { recv, index, .. } => {
+                expr(recv, out);
+                expr(index, out);
+            }
+            Expr::Binary { lhs, rhs, .. } => {
+                expr(lhs, out);
+                expr(rhs, out);
+            }
+            Expr::If { cond, then_, else_, .. } => {
+                expr(cond, out);
+                block(then_, out);
+                if let Some(e) = else_ {
+                    expr(e, out);
+                }
+            }
+            Expr::Match { scrutinee, arms, .. } => {
+                expr(scrutinee, out);
+                arms.iter().for_each(|a| expr(&a.body, out));
+            }
+            Expr::Lambda { body, .. } | Expr::Recover { body, .. } | Expr::Block(body) => block(body, out),
+            Expr::Spawn { args, .. } => args.iter().for_each(|a| expr(a, out)),
+            Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => {}
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    block(b, &mut out);
+    out
 }
 
 impl SendWalk<'_> {
+    /// A function's, test's, behaviour's or constructor's body, with the names it assigns anywhere (`mutated`); its
+    /// parameters hold nothing the source shows.
+    fn body(&mut self, params: &[delulu_syntax::ast::Param], b: &delulu_syntax::ast::Block) {
+        self.mutated = assigned(b);
+        let saved = self.vars.clone();
+        for p in params {
+            self.vars.insert(p.name.name.clone(), None);
+        }
+        self.block(b);
+        self.vars = saved;
+    }
+
+    /// A name assigned in `names` no longer holds the secret it was bound to: it may hold another (SEND-REBIND-1).
+    fn forget<'n>(&mut self, names: impl IntoIterator<Item = &'n String>) {
+        for n in names {
+            if let Some(held) = self.vars.get_mut(n) {
+                *held = None;
+            }
+        }
+    }
+
+    /// A block's own names end with it, and a name it assigns from outside holds, after it, either value
+    /// (SEND-REBIND-1: `if c { tok = root.secret("B") }` was undone at the block's end, so a send after it was attributed to
+    /// the secret `tok` held before, and `--within` decided it by that secret's audience).
     fn block(&mut self, b: &delulu_syntax::ast::Block) {
         let saved = self.vars.clone();
         for s in &b.stmts {
             self.stmt(s);
         }
         self.vars = saved;
+        self.forget(&assigned(b));
     }
 
     fn stmt(&mut self, s: &delulu_syntax::ast::Stmt) {
@@ -853,22 +982,25 @@ impl SendWalk<'_> {
         match s {
             Stmt::Let { name, value, .. } => {
                 self.expr(value);
-                let held = self.secret_of(value);
+                let held = self.held(value);
                 self.vars.insert(name.name.clone(), held);
             }
             Stmt::Assign { target, value, .. } => {
                 self.expr(value);
                 if let LValue::Var(name) = target {
-                    let held = self.secret_of(value);
+                    let held = self.held(value);
                     self.vars.insert(name.name.clone(), held);
                 }
             }
+            // A loop's body runs again after it assigns, so a name it assigns is unknown from its first statement on.
             Stmt::While { cond, body, .. } => {
+                self.forget(&assigned(body));
                 self.expr(cond);
                 self.block(body);
             }
             Stmt::For { var, iter, body, .. } => {
                 self.expr(iter);
+                self.forget(&assigned(body));
                 let saved = self.vars.clone();
                 self.vars.insert(var.name.clone(), None);
                 self.block(body);
@@ -891,9 +1023,32 @@ impl SendWalk<'_> {
             },
             // `Secret.map` keeps the secret's grant name (D-V2-131: a value derived from its bytes goes where they may).
             Expr::Method { recv, name, .. } if name.name == "map" => self.secret_of(recv),
-            Expr::Var { path, .. } if path.segs.len() == 1 => self.vars.get(&path.segs[0].name).cloned().flatten(),
+            Expr::Var { path, .. } if path.segs.len() == 1 => match self.vars.get(&path.segs[0].name) {
+                Some(Some(Held::Secret(s))) => Some(s.clone()),
+                _ => None,
+            },
             _ => None,
         }
+    }
+
+    /// The string literal `e` evaluates to, when the source shows it: written at the call, or bound to a name by a `let`
+    /// or a module's `const` that nothing may have bound again.
+    fn str_of(&self, e: &delulu_syntax::ast::Expr) -> Option<String> {
+        use delulu_syntax::ast::Expr;
+        match e {
+            Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(s), .. } => Some(s.clone()),
+            Expr::Var { path, .. } if path.segs.len() == 1 => match self.vars.get(&path.segs[0].name) {
+                Some(Some(Held::Str(s))) => Some(s.clone()),
+                Some(_) => None,
+                None => self.consts.get(&path.segs[0].name).cloned(),
+            },
+            _ => None,
+        }
+    }
+
+    /// What a `let` or an assignment binds its name to.
+    fn held(&self, e: &delulu_syntax::ast::Expr) -> Option<Held> {
+        self.secret_of(e).map(Held::Secret).or_else(|| self.str_of(e).map(Held::Str))
     }
 
     fn expr(&mut self, e: &delulu_syntax::ast::Expr) {
@@ -908,10 +1063,7 @@ impl SendWalk<'_> {
                 let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret")
                     && self.types.and_then(|t| t.get(&recv.id())).is_some_and(is_http);
                 if request {
-                    let url = match args.first() {
-                        Some(Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(u), .. }) => Some(u.clone()),
-                        _ => None,
-                    };
+                    let url = args.first().and_then(|u| self.str_of(u));
                     let target = url.as_deref().and_then(|u| delulu_runtime::egress::parse_target(u).ok());
                     self.requests.push(json!({
                         "method": name.name,
@@ -923,12 +1075,9 @@ impl SendWalk<'_> {
                     self.sites.push(RequestSite { url, at: *span });
                 }
                 if name.name == "get_with_secret" && args.len() == 4 {
-                    let to = match &args[0] {
-                        Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(u), .. } => {
-                            delulu_runtime::egress::parse_target(u).ok().map(|t| format!("{}:{}", t.host, t.port))
-                        }
-                        _ => None,
-                    };
+                    let to = self
+                        .str_of(&args[0])
+                        .and_then(|u| delulu_runtime::egress::parse_target(&u).ok().map(|t| format!("{}:{}", t.host, t.port)));
                     let secret = self.secret_of(&args[3]);
                     self.out.push(json!({ "secret": secret, "to": to, "at": at_json(self.map, Some(*span)) }));
                     self.sends.push(SecretSend { secret, to, at: *span });
@@ -977,15 +1126,23 @@ impl SendWalk<'_> {
                     }
                     self.expr(&arm.body);
                     self.vars = saved;
+                    if let Expr::Block(b) = &arm.body {
+                        self.forget(&assigned(b));
+                    }
                 }
             }
+            // A closure runs when it is called, after any assignment its function makes: the names assigned there are
+            // unknown inside it, and a name it assigns is unknown after it.
             Expr::Lambda { params, body, .. } => {
                 let saved = self.vars.clone();
+                let mutated = self.mutated.clone();
+                self.forget(&mutated);
                 for p in params {
                     self.vars.insert(p.name.name.clone(), None);
                 }
                 self.block(body);
                 self.vars = saved;
+                self.forget(&assigned(body));
             }
             Expr::Try { inner, .. } => self.expr(inner),
             Expr::Block(b) => self.block(b),

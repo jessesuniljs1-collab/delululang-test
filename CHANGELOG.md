@@ -11,13 +11,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## Unreleased — ctutils 0.4.5, 2026-10-23
+## Unreleased — a reassigned secret is not attributed to its first value, 2026-10-23
 
-- **Security: RUSTSEC-2026-0385, published on 2026-10-23, is fixed by a patch update.** `ctutils` 0.4.2 → 0.4.5. Before
-  0.4.4, its constant-time mask functions could compile to a branch on common platforms, and its `u128` comparisons
-  branched on 32-bit targets. Such a branch can leak a secret through timing. `ctutils` provides the constant-time
-  comparisons and selects that ML-DSA uses when signing (`ml-dsa` 0.1.1, under `delulu sign` and the hybrid signature
-  of a package or artifact). It is also linked through `ml-kem`. Nothing else in the lockfile moved.
+- **Fixed: `authority --grants`/`--within`/`deploy plan` attributed a send of a secret reassigned in a branch, a loop or
+  a closure to the secret first bound** (SEND-REBIND-1, RW 4.78), and could answer *within* for a boundary under which the
+  run refuses the send. Such a send is now judged as a secret the source does not name.
 
 ## Unreleased — a sent secret is asked for and decided with its audience, 2026-10-23
 

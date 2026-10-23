@@ -8945,3 +8945,14 @@ none), and it was taken out. `deploy_plan_adversarial`'s fixture requested `http
 ("only `https://` is fetched"); five of its tests went red with a misleading reason. Such a URL is now refused in the
 client's words, and the fixture requests `https://example.com`, its assertions unchanged.
 
+## 2026-10-23 (afternoon) — the laptop: SEND-REBIND-1, a reassigned secret's send (RW 4.78)
+
+The walk behind `secret_destinations` (and D-V2-180's verdict) restored a block's bindings at its end, undoing assignments
+inside it. `var tok = root.secret("A"); if 1 > 0 { tok = root.secret("B") }` then a send: attributed to `A`, and `--within`
+said *within* with `B` granted no audience (witnessed on `85f6b5c`'s binary). Same in a loop that assigns after it sends,
+and in a closure (closures capture by reference: `var x = 1; let f = fn() -> Int { x }; x = 2; f()` prints 2 on both
+engines). Fixed by forgetting assigned names after blocks, arms and closures, before loop bodies, and inside closures for
+names their function assigns. `within_cli` test red on master; four mutants red. Green: 8 `delulu` targets, 306 passed.
+Also read: launch `cab60c7`'s release dry run `39911653388` **success**; conformance on the launch tree 355/355, reference
+in sync. The owner saved `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and a setup script (with `|| true` and `exit 0`) in the Default
+cloud environment; not yet seen run.
