@@ -9090,3 +9090,16 @@ interpreter's own `post`. `post_with_secret` stays on the interpreter.
 - `delulu build --target wasm` of a POST program wrote 1,860 bytes, and its imports name `http_get` and `http_post`.
   So the run compiled; it did not fall back to the interpreter.
 - Mutant red: the host's gate asking with no method.
+
+**And `post_with_secret` on the WASM engine.** The host's `http_get_with_secret` body became one helper,
+`send_with_secret(caller, method, …, body_ptr: Option<i32>, …)`, with `http_get_with_secret` and a new
+`http_post_with_secret` as thin imports. The custody is asked by the method, and the body is read when its pointer is
+given. Codegen: the import, its 10-argument type, and the call. `broker_cli`
+`a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method` now runs the POST on both engines
+under the daemon, one connection and one `send` each. `build --target wasm` imports `http_post_with_secret`. Mutant
+red: the helper's custody asked with no method.
+
+**Found on the way (RW 4.79, open, LOW).** The GET-only run's custody recorded `use allow` with `method: POST`: the
+node's grant takes POST, while the program's own capability, narrower, refused the call after. The interpreter asks the
+custody before `prim` judges the capability, for every op. So the chain records a use the custody allowed and the
+program never made. Nothing is performed, and the run reports DL0904. The test counts that record and names the row.

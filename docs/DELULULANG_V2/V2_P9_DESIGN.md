@@ -303,4 +303,5 @@ skip branch, §11.2).
   `PRIM_TABLE_VERSION` 8. Next: both on the WASM engine.
   **And `post` on the WASM engine, the same day:** the import `delulu:cap.http_post(cap, url, headers, desc, body, …)`,
   performed by the interpreter's own `post`; the host's gate asks the custody by its method (`custody_allows_by`).
-  Next: `post_with_secret` on the WASM engine.
+  And `post_with_secret` (`delulu:cap.http_post_with_secret`, through one host helper with `get_with_secret`). Next: PUT,
+  PATCH and DELETE, each a primitive of its own when a program needs one.
