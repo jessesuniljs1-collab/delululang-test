@@ -284,7 +284,8 @@ Recorded so no reader mistakes the shape of the claim:
 - **`--trace-effects` buffers the whole trace in RAM** (C56, open): 70 MB per 100k effects, unbounded.
   The audit chain streams to day files; the trace does not.
 - **The interpreter's field access is O(record width)** (C55): measured, published, and a named limit
-  rather than a defect.
+  rather than a defect. *Closed 2026-10-23 (RW 2.10, D-V2-178): a record wider than 16 fields finds a field at its
+  declared place, checked against its name; `measurements/scale/RECORD.md`.*
 - **C21 is closed** (D51): the depth bound is now part of the API (`Interp::with_max_depth`), the
   per-frame native stack cost is measured (80 KiB per unit of depth in a debug build) and published,
   and the guard is witnessed firing on a deliberately small thread. An embedder that ignores the

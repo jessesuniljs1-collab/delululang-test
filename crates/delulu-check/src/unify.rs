@@ -250,12 +250,38 @@ impl InferCtx {
     }
 
     fn occurs_type(&self, v: u32, t: &Type) -> bool {
-        match self.resolve_type_shallow(t) {
-            Type::Var(TypeVar(w)) => w == v,
-            Type::List(inner) | Type::Option(inner) | Type::Secret(inner) | Type::Plugin(inner) => self.occurs_type(v, &inner),
-            Type::Result(a, b) | Type::Map(a, b) => self.occurs_type(v, &a) || self.occurs_type(v, &b),
-            Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => args.iter().any(|a| self.occurs_type(v, a)),
-            Type::Fn { params, ret, .. } => params.iter().any(|p| self.occurs_type(v, p)) || self.occurs_type(v, &ret),
+        self.occurs_in(v, t, &mut vec![false; self.type_bindings.len()])
+    }
+
+    /// Whether the unbound variable `v` occurs in `t`, each bound variable followed once (RW 2.3): `explored[w]` marks a
+    /// variable whose binding has been searched without finding `v`. A binding is shared by every place its variable
+    /// stands, so `let a1 = Pair { l: a0, r: a0 }` … `a22` is a type of 22 nodes through its variables and ~4 million
+    /// written out; followed at every place, each `let`'s check walked the whole tree, and 22 lines took 5.8 s.
+    fn occurs_in(&self, v: u32, t: &Type, explored: &mut [bool]) -> bool {
+        match t {
+            Type::Var(TypeVar(w)) => {
+                if *w == v {
+                    return true;
+                }
+                let w = *w as usize;
+                match &self.type_bindings[w] {
+                    Some(bound) if !explored[w] => {
+                        explored[w] = true;
+                        self.occurs_in(v, bound, explored)
+                    }
+                    _ => false,
+                }
+            }
+            Type::List(inner) | Type::Option(inner) | Type::Secret(inner) | Type::Plugin(inner) => {
+                self.occurs_in(v, inner, explored)
+            }
+            Type::Result(a, b) | Type::Map(a, b) => self.occurs_in(v, a, explored) || self.occurs_in(v, b, explored),
+            Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => {
+                args.iter().any(|a| self.occurs_in(v, a, explored))
+            }
+            Type::Fn { params, ret, .. } => {
+                params.iter().any(|p| self.occurs_in(v, p, explored)) || self.occurs_in(v, ret, explored)
+            }
             _ => false,
         }
     }

@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a record's width no longer costs per field, 2026-10-23
+
+- **Fixed: building a record literal whose fields are written out of declared order was quadratic in the record's
+  width** (RW 2.10, D-V2-178). The interpreter put the fields in order with a sort that scanned the declaration at every
+  comparison: one literal of 6,400 fields took 1.1 s. It now looks up each field's place once; 250 literals of 1,600
+  fields went from 9.79 s to 0.078 s.
+- **Changed: reading or writing a field of a record wider than 16 fields costs the same whatever the field** (finding
+  C55, published as a limit since 2026-07). A program reading the last of 1,600 fields 200,000 times took 4.1x as long
+  as one reading a 4-field record's; now 1.1x. Records of 16 fields or fewer are scanned as before.
+
 ## Unreleased — a capability or a secret in a list, an option, a record or a map compiles to WASM, 2026-10-23
 
 - **Added: on `--target wasm`, a capability or a secret may sit in a list, an option, a record field or a map's value**

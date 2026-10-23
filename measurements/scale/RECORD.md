@@ -199,6 +199,31 @@ the constant is small. Contrast C48, which was accidentally quadratic *and* allo
 — that was fixed. This is inherent to the representation and is therefore reported with a number, per
 the Constitution's own rule that where DeluluLang loses, the table says so.
 
+### Closed 2026-10-23 (RW 2.10, D-V2-178): a field at its place, and the literal that had become quadratic
+
+Re-measured on the laptop (Windows 11, 16 logical CPUs) with a release build of `master` `3334f93` and of the fix, the
+same programs on both, best of three whole `delulu run` processes (start and check included, ~0.06 s). Each program
+builds a record of `fields` Int fields and then reads its last field 200,000 times, or writes it 200,000 times, or builds
+literals of it, 400,000 fields in all, written in a fixed shuffle of the declared order:
+
+| fields | read: before | after | write: before | after | literals out of order: before | after |
+|---|---|---|---|---|---|---|
+| 4 | 0.116 s | 0.114 s | 0.096 s | 0.097 s | 0.120 s | 0.122 s |
+| 20 | 0.118 s | 0.115 s | 0.098 s | 0.101 s | 0.178 s | 0.081 s |
+| 100 | 0.149 s | 0.118 s | 0.136 s | 0.103 s | 0.560 s | 0.073 s |
+| 400 | 0.255 s | 0.119 s | 0.251 s | 0.106 s | 2.507 s | 0.071 s |
+| 1,600 | 0.473 s | 0.128 s | 0.468 s | 0.110 s | 9.793 s | 0.078 s |
+
+The last column was the larger cost and was not on this page. RECORD-ORDER-1 (2026-10-20) made a record hold its fields
+in declared order, and its sort scanned the declaration for both fields' places at every comparison: quadratic in the
+width. One literal of 6,400 fields took 1.1 s. A literal written in declared order cost less (the sort finds the run),
+but each place was still a scan. `delulu check` of the same programs is linear: 0.059 s at 400 fields, 0.183 s at
+6,400.
+
+The fix is in the interpreter, not the DIR (D-V2-178): each record type's fields map by name to their place, looked up
+once per field of a literal, and a record wider than 16 fields finds a field at its place, checked against the name
+held there. At 4 and 20 fields every figure is within noise, as D56's measurement of the narrow end predicted.
+
 ## Runtime memory: `--trace-effects` buffers the whole trace in RAM (hardening P14, finding C56)
 
 `TraceSink` is a `Vec<TraceRecord>` with no bound. Every traced effect is retained until the process

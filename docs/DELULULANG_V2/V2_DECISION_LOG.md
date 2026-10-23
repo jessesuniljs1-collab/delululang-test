@@ -4544,3 +4544,31 @@ Both fail on `master`'s code (DL1201, "a list of Cap"). The `checked_ty` arms dr
 `list_parity.rs` and `record_parity.rs` had pinned a list, and a record field, of `Cap[Console]` as refused: outside the
 fragment, not unsafe. Those cases moved here. The pins now hold the root, the handle no slot holds: a list of it, a
 record field of it. Letting `Root` into a slot turns both red.
+
+## D-V2-178 — RW 2.10: a record's fields are found at their declared place, by a map checked against the name — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** the interpreter found a record's field by scanning its fields (finding C55, published as a limit in
+2026-07), and since RECORD-ORDER-1 (2026-10-20) it put a literal's fields in declared order with a sort whose every
+comparison scanned the declaration for both fields' places: quadratic in the width. RW 2.10 named the fix as static field
+indices through the DIR.
+
+**Decided:** the interpreter holds each record type's fields as a map from name to declared place (`Home.records`,
+built once per module). A literal looks up each field's place once and is sorted by it (`sort_by_cached_key`, the same
+order as before). A field read or write in a record wider than 16 fields (`SCAN_WIDTH`) asks the map for the place and
+uses it only when the field held there has the name asked for; otherwise, and for a record of 16 fields or fewer, it
+scans as before.
+
+**Why not the DIR:** a static index would change the AST and the DIR's serialized form (byte-reproducible, read by
+plugins), and the interpreter would have to trust that every record value it reads was laid out by this module's
+declaration. A record can come from a plugin's module, an actor's message or another module's closure; checking the name
+at the place makes a wrong place cost a scan, never a wrong field. Below 17 fields the scan stays: D56 measured it at
+or below the interpreter's own cost there, and two hash lookups are not cheaper.
+
+**Evidence** (release, the laptop, best of three; `measurements/scale/RECORD.md`): reading the last of 1,600 fields
+200,000 times 0.473 s → 0.128 s, a write 0.468 s → 0.110 s, 250 literals of 1,600 fields written out of order 9.79 s →
+0.078 s; at 4 fields every figure unchanged. `crates/delulu-runtime/tests/record_width.rs`, four tests: two timing
+tests judged against a control measured beside them, both red on the old interpreter (3,662x and 21.4x against bounds of
+100 and 3; 17x and 1.00 now), and two that hold the layout's answers. Mutants red: the name check removed, a scan at every
+width, no ordering of a literal. The checker's `C48` residual scan was measured rather than changed: 6,400 fields check
+in 0.18 s, linear.
+
