@@ -1667,6 +1667,87 @@ fn a_request_is_decided_by_its_path_against_the_boundary() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A URL written once and named (`let u = "https://…"` in a body, or a module's constant, `let U: Str = "https://…"` among
+/// its items) is the literal it was bound to, as the run reads it. The walk read a URL only where the call wrote it out, so
+/// such a request under a path-scoped boundary was *inconclusive*, even when it named a path outside the boundary, and a
+/// sent secret's audience was proposed as `HOST`. A name that may hold another value at the call is still computed: one
+/// assigned in a branch, a parameter or a local `let` shadowing the constant.
+#[test]
+fn a_url_named_by_a_let_or_a_constant_is_decided_by_its_literal() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-url-let-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = |name: &str, top: &str, prelude: &str, url: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n{top}\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"example.com/api/**\"])\n{prelude}    match h.get({url}) {{\n        \
+                 Ok(body) => out.println(\"got\")\n        Err(e) => out.println(\"no\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let scoped = vec!["console".to_string(), "net=example.com/api/**".to_string()];
+    let decided = |f: &str, want: (i32, &str)| {
+        let (code, v) = within(f, &scoped);
+        assert_eq!((code, v["result"].as_str()), (want.0, Some(want.1)), "{f}: {v:#}");
+        v
+    };
+
+    let v = decided(&program("let_out", "", "    let u = \"https://example.com/admin\"\n", "u"), (1, "exceeds"));
+    assert_eq!(
+        (v["counterexample"]["grant"].as_str(), v["counterexample"]["at"]["line"].as_u64()),
+        (Some("net=example.com/admin"), Some(7)),
+        "named at the request's call: {v:#}"
+    );
+    decided(&program("let_in", "", "    let u = \"https://example.com/api/v1\"\n", "u"), (0, "within"));
+    let top = "\nlet ADMIN: Str = \"https://example.com/admin\"\n";
+    decided(&program("const_out", top, "", "ADMIN"), (1, "exceeds"));
+    let top_in = "\nlet ITEMS: Str = \"https://example.com/api/items\"\n";
+    decided(&program("const_in", top_in, "", "ITEMS"), (0, "within"));
+
+    // A name that may hold another value at the call.
+    let branch = "    var u = \"https://example.com/api/v1\"\n    if 1 > 0 {\n        u = \"https://example.com/admin\"\n    }\n";
+    decided(&program("let_branch", "", branch, "u"), (1, "inconclusive"));
+    decided(
+        &program("const_shadowed", top_in, "    let ITEMS = \"https://example.com/\" + \"admin\"\n", "ITEMS"),
+        (1, "inconclusive"),
+    );
+    let param = dir.join("const_param.delulu");
+    std::fs::write(
+        &param,
+        format!(
+            "module const_param\n{top_in}\nfn fetch(h: Cap[Http], ITEMS: Str) -> Int ! {{Net}} {{\n    match h.get(ITEMS) {{\n        \
+             Ok(body) => 1\n        Err(e) => 0\n    }}\n}}\n\nfn main(root: Root) ! {{Net}} {{\n    \
+             let h = root.http([\"example.com/api/**\"])\n    let n = fetch(h, \"https://example.com/\" + \"admin\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let param = param.to_string_lossy().to_string();
+    let (code, v) = within(&param, &["net=example.com/api/**".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "a parameter shadows the constant: {v:#}");
+
+    // A sent secret's audience is proposed from the literal its URL names.
+    let send = dir.join("send.delulu");
+    std::fs::write(
+        &send,
+        "module send\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"api.example.com\"])\n    \
+         let tok = root.secret(\"A\")\n    let u = \"https://api.example.com:8443/v1\"\n    \
+         let ok = match h.get_with_secret(u, Map(), \"Authorization\", tok) {\n        Ok(b) => true\n        Err(e) => false\n    }\n}\n",
+    )
+    .unwrap();
+    let send = send.to_string_lossy().to_string();
+    assert_eq!(required(&send), ["net=api.example.com", "secret:A@api.example.com:8443=VALUE"]);
+    let (code, v) = within(&send, &["net=api.example.com".to_string(), "secret:A@api.example.com:8443=v".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (0, Some("within")), "{v:#}");
+    let (code, v) = within(&send, &["net=api.example.com".to_string(), "secret:A@api.example.com:443=v".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "the port is the literal's: {v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// SEND-REBIND-1 (D-V2-180's walk): a secret the program sends is attributed to the name it was bound to only where nothing
 /// may have bound it again. The walk restored each block's bindings at its end, which also undid an assignment made inside it,
 /// so after `if c { tok = root.secret("B") }`, in a loop that assigns after it sends, and in a closure called after

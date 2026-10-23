@@ -8956,3 +8956,24 @@ names their function assigns. `within_cli` test red on master; four mutants red.
 Also read: launch `cab60c7`'s release dry run `39911653388` **success**; conformance on the launch tree 355/355, reference
 in sync. The owner saved `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and a setup script (with `|| true` and `exit 0`) in the Default
 cloud environment; not yet seen run.
+
+## 2026-10-23 (evening) — the laptop: a URL named by a `let` or a constant is decided by its literal
+
+**Why.** D-V2-180/181 decide a send by its URL's origin and a request by its path, but the walk read a URL only where the
+call wrote it out. `let u = "https://example.com/admin"; h.get(u)` under `net=example.com/api/**` was *inconclusive*,
+though the run refuses that request; `--grants` proposed `secret:A@HOST=VALUE` for a send through such a name. Naming a
+URL once and using it is the ordinary way to write one, so the precision was the common case, not an edge.
+
+**What.** `SendWalk.vars` now maps a name to what it is known to hold, a secret or a string literal (`Held`), under the
+rules SEND-REBIND-1 just gave the secrets: a block's names end with it, a name assigned in a branch, a loop or a closure
+is forgotten. A module's constants (`let NAME: Str = "…"` among its items, `Item::Const`) are read where no local name
+shadows them, and each body's parameters now shadow them (`body(params, block)`). Another module's constant, imported,
+stays computed. A constant cannot be assigned (DL0301, checked), so nothing forgets it.
+
+**Evidence.** `within_cli` `a_url_named_by_a_let_or_a_constant_is_decided_by_its_literal`: red on the previous code (the
+`let` request *inconclusive*, not *exceeds*). Mutants, each red at its own assertion: a parameter not shadowing (K1), a
+`let`-bound literal not read (K2), constants not read (K3), a shadowing local falling through to the constant (K4), a
+literal not forgotten after a branch (K5), a send's audience from the call's literal only (K6). Green: the binary's unit
+tests and 14 `delulu` targets (`add_path_cli`, `atlas_chain`, `cli`, `cli_contract`, `deploy_cli`,
+`deploy_plan_adversarial`, `egress_cli`, `json_contract`, `mcp_cli`, `sandbox_modes_cli`, `within_cli`, `grants_cli`,
+`guest_cli`, `schema_cli`): 370 passed, 0 failed. `docs/for-agents.md` says where the literal may be written.

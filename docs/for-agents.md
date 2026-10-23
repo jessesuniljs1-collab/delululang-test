@@ -381,9 +381,11 @@ does not (P9-04 (d), D-V2-133).
 `delulu authority FILE --json` names every place the program SENDS a secret (P9-04 (e), D-V2-135) — a
 `secret_destinations` array, present only when it sends one: `{"secret", "to", "at"}` per `http.get_with_secret`
 call, `secret` the grant name when the source shows it (`root.secret("NAME")`, a `let`-bound one, a `Secret.map` of
-it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`).
-Either is `null` when the source does not show it (a computed URL, a secret passed in as a parameter, a name a `for`
-or a match arm rebinds) — never a guess.
+it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`). The
+literal may be written at the call, or bound to a name by a `let` in the body or by a constant of the module
+(`let API: Str = "https://…"` among its items). Either is `null` when the source does not show it (a computed URL, a
+secret passed in as a parameter, a name a `for` or a match arm rebinds, a name assigned in a branch, a loop or a
+closure) — never a guess.
 
 Since 2026-10-23 (RW 2.11, D-V2-180) those sends are part of what the program asks for. `--grants` names a sent secret's
 audience: `secret:API_TOKEN@api.example.com:8443=VALUE`, with `HOST` for a send whose URL the source computes, and

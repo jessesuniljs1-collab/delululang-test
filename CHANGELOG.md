@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a URL named by a `let` or a constant is read as its literal, 2026-10-23
+
+- **Changed: `authority --grants`, `--within` and `deploy plan` read a request's or a send's URL through a name.** A URL
+  bound once by a `let` (`let u = "https://example.com/admin"`) or by a module constant (`let API: Str = "https://…"`
+  among the module's items) is now decided by its literal, as one written at the call always was. Before, it was taken
+  as computed. Under a path-scoped boundary such a request was *inconclusive*; it is now *within* or *exceeds*, the second
+  named at the request. A sent secret's audience was proposed as `HOST`; now it is the literal's `host:port`. A name
+  that may hold another value at the call still counts as computed: one assigned in a branch, a loop or a closure, or a
+  parameter or local `let` that shadows the constant.
+
 ## Unreleased — a reassigned secret is not attributed to its first value, 2026-10-23
 
 - **Fixed: `authority --grants`/`--within`/`deploy plan` attributed a send of a secret reassigned in a branch, a loop or
