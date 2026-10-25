@@ -30,6 +30,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `localhost`, a private range) when the grant is written: a node cannot carry `net.special` yet, so a run under it is
   refused at that connect, and the note gives `--grant net.special=HOST`, the grant that reaches it. The node is still
   made.
+- **Changed (RW 6.17): a network entry wider than its grant is named as that.** `root.http(["127.0.0.1:GET,POST,PUT"])`
+  under a grant of `127.0.0.1:GET,POST` was refused "`network host` was not granted — pass `--grant net=HOST`"; the
+  refusal now names the entry, the host and its grants, and the entry as the grant to pass. A special-use host's remedy is
+  `net.special=` (a plain `net=` never grants one). The code is DL0703 as before; `--within` and `deploy plan` say the
+  same.
 
 ## Unreleased — `authority --within` decides a file use at its call, 2026-10-25
 

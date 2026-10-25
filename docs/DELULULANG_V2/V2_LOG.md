@@ -9280,3 +9280,18 @@ the dimension for the next slice). Witness `broker_cli`
 host as the control); M811–M814 red, the control green; broker_cli 16, federation_cli 10, grants_cli 5, json_contract 14
 passed. A first form refused the host; reading the tests that delegate `127.0.0.1`, before running them, showed what such a
 node is used for, and the refusal became a note.
+
+**A20 — a network entry wider than its grant was called a host that was not granted** (the builder, Sonnet 5.5; reproduced
+here by `run` and `--within`). The `http` mint now names the entry no grant holds, the host and every grant for it, and
+gives the entry as the remedy (`net.special=` for a special-use host, never the `net=` the parser refuses); a host granted
+nothing keeps its words. Witness `within_cli` `a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds`,
+holding the verdict's reason and `run`'s refusal to the same words; M815 (the old refusal), M816 (the remedy always
+`net=`) and M817 (no grant found for the host) red, the control green. `egress_cli`'s GET-under-POST mint asserted "was
+not granted", the old words for this very case; it asserts the new ones. egress_cli 11, within_cli 24, wasm_cli 18, cli
+52, json_contract 14, core_invariance 1, fault_parity 7, delulu-runtime lib 297 passed.
+
+**`launch/2.0.0` at `0a55a44`:** `master` `ce25bc1..41f820f` merged in a worktree with its own target. The CHANGELOG's ten
+new sections moved under `## [2.0.0]`, the Breaking paragraph gains D-V2-184, RW 4.82, D-V2-185, D-V2-186 and A18, and
+the decision log kept D-V2-155 beside D-V2-182 to D-V2-187. Gates there: fmt, clippy.sh, the Survey (0 errors), `doctor
+--check` 26 and the eleven document gates passed. Its `everything` run and release dry run are dispatched; CHECKLIST-2.0's
+criteria 1, 3 and 4 are re-cited from that run once read.

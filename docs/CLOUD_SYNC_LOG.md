@@ -5693,3 +5693,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   V2_LOG). `601d9bb`'s push run `40182828236` **success**.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** RW 4.86's dimension (D-V2-187 sizes it) before the rest of the campaign list in the entry above.
+
+### 2026-10-25 — on-demand routine run 6 (continued): A20 — a network entry wider than its grant is named with it; `launch/2.0.0` at `0a55a44`
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`; `launch/2.0.0` (merge commit `0a55a44`)   Pull request: none
+  Base: `41f820f`
+- Commits: `674d2a2` (A20), this entry's commit; on `launch/2.0.0`: `0a55a44` (the merge of `master` `ce25bc1..41f820f`).
+- **What:** see V2_LOG's paragraphs on A20 and on `launch/2.0.0`.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. On
+  `launch/2.0.0`: everything `master` changed since `ce25bc1`, with `CHANGELOG.md` resolved by hand (the 2.0.0 section).
+  Added, deleted, renamed: nothing.
+- Verified: M815–M817 red; the targets in V2_LOG passed in the VM; runners for `674d2a2` dispatched (`within_cli`,
+  `egress_cli` on macOS and Windows). `launch/2.0.0`'s gates passed in its worktree; its `everything` run and release dry run
+  dispatched at `0a55a44`, unread at this entry. `master`'s `everything` sweep (`40184114103`, on `8a9bcf5`) running.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** read `launch/2.0.0`'s `everything` run and dry run, then re-cite CHECKLIST-2.0 criteria 1, 3 and 4 from them;
+  RW 4.86's dimension; the rest of the campaign list two entries above.
