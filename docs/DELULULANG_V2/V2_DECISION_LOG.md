@@ -4876,3 +4876,27 @@ to plan them. They declare the secret now, and every assertion about the profile
 whose manifest declares no effects was refused DL0701 by `run`'s manifest gate; the supply-chain gate now refuses it
 first, with DL1009, as `build` does, and the test asserts that code. A single file beside a manifest has no package
 check, and is still refused DL0701.
+
+## D-V2-187 — A special-use host in a delegation is named where it is written, and the node is still made; the `net.special` dimension on a node is the next slice (B1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B1, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; re-run by on-demand routine
+run 6).** `grants delegate --net 127.0.0.1` was accepted without a word, and every run under the lease was then refused at
+the connect (`special-use`). A broker node has no `net.special` dimension (`grants_from_lease` gives a leased run an empty
+`net_special`, PS-B-02), so no lease reaches a special-use address, whatever its `net` says.
+
+**Decision.** `grants delegate` and `grants certify` — the two places a node's `net` is written — print a note for an entry
+whose host is a special-use address or name (`netclass::special_use_class` of `netscope::host_of`, so a path or a method
+list is no way round it): the node cannot carry `net.special`, a run under it is refused at that connect, and `--grant
+net.special=HOST` on the run reaches it. The node is still made. **Refusing it was weighed and rejected:** such a node
+drives every decision before the connect — the custody, the Guard's permits per destination, the audit — and
+`broker_cli` and `federation_cli` use exactly that to witness a leased send with nothing leaving the machine; a refusal
+would remove a working grant to report a missing one. **The real fix is the dimension**, sized here for the next slice:
+`Scopes::net_special`, a set of `net` entries ordered by `netscope`'s own order and met by `set_meet`, well-formed only
+within `net` (as `secret_to` lives only beside its secret), emitted in JSON only when non-empty (no existing hash, chain
+or certificate moves); `--net-special` on `delegate` and `certify`; the certificate, `AuthoritySpec`, `NodeInfo`,
+`authority_spec_from_grants` and `grants_from_lease`; the Z3 model's dimension; and the proposal flow, whose filing says
+a special-use reach is never filed while a `net.special=HOST` line passes its check (code reading, unwitnessed). With the
+dimension, a plain `--net` special-use host can be refused as `--grant net=` refuses one (D-NE-28).
+
+Witness: `broker_cli` `a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four
+spellings, both verbs, a control); M811–M814 red.

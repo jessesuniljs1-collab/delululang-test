@@ -5678,3 +5678,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `Async` under a lease), A14 (the interpreter's merge sort), the papercuts (A1, A4–A13, A15, A16, A21, A22, B4–B8, B11,
   C6–C16); (4) `launch/2.0.0`: merge `master` (#61 … this run), dispatch `everything` and the release dry run; (5)
   *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-25 — on-demand routine run 6 (continued): B1 — `delegate` and `certify` name a special-use host a lease cannot reach (D-V2-187)
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `8a9bcf5`
+- Commits: `3eaed71` (B1), this entry's commit.
+- **What:** see V2_LOG's paragraph on B1 and D-V2-187: the note at `delegate` and `certify`; the node still made; the
+  `net.special` dimension sized as the next slice.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/broker_cli.rs`, `docs/for-agents.md`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.86),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: M811–M814 red; broker_cli 16, federation_cli 10, grants_cli 5, json_contract 14 passed in the VM; runners for the
+  witness dispatched at `3eaed71` (macOS `40184714370`, Windows `40184716048` — read before `master` moved, in the next entry or
+  V2_LOG). `601d9bb`'s push run `40182828236` **success**.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** RW 4.86's dimension (D-V2-187 sizes it) before the rest of the campaign list in the entry above.

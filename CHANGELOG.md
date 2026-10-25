@@ -26,6 +26,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
   refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
   this dependency".
+- **Changed (D-V2-187, RW 4.86): `grants delegate` and `grants certify` name a special-use `--net` host** (`127.0.0.1`,
+  `localhost`, a private range) when the grant is written: a node cannot carry `net.special` yet, so a run under it is
+  refused at that connect, and the note gives `--grant net.special=HOST`, the grant that reaches it. The node is still
+  made.
 
 ## Unreleased — `authority --within` decides a file use at its call, 2026-10-25
 

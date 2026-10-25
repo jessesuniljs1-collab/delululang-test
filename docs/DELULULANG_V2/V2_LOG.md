@@ -9269,3 +9269,14 @@ The three are D-V2-186 at work, each read: two `deploy_cli` services were packag
 declared, DL1009), and `sandbox_run_cli`'s package with no declared effects is refused DL1009 by the gate before `run`'s
 DL0701. The fixtures declare their secrets now, and the package case asserts DL1009 (the single file beside a manifest
 keeps DL0701); `deploy_cli` 11 and `sandbox_run_cli` 19 passed.
+
+**B1 — a lease cannot carry `net.special`, and nothing said so until the connect** (the least-authority agent, Sonnet
+5.5; re-run here: `grants delegate --net 127.0.0.1` exit 0, no word). A broker node has no `net.special` dimension, so a
+leased run reaches no special-use address. `delegate` and `certify` now print a note naming the host, the missing
+dimension and `--grant net.special=HOST`; the node is still made, because the Guard and the audit decide a leased send
+before the connect and `broker_cli`'s and `federation_cli`'s witnesses rest on such a node (D-V2-187, which also sizes
+the dimension for the next slice). Witness `broker_cli`
+`a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four spellings, both verbs, a public
+host as the control); M811–M814 red, the control green; broker_cli 16, federation_cli 10, grants_cli 5, json_contract 14
+passed. A first form refused the host; reading the tests that delegate `127.0.0.1`, before running them, showed what such a
+node is used for, and the refusal became a note.
