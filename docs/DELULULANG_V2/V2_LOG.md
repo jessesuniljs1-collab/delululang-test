@@ -9436,3 +9436,34 @@ each refusal to its place: `a_str_field_actor_refuses_as_dl1201` and `a_list_par
 field not placed) and M847 (the parameter not placed) were each red, and the control green. The same refusals in
 `compile_actor_member` are placed alike, but the early gate refuses first, so no test reaches them. Holding a capability
 in an actor field on WASM is a feature, not built here; such a program runs on the interpreter.
+
+## 2026-10-26 — the laptop: `r.float()` runs on WASM (A21, its first half)
+
+**The finding** (the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, A21, low). *"WASM refusals for common
+network/random calls: `.get_with` (DL1201) and `Rand.float` (DL1201)."* Its note that `GETTING_STARTED.md` called
+`get_with_secret` unsupported on WASM no longer holds: the guide now says it runs there (D-V2-174).
+
+**`Rand.float`.** `r.int(lo, hi)` compiled to the host import `rand_int`, and `r.float()` had no lowering. The change has
+three parts:
+- A host import, `rand_float(cap, file, start, end) -> f64`, with `rand_int`'s capability check, trace and custody gate.
+  It takes one step of the same xorshift generator and maps it as the interpreter does (`x as f64 / u64::MAX as f64`), so
+  a seeded run draws alike on both engines, floats and ints in turn.
+- The codegen imports it only where a module calls `.float`, so a module that draws only ints keeps its exact imports,
+  and every `.dwx` built before keeps running.
+- A contained plugin granted `Rand` may import it: `cap_slice` lists it beside `rand_int`, never `root_rand`.
+
+Witnesses:
+- `delulu-wasm` `rand_float_sequence_matches_the_interpreter`: a float, an int and a float under one seed print alike on
+  both engines, each float is in [0, 1], and another seed draws otherwise. It was red before the fix (DL1201, placed at
+  the call).
+- `delulu-runtime` `rand_confers_its_two_draws_and_nothing_more`: the `Rand` slice is exactly the two draws, with their
+  signatures.
+- Mutants, each red with the control green: M848 (the generator not advanced), M849 (the import never made) and M850
+  (the plugin slice without it).
+
+**Seen on the way, not changed.** A seed is made odd (`seed | 1`), so seeds 4242 and 4243 draw alike. A small seed's first
+draws are tiny: the first float under seed 4242 is 2.5e-7, which xorshift64 gives from a seed with few bits set. Mixing
+the seed first (splitmix64) would fix both, but would change every seeded sequence recorded so far, so it is a decision,
+named in *Open / next*.
+
+**Still open:** `http.get_with` (a request with headers and no secret) on WASM; `get_with_secret` compiles there.

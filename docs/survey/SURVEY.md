@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 332 |
-| Rust lines | 191911 |
+| Rust lines | 191995 |
 | Rust files outside `src/` (test/bench targets) | 162 |
 | Markdown documents | 272 |
-| Markdown lines | 87526 |
+| Markdown lines | 87586 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1562 / 16913 |
+| Nodes / edges in this map | 1563 / 16930 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 23735 lines
+- **Modules:** 24 files, 23753 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -323,7 +323,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/interp.rs` | 2855 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 458 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
-| `src/plugin.rs` | 2204 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
+| `src/plugin.rs` | 2222 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 484 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
 | `src/prim.rs` | 1972 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 328 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
@@ -383,17 +383,17 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 13223 lines
+- **Modules:** 9 files, 13289 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 265 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 344 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 6168 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 6194 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 3014 | The embedded Wasmtime host (Phase 3a/3b). |
-| `src/lib.rs` | 1142 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
+| `src/host.rs` | 3041 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/lib.rs` | 1155 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 | `src/reify.rs` | 449 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |
 
@@ -414,7 +414,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | `DL06xx` | 5 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm` |
 | `DL07xx` | 3 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
 | `DL08xx` | 3 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime` |
-| `DL09xx` | 7 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
+| `DL09xx` | 8 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
 | `DL10xx` | 12 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-registry` |
 | `DL11xx` | 2 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-runtime` |
 | `DL12xx` | 6 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-wasm` |

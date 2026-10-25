@@ -1389,6 +1389,33 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // A21: `r.float()` — the same capability check, trace and custody gate as `int`, one step of the same generator,
+    // mapped exactly as the interpreter maps it (`next_rand() as f64 / u64::MAX as f64`), so a seeded run draws alike.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "rand_float",
+            |mut caller: Caller<'_, HostState>, cap: i32, file: i32, start: i32, end: i32| -> f64 {
+                if caller.data().refused.is_some() {
+                    return 0.0;
+                }
+                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
+                if !ok {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                    return 0.0;
+                }
+                caller.data_mut().push_trace("Rand", "float", "Rand", None, file, start, end);
+                if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
+                    caller.data_mut().push_refusal_trace("Rand", "float", "Rand", file, start, end);
+                    return 0.0;
+                }
+                let st = caller.data_mut();
+                let x = xorshift64(st.rng);
+                st.rng = x;
+                (x as f64) / (u64::MAX as f64)
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "root_fs_read", |mut caller: Caller<'_, HostState>, root: i32, path_ptr: i32| -> i32 {
             if caller.data().refused.is_some() {

@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `r.float()` runs on WASM, 2026-10-26
+
+- **Added (A21):** `Cap[Rand].float()` compiles to WASM (`--engine wasm`, `build --target wasm`, a contained plugin granted
+  `Rand`). Until now it was DL1201 there. Under `--seed`, a run draws the same floats and ints in the same order on both
+  engines.
+
 ## Unreleased — A10: an empty list filled later with a sum or a record runs on WASM; a WASM refusal names its line, 2026-10-26
 
 - **Fixed (A10):** `let out = []`, then `out.push(TNum(1))` with a sum or a record, ran on the interpreter and was refused

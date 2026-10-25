@@ -5818,3 +5818,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `claude/peaceful-carson-crfvfa`. Then: CHECKLIST-2.0 re-cite from `40191260368`; the first nightly with #69; A17, A14,
   A11 and the papercuts.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — `r.float()` runs on WASM (A21, its first half) (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/a21-rand-float` (on `laptop/a10-wasm`, #72)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/src/lib.rs`,
+  `crates/delulu-runtime/src/plugin.rs`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.23),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #72, then this PR, each on green CI, and delete the branches.
+  2. Merge `master` into `launch/2.0.0`: #71, #72 and this PR. Re-cite CHECKLIST-2.0 criteria 1, 3 and 4 from its
+     `everything` run. The last ones read green are `40185296917` (`0a55a44`) and `40191260368` (`f0cb42b`).
+  3. A21's other half, `http.get_with` on WASM.
+  4. A15 is a decision. `r.int(lo, hi)` with `hi <= lo` faults as DL0904, "capability scope violation", and a bad
+     argument is not that. The honest code is a new runtime one (DL0908, "an argument outside what the operation
+     accepts"), but it touches the diagnostic registry, the reference and the entrenched conformance witnesses. Also
+     document that the range is half-open.
+  5. A decision on mixing the seed (splitmix64) so a small seed's first draws are not near 0. It changes every seeded
+     sequence.
+  6. A17, a decision: `Async` is not authority, and the run's budget bounds an actor program.
+  7. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+- Survey and doctor (after the last edit): in the commit message.

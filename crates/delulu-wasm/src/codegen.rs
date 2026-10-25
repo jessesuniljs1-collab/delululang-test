@@ -743,6 +743,7 @@ struct Imports {
     clock_now_ms: u32,
     root_rand: u32,
     rand_int: u32,
+    rand_float: u32,
     root_fs_read: u32,
     fs_read_text: u32,
     /// `delulu:cap.fs_narrow` — `Cap[FsRead].narrow(sub)`, a narrower handle minted host-side by the interpreter's own
@@ -1311,6 +1312,8 @@ fn compile_module_typed(
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
+    // A21: `r.float()` imports `rand_float` only where it is called, so a module drawing only `int`s keeps its imports.
+    let needs_rand_float = needs_rand && module_calls_method(&env, module, &["float"]);
     let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text", "narrow"]);
     // Stage 4 phase 4g: a program needs the `delulu:foreign` imports when it binds/loads a foreign lib.
     let needs_foreign = module_calls_method(&env, module, &["foreign", "foreign_load"]);
@@ -1326,6 +1329,7 @@ fn compile_module_typed(
         clock_now_ms: u32::MAX,
         root_rand: u32::MAX,
         rand_int: u32::MAX,
+        rand_float: u32::MAX,
         root_fs_read: u32::MAX,
         fs_read_text: u32::MAX,
         fs_narrow: u32::MAX,
@@ -1378,6 +1382,10 @@ fn compile_module_typed(
         imp.root_rand = n_imports;
         imp.rand_int = n_imports + 1;
         n_imports += 2;
+    }
+    if needs_rand_float {
+        imp.rand_float = n_imports;
+        n_imports += 1;
     }
     if needs_fs {
         imp.root_fs_read = n_imports;
@@ -1592,6 +1600,12 @@ fn compile_module_typed(
         rand_int_ty = next_type + 1;
         types.ty().function([ValType::I32, ValType::I64, ValType::I64, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]); // rand_int(cap, lo, hi, file, start, end) -> i64
         next_type += 2;
+    }
+    let mut rand_float_ty = 0;
+    if needs_rand_float {
+        rand_float_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::F64]); // rand_float(cap, file, start, end) -> f64
+        next_type += 1;
     }
     let mut fs_root_ty = 0;
     let mut fs_read_ty = 0;
@@ -1834,6 +1848,9 @@ fn compile_module_typed(
     if needs_rand {
         imports.import("delulu:cap", "root_rand", EntityType::Function(rand_root_ty));
         imports.import("delulu:cap", "rand_int", EntityType::Function(rand_int_ty));
+    }
+    if needs_rand_float {
+        imports.import("delulu:cap", "rand_float", EntityType::Function(rand_float_ty));
     }
     if needs_fs {
         imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
@@ -3868,6 +3885,15 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.rand_int));
                 return Ok(Ty::I64);
+            }
+            // A21: Cap[Rand].float() -> host import returning a Float in [0, 1], drawn from the stream `int` draws from.
+            if name.name == "float" && args.is_empty() {
+                if compile_expr(recv, cx)? != Ty::Rand {
+                    return Err(CompileError::Unsupported("float() on a non-Rand receiver".into()));
+                }
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.rand_float));
+                return Ok(Ty::F64);
             }
             // Phase 3p: Root.fs_read(path) -> host import minting a scoped FsRead handle.
             if name.name == "fs_read" && args.len() == 1 {

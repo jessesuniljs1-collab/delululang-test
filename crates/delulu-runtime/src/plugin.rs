@@ -320,7 +320,10 @@ pub fn cap_slice(grant: &Grant) -> ImportSlice {
             Effect::Write => add("console_println", vec![I32, I32, I32, I32, I32], vec![]),
             Effect::Read => add("fs_read_text", vec![I32, I32, I32, I32, I32], vec![I32]),
             Effect::Clock => add("clock_now_ms", vec![I32, I32, I32, I32], vec![I64]),
-            Effect::Rand => add("rand_int", vec![I32, I64, I64, I32, I32, I32], vec![I64]),
+            Effect::Rand => {
+                add("rand_int", vec![I32, I64, I64, I32, I32, I32], vec![I64]);
+                add("rand_float", vec![I32, I32, I32, I32], vec![WasmVal::F64]);
+            }
             // Net/Declassify/Load/ForeignCall/user effects have no Contained host import in v0.6: a
             // module granted them still imports nothing for them, so it can reach nothing by them.
             // Silence here is fail-closed — an unlisted effect grants no import.
@@ -2200,5 +2203,20 @@ mod tests {
         g.effects.push("Read".into());
         let slice = cap_slice(&g);
         assert_eq!(slice.len(), 1, "only Read has an import; the other two still confer nothing");
+    }
+
+    #[test]
+    fn rand_confers_its_two_draws_and_nothing_more() {
+        // `Rand` confers the two draws its capability has on the host — `int` and, since the agent campaign's A21,
+        // `float` — with their exact signatures, and never `root_rand`, the constructor that mints it.
+        let g = Grant { effects: vec!["Rand".into()], ..Grant::default() };
+        let slice = cap_slice(&g);
+        let key = |n: &str| ("delulu:cap".to_string(), n.to_string());
+        assert_eq!(slice.len(), 2, "{slice:?}");
+        let int = slice.get(&key("rand_int")).expect("rand_int");
+        assert_eq!((int.params.len(), int.results.as_slice()), (6, [WasmVal::I64].as_slice()));
+        let float = slice.get(&key("rand_float")).expect("rand_float");
+        assert_eq!((float.params.len(), float.results.as_slice()), (4, [WasmVal::F64].as_slice()));
+        assert!(!slice.contains_key(&key("root_rand")), "a plugin never mints a capability");
     }
 }
