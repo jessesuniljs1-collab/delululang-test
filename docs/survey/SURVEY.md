@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 330 |
-| Rust lines | 190510 |
+| Rust lines | 190514 |
 | Rust files outside `src/` (test/bench targets) | 160 |
 | Markdown documents | 270 |
-| Markdown lines | 86564 |
+| Markdown lines | 86590 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1558 / 16632 |
+| Nodes / edges in this map | 1558 / 16635 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 14376 lines
+- **Modules:** 19 files, 14380 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -177,7 +177,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 837 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 85 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
-| `src/netscope.rs` | 749 | P9-05 (a), D-V2-138 — a `net` scope entry is `HOST` or `HOST/PATTERN`, and this is the one reading of it: the … |
+| `src/netscope.rs` | 753 | P9-05 (a), D-V2-138 — a `net` scope entry is `HOST` or `HOST/PATTERN`, and this is the one reading of it: the … |
 | `src/ocsf.rs` | 358 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 615 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/proposal.rs` | 407 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |

@@ -297,7 +297,12 @@ jobs:
   # `unsafe` block (see `miri-ffi`), so what Miri checks here is safe code and the dependencies' unsafe
   # beneath it. That is worth running, but not worth 135 runner-minutes and a red cross on every
   # push. It runs nightly (unless NIGHTLY is `off`) and by hand (Run workflow → `everything`, `heavy`
-  # or `miri-slow`), with a 240-minute budget — which no run has yet confirmed is enough.
+  # or `miri-slow`), with a 240-minute budget. The nightly runs of 2026-10-20, -21 and -23 finished
+  # inside it: delulu-broker in 2 h 34, 1 h 34 and 1 h 25 min (one test, path canonicalization's
+  # laws, is about 66 of those minutes), delulu-check in about 1 h 25, delulu-syntax in about 20.
+  # On 2026-10-24 delulu-broker was cancelled at the cap: a new test judged the same requests afresh
+  # for every pair of entries and alone took 2 h 45 min. A test that grows is answered by doing its
+  # work once (that one now judges each entry once), never by raising this budget.
   miri-slow:
     if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'heavy-gates')
     runs-on: ubuntu-24.04

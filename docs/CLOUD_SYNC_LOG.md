@@ -5603,3 +5603,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
   `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-25 — #66, #67, #68 landed; the broker's Miri run back inside its budget (made on the laptop)
+- Session: `https://claude.ai/code/session_01KUXP3DH8XB3jydsTC8AtuD`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/miri-methods` (on `master` `0549645`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. `master` = `0549645` (#66, #67, #68 fast-forwarded on green).
+- Files and folders: M `crates/delulu-broker/src/netscope.rs`, `.github/workflows/ci.yml`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
+  `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
+- Survey and doctor (after the last edit): in the commit message.

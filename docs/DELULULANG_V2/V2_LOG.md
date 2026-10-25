@@ -9188,3 +9188,19 @@ traps `IntegerDivisionByZero` by itself, so the helper now leaves `b == 0` to it
 (`guest: error[DL0904]: lease … does not grant …`); `APPLIED_UNDER_SANDBOX` has listed both since RW 4.20. Two
 passages said a secret-carrying request is "not yet" under `--engine wasm`, a claim stale since D-V2-174. All three now
 say what the binary does.
+
+## 2026-10-25 — the laptop: #66, #67 and #68 landed; the nightly Miri run of the broker back inside its budget
+
+**Landed.** PRs #66 (GENERIC-RIGID-1), #67 (CONST-UNCHECKED-1) and #68 (`% 0` on WASM) were green on every job of
+their own runs (40015000010, 40016786869, 40017678424: 14 passed, `miri-slow` and `heavy-gates` skipped as on every
+pull request). `master` was fast-forwarded through them in order: `bf922f6` → `85f5f7a` → `0f79ac4` → `0549645`.
+
+**The nightly run of 2026-10-24 (40075722165) was cancelled.** Every job passed except `miri-slow (delulu-broker)`,
+cancelled at its 240-minute cap. Its log shows why: `netscope::tests::the_order_and_the_meet_with_methods_are_exact_over_a_bounded_domain`
+(D-V2-182) ran from 08:24:57 to 11:09:59, 2 h 45 min, and the run then reached
+`path::tests::canonicalization_laws_hold_on_generated_paths`, which took 66 min on 2026-10-23. The whole crate had
+taken 1 h 25 min that night (39922976338). The test judged every request afresh for both entries of each of the 1,521
+pairs, about 410,000 `judge` calls, all identical to the 3,510 needed. It now judges each entry's requests once and
+each distinct meet's once. Its domain is unchanged, nothing shrinks under `cfg!(miri)`, and two mutants still turn it
+red: a meet that unions the methods (line 741) and an order that ignores them (line 734). The `ci.yml` comment that
+said no run had confirmed the 240-minute budget now gives the measured times.
