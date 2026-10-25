@@ -9437,7 +9437,7 @@ field not placed) and M847 (the parameter not placed) were each red, and the con
 `compile_actor_member` are placed alike, but the early gate refuses first, so no test reaches them. Holding a capability
 in an actor field on WASM is a feature, not built here; such a program runs on the interpreter.
 
-## 2026-10-26 — the laptop: `r.float()` runs on WASM (A21, its first half)
+## 2026-10-26 — the laptop: `r.float()` and `http.get_with` run on WASM (A21)
 
 **The finding** (the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, A21, low). *"WASM refusals for common
 network/random calls: `.get_with` (DL1201) and `Rand.float` (DL1201)."* Its note that `GETTING_STARTED.md` called
@@ -9466,4 +9466,16 @@ draws are tiny: the first float under seed 4242 is 2.5e-7, which xorshift64 give
 the seed first (splitmix64) would fix both, but would change every seeded sequence recorded so far, so it is a decision,
 named in *Open / next*.
 
-**Still open:** `http.get_with` (a request with headers and no secret) on WASM; `get_with_secret` compiles there.
+**`http.get_with`, the other half, the same day.** A request with headers and no secret is now the host import
+`http_get_with(cap, url, headers, desc, file, start, end)`. It is `http_post`'s headers sent as a GET, with no body. The
+custody is asked on the URL's host and path as `http_get`'s is, then the interpreter's own `get_with` sends it, and the
+trace names the URL alone, never a header's value (D-V2-128).
+- Witness: `egress_cli` `a_request_with_headers_leaves_alike_from_the_wasm_engine`. The same request leaves from the
+  interpreter, `--engine wasm` and a built `.dwx`: TLS, the report naming the headers and never a value, one trace
+  (each listener's port aside). It was red before the fix: DL1201, placed at the call.
+- `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now runs a `get_with` beside its `get`:
+  refused as a GET on every route, and the daemon's chain holds its `deny` from the WASM engine too.
+- Mutants, each red with the control green: M851 (the trace without the URL), M852 (`get` sent, the headers dropped),
+  M853 (the import never made), M854 (the custody never asked).
+
+**A21 is closed.**

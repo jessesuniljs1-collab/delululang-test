@@ -397,6 +397,68 @@ fn a_request_with_headers_leaves_as_tls_at_l0_and_from_a_guest_and_the_report_na
     }
 }
 
+/// `get_with` on the WASM engine (the agent campaign's A21: DL1201 "does not support the method `.get_with`", though
+/// `get`, `post` and `get_with_secret` compiled): the same request leaves — TLS, the headers named in the report, never
+/// a value — from the source on `--engine wasm` and from a built `.dwx` as from the interpreter, with the same trace.
+#[test]
+fn a_request_with_headers_leaves_alike_from_the_wasm_engine() {
+    let mut traces = Vec::new();
+    for engine in ["interp", "wasm", "dwx"] {
+        let dir = tmp(&format!("hdr-{engine}"));
+        let (port, seen) = listen(Duration::from_secs(20));
+        fetcher_with(
+            &dir,
+            "127.0.0.1",
+            &format!("https://127.0.0.1:{port}/probe"),
+            &[("X-Api-Version", "7"), ("Accept", "text/plain")],
+        );
+        let target = if engine == "dwx" {
+            let o = delulu(&dir, &["build", "fetch.delulu", "--target", "wasm", "--out", "fetch.dwx"]);
+            assert_eq!(o.status.code(), Some(0), "build: {}", out(&o));
+            "fetch.dwx"
+        } else {
+            "fetch.delulu"
+        };
+        let mut args = vec![
+            "run",
+            target,
+            "--grant",
+            "console",
+            "--grant",
+            "net.special=127.0.0.1",
+            "--report-out",
+            "rep.json",
+            "--trace-effects",
+            "--trace-out",
+            "trace.txt",
+        ];
+        if engine == "wasm" {
+            args.extend(["--engine", "wasm"]);
+        }
+        let o = delulu(&dir, &args);
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("{engine}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "{engine}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "{engine}:\n{}", out(&o));
+        assert_eq!(String::from_utf8_lossy(&o.stdout), "not delivered\n", "{engine}:\n{}", out(&o));
+        let v = report(&dir);
+        assert_eq!(
+            v["egress"]["records"][0]["hops"][0]["headers"],
+            serde_json::json!(["accept", "x-api-version"]),
+            "{engine}: {v}"
+        );
+        assert!(!v.to_string().contains("text/plain"), "{engine}: no header value in the report: {v}");
+        let trace = std::fs::read_to_string(dir.join("trace.txt")).unwrap_or_default();
+        assert!(trace.contains("\"get_with\"") && !trace.contains("text/plain"), "{engine}: {trace}");
+        // The trace names the URL, and each engine's listener has its own port.
+        traces.push((engine, trace.replace(&format!(":{port}/"), ":PORT/")));
+    }
+    let (_, interp) = &traces[0];
+    assert!(interp.contains("https://127.0.0.1:PORT/probe"), "{interp}");
+    for (engine, trace) in &traces[1..] {
+        assert_eq!(trace, interp, "{engine}'s trace is the interpreter's");
+    }
+}
+
 /// A header the egress client refuses (here `Host`, which would carry the request to another site on
 /// the checked address) is refused before anything connects: the program is told `Refused`, the
 /// operator why — on stderr, in the report, and for a guest in `denied[]`.

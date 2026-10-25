@@ -11,11 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## Unreleased — `r.float()` runs on WASM, 2026-10-26
+## Unreleased — `r.float()` and `http.get_with` run on WASM, 2026-10-26
 
 - **Added (A21):** `Cap[Rand].float()` compiles to WASM (`--engine wasm`, `build --target wasm`, a contained plugin granted
   `Rand`). Until now it was DL1201 there. Under `--seed`, a run draws the same floats and ints in the same order on both
   engines.
+- **Added (A21):** `Cap[Http].get_with(url, headers)` compiles to WASM. The host sends it as the interpreter does, under
+  the same custody, and with the same trace (the URL, never a header's value).
 
 ## Unreleased — A10: an empty list filled later with a sum or a record runs on WASM; a WASM refusal names its line, 2026-10-26
 
