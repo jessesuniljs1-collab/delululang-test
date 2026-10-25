@@ -65,6 +65,9 @@ pub enum CompileError {
     /// A construct that would place SECRET contents in guest linear memory — DL1205. Refused so the
     /// program runs on the interpreter, where secret bytes never cross into a guest (§4.4, spec §9.8).
     SecretInGuest(String),
+    /// One of the above, at the innermost expression or statement that refused it (the campaign's A10: a refusal named no
+    /// line, so the author of a long program had to guess which expression the backend could not compile).
+    At(delulu_diag::Span, Box<CompileError>),
 }
 
 impl CompileError {
@@ -74,6 +77,7 @@ impl CompileError {
             CompileError::SecretInGuest(what) => {
                 format!("secret contents cannot enter WASM guest memory ({what}); it runs on the interpreter")
             }
+            CompileError::At(_, inner) => inner.message(),
         }
     }
 
@@ -82,6 +86,33 @@ impl CompileError {
         match self {
             CompileError::Unsupported(_) => "DL1201",
             CompileError::SecretInGuest(_) => "DL1205",
+            CompileError::At(_, inner) => inner.code(),
+        }
+    }
+
+    /// Where the refusal is: the innermost expression or statement the backend refused, or `None` for one that belongs to
+    /// no single node (the module's data, an actor's layout).
+    pub fn span(&self) -> Option<delulu_diag::Span> {
+        match self {
+            CompileError::At(span, _) => Some(*span),
+            _ => None,
+        }
+    }
+
+    /// Place the refusal at `span` unless a node inside it was already named: the innermost one wins.
+    fn at(self, span: delulu_diag::Span) -> Self {
+        match self {
+            CompileError::At(..) => self,
+            e => CompileError::At(span, Box::new(e)),
+        }
+    }
+
+    /// Rewrite an `Unsupported` refusal's text, wherever it is placed.
+    fn map_unsupported(self, f: impl FnOnce(String) -> String) -> Self {
+        match self {
+            CompileError::Unsupported(m) => CompileError::Unsupported(f(m)),
+            CompileError::At(span, inner) => CompileError::At(span, Box::new(inner.map_unsupported(f))),
+            other => other,
         }
     }
 }
@@ -2492,7 +2523,22 @@ fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<T
     Ok(result)
 }
 
+/// Compile one statement; a refusal no expression inside it placed is placed at the statement (A10).
 fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    let span = match stmt {
+        Stmt::Let { span, .. }
+        | Stmt::Assign { span, .. }
+        | Stmt::While { span, .. }
+        | Stmt::For { span, .. }
+        | Stmt::Break { span }
+        | Stmt::Continue { span }
+        | Stmt::Return { span, .. } => *span,
+        Stmt::Expr(e) => e.span(),
+    };
+    compile_stmt_unplaced(stmt, cx, is_last, expected).map_err(|e| e.at(span))
+}
+
+fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
     match stmt {
         Stmt::Let { name, ty, value, .. } => {
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
@@ -3612,7 +3658,13 @@ fn inline_body(
     r
 }
 
+/// Compile one expression; a refusal no node inside it placed is placed here, so the innermost refused expression is the
+/// one a DL1201 names (A10).
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    compile_expr_unplaced(e, cx).map_err(|err| err.at(e.span()))
+}
+
+fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     match e {
         Expr::Lit { kind, .. } => match kind {
             LitKind::Int(n) => {
@@ -3734,10 +3786,8 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             cx.instrs[at] = Instruction::If(block_type(tt));
             cx.emit(Instruction::Else);
-            compile_expr_as(else_, cx, tt).map_err(|e| match e {
-                CompileError::Unsupported(m) => CompileError::Unsupported(format!("`if` branches of differing types: {m}")),
-                other => other,
-            })?;
+            compile_expr_as(else_, cx, tt)
+                .map_err(|e| e.map_unsupported(|m| format!("`if` branches of differing types: {m}")))?;
             cx.emit(Instruction::End);
             Ok(tt)
         }
@@ -6012,6 +6062,28 @@ fn alloc_fn(heap_global: u32) -> Function {
         LocalGet(1),
     ]);
     build(&[(2, ValType::I32)], &code)
+}
+
+#[cfg(test)]
+mod placed_refusal_tests {
+    use super::*;
+
+    /// A refusal keeps the innermost place it was given, and a rewrite of its text (the `if` arm's
+    /// "`if` branches of differing types: …") reaches through the place without losing it (A10).
+    #[test]
+    fn the_innermost_place_wins_and_a_rewrite_keeps_it() {
+        let inner = delulu_diag::Span::new(0, 40, 45);
+        let outer = delulu_diag::Span::new(0, 10, 90);
+        let e = CompileError::Unsupported("this expression form".into()).at(inner).at(outer);
+        assert_eq!(e.span(), Some(inner));
+        assert_eq!((e.code(), e.message()), ("DL1201", "WASM codegen does not support this expression form".to_string()));
+        let e = e.map_unsupported(|m| format!("`if` branches of differing types: {m}"));
+        assert_eq!(e.span(), Some(inner));
+        assert_eq!(e.message(), "WASM codegen does not support `if` branches of differing types: this expression form");
+        let s = CompileError::SecretInGuest("a secret".into()).at(outer);
+        assert_eq!((s.code(), s.span()), ("DL1205", Some(outer)));
+        assert_eq!(CompileError::Unsupported("x".into()).span(), None);
+    }
 }
 
 #[cfg(test)]

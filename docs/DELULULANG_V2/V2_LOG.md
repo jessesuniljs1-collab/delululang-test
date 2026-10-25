@@ -9389,3 +9389,37 @@ went with `git branch -d`, and the archived WIP with `-D`. The `dl-launch` workt
 checker 1 h 28 min, syntax 12 min). The release dry run `40191262135` at `f0cb42b` was a success. Run 6's last push run,
 `40190825887` at `8c9ccc9`, was a success. The A10 witnesses on `16470ed`, `wasm_cli` on macOS `40191526037` and Windows
 `40191528017`, were both successes.
+
+## 2026-10-26 — the laptop: A10 closed — an empty list filled later with a sum or a record runs on WASM, and a WASM refusal names its line
+
+**The finding** (the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, A10, medium). *"WASM engine refuses the
+idiomatic `let out = []` + `out.push(<sum-type value>)`; the message has no span and the checker already knows the type."*
+
+**The first half: run 6's fix, landed.** On-demand routine run 6 fixed the list in `16470ed`, on its session branch
+`claude/peaceful-carson-crfvfa`. The weekly limit ended the run before the fix was recorded or landed. Read again here as
+a stranger's diff:
+- The checker's result carries each type definition's name, indexed by `TypeDefId`: `CheckResult::type_names`, from
+  `DeclTable::types`.
+- `compile_checked` gives those names to the codegen.
+- `list_scalar` resolves a non-generic sum or record by name, as `wasm_ty` already resolves the name an annotation writes.
+  A generic sum's list stays on the interpreter.
+
+Nothing in the codegen reads `CompileError`'s variants to choose a path, so the change cannot reroute a program. Its
+witness `wasm_cli` `an_empty_list_filled_later_with_sums_or_records_runs_alike_on_both_engines` passes here. Run 6 read it
+on macOS (`40191526037`) and Windows (`40191528017`), and recorded its mutants M836–M839 red and the control green; they
+were not re-run here. The fix is landed as `500de3b`: cherry-picked onto #71, message kept, the Survey map regenerated.
+
+**The second half: a WASM refusal names its line.** DL1201 and DL1205 carried no span (`"spans": []`), so the author of a
+long program had to guess which expression the backend refused. Every checker refusal points at its own.
+- `CompileError` gains `At(Span, inner)`. `compile_expr` and `compile_stmt` place a refusal that no node inside them placed,
+  so the innermost refused expression or statement is named. `map_unsupported` lets the `if` arm's text rewrite reach
+  through the place, so every message reads as before.
+- `cli::wasm_refusal` builds the diagnostic, with that span, for `run --engine wasm`, `build --target wasm` and a
+  contained plugin's build.
+- Witness: `wasm_cli` `a_wasm_refusal_names_the_line_it_refuses`. A closure in a list on line 6 is refused at
+  `noline.delulu:6:15`, the closure, not the list or the `for`. The human form, `--json` and `build --target wasm` are
+  each checked, and the message is unchanged. It was red before the fix (no location); `wasm_cli` 20 passed after it.
+- `delulu-wasm`'s `placed_refusal_tests`: the innermost place wins, and a rewrite keeps the place.
+- Mutants, each red with the control green: M840 never placed, M841 the outermost place wins, M842 expressions not placed
+  (the statement is named instead), M843 the CLI drops the span, M844 a rewrite drops the place, M845 a rewrite drops the
+  text.

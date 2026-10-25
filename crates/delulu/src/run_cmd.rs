@@ -1417,8 +1417,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
             Ok(w) => w,
             Err(e) => {
-                let d =
-                    Diagnostic::error(e.code(), format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
+                let d = wasm_refusal(&e, "omit `--engine wasm` to run it on the interpreter");
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 return 1;
             }
