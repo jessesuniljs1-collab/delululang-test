@@ -122,6 +122,9 @@ pub struct CheckResult {
     /// `NodeId`. This is what DIR serializes so a Verified plugin can be re-checked without
     /// re-inferring.
     pub node_types: HashMap<NodeId, Type>,
+    /// Each type definition's name, indexed by its `TypeDefId`: what a backend reading `node_types` needs to name a
+    /// `Type::Sum` or a `Type::Record` (A10: an empty list of a user sum, filled by `push` later, on WASM).
+    pub type_names: Vec<String>,
     /// The per-node resolved effect row, companion to `node_types` (DIR §2.3). The row is the
     /// resolved effect set the node performs; polymorphic tails that never bound to concrete
     /// effects are dropped (they contribute nothing observable — the boundary subset check in
@@ -367,6 +370,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         fn_types: checker.fn_types,
         foreign_binds,
         node_types,
+        type_names: table.types.iter().map(|t| t.name.clone()).collect(),
         node_rows,
     }
 }

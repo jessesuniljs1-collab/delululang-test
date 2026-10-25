@@ -338,6 +338,9 @@ struct EnumEnv {
     /// RW 3.4: the module's non-generic record types, by declaration order, and their names.
     records: Vec<RecordDesc>,
     records_by_name: HashMap<String, u32>,
+    /// The checker's name for each `TypeDefId` (`compile_checked`; empty through `compile_module`): how a sum or a record
+    /// the checker inferred is named here (A10: `let out = []`, filled by `out.push(TNum(1))` later).
+    checked_names: Vec<String>,
 }
 
 /// A record type the backend lays out: its fields in declaration order, each a slot's type (`field_ty`) — or `None` when
@@ -600,6 +603,7 @@ fn build_enum_env(module: &Module) -> EnumEnv {
         actors_by_name,
         records: Vec::new(),
         records_by_name,
+        checked_names: Vec::new(),
     };
     // Prelude descriptors.
     let str_payload = vec![Scalar::Str];
@@ -1217,23 +1221,25 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 /// grammar has no method type-argument syntax, so — exactly as the interpreter does — codegen recovers
 /// which lib each bind site resolves to from `foreign_binds` (keyed by the call's `NodeId`).
 pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, String>) -> Result<Vec<u8>, CompileError> {
-    compile_module_typed(module, foreign_binds, &HashMap::new())
+    compile_module_typed(module, foreign_binds, &HashMap::new(), &[])
 }
 
 /// Compile with everything the checker knows that the syntax does not say: the foreign bind sites, and the type it
 /// inferred for each node — so an empty list whose element type no `let` writes (`let out = []`, filled by
 /// `out.push(i)` later) has the type the checker gave it (RW 3.4). What the command line compiles with.
 pub fn compile_checked(module: &Module, checked: &delulu_check::CheckResult) -> Result<Vec<u8>, CompileError> {
-    compile_module_typed(module, &checked.foreign_binds, &checked.node_types)
+    compile_module_typed(module, &checked.foreign_binds, &checked.node_types, &checked.type_names)
 }
 
 fn compile_module_typed(
     module: &Module,
     foreign_binds: &HashMap<NodeId, String>,
     node_types: &HashMap<NodeId, delulu_check::Type>,
+    type_names: &[String],
 ) -> Result<Vec<u8>, CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
-    let env = build_enum_env(module);
+    let mut env = build_enum_env(module);
+    env.checked_names = type_names.to_vec();
 
     // Generic user functions are not compiled as top-level exports; they are inlined (monomorphised)
     // at each call site (Phase 3r). Collect them by name for the inliner.
@@ -3701,7 +3707,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
         // An empty list's element type, when no `let` writes it, is the one the checker inferred (`let out = []`, then
         // `out.push(i)`); a list with items says its own.
         Expr::List { items, id, .. } => {
-            let inferred = if items.is_empty() { cx.node_types.get(id).and_then(list_scalar) } else { None };
+            let inferred = if items.is_empty() { cx.node_types.get(id).and_then(|t| list_scalar(cx.env, t)) } else { None };
             compile_list_literal(items, cx, inferred)
         }
         Expr::Index { recv, index, .. } => compile_index(recv, index, cx),
@@ -4450,14 +4456,21 @@ fn compile_list_literal(items: &[Expr], cx: &mut Cx, want: Option<Scalar>) -> Re
 }
 
 /// The element type of a `List` the checker inferred, where the backend holds it: an `Int`, `Bool`, `Float` or `Str`.
-fn list_scalar(t: &delulu_check::Type) -> Option<Scalar> {
+fn list_scalar(env: &EnumEnv, t: &delulu_check::Type) -> Option<Scalar> {
     use delulu_check::Type;
     match t {
-        Type::List(e) => match **e {
+        Type::List(e) => match &**e {
             Type::Int => Some(Scalar::I64),
             Type::Bool => Some(Scalar::I32),
             Type::Float => Some(Scalar::F64),
             Type::Str => Some(Scalar::Str),
+            // A sum or a record the checker names, as `wasm_ty` reads the same name from an annotation (A10).
+            Type::Sum(d, args) if args.is_empty() => {
+                env.checked_names.get(d.0 as usize).and_then(|n| env.id(n)).and_then(|i| list_element(Ty::Enum(i)))
+            }
+            Type::Record(d, args) if args.is_empty() => {
+                env.checked_names.get(d.0 as usize).and_then(|n| env.record_id(n)).and_then(|i| list_element(Ty::Record(i)))
+            }
             _ => None,
         },
         _ => None,
