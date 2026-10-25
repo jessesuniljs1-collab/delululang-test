@@ -375,6 +375,109 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// P9-05 (d), D-V2-183: `post_with_secret` of a broker-held secret under the daemon — the bytes are asked of the broker for
+/// the one origin, as `get_with_secret`'s are, and the request leaves as a POST. The chain holds the custody's `use` of
+/// the host naming `method: POST`, then the `send`. A capability minted without POST refuses it at the call, before the
+/// broker is asked for a byte: no `send`, nothing connected.
+#[test]
+fn a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method() {
+    let base = std::env::temp_dir().join(format!("delulu_bsec_post_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    for (file, mint) in [("post.delulu", "127.0.0.1:POST"), ("getonly.delulu", "127.0.0.1")] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{mint}\"])\n    \
+             let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+             match h.post_with_secret(\"https://127.0.0.1:{port}/items\", hs, \"Authorization\", tok, \"{{}}\") {{\n        \
+             Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let secret = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
+    let daemon_on = |file: &str, engine: &str| {
+        let net = "net.special=127.0.0.1:GET,POST";
+        delulu_in(
+            &cwd,
+            &state,
+            &[
+                "run",
+                file,
+                "--grant",
+                "console",
+                "--grant",
+                net,
+                "--grant",
+                &secret,
+                "--no-prompt",
+                "--broker",
+                "daemon",
+                "--engine",
+                engine,
+            ],
+        )
+    };
+    let daemon = |file: &str| daemon_on(file, "interp");
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let records = || -> Vec<serde_json::Value> {
+        let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+        v["records"].as_array().expect("records").clone()
+    };
+    let sends = |rs: &[serde_json::Value]| rs.iter().filter(|r| r["action"] == "send").count();
+    // Minted for GET alone: the POST is refused at the call, and the broker is asked for nothing.
+    let o = daemon("getonly.delulu");
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("a `POST` to"), "{}{}", stdout(&o), stderr(&o));
+    assert_eq!(sends(&records()), 0, "{:#?}", records());
+    assert!(l.accept().is_err(), "nothing connected");
+    // Each engine's POST, the interpreter's and then the WASM engine's (the host's `send_with_secret`).
+    let accept = |l: std::net::TcpListener| {
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            loop {
+                match l.accept() {
+                    Ok(_) => return true,
+                    Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10))
+                    }
+                    Err(_) => return false,
+                }
+            }
+        })
+    };
+    for (n, engine) in [(1, "interp"), (2, "wasm")] {
+        let accepter = accept(l.try_clone().unwrap());
+        let o = daemon_on("post.delulu", engine);
+        assert_eq!(o.status.code(), Some(0), "{engine}: {}{}", stdout(&o), stderr(&o));
+        assert!(accepter.join().unwrap(), "{engine}: the POST went out: {}{}", stdout(&o), stderr(&o));
+        let rs = records();
+        assert_eq!(sends(&rs), n, "{engine}: {rs:#?}");
+        let used: Vec<_> = rs
+            .iter()
+            .filter(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "allow")
+            .map(|r| r["authority"]["method"].clone())
+            .collect();
+        // The GET-only run's custody allowed the node's POST before the program's own capability refused it (RW 4.79): a
+        // `use allow` with no `send` after it. Then one for each engine's POST.
+        assert_eq!(used, vec![serde_json::json!("POST"); n + 1], "{engine}: {rs:#?}");
+    }
+    for entry in std::fs::read_dir(state.join("audit")).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        assert!(!text.contains(CANARY), "the chain holds the bytes");
+    }
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// D-V2-174: on the WASM engine under the daemon, a run's secret is the broker's handle, as on the interpreter — the
 /// program holds an index to it, the host holds the handle — and `get_with_secret` asks the broker for the bytes for the
 /// one origin by the interpreter's own code. The same program run on each engine writes the same chain, record for
@@ -608,6 +711,73 @@ fn a_pattern_net_grant_is_honored_under_the_daemon_as_embedded() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// P9-05 (d), D-V2-183: a POST is judged by its method under the daemon as embedded. Granted
+/// `net.special=*.example.invalid:POST/v1/**` (`.invalid` never resolves, so nothing leaves the machine), a POST under
+/// `/v1` reaches the egress client under both custodies, from a sandboxed guest and on the WASM engine; a GET there is
+/// refused DL0904 at the call, in words about its method. The daemon's chain names the POST's `method` beside its
+/// `url_path`, allowed; the GET's use names none and is refused.
+#[test]
+fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
+    let base = std::env::temp_dir().join(format!("delulu_bpost_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let scope = "*.example.invalid:POST/v1/**";
+    for (file, call) in [
+        ("post.delulu", "post(\"https://api.example.invalid/v1/items\", Map(), \"{}\")"),
+        ("get.delulu", "get(\"https://api.example.invalid/v1/items\")"),
+    ] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{scope}\"])\n    \
+             match h.{call} {{\n        Ok(b) => out.println(\"answered\")\n        Err(e) => out.println(\"not answered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let grant = format!("net.special={scope}");
+    let run = |file: &str, extra: &[&str]| {
+        let mut args = vec!["run", file, "--grant", "console", "--grant", grant.as_str(), "--no-prompt"];
+        args.extend_from_slice(extra);
+        delulu_in(&cwd, &state, &args)
+    };
+    let check = |extra: &[&str]| {
+        let o = run("post.delulu", extra);
+        assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not answered\n"), "{extra:?}: {}", stderr(&o));
+        assert!(!stderr(&o).contains("DL0904"), "{extra:?}: {}", stderr(&o));
+        let o = run("get.delulu", extra);
+        assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside the methods"), "{extra:?}: {}", stderr(&o));
+        assert!(!stdout(&o).contains("answered"), "{extra:?}: the program never got an answer: {}", stdout(&o));
+    };
+    check(&[]);
+    check(&["--engine", "wasm"]);
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    check(&["--broker", "daemon"]);
+    check(&["--broker", "daemon", "--sandbox"]);
+    // The WASM host's gate asks its custody by the method too (`custody_allows_by`).
+    check(&["--broker", "daemon", "--engine", "wasm"]);
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let uses: Vec<(Option<String>, String)> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        // The broker's own judgement of each use names its path (the egress refusal's record after a refused one does not).
+        .filter(|r| r["target"] == "api.example.invalid" && r["authority"].get("url_path").is_some())
+        .map(|r| (r["authority"]["method"].as_str().map(str::to_string), r["decision"].as_str().unwrap().to_string()))
+        .collect();
+    let (post, get) = ((Some("POST".to_string()), "allow".to_string()), (None, "deny".to_string()));
+    assert_eq!(
+        uses,
+        [post.clone(), get.clone(), post.clone(), get.clone(), post, get],
+        "the interpreter's two runs, then the guest's, then the WASM engine's: {v:#}"
+    );
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// P9-05 (a), D-V2-138: a path-scoped `net` grant means the same under the daemon as embedded — NET-WILDCARD-1's question
 /// asked of a path. Granted `net.special=*.example.invalid/v1/**` (`.invalid` never resolves, so nothing leaves the
 /// machine), a request under `/v1` reaches the egress client under both custodies, and the daemon's chain holds the host's
@@ -756,6 +926,46 @@ fn a_delegation_narrows_a_host_to_its_paths_and_never_widens_one() {
     assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not fetched\n"), "{}", stderr(&o));
     let o = run("out.delulu");
     assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside every path"), "{}{}", stdout(&o), stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// B1 (the agent test campaign, D-V2-187): a node has no `net.special` dimension, so a run under a lease reaches no
+/// special-use address, and `grants delegate --net 127.0.0.1` was accepted without a word and then refused at every connect.
+/// It is still made — the tests above use such a node to witness the Guard on a leased send — and `delegate` says now, by
+/// every spelling a `net` entry takes, that its runs will be refused at the connect and which grant reaches the host;
+/// `certify`, the other place a node's `net` is written, says the same. The control: a public host gets no note.
+#[test]
+fn a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dbsu-{}-{}", std::process::id(), t % 1_000_000_000));
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let key = cwd.join("ground.key").to_string_lossy().to_string();
+    let subject = stdout(&delulu_in(&cwd, &state, &["grants", "pubkey", "--key", &key])).trim().to_string();
+    assert_eq!(subject.len(), 64, "a public key: {subject}");
+    for (n, entry) in ["127.0.0.1", "localhost", "10.0.0.7/health/**", "[::1]:GET,POST"].into_iter().enumerate() {
+        let delegated = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", entry, "--json"]);
+        let out = format!("c{n}.dlcert");
+        let certify =
+            ["grants", "certify", "--key", &key, "--subject", &subject, "--ttl", "20m", "--effects", "Net", "--net", entry];
+        let certified = delulu_in(&cwd, &state, &[&certify[..], &["--out", &out]].concat());
+        for (verb, o) in [("delegate", &delegated), ("certify", &certified)] {
+            assert!(o.status.success(), "`grants {verb} --net {entry}` is made: {}{}", stdout(o), stderr(o));
+            let said = stderr(o);
+            assert!(
+                said.contains("special-use") && said.contains(&format!("--grant net.special={entry}")),
+                "{verb} {entry}: {said}"
+            );
+        }
+    }
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", "api.example.invalid", "--json"]);
+    assert!(o.status.success(), "the control: {}{}", stdout(&o), stderr(&o));
+    assert!(!stderr(&o).contains("special-use"), "a public host gets no note: {}", stderr(&o));
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }

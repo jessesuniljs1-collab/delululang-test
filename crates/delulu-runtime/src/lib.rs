@@ -288,9 +288,15 @@ mod tests {
         struct Recording(Seen);
         impl Custody for Recording {
             fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
-                self.check_at(op, arg, None)
+                self.check_at(op, arg, None, None)
             }
-            fn check_at(&mut self, _op: Op, _arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+            fn check_at(
+                &mut self,
+                _op: Op,
+                _arg: Option<&str>,
+                url_path: Option<&str>,
+                _method: Option<&str>,
+            ) -> CustodyDecision {
                 self.0.borrow_mut().push(url_path.map(str::to_string));
                 CustodyDecision::Allow
             }
@@ -308,7 +314,7 @@ mod tests {
         let seen: Seen = Rc::default();
         let host: Rc<RefCell<Box<dyn Custody>>> = Rc::new(RefCell::new(Box::new(Recording(seen.clone()))));
         let mut plugin = custody::PluginUseCustody::new(host, delulu_broker::GrantId::from_trusted("g_plugin".to_string()));
-        assert!(matches!(plugin.check_at(Op::Net, Some("api.example.com"), Some("/v1/items")), CustodyDecision::Allow));
+        assert!(matches!(plugin.check_at(Op::Net, Some("api.example.com"), Some("/v1/items"), None), CustodyDecision::Allow));
         assert_eq!(seen.borrow().as_slice(), [Some("/v1/items".to_string())]);
     }
 

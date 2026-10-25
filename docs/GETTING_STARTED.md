@@ -318,7 +318,8 @@ records a `send` — so a delegation says where a secret may go: `delulu grants 
 --secret-to API_TOKEN@api.example.com …` (a child may name fewer origins, never another one). A leased
 run's send is guarded like a declassification: approve it per destination, `delulu guard request g_NODE
 --use declassify:API_TOKEN@api.example.com:443 --why "…"`. Not yet: a `--sandbox` guest (it holds no
-secret) or `--engine wasm` (no `http` at all).
+secret). Under `--engine wasm` it runs as on the interpreter (`get_with_secret` since D-V2-174,
+`post_with_secret` since 2026-10-23).
 
 Secrets have no string form and no equality. **Two** operations get information out to your program,
 and **both carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in

@@ -202,11 +202,17 @@ pub const GRANT_FORMS: &[GrantForm] = &[
     GrantForm { key: "fs.write", form: "fs.write=PATH", example: "fs.write=./out", grants: "writing files under PATH" },
     GrantForm {
         key: "net",
-        form: "net=HOST[/PATH]",
-        example: "net=api.example.com/v1/**",
-        grants: "HTTPS to HOST — only under PATH when one is named (`*` one segment, `**` the rest); never a special-use address",
+        form: "net=HOST[:METHODS][/PATH]",
+        example: "net=api.example.com:GET,POST/v1/**",
+        grants: "HTTPS to HOST by the METHODS named (GET, HEAD, POST, PUT, PATCH, DELETE, in that order; none named: GET \
+                 alone) — only under PATH when one is named (`*` one segment, `**` the rest); never a special-use address",
     },
-    GrantForm { key: "net.special", form: "net.special=HOST[/PATH]", example: "net.special=127.0.0.1", grants: "HTTPS to a special-use address, named explicitly" },
+    GrantForm {
+        key: "net.special",
+        form: "net.special=HOST[:METHODS][/PATH]",
+        example: "net.special=127.0.0.1",
+        grants: "HTTPS to a special-use address, named explicitly; METHODS and PATH as for `net`",
+    },
     GrantForm { key: "foreign.c", form: "foreign.c=LOGICAL:PATH", example: "foreign.c=mathlib:libm.so.6", grants: "binding the C library LOGICAL to PATH" },
     GrantForm { key: "foreign.python", form: "foreign.python=PATTERN", example: "foreign.python=numpy", grants: "importing Python modules matching PATTERN" },
     GrantForm {

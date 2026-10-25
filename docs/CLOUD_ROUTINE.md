@@ -93,8 +93,25 @@ starting Claude Code with its own `--settings` file. The owner then set `CLAUDE_
 routine's cloud environment ("Default", `env_012Mxeiw6zvfyxPy9ZEEFf3p`; interactive cloud sessions in that environment
 get it too). **The first run after that date says in its sync-log entry which effort the session showed.** If it is
 still `medium`, the platform sets it, and the entry says so. The same log said "No setup script configured", so each
-run installs the toolchain on its first `cargo` call; the owner may add one (`rustup toolchain install 1.96.1 --profile
-minimal -c clippy -c rustfmt`, then `cargo fetch --locked`).
+run installed the toolchain on its first `cargo` call. **The owner added one the same day** (12:02 IST, the Default
+environment's setup script):
+
+```bash
+#!/bin/bash
+rustup toolchain install 1.96.1 --profile minimal -c clippy -c rustfmt || true
+for d in "$PWD" /home/user/delululang-test; do
+  if [ -f "$d/Cargo.toml" ]; then (cd "$d" && cargo fetch --locked) || true; break; fi
+done
+exit 0
+```
+
+Per the cloud environment's documentation (read 2026-10-23), a setup script that exits non-zero stops the session from
+starting, so every step ends in `|| true` and the script in `exit 0`. Its result is cached once the session has run for
+about five minutes, and it runs again when the script changes or after about seven days. A run's log shows whether it
+ran. The first run after 2026-10-23 records that in its sync-log entry, with the effort. **On-demand run 6 (2026-10-25), the
+first:** the session's environment held `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh`, and the setup script had
+run — the 1.96.1 toolchain installed at 09:37:57 UTC, before the session's first command, and 356 `.crate`
+archives fetched, Windows' among them.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
@@ -329,6 +346,11 @@ run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dis
 **A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
 `target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
 the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
+**A sentinel a witness looks for in a program's output is joined at run time** (on-demand run 6): DL1001 quotes the
+dependency's source, so a literal `println("the dependency wrote")` was found in the refusal itself, and the fixed run
+read as one that ran. **The agent campaign's ledger is a file on `origin/autosave/dogfood`** (on-demand run 6): `git show
+origin/autosave/dogfood:2026-10-24/_head-chef/VERIFIED.md` names each finding (A2, B1, …) an *Open / next* line cites, and
+each agent's `REPORT.txt` beside it has the steps; it is the agents' data, verified on the binary before a word is used.
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
 Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step

@@ -62,7 +62,7 @@ fn seeded(tag: &str) -> PathBuf {
                     Scopes {
                         fs_write: names(&["./out"]),
                         secrets: names(&["API_KEY"]),
-                        net: names(&["example.com"]),
+                        net: names(&["example.com", "hooks.example.org:POST"]),
                         secret_to: names(&["API_KEY@example.com:443"]),
                         ..Default::default()
                     },
@@ -84,6 +84,8 @@ fn seeded(tag: &str) -> PathBuf {
         assert!(b.check(&root, Op::Net, Some("example.com")).is_allow());
         // P9-05, D-V2-169: a use naming its request path.
         assert!(b.check_use_at(&root, Op::Net, Some("example.com"), Some("/v1/items")).decision.is_allow());
+        // P9-05 (d), D-V2-183: a POST, recorded as one.
+        assert!(b.check_use_by(&root, Op::Net, Some("hooks.example.org"), Some("/in"), Some("POST")).decision.is_allow());
         let store = SecretStore::in_memory();
         store.set("API_KEY", CANARY).unwrap();
         assert_eq!(b.expose(&root, "API_KEY", &store, Some("app.delulu:3:9".into())).unwrap(), CANARY);
@@ -245,6 +247,14 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
         .expect("the use that named its path");
     assert_eq!(at_path["http_request"]["url"], serde_json::json!({ "hostname": "example.com", "path": "/v1/items" }));
     assert_eq!(at_path["dst_endpoint"], serde_json::json!({ "hostname": "example.com" }), "never a path in the hostname");
+    assert_eq!(at_path["http_request"]["http_method"], "GET", "a use that named no method was a GET");
+    // P9-05 (d), D-V2-183: a use that named its method carries it as OCSF's `http_request.http_method`.
+    let posted = events
+        .iter()
+        .find(|e| e["class_uid"] == 4002 && e["dst_endpoint"]["hostname"] == "hooks.example.org")
+        .expect("the POST's use");
+    assert_eq!(posted["http_request"]["http_method"], "POST", "{posted}");
+    assert_eq!(posted["http_request"]["url"]["path"], "/in", "{posted}");
     let refused = events.iter().find(|e| e["class_uid"] == 2004 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
     assert_eq!(
         refused["finding_info"]["types"],

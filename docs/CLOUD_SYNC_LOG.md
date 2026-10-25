@@ -5538,3 +5538,199 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** land this, merge `master` into #59 and land it; then the launch merge takes #58, #59 and this, and
   CHECKLIST-2.0 criteria 1, 3 and 4 are re-cited from that tree's own `everything` run (criterion 4 gains this advisory).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (evening) — a URL named by a `let` or a constant is decided by its literal (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/send-url-let` (on `laptop/send-rebind` `6d1242c`, #59; `master` `ce25bc1` merged in after #59 landed)   Pull request: opened with that push
+- **What:** see V2_LOG's entry of the same name. `--grants`, `--within` and `deploy plan` read a send's or a request's
+  URL through a `let` or a module constant, under SEND-REBIND-1's forgetting rules. A second commit records the owner's
+  setup script for the cloud environment in `docs/CLOUD_ROUTINE.md`; no run has used it yet.
+- Files and folders: M `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`, `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/CLOUD_ROUTINE.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+
+### 2026-10-23 (evening) — a `net` entry names its methods (P9-05 (d), first slice, D-V2-182) (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/net-methods` (on `master` `269237d`)   Pull request: opened with this push
+- **What:** see V2_LOG's entry of the same name and D-V2-182. `net=HOST[:METHODS][/PATTERN]`, none named = GET alone;
+  the order, the meet, the judge, every check asking with GET, Z3 §2e, the OpenShell export's refusal.
+- Files and folders: M `crates/delulu-broker/src/netscope.rs`, `crates/delulu-broker/src/validate.rs`,
+  `crates/delulu-broker/src/diag.rs`, `crates/delulu-runtime/src/egress.rs`, `crates/delulu-runtime/src/prim.rs`,
+  `crates/delulu/src/within.rs`, `crates/delulu/src/openshell.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `crates/delulu/tests/sandbox_openshell_cli.rs`, `docs/design/models/authority_algebra.py`,
+  `docs/design/models/README.md`, `docs/MATHEMATICS.md`, `.github/workflows/ci.yml` (11 Z3 mutants), `CHANGELOG.md`,
+  `docs/for-agents.md`, `skills/delulu/SKILL.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** the first non-GET primitive (P9-05 (d)'s second slice).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (night) — `http.post`, the first request that is not a GET (P9-05 (d), second slice, D-V2-183) (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/http-post` (on `laptop/net-methods` `69414e5`, #61)   Pull request: opened with this push
+- **What:** see V2_LOG's entry of the same name and its continuation (`post_with_secret`), D-V2-183 and
+  `ENTRENCHED_CHANGE_RECORD.md` (the anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`, four witness
+  rows each, in an entrenched file).
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/dir.rs`,
+  `crates/delulu-check/src/prim_table.rs`, `crates/delulu-runtime/src/egress.rs`,
+  `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-runtime/src/interp.rs`,
+  `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/trace.rs`, `crates/delulu-runtime/src/custody.rs`,
+  `crates/delulu-runtime/src/channel.rs`, `crates/delulu-runtime/src/lib.rs`, `crates/delulu-broker/src/validate.rs`,
+  `crates/delulu-broker/src/ocsf.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/src/within.rs`, `crates/delulu/src/schema.rs`, `crates/delulu/src/broker_ipc.rs`,
+  `crates/delulu/src/broker_client.rs`, `crates/delulu/src/brokerd.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/audit_ocsf_cli.rs`,
+  `tests/conformance/witnesses.toml` (entrenched), `docs/reference/README.md`, `docs/reference/coverage.md`,
+  `docs/reference/primitives.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`, `docs/for-agents.md`,
+  `skills/delulu/SKILL.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (`docs/reference/*` generated). Added, deleted, renamed: nothing.
+- **Open / next:** `post` and `post_with_secret` on the WASM engine.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (night) — `http.post` and `post_with_secret` on the WASM engine; RW 4.79 recorded (made on the laptop)
+- Session: `https://claude.ai/code/session_019NgNAXE8mxtFmikE2dGnPd`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-post` (on `laptop/http-post` `b40de37`, #63)   Pull request: opened once #63 lands
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `CHANGELOG.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** the launch merge of #61 to #63 and this; RW 4.79 (judge the capability before the custody).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — a certificate carries every dimension a delegation can (CERT-SECRET-1, RW 4.80); `net` form names methods (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found while setting up an agent test campaign (Sonnet 5.5 and Haiku 5.5 sous-chefs, running under leases the head chef delegated; their findings are not in this change).
+- Branch: `laptop/cert-secret` (on `laptop/wasm-post` `41f1dc6`, PR #64)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/federation_cli.rs`, `crates/delulu-runtime/src/broker.rs`,
+  `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** the agent campaign's findings, verified against the binary; the launch merge of #61 to #64 and this.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — the effect row escaped through a generic: a generic's parameters are rigid in its body (GENERIC-RIGID-1, D-V2-184) (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign's zero-authority agent (Haiku 5.5, `claude-haiku-5-5` per its transcript); verified and fixed by the head chef.
+- Branch: `laptop/generic-rigid` (on `laptop/cert-secret` `bf922f6`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name, D-V2-184 and `ENTRENCHED_CHANGE_RECORD.md` (laundering.rs).
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/unify.rs`, `crates/delulu-check/src/ty.rs`,
+  `crates/delulu-check/tests/laundering.rs` (entrenched), `CHANGELOG.md`, `HANDOFF.md` (§11: two owner instructions, three
+  lessons), `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Not in the repository (the laptop only): `.claude/settings.local.json` (the agent gate hook, untracked);
+  `D:\nelan\dogfood-campaign\` (the saver, the mirror and the snapshot repo); branch `autosave/dogfood` on origin (agent
+  workdir snapshots, never merged).
+- **Open / next:** the campaign's other findings, verified (top-level `let` never checked, C4/C5; `--within` and a use
+  path escaping its capability, B9; leases cannot carry `net.special`, B1; doc contradictions, B10).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — a top-level constant's value is checked (CONST-UNCHECKED-1, RW 4.82) (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign's zero-authority agent (Haiku 5.5).
+- Branch: `laptop/const-check` (on `laptop/generic-rigid` `85f5f7a`, PR #66)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added: `crates/delulu-check/tests/constants.rs`. Deleted, renamed: nothing.
+- **Open / next:** WASM `% 0` reports overflow (A3); `--within` and a use path escaping its capability (B9); a dependency
+  pin repair that writes invalid TOML (A2); `--report-out` under `--sandbox` (A18); the remaining campaign papercuts.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-24 — `% 0` faults alike on both engines (RW 4.83); three stale doc passages (made on the laptop)
+- Session: `https://claude.ai/code/session_0195W78H6GtPofusA7dom8kC`   Model: Claude Opus 5.5 (the laptop; no fallback notice). Found by the agent test campaign (A3, B10).
+- Branch: `laptop/wasm-rem` (on `laptop/const-check` `0f79ac4`, PR #67)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `docs/for-agents.md`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
+  `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-25 — #66, #67, #68 landed; the broker's Miri run back inside its budget (made on the laptop)
+- Session: `https://claude.ai/code/session_01KUXP3DH8XB3jydsTC8AtuD`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/miri-methods` (on `master` `0549645`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. `master` = `0549645` (#66, #67, #68 fast-forwarded on green).
+- Files and folders: M `crates/delulu-broker/src/netscope.rs`, `.github/workflows/ci.yml`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
+  `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-25 — `--within` decides a file use at its call (B9, D-V2-185) (made on the laptop)
+- Session: `https://claude.ai/code/session_01KUXP3DH8XB3jydsTC8AtuD`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/within-file-use` (on `laptop/miri-methods` `2ddd15c`, PR #69)   Pull request: opened with this commit
+- **What:** see D-V2-185 and V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/within.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/within_cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** land #69 after its `miri-slow` run (40165159856) is read; then this PR on green CI. A2 (pin repair TOML),
+  A18 (`--report-out` under `--sandbox`), B1 (leases and `net.special`).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-25 — on-demand routine run 6: the laptop's #69 and #70 landed; A18, A2 and RUN-PIN-1 closed (D-V2-186)
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (the system prompt names
+  `claude-opus-5-5`; no fallback notice; no sous-chef). **Effort:** `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh`
+  in the session's environment — the first run since the owner set the variable in the cloud environment (2026-10-23).
+  **The setup script ran:** the 1.96.1 toolchain installed at 09:37:57 UTC, before the session's first command, and 356
+  `.crate` archives already fetched, Windows' among them.
+- Branch: `master`; the code's runner reads on `claude/peaceful-carson-crfvfa` (this session's branch)   Pull request: none
+  (#69 and #70 landed by fast-forward)   Base: `0549645`
+- Commits: `2ddd15c`, `daff3ec` (the laptop's, #69 and #70 — `master` fast-forwarded to them); `601d9bb` (A18); `301a58d`
+  (A2); `4ee928a` (RUN-PIN-1); `94efbb3` (three tests meet the gate); this entry's commit.
+- Start of session (on `0549645`, 09:38 UTC): `survey check` ok (1558 nodes, 16632 edges); `doctor --check` ok (26 checks in
+  this VM). `gh` is at `/usr/local/bin/gh` (not used; CI read through the REST API and the GitHub MCP tools).
+- **Read first:** `origin/laptop/miri-methods` and `origin/laptop/within-file-use` were 1 and 2 commits ahead of `master`, with
+  #69 and #70 open and green (`40165160695`, `40165944252`, every job; #69's `miri-slow` dispatch `40165159856`: the broker
+  1 h 47 min, the checker 1 h 31 min, the syntax crate 21 min, inside the 240-minute budget). Re-run here: `within_cli` 23,
+  `deploy_cli` 11 (the laptop's records say 23), `netscope` 10; one D-V2-185 mutant red. `master` fast-forwarded to
+  `daff3ec`; its push run `40181838959` **success**. `autosave/laptop`'s newest snapshot `875c373` is `daff3ec`'s code;
+  `autosave/laptop-dl-launch` `ccb3241` equals `launch/2.0.0` outside the map; `autosave/dogfood` is the agent campaign's
+  workdirs (never merged) — its `_head-chef/VERIFIED.md` gave this run its inbox (A2, A18, B1). Every other branch: 0
+  commits `master` lacks, or recorded as superseded (`7d6a22b`, `d3f0d52`; `laptop/wasm-handles-in-slots` folded in).
+- **The nightly of 2026-10-25** (`40175136208`, on `0549645`, before #69): every job success except `miri-slow
+  (delulu-broker)`, still running at this entry — it carries the test #69 fixed, so its cap is expected.
+- **Built:** A18 — `run --sandbox` refuses a `--report-out` inside a write scope (D-V2-21) as the ordinary run does;
+  A2 — DL1001's repair writes the pin inside an inline-table dependency; RUN-PIN-1 (HIGH, found here) — `run` on every engine,
+  `--sandbox`, `build --target wasm`, `test`, `deploy plan`, `publish`, `add` and `sandbox policy` ran or shipped a dependency
+  its pin refuses; one `supply_chain_gate` on every route now (D-V2-186). V2_LOG's entry of the same name has each witness
+  (red first) and mutant (M801–M810, each red, controls green).
+- Files and folders: M `crates/delulu/src/guest.rs`, `crates/delulu/src/run_cmd.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu-check/src/deps.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu/tests/sandbox_modes_cli.rs`,
+  `crates/delulu/tests/sandbox_guard_e2e.rs`, `crates/delulu/tests/provenance.rs`, `crates/delulu/tests/fix_cli.rs`,
+  `crates/delulu/tests/deploy_cli.rs`, `crates/delulu/tests/sandbox_run_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4, §11.5),
+  `docs/CLOUD_ROUTINE.md` (the effort and setup script seen; two traps), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-186),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.84, 4.85, 6.16), `docs/design/STAGE2_SPECIFICATION.md` (§3.2's
+  example valid TOML), `docs/book/THE_DELULULANG_BOOK.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `docs/assistant-memory/a-guarantee-witnessed-through-one-command.md`. Deleted, renamed: nothing.
+- Verified: runners at `601d9bb` — macOS `40182254723`, Windows `40182256417` (json_contract, sandbox_guard_e2e,
+  sandbox_modes_cli); at `4ee928a` — macOS `40183138954`, Windows `40183140704` (provenance 17, fix_cli 13). The full suite
+  alone at `4ee928a`: 2,544 passed, 3 failed (D-V2-186's, fixed in `94efbb3`), 16 ignored, 183 binaries; after the fix
+  `deploy_cli` 11, `sandbox_run_cli` 19. `601d9bb`'s push run `40182828236` running at this entry.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: mark A2 and A18 FIXED in `D:\nelan\dogfood-campaign\…\_head-chef\VERIFIED.md`, and add RUN-PIN-1.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RUN-PIN-1) and §11.5 (a guarantee witnessed through one command is witnessed
+  for that command); `docs/assistant-memory/a-guarantee-witnessed-through-one-command.md`, copied both ways.
+- Loop engineering: `docs/CLOUD_ROUTINE.md` — what the first run after 2026-10-23 saw (effort, setup script); a sentinel a
+  witness looks for is joined at run time (DL1001 quotes the source it refuses); the agent campaign's ledger is on
+  `origin/autosave/dogfood`.
+- **Open / next, in order:** (1) the push runs of `601d9bb`…this commit, and the nightly `40175136208`'s broker Miri job —
+  then the first nightly with #69 (2026-10-26); (2) B1 — a lease cannot carry `net.special` (`delegate --net 127.0.0.1` is
+  accepted and can never connect); (3) the campaign's other findings, each verified first: A19 (`grants propose` files no
+  ask for an egress refusal), A20 (`--within` names the wrong grant when only the methods are short), A17 (a decision:
+  `Async` under a lease), A14 (the interpreter's merge sort), the papercuts (A1, A4–A13, A15, A16, A21, A22, B4–B8, B11,
+  C6–C16); (4) `launch/2.0.0`: merge `master` (#61 … this run), dispatch `everything` and the release dry run; (5)
+  *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-25 — on-demand routine run 6 (continued): B1 — `delegate` and `certify` name a special-use host a lease cannot reach (D-V2-187)
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `8a9bcf5`
+- Commits: `3eaed71` (B1), this entry's commit.
+- **What:** see V2_LOG's paragraph on B1 and D-V2-187: the note at `delegate` and `certify`; the node still made; the
+  `net.special` dimension sized as the next slice.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/broker_cli.rs`, `docs/for-agents.md`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.86),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: M811–M814 red; broker_cli 16, federation_cli 10, grants_cli 5, json_contract 14 passed in the VM; runners for the
+  witness dispatched at `3eaed71` (macOS `40184714370`, Windows `40184716048` — read before `master` moved, in the next entry or
+  V2_LOG). `601d9bb`'s push run `40182828236` **success**.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** RW 4.86's dimension (D-V2-187 sizes it) before the rest of the campaign list in the entry above.

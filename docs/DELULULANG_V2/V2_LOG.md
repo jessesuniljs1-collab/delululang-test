@@ -9007,3 +9007,307 @@ entry does not show whether ML-DSA's code calls the affected mask functions; the
 **Evidence.** Locally `cargo deny check advisories`: `advisories ok` (exit 0), and `advisories FAILED` on the launch
 tree's 0.4.2 lockfile (the witness). `delulu-runtime` `nist_kat` 5 passed, so the signatures and keys are byte-identical
 to NIST's vectors. `--lib pqc` 11 passed, `delulu` `pqc_cli` 6 passed. Clippy stamped; the pull request's CI is the rest.
+
+## 2026-10-23 (evening) — the laptop: a URL named by a `let` or a constant is decided by its literal
+
+**Why.** D-V2-180/181 decide a send by its URL's origin and a request by its path, but the walk read a URL only where the
+call wrote it out. `let u = "https://example.com/admin"; h.get(u)` under `net=example.com/api/**` was *inconclusive*,
+though the run refuses that request; `--grants` proposed `secret:A@HOST=VALUE` for a send through such a name. Naming a
+URL once and using it is the ordinary way to write one, so the precision was the common case, not an edge.
+
+**What.** `SendWalk.vars` now maps a name to what it is known to hold, a secret or a string literal (`Held`), under the
+rules SEND-REBIND-1 just gave the secrets: a block's names end with it, a name assigned in a branch, a loop or a closure
+is forgotten. A module's constants (`let NAME: Str = "…"` among its items, `Item::Const`) are read where no local name
+shadows them, and each body's parameters now shadow them (`body(params, block)`). Another module's constant, imported,
+stays computed. A constant cannot be assigned (DL0301, checked), so nothing forgets it.
+
+**Evidence.** `within_cli` `a_url_named_by_a_let_or_a_constant_is_decided_by_its_literal`: red on the previous code (the
+`let` request *inconclusive*, not *exceeds*). Mutants, each red at its own assertion: a parameter not shadowing (K1), a
+`let`-bound literal not read (K2), constants not read (K3), a shadowing local falling through to the constant (K4), a
+literal not forgotten after a branch (K5), a send's audience from the call's literal only (K6). Green: the binary's unit
+tests and 14 `delulu` targets (`add_path_cli`, `atlas_chain`, `cli`, `cli_contract`, `deploy_cli`,
+`deploy_plan_adversarial`, `egress_cli`, `json_contract`, `mcp_cli`, `sandbox_modes_cli`, `within_cli`, `grants_cli`,
+`guest_cli`, `schema_cli`): 370 passed, 0 failed. `docs/for-agents.md` says where the literal may be written.
+
+## 2026-10-23 (evening) — the laptop: a `net` entry names its methods (P9-05 (d), first slice, D-V2-182)
+
+**Why now.** The next feature an agent needs is a request other than GET: most APIs take a POST. Under today's grammar,
+that primitive would let every `net=HOST` grant ever written POST, PUT or DELETE on its host, so the method dimension
+comes first.
+
+**What.** `net=HOST[:METHODS][/PATTERN]`; none named = GET alone; one spelling per set. The order (subset) and meet
+(intersection) are in `netscope`, beside the paths'. Every check asks with GET, and the broker gains
+`Denial::NetMethod` (DL0904). `--within` decides a computed URL as *within* only when every boundary entry takes GET
+on every path. The OpenShell export refuses a method scope. A port in an entry, accepted before and matching nothing,
+is now refused in words, while the broker's host check still reads such an entry as one host string, so a malformed
+suffix gains no match. An entry naming no host now takes no request (it took one whose URL named no host;
+latent: such a URL is refused earlier). See D-V2-182.
+
+**Evidence.** Witnessed red on the previous code: `egress_cli` `a_method_scoped_grant_takes_only_its_methods` ("host … is
+not in the granted allowlist") and `sandbox_openshell_cli`'s method case (exit 0). Mutants N1 to N6 were red in the
+`netscope` unit tests, and N1, N2, N3 and N5 end to end as well. Z3 §2e: 9 obligations proved, 50 in all, and the
+mutants `net-method-dropped` and `net-method-meet-union` each caught. CI's teeth step now names 11 mutants.
+`delulu-broker` `netscope` 10 passed; the `delulu` binary's `within` unit tests 8 passed, the agreement test
+generating method entries.
+
+## 2026-10-23 (night) — the laptop: `http.post`, the first request that is not a GET (P9-05 (d), second slice, D-V2-183)
+
+**Why.** An agent calls an authenticated API to change something, and that takes a POST. D-V2-182 made the methods a
+dimension first, so this primitive widens no grant written before it.
+
+**What.**
+- `post(url, headers, body)`, typed as `get_with` plus a `Str` body, the URL still argument one.
+- The egress client gained `request(policy, method, url, headers, body, secret, …)`, with `request_with_secret` as
+  its GET. Each hop is judged by its own method. A 301, 302 or 303 after a non-GET continues as a GET with no body; a
+  307 or 308 keeps both, to the named origin only (`Reason::BodyElsewhere`). The body is at most 1 MiB
+  (`Reason::RequestTooLarge`).
+- The reqwest transport sends `request(method, url).body(…)`.
+- The custody's `check_at` carries the method (`custody_method_for`, `None` for a GET) to the daemon. `ReqBody::Check`
+  gains an optional `method`, absent for a GET, so a GET's frame is unchanged. `Broker::check_use_by` judges the
+  method and records `method` beside `url_path`. OCSF maps it to `http_request.http_method`.
+- `--within`'s `Ask::Request` and its `RequestSite` carry the method. The requirement line for a POST names `:POST`.
+- The conformance anchor `ref.prim.http.post` has four witnesses (entrenched; `ENTRENCHED_CHANGE_RECORD.md`), and the
+  reference was regenerated. `PRIM_TABLE_VERSION` is 8, and the pinned table count 85.
+
+**Evidence.**
+- Tests:
+  - egress unit tests: the POST, refusal under GET alone, each redirect status, the cross-origin refusal, the size
+    limit, a GET's record unchanged;
+  - over real TLS: the request line, `Content-Length` and the body whole;
+  - the broker's method judgement and record, and OCSF's `http_method`;
+  - `egress_cli` at L0 and from a guest;
+  - `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded`: embedded, the daemon, the daemon
+    with a guest; the chain's records `POST allow` and `GET deny`;
+  - `within_cli` `a_post_is_decided_by_its_method_against_the_boundary`, including a request decided by its method
+    alone.
+- Mutants, each red: P1 the first check asking GET, P2 every hop judged as GET, P3 a 303 keeping the POST, P4 the
+  body allowed elsewhere, P5 the custody never told the method, P6 `--within` deciding GET, P7 the daemon dropping
+  the method.
+- `delulu-conform --coverage`: one gap before the witness rows, 356/356 after. `--check-reference` in sync.
+
+**Found on the way:** the egress test server read only a request's head, so its body arrived unseen. It now reads to
+the head's `Content-Length`.
+
+## 2026-10-23 (night, continued) — the laptop: `http.post_with_secret`, the authenticated POST (D-V2-183)
+
+**What.** `post_with_secret(url, headers, header, secret, body)`, on the same branch and table version as `post`. The
+secret rides as `get_with_secret`'s does, and the body as `post`'s. Under the daemon, `broker_secret_send` now takes
+the method and judges the request's own method before the broker is asked for a byte. The interpreter's dispatch routes
+both secret-carrying methods to it. `--within`'s walk sees the send (the secret is argument four of both).
+
+**Evidence.**
+- Tests:
+  - egress `a_post_carries_its_secret_and_its_body_only_inside_the_audience`: the secret and the body on a POST to
+    the audience; refused outside it before anything is resolved; a 307 to another origin refused, the secret sent once;
+  - `broker_cli` `a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method`: under the daemon the
+    POST went out, the chain held the `use` with `method: POST` and one `send`, and no byte of the secret. A capability
+    minted for GET alone refused it at the call: no `send`, nothing connected;
+  - `within_cli`: `--grants` names `net=…:POST` and the secret's audience.
+- Mutants, each red: Q1 the pre-judgement as a GET, Q3 the walk blind to the send, Q4 the dispatch not routing the
+  broker-held secret.
+- Conformance: anchor `ref.prim.http.post_with_secret`, four witnesses; 357/357.
+
+## 2026-10-23 (night, later) — the laptop: `http.post` on the WASM engine
+
+**What.** The import `delulu:cap.http_post(cap, url, headers, desc, body, file, start, end)` is in the module only where
+a `Cap[Http]` is minted and `post` is called. Its index follows `http_get_with_secret`'s, so a module without `post` is
+byte-identical to before. The host reads the URL and body, reifies the headers as `get_with_secret`'s are, asks the
+custody with the method (`custody_allows_by`, beside `custody_allows_at`, which now asks it with none) and performs the
+interpreter's own `post`. `post_with_secret` stays on the interpreter.
+
+**Evidence.**
+- `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now also runs `--engine wasm`, embedded
+  and under the daemon. The chain gains the WASM run's `POST allow` and `GET deny`.
+- `delulu build --target wasm` of a POST program wrote 1,860 bytes, and its imports name `http_get` and `http_post`.
+  So the run compiled; it did not fall back to the interpreter.
+- Mutant red: the host's gate asking with no method.
+
+**And `post_with_secret` on the WASM engine.** The host's `http_get_with_secret` body became one helper,
+`send_with_secret(caller, method, …, body_ptr: Option<i32>, …)`, with `http_get_with_secret` and a new
+`http_post_with_secret` as thin imports. The custody is asked by the method, and the body is read when its pointer is
+given. Codegen: the import, its 10-argument type, and the call. `broker_cli`
+`a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_method` now runs the POST on both engines
+under the daemon, one connection and one `send` each. `build --target wasm` imports `http_post_with_secret`. Mutant
+red: the helper's custody asked with no method.
+
+**Found on the way (RW 4.79, open, LOW).** The GET-only run's custody recorded `use allow` with `method: POST`: the
+node's grant takes POST, while the program's own capability, narrower, refused the call after. The interpreter asks the
+custody before `prim` judges the capability, for every op. So the chain records a use the custody allowed and the
+program never made. Nothing is performed, and the run reports DL0904. The test counts that record and names the row.
+
+## 2026-10-24 — the laptop: a certificate carries every dimension a delegation can (CERT-SECRET-1, RW 4.80)
+
+**Found.** Setting up the agent test campaign, the head chef ran the broker as `DEPLOYMENT.md` documents for
+production: strict anchored roots, the root adopted from a certificate the anchor key signed. Delegating a lease that
+carries the broker-held secret `TOKEN` and its audience was refused DL0802: the adopted root held no secret. `grants
+certify` wrote effects, `fs.read`, `fs.write`, `net` and devices only. The certificate's `authority` field already
+carries secrets, audiences, `declassify`, foreign libraries and the budget, and `adopt` and `⊑` read them. Only the
+command line could not write them. Under strict mode a root enters only by adoption (DL1421), so no lease there could
+ever hold a broker-held secret, `declassify` or a foreign library.
+
+**Fixed.** `certify` reads `--secret`, `--secret-to`, `--declassify`, `--foreign-c`, `--foreign-python` and `--budget`,
+parsed as `delegate` parses them. `--secret NAME=VALUE` is refused: a certificate names a secret and never carries its
+value. Each audience member is canonicalized by the egress client's `parse_audience`. A pair for a secret the
+certificate does not name is refused in words. `delegate` and `certify` now share the two helpers, `secret_name_flag`
+and `secret_audiences`, so the two cannot drift.
+
+**Evidence.**
+- `federation_cli` `a_strict_broker_delegates_the_secret_its_certificate_carries`: a certificate with a secret, its
+  audience and `declassify`; `secrets set`; `broker start --require-anchored-roots`; adopt. The delegation of the secret
+  to its audience is allowed, and one to `example.com` is refused DL0802.
+- Red before the fix: `unknown grants certify argument --secret`. Mutant red: the certificate's audience dropped.
+- `federation_cli` 10 passed.
+
+**And.** `toolchain --json` described `net` as `net=HOST[/PATH]` a day after D-V2-182 gave it methods. `GRANT_FORMS`
+now says `net=HOST[:METHODS][/PATH]` for `net` and `net.special`, with the default (no methods: GET alone). Its
+example names two methods and still parses (`broker` grant-form tests, 12 passed).
+
+## 2026-10-24 — the laptop: the effect row escaped through a generic; a generic's parameters are rigid in its body (GENERIC-RIGID-1, D-V2-184)
+
+**Found by the agent test campaign.** The owner asked for agents to build and test DeluluLang under access conditions
+only the head chef can change. The head chef ran a broker with strict anchored roots and delegated one lease per
+condition. A wrapper (`dl`) was the agents' only way to run delulu, and a Claude Code PreToolUse gate refused any agent
+call that would change access. The gate was falsified first by a test agent, and judged by its own log. Agents: A, the
+builder (Sonnet 5.5); B, least authority (Sonnet 5.5); C, zero authority (Haiku 5.5). Models read from the transcripts.
+C's programs `coerce[A, B](x: A) -> B { x }` and `hide[e](…) -> fn() -> Unit { f }` printed under a console grant while
+`check` said `main` never performed `Write`. The head chef reproduced both on the current binary.
+
+**Cause.** `check_fn` gave the body fresh *flexible* variables for its generics (`make_genv`). The body unified `T` with
+`Int`, or closed `e` to `{}`, and each call site instantiated them afresh. `check_actor` did the same for actor generics.
+
+**Fixed.** Rigid variables (D-V2-184): never bound; a flexible variable meeting one is bound to it; a rigid row tail is
+never closed. The body sees rigid generics; call sites and `spawn` see flexible ones. Messages name `T` and `e`.
+
+**And the laundering suite's own witnesses.** Writing the new witnesses showed that F-3, F-3b and F-4 never parsed: two
+statements on one line, DL0209, passed through recovery. `rejects_with` now refuses a witness that does not parse. The
+three are repaired, and each is still refused with its own code.
+
+**Evidence.** `laundering` 17 passed. Mutants red: the type guard dropped, the closed-row guard dropped, actor generics
+flexible. Agent C's eleven generic programs are now refused DL0401.
+Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## 2026-10-24 — the laptop: a top-level constant's value is checked (CONST-UNCHECKED-1, RW 4.82)
+
+**Found by the agent test campaign** (agent C, Haiku 5.5): `let Y: Int = "not an int"` at module level checked clean
+and ran; `let W = spawn Worker()` checked clean, and `authority` reported only `Write`. The head chef reproduced both.
+
+**Cause.** `check_module`'s item loop matched `Fn`, `Actor` and `Test` and passed every other item with `_ => {}`. A
+constant was registered (`resolve`), its declared type used at its uses, and its value never looked at. The runtime
+evaluates every constant before `main` (`eval_consts`), trusting a "checker invariant" nothing checked. This is the
+walk's catch-all again (MATCH-NEST-1's lesson, HANDOFF §11.4): the item the loop never named was never checked.
+
+**Fixed.** `check_const` checks each constant, in order and before the functions. Its value is an expression with
+nothing in scope but the module's items, held to its declared type, and refused DL0501 if it performs any effect.
+An unannotated constant's uses share the type its value has (`const_types`), where each use had a fresh one.
+
+**Evidence.** `delulu-check/tests/constants.rs`, five tests, red before the fix. Mutants red: the constant pass
+removed, the purity check removed, the use-site type ignored. Agent C's `p5_01`, `p5_02`, `p5_05` and `p5_06` are
+refused.
+Full workspace suite on the laptop (`cargo test --workspace --no-fail-fast -j 4`): 2,472 passed; the 4 failures were `doctor_cli` (3) and the Survey's `freshness` (1), which fail until the map is regenerated after the last edit, and pass after it (below).
+
+## 2026-10-24 — the laptop: `% 0` faults alike on both engines (RW 4.83); three stale doc passages (campaign B10)
+
+**`% 0`.** The builder agent (Sonnet 5.5) found `str(id(1) % id(0))` reported DL0902 on the interpreter and DL0901 on
+WASM, while `/` agreed. The head chef reproduced it. `chk_rem_fn` trapped `b == 0` with `unreachable`, which the host's
+`clean_trap` can only read as overflow; HARDENING_CAMPAIGN C20 had recorded the mismatch as a residual. `i64.rem_s`
+traps `IntegerDivisionByZero` by itself, so the helper now leaves `b == 0` to it and keeps `unreachable` for `INT_MIN %
+-1` alone. `fault_parity` gains `7 % 0` and `INT_MIN % -1`; it was red before the fix and is green after. `delulu-wasm`
+199 passed; `core_invariance` and `wasm_cli` passed.
+
+**Docs (B10, the least-authority agent, Sonnet 5.5; confirmed by the head chef).** `for-agents.md` said `--lease` and
+`--broker` are refused under `--sandbox`. A leased `--sandbox` run works, and the lease judges the guest's uses
+(`guest: error[DL0904]: lease … does not grant …`); `APPLIED_UNDER_SANDBOX` has listed both since RW 4.20. Two
+passages said a secret-carrying request is "not yet" under `--engine wasm`, a claim stale since D-V2-174. All three now
+say what the binary does.
+
+## 2026-10-25 — the laptop: #66, #67 and #68 landed; the nightly Miri run of the broker back inside its budget
+
+**Landed.** PRs #66 (GENERIC-RIGID-1), #67 (CONST-UNCHECKED-1) and #68 (`% 0` on WASM) were green on every job of
+their own runs (40015000010, 40016786869, 40017678424: 14 passed, `miri-slow` and `heavy-gates` skipped as on every
+pull request). `master` was fast-forwarded through them in order: `bf922f6` → `85f5f7a` → `0f79ac4` → `0549645`.
+
+**The nightly run of 2026-10-24 (40075722165) was cancelled.** Every job passed except `miri-slow (delulu-broker)`,
+cancelled at its 240-minute cap. Its log shows why: `netscope::tests::the_order_and_the_meet_with_methods_are_exact_over_a_bounded_domain`
+(D-V2-182) ran from 08:24:57 to 11:09:59, 2 h 45 min, and the run then reached
+`path::tests::canonicalization_laws_hold_on_generated_paths`, which took 66 min on 2026-10-23. The whole crate had
+taken 1 h 25 min that night (39922976338). The test judged every request afresh for both entries of each of the 1,521
+pairs, about 410,000 `judge` calls, all identical to the 3,510 needed. It now judges each entry's requests once and
+each distinct meet's once. Its domain is unchanged, nothing shrinks under `cfg!(miri)`, and two mutants still turn it
+red: a meet that unions the methods (line 741) and an order that ignores them (line 734). The `ci.yml` comment that
+said no run had confirmed the 240-minute budget now gives the measured times.
+
+## 2026-10-25 — the laptop: `--within` decides a file use at its call (B9, D-V2-185)
+
+See D-V2-185. `authority fsr.delulu --within console --within fs.read=./allowed` now answers *exceeds* at
+`fsr.delulu:14:10`, with the runtime's own reason (`path `../forbidden/secret.txt` escapes the granted scope (DL0904)`).
+`within_cli` 23 passed and `deploy_cli` 23 passed on the laptop. The full suite on three OSes is the pull request's CI run.
+
+## 2026-10-25 — on-demand routine run 6: #69 and #70 landed; A18, A2 and RUN-PIN-1 closed (D-V2-186)
+
+**The session.** Opus 5.5 (the system prompt names `claude-opus-5-5`; no fallback notice), `CLAUDE_CODE_EFFORT_LEVEL=xhigh`
+and `CLAUDE_EFFORT=xhigh` in its environment — the first run since the owner set the variable in the cloud environment on
+2026-10-23, and it shows `xhigh`. The owner's setup script ran: the 1.96.1 toolchain's directory was made at 09:37:57 UTC,
+before the session's first command, and the cargo registry already held 356 `.crate` archives, Windows' among them. No sous-chef.
+
+**Landed.** The laptop's session of 2026-10-25 stopped at about 05:35 UTC with two green pull requests open: #69
+(`2ddd15c`, the methods order test judges each entry once) and #70 (`daff3ec`, D-V2-185). Their runs `40165160695` and
+`40165944252` passed every job (`miri-slow` and `heavy-gates` skipped, as on every pull request), and #69's `miri-slow`
+dispatch `40165159856` passed inside its budget: delulu-broker 1 h 47 min, delulu-check 1 h 31 min, delulu-syntax 21 min.
+Re-run here before `master` moved: `within_cli` 23 passed, `deploy_cli` **11** passed (both records say 23; the target
+holds 11 tests), `netscope` 10 passed, and a mutant of D-V2-185 that answers every file use *within* turned
+`a_file_use_is_decided_by_its_path_against_its_capability` red. `master` was fast-forwarded `0549645` → `daff3ec`. The
+autosave snapshot `875c373` (05:31 UTC) is `daff3ec`'s code before its test was carried further, and the 2026-10-23
+snapshot of the launch worktree (`ccb3241`) equals `launch/2.0.0` outside the map: nothing to recover.
+
+**A18 — a sandboxed run let the program write the runtime's record of its run** (the agent test campaign's builder,
+Sonnet 5.5; reproduced). `run p.delulu --grant fs.write=./out --report-out out/r.json` is refused before anything runs
+(exit 2, D-V2-21); the same command with `--sandbox` ran, exit 0, and the guest wrote a counterfeit report where the
+runtime's would go. `cmd_run` returned to the sandboxed route before its D-V2-21 check, and `guest.rs` never made one. The
+sandboxed route now makes both checks the ordinary route makes: the command line's scopes before anything else (one
+function, `refuse_runtime_paths_in_command_line_scopes`, which both routes call; a dry run refuses too, since it says what
+the run would do), and the final grants, a lease's included, once the lease is redeemed and before a root is issued or a
+guest exists. Witnesses: `sandbox_modes_cli` `the_report_is_refused_inside_a_write_scope_inside_the_sandbox_too` (two
+spellings, strict and audit, a control outside every scope) and `sandbox_guard_e2e`'s lease step, sandboxed and not; both
+red on the old code. M801 (the first check removed) red on the audit row, M802 (the second) on the lease step, M803 (both)
+on both; the control green. Runners at `601d9bb`: macOS `40182254723`, Windows `40182256417` (json_contract 13 there, one
+test being Unix-only; sandbox_guard_e2e 1; sandbox_modes_cli 12). `master` took it before the next two slices.
+
+**A2 — DL1001's own repair wrote a manifest that does not parse** (the builder; reproduced). With `ratlib = { path =
+"../ratlib" }` the repair appended `[dependencies.ratlib.authority]`, which TOML refuses after an inline table, so applying
+it turned DL1001 into DL1004. The inline table is the form `delulu add` writes. The pin now goes inside an inline table,
+before its closing brace, at a place read from the TOML parser's own span of the value; a table or dotted keys keep the
+appended sub-table. The label reads "add an `authority` pin to this dependency". `fix_cli` said `tooling.rs` covered the
+repair, and nothing did. Witness: `delulu-check` `deps::tests::the_pin_repair_leaves_a_manifest_that_checks_whatever_form_the_dependency_takes`
+— six forms, each repair applied byte for byte, parsed again, its pin read back and the workspace re-checked; red on the
+old code. M804 (the old append) and M805 (inserted after the brace) red; the control green. The Stage 2 specification's
+§3.2 example showed the same invalid TOML (its §12a said so); it now shows the inline form.
+
+**RUN-PIN-1 — `run` ran a dependency its pin refuses** (found while verifying A2 on the binary; HIGH). A dependency pinned
+pure that writes, or one with no pin, is DL1001 under `check`, `build` and `lock`. `delulu run app` ran it — the
+interpreter, `--sandbox` and `--engine wasm` each printed the dependency's words and exited 0; `build --target wasm` wrote a
+`.dwx` that `run` then ran; `test` ran the package's tests; `deploy plan` planned it; `sandbox policy` previewed its run.
+Every loader but `build_workspace` and `cmd_lock` checked types and never called `check_self_authority` or `check_pins`,
+while the documents said the gate "runs BEFORE any code". `delulu_check::deps::supply_chain_gate` (DL1009 and DL1001) is
+now called by every route that runs, ships or plans a package (D-V2-186). Witness: `provenance`
+`no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` — seven routes, each refused with its reason, nothing of
+the dependency run, no `.dwx` written, for a broken pin and a missing one; the control, pinned to what the dependency does,
+goes through all seven. Red on the old code. M806 (`run`'s loader), M807 (the preview's), M808 (`test`'s), M809 (the
+planner's) and M810 (the gate emptied) red; the control green. Runners at `4ee928a`: macOS `40183138954` and Windows
+`40183140704`, provenance 17 passed (the witness among them) and fix_cli 13 on each.
+
+**The full suite at `4ee928a`** (alone, `-j 4`, the tree unmoved): 2,544 passed, **3 failed**, 16 ignored, 183 binaries.
+The three are D-V2-186 at work, each read: two `deploy_cli` services were packages `build` refuses (a secret read and never
+declared, DL1009), and `sandbox_run_cli`'s package with no declared effects is refused DL1009 by the gate before `run`'s
+DL0701. The fixtures declare their secrets now, and the package case asserts DL1009 (the single file beside a manifest
+keeps DL0701); `deploy_cli` 11 and `sandbox_run_cli` 19 passed.
+
+**B1 — a lease cannot carry `net.special`, and nothing said so until the connect** (the least-authority agent, Sonnet
+5.5; re-run here: `grants delegate --net 127.0.0.1` exit 0, no word). A broker node has no `net.special` dimension, so a
+leased run reaches no special-use address. `delegate` and `certify` now print a note naming the host, the missing
+dimension and `--grant net.special=HOST`; the node is still made, because the Guard and the audit decide a leased send
+before the connect and `broker_cli`'s and `federation_cli`'s witnesses rest on such a node (D-V2-187, which also sizes
+the dimension for the next slice). Witness `broker_cli`
+`a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four spellings, both verbs, a public
+host as the control); M811–M814 red, the control green; broker_cli 16, federation_cli 10, grants_cli 5, json_contract 14
+passed. A first form refused the host; reading the tests that delegate `127.0.0.1`, before running them, showed what such a
+node is used for, and the refusal became a note.

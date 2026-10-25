@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use delulu_atlas::{Atlas, BuildInput, ModuleView, PackageView};
 use delulu_check::lockfile::api_row_hash;
 use delulu_check::{
-    authority_report, authority_widened, check_pins, check_program, check_self_authority, check_source, check_workspace,
-    compute_lockfile, enforce_semver_law, load_package, program_authority, resolve_workspace, verify_locked, Checked, Effect,
-    Lockfile, Program, Row, Workspace,
+    authority_report, authority_widened, check_program, check_source, check_workspace, compute_lockfile, enforce_semver_law,
+    load_package, program_authority, resolve_workspace, supply_chain_gate, verify_locked, Checked, Effect, Lockfile, Program,
+    Row, Workspace,
 };
 use delulu_diag::{
     color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role, SourceMap, Theme,
@@ -1535,7 +1535,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (prints a lease token; a budget left unnamed is the parent's, and a `run --lease` is held to it;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a secret is sent only to the origins its `--secret-to` names — none is nowhere)\n\
      \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. [--budget mem=N,cpu=S] --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (every dimension `delegate` names: under strict anchored roots a root enters only this way)\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..\n\
      \x20 delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —\n\
@@ -2395,7 +2397,11 @@ fn cmd_test(rest: &[String]) -> i32 {
         let label = dir.display().to_string();
         let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
         if !ws.modules.is_empty() {
-            diags.extend(delulu_check::deps::check_workspace(&ws).diagnostics);
+            // A package's tests run its dependencies' code, so the supply-chain gate holds here as it does for `run`
+            // (RUN-PIN-1).
+            let program = delulu_check::deps::check_workspace(&ws);
+            diags.extend(program.diagnostics.iter().cloned());
+            diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
         }
         if errors(&diags) > 0 {
             if st.json {
@@ -3448,8 +3454,8 @@ fn cmd_authority(rest: &[String]) -> i32 {
     }
     let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
     if asks_within {
-        let requests = crate::within::request_sites(&checked.module, &checked.result.node_types);
-        return authority_within(&map, &[&checked.module], requests, report, &opts);
+        let uses = crate::within::use_sites(&checked.module, &checked.result.node_types);
+        return authority_within(&map, &[&checked.module], uses, report, &opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -3471,7 +3477,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
 fn authority_within(
     map: &SourceMap,
     modules: &[&delulu_syntax::ast::Module],
-    requests: Vec<crate::within::RequestSite>,
+    uses: crate::within::UseSites,
     mut report: Json,
     opts: &Opts,
 ) -> i32 {
@@ -3499,7 +3505,8 @@ fn authority_within(
         }
     }
     let mut walk = requested_scopes(modules);
-    walk.requests = requests;
+    walk.requests = uses.requests;
+    walk.files = uses.files;
     let (reqs, unsupported) = requirements(&report, &walk);
     let v = crate::within::verdict(&reqs, &unsupported, &boundary);
     let code = if v.outcome == crate::within::Outcome::Within { 0 } else { 1 };
@@ -3648,6 +3655,8 @@ pub(crate) struct ScopeWalk {
     /// Each request, by the checker's type at its call (`within::request_sites`), set only by a caller that decides a verdict
     /// and holds the types — empty for `--grants`, whose line for a request is its mint's (D-V2-181).
     pub(crate) requests: Vec<crate::within::RequestSite>,
+    /// Each file use whose path the source writes (D-V2-185), set as `requests` is.
+    pub(crate) files: Vec<crate::within::FileUseSite>,
 }
 
 /// One capability-minting call (P9-03): where it is, the kind it mints, the literal scopes it writes, and whether it asks for
@@ -3859,6 +3868,7 @@ pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> Scope
         sites: Vec::new(),
         sends: crate::within::secret_sends(modules),
         requests: Vec::new(),
+        files: Vec::new(),
     };
     for m in modules {
         for item in &m.items {
@@ -3920,8 +3930,12 @@ pub(crate) enum Ask {
     SecretSend { to: Option<String> },
     /// A request, by its URL literal (`None`: computed), judged at its call against its capability's `net` entries, its
     /// path too where an entry names a pattern (P9-05 (a); D-V2-181). Decided by a verdict; the line an operator types for
-    /// it is its mint's.
-    Request { url: Option<String> },
+    /// it is its mint's. By its HTTP `method` (P9-05 (d), D-V2-183: `post` a POST, every other request a GET).
+    Request { url: Option<String>, method: &'static str },
+    /// A file use whose path the source writes, judged at its call against its capability's directory (D-V2-185): through
+    /// the capability's mint where the source shows it (`cap`), by the path alone where it does not. Decided by a verdict;
+    /// the line an operator types for it is its mint's.
+    FileUse { call: &'static str, path: String, cap: Option<crate::within::FsHeld> },
     /// A Python import: a module the program imports, or a pattern its manifest allows.
     PythonImport { name: String, pattern: bool },
     /// Python, with no import the source or the manifest names.
@@ -4124,11 +4138,26 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     }
     // Each request, when the caller set them (D-V2-181): named by the narrowest `net` line that takes it.
     for site in &walk.requests {
+        // A POST is named with its method; a GET needs none (an entry naming no methods allows GET alone).
+        let methods = if site.method == "GET" { String::new() } else { format!(":{}", site.method) };
         let grant = match site.url.as_deref() {
-            Some(u) => format!("net={}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u)),
-            None => "net=HOST/PATH".to_string(),
+            Some(u) => {
+                format!("net={}{methods}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u))
+            }
+            None => format!("net=HOST{methods}/PATH"),
         };
-        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone() }, at: Some(site.at) });
+        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone(), method: site.method }, at: Some(site.at) });
+    }
+    // Each file use whose path the source writes, when the caller set them (D-V2-185): named by its capability's mint where
+    // the source shows it — no grant lets a capability's own use leave its directory, so no wider line is proposed.
+    for site in &walk.files {
+        let key = if site.kind == "fs_read" { "fs.read" } else { "fs.write" };
+        let grant = match &site.cap {
+            Some(c) => format!("{key}={}", c.root),
+            None => format!("{key}=PATH"),
+        };
+        let ask = Ask::FileUse { call: site.call, path: site.path.clone(), cap: site.cap.clone() };
+        out.push(Requirement { grant, ask, at: Some(site.at) });
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
     // and the list named no secret at all.
@@ -5302,8 +5331,7 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     let mut diags: Vec<Diagnostic> = Vec::new();
     diags.extend(ws.diagnostics.iter().cloned());
     diags.extend(program.diagnostics.iter().cloned());
-    diags.extend(check_self_authority(&ws, &program));
-    diags.extend(check_pins(&ws, &program));
+    diags.extend(supply_chain_gate(&ws, &program));
 
     if locked {
         match std::fs::read_to_string(std::path::Path::new(dir).join("delulu.lock")) {
@@ -5592,8 +5620,7 @@ fn cmd_lock(rest: &[String]) -> i32 {
     let mut diags: Vec<Diagnostic> = Vec::new();
     diags.extend(ws.diagnostics.iter().cloned());
     diags.extend(program.diagnostics.iter().cloned());
-    diags.extend(check_self_authority(&ws, &program));
-    diags.extend(check_pins(&ws, &program));
+    diags.extend(supply_chain_gate(&ws, &program));
     if !ws.git_deferred.is_empty() {
         diags.push(Diagnostic::error(
             "DL1007",
@@ -5659,7 +5686,9 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let (program, name, map, modules, units) = if path.join("delulu.toml").is_file() {
         let ws = resolve_workspace(dir);
         let program = check_workspace(&ws);
-        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 {
+        // `deploy plan`, `publish` and `add` plan or advertise a package as it would run: the supply-chain gate too
+        // (RUN-PIN-1).
+        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 || errors(&supply_chain_gate(&ws, &program)) > 0 {
             return None;
         }
         let name = program
@@ -5685,7 +5714,9 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let refs: Vec<&delulu_syntax::ast::Module> = modules.iter().collect();
     let unit_refs: Vec<&str> = units.iter().map(String::as_str).collect();
     let mut walk = requested_scopes(&refs);
-    walk.requests = package_request_sites(&program, &refs, &unit_refs);
+    let uses = package_use_sites(&program, &refs, &unit_refs);
+    walk.requests = uses.requests;
+    walk.files = uses.files;
     let (requirements, unsupported) = requirements(&report, &walk);
     Some(CheckedPackage { report, requirements, unsupported, map })
 }
@@ -5752,21 +5783,22 @@ fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
     emit_authority(&program, &name, dir, &pkg.source_map, (&modules, &units), opts)
 }
 
-/// A package's requests, each module's by its own node types, keyed by its unit as the check keyed them (node ids are per
-/// module) — what `--within` and `deploy plan` decide each request by (D-V2-181).
-fn package_request_sites(
+/// A package's requests and file uses, each module's by its own node types, keyed by its unit as the check keyed them (node
+/// ids are per module) — what `--within` and `deploy plan` decide each use by (D-V2-181, D-V2-185).
+fn package_use_sites(
     program: &delulu_check::Program,
     modules: &[&delulu_syntax::ast::Module],
     units: &[&str],
-) -> Vec<crate::within::RequestSite> {
-    modules
-        .iter()
-        .zip(units)
-        .flat_map(|(m, unit)| match program.node_types.get(*unit) {
-            Some(types) => crate::within::request_sites(m, types),
-            None => Vec::new(),
-        })
-        .collect()
+) -> crate::within::UseSites {
+    let mut all = crate::within::UseSites::default();
+    for (m, unit) in modules.iter().zip(units) {
+        if let Some(types) = program.node_types.get(*unit) {
+            let uses = crate::within::use_sites(m, types);
+            all.requests.extend(uses.requests);
+            all.files.extend(uses.files);
+        }
+    }
+    all
 }
 
 /// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
@@ -5801,7 +5833,7 @@ fn emit_authority(
     }
     // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
     if !opts.within.is_empty() || opts.within_file.is_some() {
-        return authority_within(map, modules, package_request_sites(program, modules, units), report, opts);
+        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -7836,15 +7868,78 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     0
 }
 
-/// `delulu grants certify --subject HEX --effects E,.. [--device D].. --ttl 1h [--key F]
-/// [--parent-cert F] [--out F]`
+/// B1 (D-V2-187): the note `grants delegate` and `grants certify` print for a `--net` entry whose host is a special-use
+/// address or name. A node has no `net.special` dimension, so a run under it reaches no special-use address
+/// (`grants_from_lease`): the custody and the Guard decide its uses, and the egress client then refuses every connect.
+/// Such a node is made — it still drives every decision before the connect — and the operator is told so, here, rather
+/// than at the first refused connect.
+fn special_use_net_note(entry: &str, what: &str) -> Option<String> {
+    let host = delulu_broker::netscope::host_of(entry);
+    let class = delulu_runtime::netclass::special_use_class(host)?;
+    Some(format!(
+        "note: `{host}` (`--net {entry}`) is a special-use address ({class}), and {what} cannot carry `net.special` — a \
+         node has no such dimension yet — so a run under it is refused when it connects there (`special-use`). To reach \
+         it, grant it on the run itself: `--grant net.special={entry}`"
+    ))
+}
+
+/// `--secret NAME` as `grants delegate` and `grants certify` read it: a grant NAMES a secret the broker holds and never
+/// carries its value. `NAME=VALUE` was accepted once and stored as a name no program could ever mint (agent pass 2).
+fn secret_name_flag(v: &str, who: &str) -> Result<(), String> {
+    match v.split_once('=') {
+        None => Ok(()),
+        Some((name, _)) => Err(format!(
+            "error: `--secret {v}`: {who} names a secret the broker already holds — `--secret {name}`. Store its value \
+             first with `delulu secrets set {name} VALUE`."
+        )),
+    }
+}
+
+/// `--secret-to NAME@HOST[:PORT]` as `grants delegate` and `grants certify` read it (P9-04 (d), D-V2-133): each audience
+/// member is read by the egress client's own parser (`parse_audience` — the spelling a request's origin is compared in at
+/// send time) and kept in its canonical form, so the broker's exact-set `⊑` compares one spelling. A pair for a secret
+/// `secrets` does not name would grant reach to nothing: refused in words, never dropped.
+fn secret_audiences(secrets: &[String], pairs: &[String], who: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::with_capacity(pairs.len());
+    for pair in pairs {
+        let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
+            return Err(format!(
+                "error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to"
+            ));
+        };
+        if !secrets.iter().any(|s| s == name) {
+            return Err(format!(
+                "error: `--secret-to {pair}` names the secret `{name}`, which {who} does not — add `--secret {name}` (an \
+                 audience is where a delegated secret may go)"
+            ));
+        }
+        match delulu_runtime::egress::parse_audience(member) {
+            Ok(a) => out.push(format!("{name}@{a}")),
+            Err(e) => return Err(format!("error: bad --secret-to `{pair}`: {e}")),
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// `delulu grants certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H].. [--secret N]..
+/// [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P].. [--device D]..
+/// [--budget mem=N,cpu=S] --ttl 1h [--key F] [--parent-cert F] [--out F]`
 ///
 /// Mint one grant certificate. **Offline by design** — no daemon, no tree, no network. The ground
 /// segment can run this on an air-gapped machine and hand the result to a spacecraft over whatever
 /// link exists.
+///
+/// It writes every dimension `grants delegate` can (CERT-SECRET-1, 2026-10-24): under strict anchored roots a root enters
+/// only by adopting a certificate (DL1421), so a dimension `certify` could not write was one no lease on that broker could
+/// ever hold — a broker-held secret among them.
 fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
     let mut effects: Vec<String> = Vec::new();
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut secrets, mut secret_to, mut declassify) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut foreign_c, mut foreign_python) = (Vec::new(), Vec::new());
+    let mut budget: Option<String> = None;
     let mut device: Vec<String> = Vec::new();
     let (mut subject, mut ttl, mut key, mut parent_cert, mut out) = (None, None, None, None, None);
     // RFC 0001 F4: how long the holder may run WITHOUT a contact receipt. Absent = the
@@ -7869,7 +7964,29 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
                 eprintln!("error: `--net {v}` is refused: {why}");
                 return 2;
             }
+            if let Some(note) = special_use_net_note(&v, "this certificate") {
+                eprintln!("{note}");
+            }
             net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret") {
+            if let Err(why) = secret_name_flag(&v, "a certificate") {
+                eprintln!("{why}");
+                return 2;
+            }
+            secrets.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret-to") {
+            secret_to.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--declassify") {
+            declassify.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-c") {
+            foreign_c.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-python") {
+            foreign_python.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--budget") {
+            if budget.replace(v).is_some() {
+                eprintln!("error: `--budget` is given twice; a certificate has one budget");
+                return 2;
+            }
         } else if let Some(v) = flag_value(args, &mut i, "--subject") {
             subject = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
@@ -8008,6 +8125,21 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             }
         }
     }
+    let secret_to = match secret_audiences(&secrets, &secret_to, "this certificate") {
+        Ok(v) => v,
+        Err(why) => {
+            eprintln!("{why}");
+            return 2;
+        }
+    };
+    let budget = match budget.as_deref().map(delulu_broker::BudgetScope::parse) {
+        None => None,
+        Some(Ok(b)) => Some(b),
+        Some(Err(e)) => {
+            eprintln!("error: bad --budget: {e}\n  form: mem=BYTES,cpu=SECONDS (both named, both above zero)");
+            return 2;
+        }
+    };
     let now = now_millis();
     let authority = delulu_broker::Authority::new(
         effects.iter().filter_map(|e| Effect::core_from_name(e)),
@@ -8015,8 +8147,13 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             fs_read: fs_read.into_iter().collect(),
             fs_write: fs_write.into_iter().collect(),
             net: net.into_iter().collect(),
+            secrets: secrets.into_iter().collect(),
+            secret_to: secret_to.into_iter().collect(),
+            declassify: declassify.into_iter().collect(),
+            foreign_c: foreign_c.into_iter().collect(),
+            foreign_python: foreign_python.into_iter().collect(),
             device: device_canon.into_iter().map(|d| (d.device.clone(), d)).collect(),
-            ..Default::default()
+            budget,
         },
     );
     // Catch a widening at MINT time rather than letting the holder discover it at use time. The
@@ -8375,16 +8512,13 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 eprintln!("error: `--net {v}` is refused: {why}");
                 return 2;
             }
+            if let Some(note) = special_use_net_note(&v, "this delegation") {
+                eprintln!("{note}");
+            }
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
-            // A delegation NAMES a secret the broker holds; it never carries the value. `NAME=VALUE`
-            // was accepted and stored as a name no program could ever mint (agent pass 2).
-            if v.contains('=') {
-                let name = v.split('=').next().unwrap_or_default();
-                eprintln!(
-                    "error: `--secret {v}`: a delegation names a secret the broker already holds — \
-                     `--secret {name}`. Store its value first with `delulu secrets set {name} VALUE`."
-                );
+            if let Err(why) = secret_name_flag(&v, "a delegation") {
+                eprintln!("{why}");
                 return 2;
             }
             secrets.push(v);
@@ -8462,31 +8596,12 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // request's origin is compared in at send time) and sent in its canonical form, so the broker's exact-set `⊑`
     // compares one spelling. A pair for a secret this delegation does not name would grant reach to nothing: refused
     // in words here, and dropped by the broker's canonicalization if it ever arrived.
-    let secret_to = {
-        let mut out = Vec::with_capacity(secret_to.len());
-        for pair in &secret_to {
-            let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
-                eprintln!("error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to");
-                return 2;
-            };
-            if !secrets.iter().any(|s| s == name) {
-                eprintln!(
-                    "error: `--secret-to {pair}` names the secret `{name}`, which this delegation does not — add `--secret {name}` \
-                     (an audience is where a delegated secret may go)"
-                );
-                return 2;
-            }
-            match delulu_runtime::egress::parse_audience(member) {
-                Ok(a) => out.push(format!("{name}@{a}")),
-                Err(e) => {
-                    eprintln!("error: bad --secret-to `{pair}`: {e}");
-                    return 2;
-                }
-            }
+    let secret_to = match secret_audiences(&secrets, &secret_to, "this delegation") {
+        Ok(v) => v,
+        Err(why) => {
+            eprintln!("{why}");
+            return 2;
         }
-        out.sort();
-        out.dedup();
-        out
     };
     // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
     // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-

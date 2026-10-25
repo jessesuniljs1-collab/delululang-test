@@ -746,6 +746,12 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     if let Some(code) = refuse_what_the_guest_does_not_apply(opts) {
         return code;
     }
+    // D-V2-21 (A18): the run report is the runtime's alone on this route as on the ordinary one, so a `--report-out` inside
+    // a scope the command line grants the program to write is refused before anything else — a dry run's too, since it
+    // says what the run would do. A lease's scopes are checked once it is redeemed, below.
+    if let Some(code) = crate::run_cmd::refuse_runtime_paths_in_command_line_scopes(opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `run --sandbox` needs a file");
         return 2;
@@ -934,6 +940,11 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             Ok(c) => custody = Some(c),
             Err(code) => return code,
         }
+    }
+    // D-V2-21, the second time (A18): the grants are final now, a lease's included, and the report may not lie in a scope
+    // they let the program write — decided before a root is issued or a guest exists.
+    if let Some(code) = crate::run_cmd::refuse_runtime_paths_in_write_scopes(opts, &grants.build_root().fs_write) {
+        return code;
     }
     if daemon_mode && !opts.json {
         eprintln!("custody: daemon");

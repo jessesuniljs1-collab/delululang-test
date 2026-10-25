@@ -480,12 +480,13 @@ fn a_package_runs_sandboxed_as_it_runs_plainly_and_its_manifest_binds_both() {
     assert_eq!(refused.status.code(), Some(1), "{}", out(&refused));
     assert!(out(&refused).contains("DL0703"), "{}", out(&refused));
 
-    // The manifest binds the sandboxed run: a package declaring no effects runs under neither.
+    // The manifest binds the sandboxed run: a package declaring no effects runs under neither. A package is refused by
+    // the supply-chain gate, DL1009 as `build` refuses it (D-V2-186); a single file, below, by DL0701.
     std::fs::write(pkg.join("delulu.toml"), manifest("")).unwrap();
     for args in [vec!["run", p, "--grant", "console"], vec!["run", p, "--sandbox", "--grant", "console"]] {
         let o = delulu(&args);
         assert_eq!(o.status.code(), Some(1), "`{}`: {}", args.join(" "), out(&o));
-        assert!(out(&o).contains("DL0701"), "`{}`: {}", args.join(" "), out(&o));
+        assert!(out(&o).contains("DL1009"), "`{}`: {}", args.join(" "), out(&o));
         assert!(o.stdout.is_empty(), "nothing ran: {}", out(&o));
     }
 

@@ -880,7 +880,7 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
-        ReqBody::Check { node, op, arg, url_path } => {
+        ReqBody::Check { node, op, arg, url_path, method } => {
             let Some(op) = Op::from_wire_name(&op) else {
                 return (
                     Response::Error {
@@ -895,7 +895,7 @@ fn handle(
             failed.set(false);
             // Guard-aware check (Stage 5 chunk 6): a guarded op validates synchronously and may carry
             // an agent-side `warn` note (warn-tier / bypassed-guarded).
-            let guarded = broker.check_use_at(&node, op, arg.as_deref(), url_path.as_deref());
+            let guarded = broker.check_use_by(&node, op, arg.as_deref(), url_path.as_deref(), method.as_deref());
             // Fail-stop on inability to record a synchronous-class use (invariant 26).
             if failed.get() {
                 return (
@@ -2932,7 +2932,13 @@ mod tests {
         // The redeemed child's synchronous op validates against live tree state.
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "FsWrite".to_string(), arg: Some("./out/x".to_string()), url_path: None },
+            ReqBody::Check {
+                node: child.clone(),
+                op: "FsWrite".to_string(),
+                arg: Some("./out/x".to_string()),
+                url_path: None,
+                method: None,
+            },
         )
         .unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }));
@@ -3428,6 +3434,7 @@ mod tests {
             op: "Declassify".into(),
             arg: Some("S".into()),
             url_path: None,
+            method: None,
         };
         // The baseline, with the chain free: two requests queued, one approved, its node's use passing.
         let Ok(Response::GuardRequested { id: asked_id, .. }) = request(&state, ask(&asked)) else { panic!("ask") };
@@ -3774,7 +3781,7 @@ mod tests {
         // Criterion 1: the delegated child using declassify WITHOUT a permit is DL1410 naming the cmd.
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None },
+            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
         )
         .unwrap();
         match resp {
@@ -3789,8 +3796,11 @@ mod tests {
         }
 
         // Criterion 2: the ROOT using the same authority passes with no guard interaction.
-        let resp = request(&state, ReqBody::Check { node: root, op: "Declassify".into(), arg: Some("S".into()), url_path: None })
-            .unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Check { node: root, op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
+        )
+        .unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }), "root declassify passes ungated: {resp:?}");
 
         stop_daemon(&state, handle);
@@ -3868,16 +3878,18 @@ mod tests {
         // Guarded (declassify) refuses even when poisoned; ungated (fs_write) is unaffected.
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None },
+            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
         )
         .unwrap();
         assert!(
             matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")),
             "poisoned guarded refuses: {resp:?}"
         );
-        let resp =
-            request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()), url_path: None })
-                .unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()), url_path: None, method: None },
+        )
+        .unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }), "ungated unaffected: {resp:?}");
         // `guard status` reports the poison.
         let resp = request(&state, ReqBody::GuardStatus).unwrap();
@@ -3984,7 +3996,7 @@ mod tests {
         // Block.
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None },
+            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
         )
         .unwrap();
         assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")));
@@ -3999,7 +4011,7 @@ mod tests {
         // A retried use is DL1411 carrying the id.
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None },
+            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
         )
         .unwrap();
         assert!(
@@ -4021,7 +4033,7 @@ mod tests {
         assert!(matches!(resp, Response::GuardApproved { .. }), "{resp:?}");
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None },
+            ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
         )
         .unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }), "approved use succeeds: {resp:?}");
@@ -4041,9 +4053,11 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(resp, Response::Ok), "{resp:?}");
-        let resp =
-            request(&state, ReqBody::Check { node: child2, op: "Declassify".into(), arg: Some("S".into()), url_path: None })
-                .unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Check { node: child2, op: "Declassify".into(), arg: Some("S".into()), url_path: None, method: None },
+        )
+        .unwrap();
         match resp {
             Response::Decision { allow: false, code, message, .. } => {
                 assert_eq!(code.as_deref(), Some("DL1412"));
@@ -4119,7 +4133,13 @@ mod tests {
         // …the permit works while guarded…
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()), url_path: None },
+            ReqBody::Check {
+                node: child.clone(),
+                op: "FsWrite".into(),
+                arg: Some("./out/x".into()),
+                url_path: None,
+                method: None,
+            },
         )
         .unwrap();
         assert!(matches!(&resp, Response::Decision { allow: true, .. }), "permit works while guarded: {resp:?}");
@@ -4137,7 +4157,13 @@ mod tests {
         .unwrap();
         let resp = request(
             &state,
-            ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()), url_path: None },
+            ReqBody::Check {
+                node: child.clone(),
+                op: "FsWrite".into(),
+                arg: Some("./out/x".into()),
+                url_path: None,
+                method: None,
+            },
         )
         .unwrap();
         assert!(
@@ -4146,9 +4172,11 @@ mod tests {
         );
         // …and under bypass.
         request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true }).unwrap();
-        let resp =
-            request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()), url_path: None })
-                .unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()), url_path: None, method: None },
+        )
+        .unwrap();
         assert!(
             matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")),
             "sealed under bypass: {resp:?}"

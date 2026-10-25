@@ -4712,3 +4712,208 @@ request at its call ("only `https://` is fetched"), and the plan had been approv
 refused it with a misleading reason ("names `http`": `prim::host_of` strips only `https://`). The fixture exists to
 perform `Net`, and now requests `https://example.com`; its five tests assert what they did.
 
+
+## D-V2-182 — P9-05 (d), first slice: a `net` entry names its methods — `HOST[:METHODS][/PATTERN]`, one spelling for each set, none named = GET alone; ordered by subset and met by intersection everywhere the entry is read — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**Context.** RW 2.12: a `net` grant could not limit the methods a program may use on a host. That was moot while
+`http` could only GET, and it stops being moot with the first primitive that makes another request: added to today's
+grammar, such a primitive would let every `net=HOST` grant ever written POST, PUT or DELETE there. That would widen
+what existing grants mean, which the semver-authority law forbids. So the dimension comes first, with no primitive
+yet that needs it (D-V2-55, `V2_OPENSHELL_STUDY.md` §4.12).
+
+**Decision.**
+1. **The grammar.** `net=HOST[:METHODS][/PATTERN]`, METHODS names from `GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+   `DELETE`, separated by `,`. Each set has one spelling: each name once, in that order, and never `GET` alone. An
+   entry naming no methods allows **GET alone**, the one request a program has made, so no grant reaches more than it
+   did. After an IPv6 literal the methods follow its `]`. The design's `:GET,POST/repos/**` spelling is kept.
+2. **A suffix that is not methods stays in the host** (`netscope::read`). `h.com:8443` reads as before, a host
+   string no request names, so the broker's host check matches it no more than it did. Every grant parser refuses it
+   through `check_entry`, in words: "a `net` entry names no port".
+3. **The order and the meet.** `entry_within`: the same host string, the child's methods a subset of the parent's,
+   then the paths as D-V2-139. `entry_meet`: the methods intersected (none in common: no meet), then the paths. The
+   canonical form (an antichain) is unchanged; a single spelling per set keeps equivalent sets identical.
+4. **The judge.** `judge(entry, method, host, path)`: the host, then the path, then the method.
+   `Verdict::OtherMethod` ranks after `OutsidePath`, since "this path is granted, not by this method" is the more
+   telling refusal. Every caller asks with `GET` until a primitive makes another request: the runtime's first check
+   (DL0904, worded about the method), every egress hop, the broker's use check (a new `Denial::NetMethod`, DL0904,
+   no new code) and `--within`. Under `--within`, a computed URL is *within* only when every boundary entry takes
+   GET on every path. The OpenShell export refuses a method scope, as it refuses a path scope: the host alone would
+   grant every method there.
+5. **Hardened on the way.** An entry naming no host takes no request, not even one whose URL names no host
+   (`host_matches("", "")` was true; such a URL is refused earlier, so this was latent).
+6. **Not yet:** the primitive, the method in the broker's op and record, OCSF's `http_request.http_method`, a
+   redirect's method (a 303 turns a POST into a GET), and the static half (`authority --json` `requests`' method,
+   `--grants` proposing it).
+
+**Evidence.** `netscope` tests: the grammar (11 refused spellings, each in its words; a malformed suffix read as a
+host), the judge, and the order and the meet EXACT with methods over a bounded domain. The canonical-form universe
+gained two method entries, and the `--within` agreement test generates three. `egress_cli`
+`a_method_scoped_grant_takes_only_its_methods` runs at L0 and from a guest. It failed on the previous code ("host
+… is not in the granted allowlist": the methods were read as part of the host). `sandbox_openshell_cli` failed on
+the previous code too (exit 0, a document printed). Mutants N1 to N6 were red in the unit tests: methods out of the
+order, out of the judge, unparsed, a union meet, a malformed suffix dropped, the default allowing every method.
+N1, N2, N3 and N5 were also red end to end. Z3 §2e: 9 obligations proved (50 in all). Its mutants
+`net-method-dropped` and `net-method-meet-union` each leave obligations undischarged, and CI requires both.
+
+## D-V2-183 — P9-05 (d), second slice: `Cap[Http].post(url, headers, body)` and `post_with_secret`, the first requests that are not a GET — judged by its method at every check, its method carried to the broker and its record, a redirect's method by its status — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**Context.** RW 2.11 gave an agent a way to call an authenticated API, but only by GET, and most APIs take their writes
+by POST. D-V2-182 made the method dimension first, so that a POST could not widen any grant written before it: an
+entry naming no methods allows GET alone.
+
+**Decision.**
+1. **The primitive.** `post(url: Str, headers: Map[Str, Str], body: Str) -> Result[Str, NetErr] ! {Net}`. The URL stays
+   argument one, as `get_with`'s, so every check that reads a request's URL reads it there. The headers are held to
+   `get_with`'s rules, and the body is at most 1 MiB (`MAX_REQUEST_BODY`, refused before anything is resolved).
+   `PRIM_TABLE_VERSION` goes from 7 to 8 (additive). Conformance anchor `ref.prim.http.post` with four witnesses
+   (`ENTRENCHED_CHANGE_RECORD.md`).
+   **And `post_with_secret(url, headers, header, secret, body)`**: a POST carrying one `Secret[Str]` in one header,
+   held to `get_with_secret`'s rules. It is never declassified and is sent only to its grant's audience; under the
+   daemon the broker is asked for the bytes for the one origin (`broker_secret_send`, which now judges the request's
+   own method first, so a capability without POST refuses it before a byte is asked). Anchor
+   `ref.prim.http.post_with_secret`, four witnesses.
+2. **Judged by its method everywhere a GET is judged by its path:**
+   - the runtime's first check (DL0904: "a `POST` to … is outside the methods the grant names for it");
+   - every egress hop, by that hop's own method;
+   - the broker's use check under a daemon or lease: the custody's `check_at` carries the method, and the IPC's
+     `Check` gains an optional `method`, absent for a GET, so a GET's frame and record are as before;
+   - `--within`, by the request's method.
+
+   A program asks for `root.http(["HOST:POST"])`, and `--grants` names that line.
+3. **The record.** A use that is not a GET names its `method` beside `url_path`, allowed or refused. OCSF maps it to
+   `http_request.http_method`, which was always `GET` before. A run report's egress hop names its `method` when it
+   is not a GET.
+4. **Redirects.** After a request that is not a GET, a 301, 302 or 303 is followed as a GET with no body, as browsers
+   do, and judged as a GET, so a grant naming POST alone refuses it. A 307 or 308 keeps the method and the body, but
+   only to the origin the program named. The body is the program's data, as its headers are, so a redirect that would
+   carry it elsewhere is refused (`Reason::BodyElsewhere`).
+5. **One implementation for L0 and every guest:** a sandboxed guest's `post` is performed by the host, in the same
+   `prim` arm.
+6. **Not yet:** `post` on the WASM engine (its custody check passes no method, and the compiler does not emit
+   `post`); and PUT, PATCH, DELETE. `deploy plan` decides with
+   `--within`'s verdict (D-V2-176), so it judges a POST by its method too. No test of `deploy plan` with a POST was
+   written in this slice.
+
+**Evidence.** Unit tests on the egress client (`a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status`:
+the body sent, refused under GET alone before anything is resolved, 301, 302 and 303 as GET without a body, 307 and 308
+kept, kept only to the same origin, the size limit, a GET's record unchanged). Over real TLS
+(`a_post_arrives_over_tls_with_its_body`): the request line `POST /items`, its `Content-Length`, its body whole. The
+broker (`a_net_use_is_judged_by_its_method_and_a_post_is_recorded_as_one`) and OCSF (`audit_ocsf_cli`) were also
+tested. End to end at L0 and from a guest: `egress_cli` `a_post_leaves_under_a_grant_that_names_post_and_no_other`
+(TLS out under `:POST`; DL0904 in words about the method under a host-only grant, nothing connects; the report's hop
+names POST). `within_cli` `a_post_is_decided_by_its_method_against_the_boundary` covers the mint and a request decided
+by its method. Mutants: see V2_LOG.
+
+## D-V2-184 — A generic's own type and row parameters are rigid inside its body (GENERIC-RIGID-1); a laundering witness must parse — TAKEN (head chef, 2026-10-24, under the owner's delegation)
+
+**Context.** The owner commissioned agents to build and run DeluluLang programs under conditions the head chef holds
+(2026-10-24). The zero-authority agent (Haiku 5.5) found the effect row escapable through a generic. The checker gave a
+function's generics fresh inference variables for its own body (`make_genv`, "fresh inference variables for this
+checking pass"), so the body could decide them: `T := Int`, `e := {}`. A caller then instantiated them again. So
+`coerce[A, B](x: A) -> B { x }` laundered an effectful closure into a pure type, and a pure function printed. The head
+chef reproduced it against the current binary: `check` exit 0 with "`main` declares effect `Write` it never performs",
+and the run printed under a console grant. It is the P16 class, the effect row escaping, through a door the laundering
+suite never tried.
+
+**Decision.**
+1. **Rigid variables.** `InferCtx` marks a variable rigid (`fresh_rigid_type`, `fresh_rigid_row_var`). Unification never
+   binds a rigid variable. A flexible variable meeting one is bound to it. A rigid type meeting any other type, or a
+   different rigid one, is a mismatch. A rigid row tail is never closed. A flexible tail meeting it is bound to the rigid
+   tail plus the effects it lacks, and only when it holds no effect the rigid side does not.
+2. **Where.** `check_fn` gives the body rigid generics, and so does `check_actor` for its members' bodies. Call sites
+   (`instantiate_fn`) and `spawn` still instantiate flexible ones: the caller picks, and the body holds for every pick.
+3. **Messages** name the parameter the author wrote (`expected T, found Int`; `fn() -> Unit !{e}`). `TypeNames` gains
+   default `type_var_name` and `row_var_name`, and the checker supplies the rigid generics' names.
+4. **The laundering suite** (`crates/delulu-check/tests/laundering.rs`, entrenched) gains five witnesses. Its
+   `rejects_with` refuses a witness that does not lex or parse (any DL01xx or DL02xx). F-3, F-3b and F-4 had written two
+   statements on one line (DL0209) since they were written, and passed through the parser's recovery. Each is repaired,
+   and each is still refused with its own code. Recorded in `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Why this hardens, and redefines nothing.** A generic signature promises its result for every `T` and `e` a caller
+picks, and every call site already instantiated them so. Only the body was checked against one choice of its own. No
+program the rule always meant to accept is refused: `delulu-check` and the conformance suite pass unchanged, and so
+does the stdlib's `Promise[T, e]`. A program that relied on the hole is refused DL0401 (no new code).
+
+**Evidence.** `laundering` 17 passed (12 before). Mutants red: the type guard dropped (three witnesses), the closed-row
+guard dropped, actor generics flexible. Agent C's programs (`p2_09`…`p2_13`, `p3_01`…`p3_03`) are refused DL0401.
+Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## D-V2-185 — `--within` decides a file use at its call, where the source writes its path (B9) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B9, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; confirmed by the head chef on
+the current binary).** `rd.read_text("../forbidden/secret.txt")` on a capability minted for `./allowed` was *within* a
+boundary of `console` and `fs.read=./allowed`, and `run` with exactly those grants refused it (DL0904). `--within` judged
+each file capability at its mint only; the use's path, checked by `prim::resolve_in_anchor` at the call, was never read.
+It is the class D-V2-180 and D-V2-181 closed for secret sends and request paths: a verdict that skips a use-time check.
+
+**Decision.** A use whose path the source writes (`read_text`, `list_dir` and `narrow` on `Cap[FsRead]`, `write_text`
+and `append_text` on `Cap[FsWrite]`, by the checker's type at the call) is decided at its call:
+- **The source shows the capability's mint** (`root.fs_read("DIR")` through a `let`, with `narrow`s of literals; any
+  rebinding forgets it, SEND-REBIND-1's walk): the runtime mints and narrows it and asks `resolve_in_anchor`. A use it
+  refuses is *exceeds*, refused whatever the boundary grants, as a URL the egress client will not read is (D-V2-181).
+  The finding is labelled with the capability's mint line, since no grant lets a capability's use leave its directory.
+- **The source does not show the capability** (a parameter, a field): a relative path that never climbs above where it
+  starts is *within*; a spelling every call refuses (D-NE-29) is *exceeds*; any other path is *inconclusive*.
+- **A computed path** is decided by its capability's mint, as a computed URL is (D-V2-181). **The limit, recorded:** such
+  a use can still be refused at its call (DL0904) under a *within* verdict. It asks for nothing beyond its capability,
+  and the verdict does not judge a name the source does not show.
+
+`--grants` is unchanged. Witness: `within_cli` `a_file_use_is_decided_by_its_path_against_its_capability`, holding each
+verdict on a written path to what `run` does with the same grants. It was red before the fix, and four mutants turn it
+red: a refused use answered within, every path taken as staying below, narrowings skipped, and hostile spellings unchecked.
+
+## D-V2-186 — The supply-chain gate (DL1009, DL1001) holds on every route that runs, ships or plans a package; reports keep answering (RUN-PIN-1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (RUN-PIN-1, on-demand routine run 6, found while verifying the agent campaign's A2 on the binary).** A
+dependency pinned `effects = []` that writes, or one that carries no pin, is DL1001 under `delulu check`, `build` and
+`lock`. `delulu run app` ran it, on the interpreter, in the sandbox and on the WASM engine; `build --target wasm` wrote a
+`.dwx` that ran it; `test` ran the package's tests; `deploy plan` planned it and `sandbox policy` previewed its run. Only
+`build_workspace` and `cmd_lock` called `check_self_authority` and `check_pins`; every other loader checked types alone.
+The specification, the book and `provenance.rs` all say the gate refuses "before any code runs", and its witness drove
+`build` alone.
+
+**Decision.** One function, `delulu_check::deps::supply_chain_gate` — every package within its own manifest (DL1009) and
+every dependency within its consumer's pin (DL1001) — and every route that **runs** a package's code (`run` on every
+engine, `run --sandbox`, `test`), **ships** it (`build`, `build --target wasm`, `lock`, `publish`), **plans or previews**
+it (`deploy plan`, `sandbox policy`) or **accepts** it as a dependency (`add`, which computes the authority it pins) calls
+it and refuses on its errors. The routes that only **report** — `authority`, `why`, the Atlas — keep answering for such a
+package: they run nothing, and an operator needs to read what a package does to decide its pin. No new code: the refusal is
+DL1001 or DL1009, as `build` says it.
+
+**Why.** A pin is the consumer's ceiling on a dependency, and the commonest command, `run`, is the one an author types
+first; a gate that `build` keeps and `run` skips protects only those who build first. The reports are left alone because
+refusing them would hide the answer the pin is decided from.
+
+Witness: `provenance` `no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` (seven routes, a broken pin and
+a missing one, and a control that goes through all seven); red on the old code; M806–M810 red.
+
+**What it moved in three existing tests (the full suite, 2,544 passed and these 3 failed).** Two `deploy_cli` fixtures
+were packages `build` refuses: each read a secret its own manifest never declares (DL1009), and `deploy plan` now refuses
+to plan them. They declare the secret now, and every assertion about the profile stands. `sandbox_run_cli`'s package
+whose manifest declares no effects was refused DL0701 by `run`'s manifest gate; the supply-chain gate now refuses it
+first, with DL1009, as `build` does, and the test asserts that code. A single file beside a manifest has no package
+check, and is still refused DL0701.
+
+## D-V2-187 — A special-use host in a delegation is named where it is written, and the node is still made; the `net.special` dimension on a node is the next slice (B1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B1, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; re-run by on-demand routine
+run 6).** `grants delegate --net 127.0.0.1` was accepted without a word, and every run under the lease was then refused at
+the connect (`special-use`). A broker node has no `net.special` dimension (`grants_from_lease` gives a leased run an empty
+`net_special`, PS-B-02), so no lease reaches a special-use address, whatever its `net` says.
+
+**Decision.** `grants delegate` and `grants certify` — the two places a node's `net` is written — print a note for an entry
+whose host is a special-use address or name (`netclass::special_use_class` of `netscope::host_of`, so a path or a method
+list is no way round it): the node cannot carry `net.special`, a run under it is refused at that connect, and `--grant
+net.special=HOST` on the run reaches it. The node is still made. **Refusing it was weighed and rejected:** such a node
+drives every decision before the connect — the custody, the Guard's permits per destination, the audit — and
+`broker_cli` and `federation_cli` use exactly that to witness a leased send with nothing leaving the machine; a refusal
+would remove a working grant to report a missing one. **The real fix is the dimension**, sized here for the next slice:
+`Scopes::net_special`, a set of `net` entries ordered by `netscope`'s own order and met by `set_meet`, well-formed only
+within `net` (as `secret_to` lives only beside its secret), emitted in JSON only when non-empty (no existing hash, chain
+or certificate moves); `--net-special` on `delegate` and `certify`; the certificate, `AuthoritySpec`, `NodeInfo`,
+`authority_spec_from_grants` and `grants_from_lease`; the Z3 model's dimension; and the proposal flow, whose filing says
+a special-use reach is never filed while a `net.special=HOST` line passes its check (code reading, unwitnessed). With the
+dimension, a plain `--net` special-use host can be refused as `--grant net=` refuses one (D-NE-28).
+
+Witness: `broker_cli` `a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four
+spellings, both verbs, a control); M811–M814 red.

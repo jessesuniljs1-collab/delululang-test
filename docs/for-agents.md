@@ -381,9 +381,11 @@ does not (P9-04 (d), D-V2-133).
 `delulu authority FILE --json` names every place the program SENDS a secret (P9-04 (e), D-V2-135) — a
 `secret_destinations` array, present only when it sends one: `{"secret", "to", "at"}` per `http.get_with_secret`
 call, `secret` the grant name when the source shows it (`root.secret("NAME")`, a `let`-bound one, a `Secret.map` of
-it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`).
-Either is `null` when the source does not show it (a computed URL, a secret passed in as a parameter, a name a `for`
-or a match arm rebinds) — never a guess.
+it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`). The
+literal may be written at the call, or bound to a name by a `let` in the body or by a constant of the module
+(`let API: Str = "https://…"` among its items). Either is `null` when the source does not show it (a computed URL, a
+secret passed in as a parameter, a name a `for` or a match arm rebinds, a name assigned in a branch, a loop or a
+closure) — never a guess.
 
 Since 2026-10-23 (RW 2.11, D-V2-180) those sends are part of what the program asks for. `--grants` names a sent secret's
 audience: `secret:API_TOKEN@api.example.com:8443=VALUE`, with `HOST` for a send whose URL the source computes, and
@@ -653,8 +655,9 @@ A budget is also AUTHORITY (PS-B-05). Whoever delegates to you can hand one down
 a budget inherits it. When you run under `--lease`, the node's budget is what you are held to and your
 default: `--limits` may ask for less and is refused, before `main`, if it asks for more. A delegation
 that asks for a larger budget than its parent holds is DL0802, and its repair is the meet. Under
-`--sandbox`, a flag the sandboxed run does not apply (`--lease` and `--broker` among them) is refused
-rather than ignored; a lease runs without `--sandbox`.
+`--sandbox`, a flag the sandboxed run does not apply is refused rather than ignored. `--lease` and
+`--broker` apply there (REMAINING_WORK 4.20): the guest performs nothing itself, and each use it asks of the
+host is judged by the lease's node first (`guest: error[DL0904]: lease … does not grant …`).
 
 On Windows a `--sandbox` guest also runs as a separate identity (PS-B-03): a per-run AppContainer with
 no network and none of the operator's files. On Linux, where the host allows user namespaces, it runs
@@ -689,11 +692,15 @@ overstate it downstream:
 - **The network client is `GET` over verified HTTPS, host-side, and nothing more.** `http.get` is
   performed by the runtime (for a `--sandbox` guest, by the HOST — the guest has no socket and no
   resolver): allowlisted host, name resolved once and pinned, special-use addresses refused unless the
-  host was granted with `--grant net.special=HOST` (never plain `net=`), every redirect re-checked,
+  host was granted with `--grant net.special=HOST` (never plain `net=`, and not yet under a lease: a broker node has no
+  `net.special` dimension, so a leased run is refused at that connect, which `grants delegate` and `certify` say when the
+  grant is written — D-V2-187), every redirect re-checked,
   a grant's path pattern held on every hop (`--grant net=api.example.com/v1/**`, P9-05 (a): `*` one
   segment, `**` the rest; the program asks for the same scope, `root.http(["api.example.com/v1/**"])`;
   a path outside it, or one a server could read another way — `..`, `//`, `;`, an escaped `/` — is
-  refused at the call, DL0904, under every custody),
+  refused at the call, DL0904, under every custody), and its methods (`--grant net=api.example.com:GET,POST/v1/**`,
+  P9-05 (d), D-V2-182: named after the host in the order GET, HEAD, POST, PUT, PATCH, DELETE, each once; an entry
+  naming none allows GET alone, the one request a program makes today, so a POST-only entry refuses it, DL0904),
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
@@ -713,7 +720,19 @@ overstate it downstream:
   chain records a `send` with the pair; a delegated node's send is guarded (DL1410) until a person approves
   `declassify:NAME@host:port` — one for another destination does not buy it; a rule or permit on the secret's NAME
   (`declassify:NAME`) covers every send of it, and a seal on it refuses them all (D-V2-137). Not yet in a
-  `--sandbox` guest (DL1401: no secret crosses the channel), or under `--engine wasm`.
+  `--sandbox` guest (DL1401: no secret crosses the channel). Under `--engine wasm` it runs as on the interpreter
+  (D-V2-174; `post_with_secret` since 2026-10-23).
+  `http.post(url, headers, body)` (P9-05 (d), D-V2-183) is the one request that is not a GET: the program mints
+  `root.http(["api.example.com:POST/v1/**"])` and the operator grants the same (`--grant net=api.example.com:POST/v1/**`;
+  `--grants` prints it). Under an entry naming no methods it is refused at the call, DL0904, *"a `POST` to … is outside
+  the methods the grant names"*. Its headers follow `get_with`'s rules, and its body is at most 1 MiB (reason
+  `request-too-large`). A 301, 302 or 303 after it is followed as a GET with no body, judged as a GET; a 307 or 308
+  keeps the POST and its body, only to the URL's own origin (elsewhere: reason `body-elsewhere`). Each hop's report
+  record names its `method` when it is not a GET, and under `--broker daemon`/`--lease` the chain's `use` record does
+  too, beside `url_path` (OCSF `http_request.http_method`). From a `--sandbox` guest the host performs it, and under
+  `--engine wasm` (since 2026-10-23) the WASM host does, its custody asked by the method; `post_with_secret` too. `http.post_with_secret(url, headers, header, secret, body)` is the authenticated POST: the
+  secret as `get_with_secret` sends it (its audience only; under `--broker daemon`/`--lease` the broker's `send`), the
+  body as `post`'s; a capability minted without POST refuses it before the broker is asked for a byte.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

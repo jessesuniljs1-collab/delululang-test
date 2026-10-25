@@ -886,7 +886,8 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 if let Some(custody) = self.custody.as_mut() {
                     if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded, fs_pin.as_deref()) {
                         let url_path = crate::interp::custody_path_for(op, &decoded);
-                        if let crate::custody::CustodyDecision::Deny(d) = custody.check_at(op, arg.as_deref(), url_path) {
+                        let verb = crate::interp::custody_method_for(op, method);
+                        if let crate::custody::CustodyDecision::Deny(d) = custody.check_at(op, arg.as_deref(), url_path, verb) {
                             return Response::Fault { code: d.code.to_string(), message: d.message };
                         }
                         if let (crate::custody::Op::Net, Some(Value::Str(url))) = (op, decoded.first()) {

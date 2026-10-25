@@ -469,7 +469,7 @@ The manifest is a *checked ceiling*, not a hopeful comment.
 
 **2. Authority pins (DL1001).** When you depend on `markdown = "1.2"`, your lockfile records the
 authority you accepted. If a later resolution would let `markdown` do *more* than you pinned, the
-build fails — before running anything. This is the anti-`xz` mechanism: a dependency cannot quietly
+build fails — and so do `run`, `test` and every other command that would run it, before running anything. This is the anti-`xz` mechanism: a dependency cannot quietly
 grow new powers.
 
 **3. The semver-authority law (DL1003).** Widening authority is a **major-version** change, always. A

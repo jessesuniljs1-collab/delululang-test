@@ -1343,7 +1343,8 @@ impl Interp {
         let mut fetch_allowed: Option<String> = None;
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             let url_path = custody_path_for(op, &argvals);
-            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path) {
+            let method = custody_method_for(op, &name.name);
+            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path, method) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
                 // means the program asked for something it never held; this one can also mean an
@@ -1486,10 +1487,10 @@ impl Interp {
             // origin the request names, after everything that can be judged without them.
             Value::Cap(c)
                 if c.kind == ResourceKind::Http
-                    && name.name == "get_with_secret"
+                    && (name.name == "get_with_secret" || name.name == "post_with_secret")
                     && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) =>
             {
-                self.send_broker_secret(c, &argvals, span)
+                self.send_broker_secret(c, &name.name, &argvals, span)
             }
             // PS-A-01: the seam. `LocalSink` calls `prim::call_cap_method` — the same call this line
             // made before — so the local path is unchanged; a guest sends it to the host instead.
@@ -2170,12 +2171,12 @@ impl Interp {
     /// bytes for that ONE origin (`Custody::send_secret`: the node's `secret_to`, the Guard on the pair, a `send` record),
     /// and the request is made with a secret that holds them and whose audience is that origin alone — so a redirect to
     /// another origin, even one the grant names, drops it. The bytes reach the egress client; no program value holds them.
-    fn send_broker_secret(&self, c: &CapVal, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
-        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, argvals, span)?;
+    fn send_broker_secret(&self, c: &CapVal, method: &str, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, method, argvals, span)?;
         match send {
-            SecretSend::AsGiven => self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None),
+            SecretSend::AsGiven => self.effects.cap_method_pinned(c, method, argvals, span, None),
             SecretSend::Answered(v) => Ok(v),
-            SecretSend::Held(args) => self.effects.cap_method_pinned(c, "get_with_secret", &args, span, None),
+            SecretSend::Held(args) => self.effects.cap_method_pinned(c, method, &args, span, None),
         }
     }
 
@@ -2392,7 +2393,12 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
         // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
         // and the trace is printed and stored (P9-04 (a), D-V2-128).
-        ("Http", "get") | ("Http", "get_with") | ("Http", "get_with_secret") => args.first().map(|v| v.display()),
+        // `post`'s body is never shown either: the program's data, as a header's value is (P9-05 (d), D-V2-183).
+        ("Http", "get")
+        | ("Http", "get_with")
+        | ("Http", "get_with_secret")
+        | ("Http", "post")
+        | ("Http", "post_with_secret") => args.first().map(|v| v.display()),
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2432,7 +2438,11 @@ pub(crate) fn custody_op_for(
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
         (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => Some((CustodyOp::FsRead, fs_arg(c))),
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => Some((CustodyOp::FsWrite, fs_arg(c))),
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
+        (ResourceKind::Http, "get")
+        | (ResourceKind::Http, "get_with")
+        | (ResourceKind::Http, "get_with_secret")
+        | (ResourceKind::Http, "post")
+        | (ResourceKind::Http, "post_with_secret") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no
@@ -2503,6 +2513,7 @@ pub enum SecretSend {
 pub fn broker_secret_send(
     custody: &mut dyn Custody,
     c: &CapVal,
+    method: &str,
     argvals: &[Value],
     span: delulu_diag::Span,
 ) -> Result<SecretSend, Fault> {
@@ -2510,7 +2521,10 @@ pub fn broker_secret_send(
         return Ok(SecretSend::AsGiven);
     };
     let url = prim::str_arg(argvals, 0, span)?;
-    if !url.starts_with("https://") || !prim::url_allowed(&url, allow) {
+    // By the request's own method (P9-05 (d), D-V2-183): a POST its capability does not take is refused by the effect, in
+    // its words, before the broker is asked for a byte.
+    let allowed = prim::url_verdict(&url, prim::http_method_of(method), allow) == delulu_broker::netscope::Verdict::Allow;
+    if !url.starts_with("https://") || !allowed {
         return Ok(SecretSend::AsGiven);
     }
     let headers = prim::headers_arg(argvals, "get_with_secret", span)?;
@@ -2539,6 +2553,16 @@ pub fn broker_secret_send(
 pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {
     match (op, argvals.first()) {
         (CustodyOp::Net, Some(Value::Str(url))) => Some(prim::request_path(url)),
+        _ => None,
+    }
+}
+
+/// The HTTP method a network use names for its custody to judge and record (P9-05 (d), D-V2-183): `POST` for `post`,
+/// `None` for a GET — the request every use was before, whose round-trip and record stay as they were.
+pub(crate) fn custody_method_for(op: CustodyOp, method: &str) -> Option<&'static str> {
+    match (op, prim::http_method_of(method)) {
+        (CustodyOp::Net, "GET") => None,
+        (CustodyOp::Net, verb) => Some(verb),
         _ => None,
     }
 }

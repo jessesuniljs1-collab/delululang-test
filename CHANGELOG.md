@@ -23,14 +23,132 @@ refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; sin
 a `match` that leaves a case uncovered below its top level, or literal arms with no catch-all, is refused (DL0407,
 D-V2-172); `deploy plan` refuses a service whose paths, hosts or secrets the environment profile does not name (DL1909,
 D-V2-176); `delulu check` refuses a type it infers that is too large to write out, over 100,000 parts (DL0211, D-V2-179);
-`authority --within` and `deploy plan` refuse a boundary under which a secret's send or a request's path is refused when the
-program runs (D-V2-180, D-V2-181).
+`authority --within` and `deploy plan` refuse a boundary under which a secret's send, a request's path or a file use's path
+is refused when the program runs (D-V2-180, D-V2-181, D-V2-185); a generic's own type and row parameters are rigid in its
+body (DL0401, D-V2-184); a top-level constant's value is checked and must be pure (RW 4.82); `run` on every engine, `run
+--sandbox`, `build --target wasm`, `test`, `deploy plan`, `publish` and `add` refuse a package whose dependency breaks its
+authority pin or carries none, as `build` does (DL1001, D-V2-186); `run --sandbox` refuses a `--report-out` inside a scope
+the program may write, as the ordinary run does (D-V2-21, RW 4.84).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### every route that runs a package holds its dependencies to their pins; a sandboxed run's report is the runtime's; DL1001's repair parses, 2026-10-25
+
+- **Fixed (supply chain, D-V2-186, RW 4.85): `delulu run DIR` ran a dependency its authority pin refuses** (RUN-PIN-1).
+  A dependency pinned `effects = []` that writes, or one with no pin, was DL1001 under `check`, `build` and `lock` and
+  ran under `run` — the interpreter, `--sandbox` and `--engine wasm` — and under `build --target wasm` (its `.dwx` too),
+  `test`, `deploy plan`, `publish`, `add` and `sandbox policy`. Every one of them now refuses it with DL1001 (or DL1009
+  for a package beyond its own manifest) before any code runs. `authority`, `why` and the Atlas still report on it.
+  **Breaking** only for a package whose dependencies break their pins: `build` already refused it.
+- **Fixed (D-V2-21, RW 4.84): `run --sandbox` accepted a `--report-out` inside a scope the program may write**, and
+  the guest could write a counterfeit report where the runtime's would go. It is refused before anything runs, as the
+  ordinary run refuses it — for `--grant` scopes, a dry run (`--mode audit`) included, and for a lease's once redeemed.
+- **Fixed (RW 6.16): DL1001's repair `insert_dependency_pin` wrote TOML that does not parse** for a dependency written
+  `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
+  refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
+  this dependency".
+- **Changed (D-V2-187, RW 4.86): `grants delegate` and `grants certify` name a special-use `--net` host** (`127.0.0.1`,
+  `localhost`, a private range) when the grant is written: a node cannot carry `net.special` yet, so a run under it is
+  refused at that connect, and the note gives `--grant net.special=HOST`, the grant that reaches it. The node is still
+  made.
+
+### `authority --within` decides a file use at its call, 2026-10-25
+
+- **Fixed (D-V2-185):** a file use whose path the source writes is decided at its call. A program reading
+  `../forbidden/secret.txt` through a capability for `./allowed` was *within* a boundary that `run` refused with DL0904;
+  it is now *exceeds* there, at that call.
+
+### `% 0` faults alike on both engines; three stale doc passages, 2026-10-24
+
+- **Fixed: `x % 0` under `--engine wasm` reported DL0901 (integer overflow)**; it is DL0902 (division by zero), as
+  on the interpreter (RW 4.83). `INT_MIN % -1` stays DL0901 on both.
+- **Docs:** `for-agents.md` said `--lease` and `--broker` are refused under `--sandbox`; they apply there (RW 4.20),
+  and each use the guest asks of the host is judged by the lease's node. `GETTING_STARTED.md` and `for-agents.md`
+  said a secret-carrying request is "not yet" under `--engine wasm`; it runs there (D-V2-174, and `post_with_secret`
+  since 2026-10-23).
+
+### a top-level constant's value is checked, 2026-10-24
+
+- **Fixed: `let NAME[: T] = value` at module level was never checked** (CONST-UNCHECKED-1, RW 4.82). Its value is
+  now type-checked against its declared type, its names resolved, and it must be pure: a constant is evaluated
+  before `main`, holding no authority, so `let W = spawn Worker()` is refused DL0501 (it performed `Async` that
+  `authority` never named). An unannotated constant has one type at every use. **Breaking** only for a program
+  whose constant was ill-typed, unresolvable or effectful — each failed at run time or did something unreported.
+
+### a generic's own parameters are rigid in its body, 2026-10-24
+
+- **Fixed (soundness): the effect row escaped through a generic function** (GENERIC-RIGID-1, D-V2-184, RW 4.81).
+  Inside its own body a generic's type and row parameters could be decided by the body: `fn forge[T](x: Int) -> T
+  { x }` checked, and `coerce[A, B](x: A) -> B { x }` or `hide[e](f: fn() -> Unit ! e) -> fn() -> Unit { f }` made
+  an effectful closure pure, so a function `authority` listed as pure printed at run time. A generic's parameters
+  are now rigid in its body (and an actor's in its members): the body must hold for every type and row a caller
+  picks. **Breaking** only for a program that relied on the hole: its body is refused DL0401, naming the parameter
+  (`expected T, found Int`).
+
+### a certificate carries every dimension a delegation can, 2026-10-24
+
+- **Fixed: under strict anchored roots, a lease can hold a broker-held secret** (CERT-SECRET-1, RW 4.80). `grants
+  certify` now takes `--secret`, `--secret-to`, `--declassify`, `--foreign-c`, `--foreign-python` and `--budget`, as
+  `grants delegate` does. A root enters a strict broker only through a certificate, so before this no delegation
+  under it could name a secret (DL0802). A certificate names a secret and never carries its value (`--secret
+  NAME=VALUE` is refused); the broker that adopts it holds the bytes (`delulu secrets set`).
+- **Fixed: `toolchain --json` describes `net` and `net.special` with their methods** (`HOST[:METHODS][/PATH]`, D-V2-182).
+
+### `http.post` and `http.post_with_secret` on the WASM engine, 2026-10-23
+
+- **Added: `Cap[Http].post` compiles to WebAssembly** (`--engine wasm`, `build --target wasm`). The host performs it by
+  the interpreter's own `post`, and its gate asks the custody by its method, as the interpreter's does: under
+  `--broker daemon` the chain records the POST's `use` with its `method`. `post_with_secret` compiles too: the guest
+  names the secret's handle and the host sends its bytes, as `get_with_secret`'s are sent.
+
+### `http.post` and `http.post_with_secret`, 2026-10-23
+
+- **Added: `Cap[Http].post(url, headers, body)`, the first request that is not a GET** (P9-05 (d), D-V2-183, RW 2.12).
+  A program mints `root.http(["api.example.com:POST/v1/**"])`, and the operator grants the same line
+  (`--grant net=api.example.com:POST/v1/**`). Under a grant naming no methods (GET alone) the POST is refused at its
+  call (DL0904, in words about its method), and nothing connects. Its headers follow `get_with`'s rules; its body is at
+  most 1 MiB. After a POST, a 301, 302 or 303 is followed as a GET with no body and judged as one. A 307 or 308 keeps
+  the POST and its body, to the URL's own origin only; a redirect elsewhere is refused. The same checks run at L0,
+  from a `--sandbox` guest (the host performs it), and under `--broker daemon` and `--lease`. There the chain's `use`
+  record names the `method`, OCSF exports it as `http_request.http_method`, and a run report's hop names it.
+  `authority --within` decides a POST by its method, and so does `deploy plan`, which uses the same verdict. Not yet on
+  `--engine wasm`.
+- **Added: `Cap[Http].post_with_secret(url, headers, header, secret, body)`**, an authenticated POST. The secret
+  rides in one header as `get_with_secret`'s does: never declassified, sent only to its grant's audience
+  (`--grant secret:NAME@HOST[:PORT]=…`, which `--grants` proposes). Under `--broker daemon` the broker hands over its
+  bytes for that one origin, and the chain records the POST's `use` and the `send`. A capability minted without POST
+  refuses it at the call before the broker is asked for a byte.
+- **Changed: the primitive table's version is 8** (was 7). A `.dpx` whose DIR was checked against version 7 is refused
+  with DL1503 and is rebuilt, as at every earlier bump.
+
+### a `net` grant names its methods, 2026-10-23
+
+- **Added: a `net` entry may name the HTTP methods it allows** (P9-05 (d), D-V2-182, RW 2.12):
+  `--grant net=api.example.com:GET,POST/v1/**`. Methods are named after the host from `GET`, `HEAD`, `POST`, `PUT`,
+  `PATCH` and `DELETE`, each once and in that order. An entry that names none allows **GET alone**, as every entry
+  has until now, so no grant reaches more than it did. A program asks for the same scope in `root.http([...])`, never
+  for a method its grant does not name. Every request is still a GET; under an entry that names POST alone it is
+  refused at its call (DL0904, in words about the method), by the egress client on every hop and by the broker.
+  `--within` and `deploy plan` decide the same way. The method set is ordered like the path patterns and proved in
+  Z3. This is the dimension a primitive other than GET needs before it can exist.
+- **Changed (stricter): a `net` entry naming a port is refused in words** (`net=api.example.com:8443`: "a `net`
+  entry names no port"). Such an entry was accepted before and never matched a request.
+- **Changed: `delulu sandbox policy FILE --format openshell` refuses a method-scoped `net` grant**, as it refuses a
+  path-scoped one: the host alone would grant every method.
+
+### a URL named by a `let` or a constant is read as its literal, 2026-10-23
+
+- **Changed: `authority --grants`, `--within` and `deploy plan` read a request's or a send's URL through a name.** A URL
+  bound once by a `let` (`let u = "https://example.com/admin"`) or by a module constant (`let API: Str = "https://…"`
+  among the module's items) is now decided by its literal, as one written at the call always was. Before, it was taken
+  as computed. Under a path-scoped boundary such a request was *inconclusive*; it is now *within* or *exceeds*, the second
+  named at the request. A sent secret's audience was proposed as `HOST`; now it is the literal's `host:port`. A name
+  that may hold another value at the call still counts as computed: one assigned in a branch, a loop or a closure, or a
+  parameter or local `let` that shadows the constant.
 
 ### ctutils 0.4.5, 2026-10-23
 

@@ -725,6 +725,12 @@ struct Imports {
     /// the interpreter's own rule and keeps, and `Cap[Http].get_with_secret`, which sends it from the host (D-V2-174).
     root_secret: u32,
     http_get_with_secret: u32,
+    /// `delulu:cap.http_post` — `Cap[Http].post(url, headers, body)`, performed host-side by the interpreter's own `post`
+    /// (P9-05 (d), D-V2-183).
+    http_post: u32,
+    /// `delulu:cap.http_post_with_secret` — `Cap[Http].post_with_secret(url, headers, header, secret, body)`, a POST
+    /// carrying a secret's handle, sent from the host as `get_with_secret`'s is (P9-05 (d), D-V2-183).
+    http_post_with_secret: u32,
     /// `delulu:cap.secret_verify` — `Secret.verify(other)`, compared host-side by the interpreter's own `secret_verify`.
     secret_verify: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
@@ -1292,6 +1298,8 @@ fn compile_module_typed(
         http_get: u32::MAX,
         root_secret: u32::MAX,
         http_get_with_secret: u32::MAX,
+        http_post: u32::MAX,
+        http_post_with_secret: u32::MAX,
         secret_verify: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
@@ -1363,6 +1371,17 @@ fn compile_module_typed(
     let needs_secret_send = needs_http && needs_secret && module_calls_method(&env, module, &["get_with_secret"]);
     if needs_secret_send {
         imp.http_get_with_secret = n_imports;
+        n_imports += 1;
+    }
+    // P9-05 (d), D-V2-183: `post` where a `Cap[Http]` is minted — `post` is no other receiver's method.
+    let needs_post = needs_http && module_calls_method(&env, module, &["post"]);
+    if needs_post {
+        imp.http_post = n_imports;
+        n_imports += 1;
+    }
+    let needs_post_secret = needs_http && needs_secret && module_calls_method(&env, module, &["post_with_secret"]);
+    if needs_post_secret {
+        imp.http_post_with_secret = n_imports;
         n_imports += 1;
     }
     // A function taking two secrets compiles wherever it is written, so a module may verify what it never mints.
@@ -1575,6 +1594,20 @@ fn compile_module_typed(
         types.ty().function([ValType::I32; 9], [ValType::I32]);
         next_type += 1;
     }
+    let mut http_post_ty = 0;
+    if needs_post {
+        http_post_ty = next_type;
+        // http_post(cap, url, headers, desc, body, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 8], [ValType::I32]);
+        next_type += 1;
+    }
+    let mut http_post_secret_ty = 0;
+    if needs_post_secret {
+        http_post_secret_ty = next_type;
+        // http_post_with_secret(cap, url, headers, desc, header, secret, body, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 10], [ValType::I32]);
+        next_type += 1;
+    }
     let mut secret_verify_ty = 0;
     if needs_secret_verify {
         secret_verify_ty = next_type;
@@ -1781,6 +1814,12 @@ fn compile_module_typed(
     }
     if needs_secret_send {
         imports.import("delulu:cap", "http_get_with_secret", EntityType::Function(secret_send_ty));
+    }
+    if needs_post {
+        imports.import("delulu:cap", "http_post", EntityType::Function(http_post_ty));
+    }
+    if needs_post_secret {
+        imports.import("delulu:cap", "http_post_with_secret", EntityType::Function(http_post_secret_ty));
     }
     if needs_secret_verify {
         imports.import("delulu:cap", "secret_verify", EntityType::Function(secret_verify_ty));
@@ -3985,6 +4024,62 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.http_get_with_secret));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
             }
+            // `Cap[Http].post_with_secret(url, headers, header, secret, body)` -> `Result[Str, NetErr]` (P9-05 (d), D-V2-183):
+            // `get_with_secret`'s arguments and then the body, sent from the host by the interpreter's own method.
+            if recv_ty == Ty::Http && name.name == "post_with_secret" && args.len() == 5 {
+                if cx.imp.http_post_with_secret == u32::MAX {
+                    return Err(CompileError::Unsupported("`post_with_secret` in a module that mints no secret".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http post of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                if compile_expr(&args[2], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a header name that is not a Str".into()));
+                }
+                if compile_expr(&args[3], cx)? != Ty::Secret {
+                    return Err(CompileError::Unsupported("`post_with_secret` of a value that is not a Secret[Str]".into()));
+                }
+                if compile_expr(&args[4], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a request body that is not a Str".into()));
+                }
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http post without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_post_with_secret));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
+            // `Cap[Http].post(url, headers, body)` -> `Result[Str, NetErr]` (P9-05 (d), D-V2-183): performed host-side by the
+            // interpreter's own `post`, judged there by its method.
+            if recv_ty == Ty::Http && name.name == "post" && args.len() == 3 {
+                if cx.imp.http_post == u32::MAX {
+                    return Err(CompileError::Unsupported("`post` on a Cap[Http] in a module that mints none".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http post of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                if compile_expr(&args[2], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a request body that is not a Str".into()));
+                }
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http post without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_post));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
             // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).
             if recv_ty == Ty::Str && name.name == "len" && args.is_empty() {
                 cx.emit(Instruction::Call(cx.str_len_fn));
@@ -5383,17 +5478,14 @@ fn ovf_mul_fn() -> Function {
 }
 
 /// `a % b`, trapping on `b == 0` and on `INT_MIN % -1` (matching `checked_rem`; core `i64.rem_s`
-/// would return 0 for the latter rather than trap).
+/// would return 0 for the latter rather than trap). `b == 0` is left to `i64.rem_s` itself, which traps
+/// `IntegerDivisionByZero` — DL0902, as the interpreter says. An `unreachable` there was read as overflow
+/// (DL0901), so `7 % 0` faulted with a different code on each engine (A3, the agent test campaign, 2026-10-24).
 fn chk_rem_fn() -> Function {
     use Instruction::*;
     build(
         &[],
         &[
-            LocalGet(1),
-            I64Eqz,
-            If(BlockType::Empty),
-            Unreachable,
-            End,
             LocalGet(0),
             I64Const(i64::MIN),
             I64Eq,

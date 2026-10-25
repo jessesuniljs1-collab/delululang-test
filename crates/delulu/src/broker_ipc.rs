@@ -249,6 +249,9 @@ pub enum ReqBody {
         arg: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         url_path: Option<String>,
+        /// The request's HTTP method when it is not a GET (P9-05 (d), D-V2-183) — absent from a GET's frame, as before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        method: Option<String>,
     },
     /// P8-04 (routine run 15): a device command the run's ENVELOPE refused after `Check` allowed the
     /// use — recorded as a `use` `deny` citing `overrides_seq`, the `allow` it overrides. Records,
@@ -619,6 +622,7 @@ mod tests {
             op: "FsWrite".into(),
             arg: Some("/tmp/x".into()),
             url_path: None,
+            method: None,
         });
         let mut buf = Vec::new();
         write_frame(&mut buf, &req).unwrap();
