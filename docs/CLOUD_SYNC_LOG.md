@@ -5839,3 +5839,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   5. A17, a decision: `Async` is not authority, and the run's budget bounds an actor program.
   6. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — A17 decided: `Async` is not authority, and the budget bounds actors (D-V2-189) (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/a17-async-decision` (on `laptop/a21-rand-float`, #73)   Pull request: opened with this commit
+- **What:** D-V2-189. Documents and a decision only; nothing in the code changes.
+- Files and folders: M `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` (6.24),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #73, then this PR, each on green CI, and delete the branches.
+  2. Merge `master` into `launch/2.0.0` (#71–#74), dispatch `everything` and the release dry run, and re-cite
+     CHECKLIST-2.0 criteria 1, 3 and 4.
+  3. A15, a decision on a code for a bad argument (DL0908), with documentation of the half-open range.
+  4. A decision on mixing the generator's seed.
+  5. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+- Survey and doctor (after the last edit): in the commit message.
