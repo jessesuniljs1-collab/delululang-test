@@ -9423,3 +9423,16 @@ long program had to guess which expression the backend refused. Every checker re
 - Mutants, each red with the control green: M840 never placed, M841 the outermost place wins, M842 expressions not placed
   (the statement is named instead), M843 the CLI drops the span, M844 a rewrite drops the place, M845 a rewrite drops the
   text.
+- The two-engine differential (`delulu-wasm --release --test differential -- --ignored`, 50,000 programs) passed on the
+  laptop in 62 s.
+
+**A16's half, the same way** (the builder, A16, low). *"WASM refuses an actor holding a Console capability in a field, with
+a message naming the field but no span."* Actor fields and parameters are checked before any body compiles, outside every
+expression, so the placement above did not reach them. Each refusal is now placed at the type it cannot hold. The builder's
+own `actors/primes.delulu` is refused at `primes.delulu:7:14`, under `Cap[Console]`. The text, which read *"does not support
+actor field `Collector.out` is outside the Int/actor-reference subset"*, is now a sentence: *"… does not support an actor
+field `Collector.out` of a type outside the Int/actor-reference subset"*. `actors_parity`'s two subset tests now also hold
+each refusal to its place: `a_str_field_actor_refuses_as_dl1201` and `a_list_param_behavior_refuses_as_dl1201`. M846 (the
+field not placed) and M847 (the parameter not placed) were each red, and the control green. The same refusals in
+`compile_actor_member` are placed alike, but the early gate refuses first, so no test reaches them. Holding a capability
+in an actor field on WASM is a feature, not built here; such a program runs on the interpreter.

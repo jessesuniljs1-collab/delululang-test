@@ -1791,21 +1791,24 @@ fn compile_module_typed(
     // Stage 7 phase 7h: the subset gate runs EARLY — one out-of-subset actor field or
     // member parameter refuses the WHOLE module (honest DL1201 interpreter fallback)
     // before any function body compiles, so no partial artifact and no late panic path.
+    // Each refusal is placed at the type it cannot hold (the campaign's A16: it named the field and no line).
     for (_, decl, params, _, _) in &member_plans {
         for fld in &decl.fields {
             if actor_boundary_ty(&env, &fld.ty).is_none() {
                 return Err(CompileError::Unsupported(format!(
-                    "actor field `{}.{}` is outside the Int/actor-reference subset",
+                    "an actor field `{}.{}` of a type outside the Int/actor-reference subset",
                     decl.name.name, fld.name.name
-                )));
+                ))
+                .at(fld.ty.span()));
             }
         }
         for p in params.iter() {
             if actor_boundary_ty(&env, &p.ty).is_none() {
                 return Err(CompileError::Unsupported(format!(
-                    "actor member parameter `{}` is outside the Int/actor-reference subset",
+                    "an actor parameter `{}` of a type outside the Int/actor-reference subset",
                     p.name.name
-                )));
+                ))
+                .at(p.ty.span()));
             }
         }
     }
@@ -2418,9 +2421,10 @@ fn compile_actor_member<'a>(
     for (i, fld) in decl.fields.iter().enumerate() {
         let fty = actor_boundary_ty(env, &fld.ty).ok_or_else(|| {
             CompileError::Unsupported(format!(
-                "an actor field `{}` of a type outside the Int/actor-reference subset",
-                fld.name.name
+                "an actor field `{}.{}` of a type outside the Int/actor-reference subset",
+                decl.name.name, fld.name.name
             ))
+            .at(fld.ty.span())
         })?;
         fields.insert(fld.name.name.clone(), (i as u32, fty));
     }
@@ -2432,6 +2436,7 @@ fn compile_actor_member<'a>(
                 "an actor parameter `{}` of a type outside the Int/actor-reference subset",
                 p.name.name
             ))
+            .at(p.ty.span())
         })?;
         scope.insert(p.name.name.clone(), (i as u32 + 1, pty));
     }

@@ -5806,12 +5806,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 
 ### 2026-10-26 — A10 closed: run 6's list fix landed, and a WASM refusal names its line (made on the laptop)
 - Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
-- Branch: `laptop/a10-wasm` (on `laptop/routine-milestones`, #71)   Pull request: opened with this commit
-- Commits: `500de3b` (run 6's `16470ed`, cherry-picked); this commit (the refusal's place and the records).
-- **What:** see V2_LOG's entry of the same name.
+- Branch: `laptop/a10-wasm` (on `laptop/routine-milestones`, #71)   Pull request: #72
+- Commits: `500de3b` (run 6's `16470ed`, cherry-picked); `647ecc3` (the refusal's place and the records); the A16 commit
+  (an actor field's or parameter's refusal placed at its type).
+- **What:** see V2_LOG's entry of the same name. A16's span is closed too.
 - Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-wasm/src/codegen.rs`, `crates/delulu/src/cli.rs`,
-  `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
-  `docs/REMAINING_WORK.md` (6.21), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+  `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/wasm_cli.rs`, `crates/delulu-wasm/tests/actors_parity.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.21, 6.22), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
 - **Open / next:** land #71, then this PR, each on green CI (fast-forward), and delete both branches and
   `claude/peaceful-carson-crfvfa`. Then: CHECKLIST-2.0 re-cite from `40191260368`; the first nightly with #69; A17, A14,
   A11 and the papercuts.
