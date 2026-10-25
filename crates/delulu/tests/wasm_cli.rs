@@ -199,7 +199,7 @@ fn main(root: Root) ! {Write} {
 /// A construct the WASM backend refuses is refused AT ITS LINE (the campaign's A10, second half): DL1201 named no line
 /// and carried no span, so a program of any size left its author to guess which expression the backend could not
 /// compile, while every checker refusal points at its own. The innermost expression it refused is the span now — the
-/// list of closures on line 6, not the `for` around it or `main` — on `run --engine wasm` (human and `--json`) and on
+/// closure inside the list on line 6, not the list, the `for` around it or `main` — on `run --engine wasm` (human and `--json`) and on
 /// `build --target wasm`, and the message is the one it was.
 #[test]
 fn a_wasm_refusal_names_the_line_it_refuses() {
@@ -213,24 +213,32 @@ fn a_wasm_refusal_names_the_line_it_refuses() {
     .unwrap();
     let f = f.to_string_lossy().to_string();
     let interp = delulu(&["run", &f, "--grant", "console"]);
-    assert_eq!((interp.status.code(), stdout(&interp).as_str()), (Some(0), "done\n"), "{}", String::from_utf8_lossy(&interp.stderr));
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "done\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
 
     let run = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
     let err = String::from_utf8_lossy(&run.stderr).to_string();
     assert_eq!(run.status.code(), Some(1), "{err}");
-    assert!(err.contains("error[DL1201]: WASM codegen does not support this expression form"), "the message is the one it was:\n{err}");
-    assert!(err.contains("noline.delulu:6:14"), "the refusal names the list of closures, line 6 column 14:\n{err}");
+    assert!(
+        err.contains("error[DL1201]: WASM codegen does not support this expression form"),
+        "the message is the one it was:\n{err}"
+    );
+    assert!(err.contains("noline.delulu:6:15"), "the refusal names the closure, line 6 column 15:\n{err}");
 
     let json = delulu(&["run", &f, "--grant", "console", "--engine", "wasm", "--json"]);
     let v: serde_json::Value = serde_json::from_slice(&json.stdout).expect("a JSON envelope");
     let d = &v["diagnostics"][0];
     assert_eq!(d["code"], "DL1201", "{v}");
-    assert_eq!((d["spans"][0]["start"]["line"].as_u64(), d["spans"][0]["start"]["col"].as_u64()), (Some(6), Some(14)), "{v}");
+    assert_eq!((d["spans"][0]["start"]["line"].as_u64(), d["spans"][0]["start"]["col"].as_u64()), (Some(6), Some(15)), "{v}");
 
     let build = delulu(&["build", &f, "--target", "wasm", "--out", &dir.join("noline.dwx").to_string_lossy()]);
     let err = String::from_utf8_lossy(&build.stderr).to_string();
     assert_eq!(build.status.code(), Some(1), "{err}");
-    assert!(err.contains("DL1201") && err.contains("noline.delulu:6:14"), "`build --target wasm` names the line too:\n{err}");
+    assert!(err.contains("DL1201") && err.contains("noline.delulu:6:15"), "`build --target wasm` names the line too:\n{err}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

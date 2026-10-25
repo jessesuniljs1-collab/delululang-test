@@ -9389,3 +9389,81 @@ went with `git branch -d`, and the archived WIP with `-D`. The `dl-launch` workt
 checker 1 h 28 min, syntax 12 min). The release dry run `40191262135` at `f0cb42b` was a success. Run 6's last push run,
 `40190825887` at `8c9ccc9`, was a success. The A10 witnesses on `16470ed`, `wasm_cli` on macOS `40191526037` and Windows
 `40191528017`, were both successes.
+
+## 2026-10-26 — the laptop: A10 closed — an empty list filled later with a sum or a record runs on WASM, and a WASM refusal names its line
+
+**The finding** (the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, A10, medium). *"WASM engine refuses the
+idiomatic `let out = []` + `out.push(<sum-type value>)`; the message has no span and the checker already knows the type."*
+
+**The first half: run 6's fix, landed.** On-demand routine run 6 fixed the list in `16470ed`, on its session branch
+`claude/peaceful-carson-crfvfa`. The weekly limit ended the run before the fix was recorded or landed. Read again here as
+a stranger's diff:
+- The checker's result carries each type definition's name, indexed by `TypeDefId`: `CheckResult::type_names`, from
+  `DeclTable::types`.
+- `compile_checked` gives those names to the codegen.
+- `list_scalar` resolves a non-generic sum or record by name, as `wasm_ty` already resolves the name an annotation writes.
+  A generic sum's list stays on the interpreter.
+
+Nothing in the codegen reads `CompileError`'s variants to choose a path, so the change cannot reroute a program. Its
+witness `wasm_cli` `an_empty_list_filled_later_with_sums_or_records_runs_alike_on_both_engines` passes here. Run 6 read it
+on macOS (`40191526037`) and Windows (`40191528017`), and recorded its mutants M836–M839 red and the control green; they
+were not re-run here. The fix is landed as `500de3b`: cherry-picked onto #71, message kept, the Survey map regenerated.
+
+**The second half: a WASM refusal names its line.** DL1201 and DL1205 carried no span (`"spans": []`), so the author of a
+long program had to guess which expression the backend refused. Every checker refusal points at its own.
+- `CompileError` gains `At(Span, inner)`. `compile_expr` and `compile_stmt` place a refusal that no node inside them placed,
+  so the innermost refused expression or statement is named. `map_unsupported` lets the `if` arm's text rewrite reach
+  through the place, so every message reads as before.
+- `cli::wasm_refusal` builds the diagnostic, with that span, for `run --engine wasm`, `build --target wasm` and a
+  contained plugin's build.
+- Witness: `wasm_cli` `a_wasm_refusal_names_the_line_it_refuses`. A closure in a list on line 6 is refused at
+  `noline.delulu:6:15`, the closure, not the list or the `for`. The human form, `--json` and `build --target wasm` are
+  each checked, and the message is unchanged. It was red before the fix (no location); `wasm_cli` 20 passed after it.
+- `delulu-wasm`'s `placed_refusal_tests`: the innermost place wins, and a rewrite keeps the place.
+- Mutants, each red with the control green: M840 never placed, M841 the outermost place wins, M842 expressions not placed
+  (the statement is named instead), M843 the CLI drops the span, M844 a rewrite drops the place, M845 a rewrite drops the
+  text.
+- The two-engine differential (`delulu-wasm --release --test differential -- --ignored`, 50,000 programs) passed on the
+  laptop in 62 s.
+
+**A16's half, the same way** (the builder, A16, low). *"WASM refuses an actor holding a Console capability in a field, with
+a message naming the field but no span."* Actor fields and parameters are checked before any body compiles, outside every
+expression, so the placement above did not reach them. Each refusal is now placed at the type it cannot hold. The builder's
+own `actors/primes.delulu` is refused at `primes.delulu:7:14`, under `Cap[Console]`. The text, which read *"does not support
+actor field `Collector.out` is outside the Int/actor-reference subset"*, is now a sentence: *"… does not support an actor
+field `Collector.out` of a type outside the Int/actor-reference subset"*. `actors_parity`'s two subset tests now also hold
+each refusal to its place: `a_str_field_actor_refuses_as_dl1201` and `a_list_param_behavior_refuses_as_dl1201`. M846 (the
+field not placed) and M847 (the parameter not placed) were each red, and the control green. The same refusals in
+`compile_actor_member` are placed alike, but the early gate refuses first, so no test reaches them. Holding a capability
+in an actor field on WASM is a feature, not built here; such a program runs on the interpreter.
+
+## 2026-10-26 — the laptop: `r.float()` runs on WASM (A21, its first half)
+
+**The finding** (the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, A21, low). *"WASM refusals for common
+network/random calls: `.get_with` (DL1201) and `Rand.float` (DL1201)."* Its note that `GETTING_STARTED.md` called
+`get_with_secret` unsupported on WASM no longer holds: the guide now says it runs there (D-V2-174).
+
+**`Rand.float`.** `r.int(lo, hi)` compiled to the host import `rand_int`, and `r.float()` had no lowering. The change has
+three parts:
+- A host import, `rand_float(cap, file, start, end) -> f64`, with `rand_int`'s capability check, trace and custody gate.
+  It takes one step of the same xorshift generator and maps it as the interpreter does (`x as f64 / u64::MAX as f64`), so
+  a seeded run draws alike on both engines, floats and ints in turn.
+- The codegen imports it only where a module calls `.float`, so a module that draws only ints keeps its exact imports,
+  and every `.dwx` built before keeps running.
+- A contained plugin granted `Rand` may import it: `cap_slice` lists it beside `rand_int`, never `root_rand`.
+
+Witnesses:
+- `delulu-wasm` `rand_float_sequence_matches_the_interpreter`: a float, an int and a float under one seed print alike on
+  both engines, each float is in [0, 1], and another seed draws otherwise. It was red before the fix (DL1201, placed at
+  the call).
+- `delulu-runtime` `rand_confers_its_two_draws_and_nothing_more`: the `Rand` slice is exactly the two draws, with their
+  signatures.
+- Mutants, each red with the control green: M848 (the generator not advanced), M849 (the import never made) and M850
+  (the plugin slice without it).
+
+**Seen on the way, not changed.** A seed is made odd (`seed | 1`), so seeds 4242 and 4243 draw alike. A small seed's first
+draws are tiny: the first float under seed 4242 is 2.5e-7, which xorshift64 gives from a seed with few bits set. Mixing
+the seed first (splitmix64) would fix both, but would change every seeded sequence recorded so far, so it is a decision,
+named in *Open / next*.
+
+**Still open:** `http.get_with` (a request with headers and no secret) on WASM; `get_with_secret` compiles there.

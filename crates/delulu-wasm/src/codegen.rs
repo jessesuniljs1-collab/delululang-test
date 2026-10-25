@@ -65,6 +65,9 @@ pub enum CompileError {
     /// A construct that would place SECRET contents in guest linear memory — DL1205. Refused so the
     /// program runs on the interpreter, where secret bytes never cross into a guest (§4.4, spec §9.8).
     SecretInGuest(String),
+    /// One of the above, at the innermost expression or statement that refused it (the campaign's A10: a refusal named no
+    /// line, so the author of a long program had to guess which expression the backend could not compile).
+    At(delulu_diag::Span, Box<CompileError>),
 }
 
 impl CompileError {
@@ -74,6 +77,7 @@ impl CompileError {
             CompileError::SecretInGuest(what) => {
                 format!("secret contents cannot enter WASM guest memory ({what}); it runs on the interpreter")
             }
+            CompileError::At(_, inner) => inner.message(),
         }
     }
 
@@ -82,6 +86,33 @@ impl CompileError {
         match self {
             CompileError::Unsupported(_) => "DL1201",
             CompileError::SecretInGuest(_) => "DL1205",
+            CompileError::At(_, inner) => inner.code(),
+        }
+    }
+
+    /// Where the refusal is: the innermost expression or statement the backend refused, or `None` for one that belongs to
+    /// no single node (the module's data, an actor's layout).
+    pub fn span(&self) -> Option<delulu_diag::Span> {
+        match self {
+            CompileError::At(span, _) => Some(*span),
+            _ => None,
+        }
+    }
+
+    /// Place the refusal at `span` unless a node inside it was already named: the innermost one wins.
+    fn at(self, span: delulu_diag::Span) -> Self {
+        match self {
+            CompileError::At(..) => self,
+            e => CompileError::At(span, Box::new(e)),
+        }
+    }
+
+    /// Rewrite an `Unsupported` refusal's text, wherever it is placed.
+    fn map_unsupported(self, f: impl FnOnce(String) -> String) -> Self {
+        match self {
+            CompileError::Unsupported(m) => CompileError::Unsupported(f(m)),
+            CompileError::At(span, inner) => CompileError::At(span, Box::new(inner.map_unsupported(f))),
+            other => other,
         }
     }
 }
@@ -712,6 +743,7 @@ struct Imports {
     clock_now_ms: u32,
     root_rand: u32,
     rand_int: u32,
+    rand_float: u32,
     root_fs_read: u32,
     fs_read_text: u32,
     /// `delulu:cap.fs_narrow` — `Cap[FsRead].narrow(sub)`, a narrower handle minted host-side by the interpreter's own
@@ -1280,6 +1312,8 @@ fn compile_module_typed(
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
+    // A21: `r.float()` imports `rand_float` only where it is called, so a module drawing only `int`s keeps its imports.
+    let needs_rand_float = needs_rand && module_calls_method(&env, module, &["float"]);
     let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text", "narrow"]);
     // Stage 4 phase 4g: a program needs the `delulu:foreign` imports when it binds/loads a foreign lib.
     let needs_foreign = module_calls_method(&env, module, &["foreign", "foreign_load"]);
@@ -1295,6 +1329,7 @@ fn compile_module_typed(
         clock_now_ms: u32::MAX,
         root_rand: u32::MAX,
         rand_int: u32::MAX,
+        rand_float: u32::MAX,
         root_fs_read: u32::MAX,
         fs_read_text: u32::MAX,
         fs_narrow: u32::MAX,
@@ -1347,6 +1382,10 @@ fn compile_module_typed(
         imp.root_rand = n_imports;
         imp.rand_int = n_imports + 1;
         n_imports += 2;
+    }
+    if needs_rand_float {
+        imp.rand_float = n_imports;
+        n_imports += 1;
     }
     if needs_fs {
         imp.root_fs_read = n_imports;
@@ -1562,6 +1601,12 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I64, ValType::I64, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]); // rand_int(cap, lo, hi, file, start, end) -> i64
         next_type += 2;
     }
+    let mut rand_float_ty = 0;
+    if needs_rand_float {
+        rand_float_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::F64]); // rand_float(cap, file, start, end) -> f64
+        next_type += 1;
+    }
     let mut fs_root_ty = 0;
     let mut fs_read_ty = 0;
     if needs_fs {
@@ -1760,21 +1805,24 @@ fn compile_module_typed(
     // Stage 7 phase 7h: the subset gate runs EARLY — one out-of-subset actor field or
     // member parameter refuses the WHOLE module (honest DL1201 interpreter fallback)
     // before any function body compiles, so no partial artifact and no late panic path.
+    // Each refusal is placed at the type it cannot hold (the campaign's A16: it named the field and no line).
     for (_, decl, params, _, _) in &member_plans {
         for fld in &decl.fields {
             if actor_boundary_ty(&env, &fld.ty).is_none() {
                 return Err(CompileError::Unsupported(format!(
-                    "actor field `{}.{}` is outside the Int/actor-reference subset",
+                    "an actor field `{}.{}` of a type outside the Int/actor-reference subset",
                     decl.name.name, fld.name.name
-                )));
+                ))
+                .at(fld.ty.span()));
             }
         }
         for p in params.iter() {
             if actor_boundary_ty(&env, &p.ty).is_none() {
                 return Err(CompileError::Unsupported(format!(
-                    "actor member parameter `{}` is outside the Int/actor-reference subset",
+                    "an actor parameter `{}` of a type outside the Int/actor-reference subset",
                     p.name.name
-                )));
+                ))
+                .at(p.ty.span()));
             }
         }
     }
@@ -1800,6 +1848,9 @@ fn compile_module_typed(
     if needs_rand {
         imports.import("delulu:cap", "root_rand", EntityType::Function(rand_root_ty));
         imports.import("delulu:cap", "rand_int", EntityType::Function(rand_int_ty));
+    }
+    if needs_rand_float {
+        imports.import("delulu:cap", "rand_float", EntityType::Function(rand_float_ty));
     }
     if needs_fs {
         imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
@@ -2387,9 +2438,10 @@ fn compile_actor_member<'a>(
     for (i, fld) in decl.fields.iter().enumerate() {
         let fty = actor_boundary_ty(env, &fld.ty).ok_or_else(|| {
             CompileError::Unsupported(format!(
-                "an actor field `{}` of a type outside the Int/actor-reference subset",
-                fld.name.name
+                "an actor field `{}.{}` of a type outside the Int/actor-reference subset",
+                decl.name.name, fld.name.name
             ))
+            .at(fld.ty.span())
         })?;
         fields.insert(fld.name.name.clone(), (i as u32, fty));
     }
@@ -2401,6 +2453,7 @@ fn compile_actor_member<'a>(
                 "an actor parameter `{}` of a type outside the Int/actor-reference subset",
                 p.name.name
             ))
+            .at(p.ty.span())
         })?;
         scope.insert(p.name.name.clone(), (i as u32 + 1, pty));
     }
@@ -2492,7 +2545,22 @@ fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<T
     Ok(result)
 }
 
+/// Compile one statement; a refusal no expression inside it placed is placed at the statement (A10).
 fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    let span = match stmt {
+        Stmt::Let { span, .. }
+        | Stmt::Assign { span, .. }
+        | Stmt::While { span, .. }
+        | Stmt::For { span, .. }
+        | Stmt::Break { span }
+        | Stmt::Continue { span }
+        | Stmt::Return { span, .. } => *span,
+        Stmt::Expr(e) => e.span(),
+    };
+    compile_stmt_unplaced(stmt, cx, is_last, expected).map_err(|e| e.at(span))
+}
+
+fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
     match stmt {
         Stmt::Let { name, ty, value, .. } => {
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
@@ -3612,7 +3680,13 @@ fn inline_body(
     r
 }
 
+/// Compile one expression; a refusal no node inside it placed is placed here, so the innermost refused expression is the
+/// one a DL1201 names (A10).
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    compile_expr_unplaced(e, cx).map_err(|err| err.at(e.span()))
+}
+
+fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     match e {
         Expr::Lit { kind, .. } => match kind {
             LitKind::Int(n) => {
@@ -3734,10 +3808,8 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             cx.instrs[at] = Instruction::If(block_type(tt));
             cx.emit(Instruction::Else);
-            compile_expr_as(else_, cx, tt).map_err(|e| match e {
-                CompileError::Unsupported(m) => CompileError::Unsupported(format!("`if` branches of differing types: {m}")),
-                other => other,
-            })?;
+            compile_expr_as(else_, cx, tt)
+                .map_err(|e| e.map_unsupported(|m| format!("`if` branches of differing types: {m}")))?;
             cx.emit(Instruction::End);
             Ok(tt)
         }
@@ -3813,6 +3885,15 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.rand_int));
                 return Ok(Ty::I64);
+            }
+            // A21: Cap[Rand].float() -> host import returning a Float in [0, 1], drawn from the stream `int` draws from.
+            if name.name == "float" && args.is_empty() {
+                if compile_expr(recv, cx)? != Ty::Rand {
+                    return Err(CompileError::Unsupported("float() on a non-Rand receiver".into()));
+                }
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.rand_float));
+                return Ok(Ty::F64);
             }
             // Phase 3p: Root.fs_read(path) -> host import minting a scoped FsRead handle.
             if name.name == "fs_read" && args.len() == 1 {
@@ -6012,6 +6093,28 @@ fn alloc_fn(heap_global: u32) -> Function {
         LocalGet(1),
     ]);
     build(&[(2, ValType::I32)], &code)
+}
+
+#[cfg(test)]
+mod placed_refusal_tests {
+    use super::*;
+
+    /// A refusal keeps the innermost place it was given, and a rewrite of its text (the `if` arm's
+    /// "`if` branches of differing types: …") reaches through the place without losing it (A10).
+    #[test]
+    fn the_innermost_place_wins_and_a_rewrite_keeps_it() {
+        let inner = delulu_diag::Span::new(0, 40, 45);
+        let outer = delulu_diag::Span::new(0, 10, 90);
+        let e = CompileError::Unsupported("this expression form".into()).at(inner).at(outer);
+        assert_eq!(e.span(), Some(inner));
+        assert_eq!((e.code(), e.message()), ("DL1201", "WASM codegen does not support this expression form".to_string()));
+        let e = e.map_unsupported(|m| format!("`if` branches of differing types: {m}"));
+        assert_eq!(e.span(), Some(inner));
+        assert_eq!(e.message(), "WASM codegen does not support `if` branches of differing types: this expression form");
+        let s = CompileError::SecretInGuest("a secret".into()).at(outer);
+        assert_eq!((s.code(), s.span()), ("DL1205", Some(outer)));
+        assert_eq!(CompileError::Unsupported("x".into()).span(), None);
+    }
 }
 
 #[cfg(test)]

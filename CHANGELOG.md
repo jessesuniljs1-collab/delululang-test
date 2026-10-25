@@ -11,6 +11,22 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `r.float()` runs on WASM, 2026-10-26
+
+- **Added (A21):** `Cap[Rand].float()` compiles to WASM (`--engine wasm`, `build --target wasm`, a contained plugin granted
+  `Rand`). Until now it was DL1201 there. Under `--seed`, a run draws the same floats and ints in the same order on both
+  engines.
+
+## Unreleased — A10: an empty list filled later with a sum or a record runs on WASM; a WASM refusal names its line, 2026-10-26
+
+- **Fixed (A10):** `let out = []`, then `out.push(TNum(1))` with a sum or a record, ran on the interpreter and was refused
+  on `--engine wasm` and `build --target wasm` (DL1201), though the checker knew the list's type. It runs on both now.
+- **Fixed (A10):** a program the WASM backend refuses (DL1201, DL1205) is refused at the expression it cannot compile —
+  `file:line:col` and the source line in the human form, `spans` in `--json` — on `run --engine wasm`,
+  `build --target wasm` and a contained plugin's build. Before, the refusal named no line. The message is unchanged.
+- **Fixed (A16):** an actor field or parameter of a type the WASM backend cannot hold is refused at that type, and the
+  refusal reads as a sentence ("an actor field `Collector.out` of a type outside the Int/actor-reference subset").
+
 ## Unreleased — every route that runs a package holds its dependencies to their pins; a sandboxed run's report is the runtime's; DL1001's repair parses, 2026-10-25
 
 - **Fixed (supply chain, D-V2-186, RW 4.85): `delulu run DIR` ran a dependency its authority pin refuses** (RUN-PIN-1).

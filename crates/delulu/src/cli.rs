@@ -4852,6 +4852,16 @@ fn build_wasm_package(dir: &str, opts: &Opts) -> i32 {
     emit_dwx(dir, &map, &checked, std::path::Path::new(dir), out, opts)
 }
 
+/// The diagnostic for a program the WASM backend refuses: its code and message, what the command can do instead
+/// (`then`), and the innermost expression or statement it refused (the campaign's A10: the refusal named no line).
+pub(crate) fn wasm_refusal(e: &delulu_wasm::CompileError, then: &str) -> Diagnostic {
+    let d = Diagnostic::error(e.code(), format!("{} — {then}", e.message()));
+    match e.span() {
+        Some(span) => d.with_span(span, "the WASM backend cannot compile this"),
+        None => d,
+    }
+}
+
 /// Compile a checked program's `main` and write its `.dwx` — to `--out`, or else `default_out` — with the authority
 /// embedded: the checker's answer, the scopes and Python allowlist of the manifest in `manifest_dir`.
 fn emit_dwx(
@@ -4873,10 +4883,7 @@ fn emit_dwx(
     let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
         Ok(w) => w,
         Err(e) => {
-            let d = Diagnostic::error(
-                e.code(),
-                format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()),
-            );
+            let d = wasm_refusal(&e, "this program can't be built to a `.dwx` yet (run it on the interpreter)");
             print_diagnostics("build", &[d], map, None, opts.json);
             return 1;
         }
@@ -5081,8 +5088,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
         delulu_check::PluginClass::Contained => match delulu_wasm::compile_checked(&checked.module, &checked.result) {
             Ok(w) => (None, Some(w)),
             Err(e) => {
-                let d =
-                    Diagnostic::error(e.code(), format!("{} — this program can't be built into a contained plugin", e.message()));
+                let d = wasm_refusal(&e, "this program can't be built into a contained plugin");
                 print_diagnostics("plugin", &[d], &map, None, opts.json);
                 return 1;
             }
