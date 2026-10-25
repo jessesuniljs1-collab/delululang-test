@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 332 |
-| Rust lines | 191674 |
+| Rust lines | 191776 |
 | Rust files outside `src/` (test/bench targets) | 162 |
 | Markdown documents | 272 |
 | Markdown lines | 87452 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1562 / 16883 |
+| Nodes / edges in this map | 1562 / 16884 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -192,12 +192,12 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 16288 lines
+- **Modules:** 18 files, 16292 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 4337 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 4341 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1539 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 863 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
@@ -383,13 +383,13 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 13133 lines
+- **Modules:** 9 files, 13146 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 265 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 344 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 6078 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 6091 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
 | `src/host.rs` | 3014 | The embedded Wasmtime host (Phase 3a/3b). |
