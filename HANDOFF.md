@@ -588,6 +588,19 @@ wins, and you should update the memory to match.
   he/his (stated 2026-10-17).
 - **Development never waits for the laptop** (owner, 2026-10-17): *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* Routine runs and interactive cloud
   sessions continue the work by `docs/CLOUD_ROUTINE.md`; a cloud session's pull request is merged by whoever comes next.
+- **A routine run is ONE milestone, then a clean stop** (owner, 2026-10-26: *"Update the routine instructions so that
+  each run stops at an appropriate major milestone … Do not make the routine run continuously until the usage limit hits.
+  However, do not make it stop merely because some time has passed or a small build or minor task has been completed"*).
+  Housekeeping, one named milestone built to done (tested, committed, pushed, its push run read), the handoff in the
+  sync-log entry, then `docs/CLOUD_ROUTINE.md` step 9. **"Continue cooking … till the limit hits" is his phrase for
+  terminal and interactive cloud sessions, never a routine run's stopping rule** (*"mainly for my regular Claude Code
+  terminal and cloud sessions, not for routine/scheduled task runs"*): those go milestone after milestone, each landed
+  and recorded before the next.
+- **Branches are cleaned as work lands** (owner, 2026-10-26: *"the repository has accumulated too many branches. Audit
+  them and safely clean up stale, redundant, and unnecessary branches while preserving valuable work"*): a `claude/*` or
+  `laptop/*` branch whose tip is in `master`'s history is deleted from `origin` once it has landed, each checked with
+  `git merge-base --is-ancestor` just before; one with a commit `master` lacks is landed, kept, or preserved under
+  `archive/*` first (`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`).
 - **Start every session by syncing with GitHub** (owner, 2026-10-17: *"save this to memory, So that u will check GitHub
   repo whenever u start session"*): `git fetch origin`, read `HEAD..origin/master` and the `origin/claude/*` branches,
   fast-forward before any edit, and read the CI runs of what came in — the on-demand routine (D-V2-146) pushes while the
@@ -783,7 +796,10 @@ wins, and you should update the memory to match.
   `medium` effort. The repository's `effortLevel: xhigh` was meant to raise them, and **since 2026-10-19 so is
   `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
   both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
-  environment variables on a trigger. A cybersecurity-flagged
+  environment variables on a trigger; the owner set the variable in the routine's cloud environment on 2026-10-23.
+  **Read the effort from the run, not a page** (2026-10-26): Claude Code sets `CLAUDE_EFFORT` in each Bash command's
+  environment to the level in effect, and a transcript's every reply carries `"effort":"…"`; `docs/CLOUD_ROUTINE.md`
+  step 0 records both each run. A cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.
 

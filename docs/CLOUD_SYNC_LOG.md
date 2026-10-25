@@ -5780,3 +5780,26 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
   the other papercuts (A1, A4–A8, A11, A13, A15, A16, A21, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19,
   RW 2.22, RW 6.19, 6.20).
+
+### 2026-10-26 — the routine stops at a milestone; 84 of `origin`'s 91 branches removed (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/routine-milestones` (on `master` `8c9ccc9`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. The routine's prompt was updated through the API, and is still paused.
+  `docs/CLOUD_ROUTINE.md` gains the milestone rule, step 9 and *Branches*. The branch cleanup is in
+  `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`.
+- Start of session (on `8c9ccc9`, after fast-forwarding through on-demand run 6): `survey check` ok (1561 nodes, 16858
+  edges); `doctor --check` ok (29 checks).
+- Files and folders: M `docs/CLOUD_ROUTINE.md`, `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md` (§11.1, §11.3),
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/REPOSITORY_STRUCTURE.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`.
+  Deleted, renamed: nothing.
+- On GitHub, outside any commit: 84 branches deleted and `archive/superseded-2026-10-26` (`7d92a8a`) created.
+- For the laptop's memory: `cloud-routine-on-demand-2026-10-17.md` (the milestone rule and the effort note), copied both ways.
+- **Open / next, in order:** (1) **land A10** from `claude/peaceful-carson-crfvfa` `16470ed` (run 6's fix for an empty
+  list filled later with a sum or a record on WASM). Its runner witnesses are green (`40191526037`, `40191528017`), but its
+  full suite result and records are missing: verify, record, fast-forward `master`, then delete the branch. (2) Re-cite
+  CHECKLIST-2.0 criteria 1, 3 and 4 from `40191260368` (`launch/2.0.0` `f0cb42b`, 18/18), and record run 6's launch merge.
+  (3) The first nightly with #69 (2026-10-26 03:00 UTC): the broker's Miri time. (4) The campaign's remaining items: A17
+  (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A11, and the papercuts (A1, A4–A8, A13, A15, A16,
+  A21, B4–B8, B11, C6–C16). (5) *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

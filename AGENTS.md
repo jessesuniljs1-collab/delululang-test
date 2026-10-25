@@ -22,7 +22,9 @@ take DeluluLang to a public release; every outstanding decision is the head chef
    Decisions taken under the owner's delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
 3. `docs/CLOUD_SYNC_LOG.md` — what earlier cloud sessions changed; and **`docs/CLOUD_ROUTINE.md`** —
    the loop every routine run follows (the cloud period 2026-09-28 → 2026-10-16; since 2026-10-17 the on-demand
-   routine `trig_01HFG6usfzmDAPQigiDu9DLq`, which the owner switches on when he cannot use the laptop — D-V2-146).
+   routine `trig_01HFG6usfzmDAPQigiDu9DLq`, which the owner switches on when he cannot use the laptop — D-V2-146). Since
+   2026-10-26 a routine run does ONE milestone, hands off and stops; the owner's *"till the limit hits"* is for his
+   terminal and interactive cloud sessions only.
 4. `docs/REMAINING_WORK.md` — everything open, each row checked against the binary.
 
 DeluluLang is a statically typed, authority-and-effect-typed language (a Rust workspace of 13 crates):

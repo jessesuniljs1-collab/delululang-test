@@ -9345,3 +9345,47 @@ knows now that nothing set it (`no_package`), and the refusal names `--test-auth
 `tests/unknown_receiver.rs` and `test_runner_cli`'s outside-a-package step; M834 and M835 red, the control green. The first
 run of M835 read BUILD-ERROR and a red control: the VM's disk had filled (0 MB free) from the mutant runs' rebuilt test
 binaries; with the stale ones deleted both runs were clean.
+
+## 2026-10-26 — the laptop: a routine run is one milestone, then a clean stop; 84 of `origin`'s 91 branches removed
+
+**The routine (the owner, 2026-10-26).** *"Currently, the routine/scheduled task keeps working continuously instead of
+stopping after completing a major build or fix, committing the work to GitHub, and recording everything properly for the
+next session. … Do not make the routine run continuously until the usage limit hits. However, do not make it stop merely
+because some time has passed or a small build or minor task has been completed."* He also said that *"Continue cooking …
+till the limit hits"* is *"mainly for my regular Claude Code terminal and cloud sessions, not for routine/scheduled task
+runs"*. On-demand run 6 was the case. It was fired at 09:37 UTC on 2026-10-25 and closed eleven items. At 12:05 UTC the
+**weekly** limit stopped it after 619 turns and 8,819 s. By then it had merged `master` into `launch/2.0.0` at `f0cb42b`,
+which nothing recorded, and committed A10's fix only to its session branch (`claude/peaceful-carson-crfvfa` `16470ed`). Its
+suite was still running and its A10 probe was unread.
+- **The routine's prompt** was read with the API before any edit, then replaced (`trig_01HFG6usfzmDAPQigiDu9DLq`, updated
+  21:02 UTC, still paused; the model, environment, tools, connector and schedule are unchanged; the API's read-back holds the
+  new text). The owner's own lines are kept verbatim. The prompt adds ONE MILESTONE, THEN STOP. A **Run now** whose text is
+  `CHECK ONLY` makes a run report its model and effort, then stop.
+- **`docs/CLOUD_ROUTINE.md`** has a new section, *A routine run is one milestone, then a clean stop*: housekeeping, one
+  named milestone built to done, the handoff, then stop. The section says what is a milestone and what is not, and that
+  time passing is no reason to stop. Step 0 no longer stops new work at three hours. Step 4's chosen work is the milestone.
+  A new step 9, *Stop cleanly*, and a *Branches* rule close the file. `CLAUDE.md`, `AGENTS.md` and `HANDOFF.md` §11.1 draw
+  the line between routine runs and the owner's terminal and interactive cloud sessions, which go milestone after
+  milestone until the limit.
+- **Effort.** Claude Code sets `CLAUDE_EFFORT` in each Bash command's environment to the level in effect (the
+  environment-variable reference), and run 6 read `xhigh` there. The routine's stored configuration has no effort field.
+  The owner: *"Leave it for now. Only anthropic can do something about it I guess."* Step 0 records the level from the run,
+  and nothing more is attempted.
+
+**The branches (the owner, 2026-10-26: *"Audit them and safely clean up stale, redundant, and unnecessary branches while
+preserving valuable work and avoiding the loss of unmerged changes"*).** `origin` held 91. Of these, 80 were already in
+`master`'s history and one (`launch-merge-1020`) in `launch/2.0.0`'s. Three held a commit `master` lacks, each recorded as
+superseded long ago (`7d6a22b`, `d3f0d52`, `5373158`). They are parents of a commit with no files, `7d92a8a`, on
+`archive/superseded-2026-10-26`. Each of the 84 was checked again with `git merge-base --is-ancestor` just before one
+`git push origin --delete`, and each was deleted. Eight remain: `master`, `launch/2.0.0`, `rc/1.0.0-drill`, the archive,
+the three `autosave/*` and `claude/peaceful-carson-crfvfa` (A10, not landed). On the laptop, 70 merged local branches
+went with `git branch -d`, and the archived WIP with `-D`. The `dl-launch` worktree moved from `launch-merge-1020` to
+`launch/2.0.0`, and local branches went from 75 to 3. Every name and tip is in
+`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`.
+
+**CI read for the record.** The nightly of 2026-10-25 (`40175136208`, on `0549645`, before #69) had 17 jobs succeed; its
+`miri-slow (delulu-broker)` was cancelled at the 240-minute cap, as expected for the test #69 fixed. `launch/2.0.0`'s
+`everything` runs were 18 of 18 green: `40185296917` at `0a55a44`, and `40191260368` at `f0cb42b` (broker Miri 3 h 12 min,
+checker 1 h 28 min, syntax 12 min). The release dry run `40191262135` at `f0cb42b` was a success. Run 6's last push run,
+`40190825887` at `8c9ccc9`, was a success. The A10 witnesses on `16470ed`, `wasm_cli` on macOS `40191526037` and Windows
+`40191528017`, were both successes.
