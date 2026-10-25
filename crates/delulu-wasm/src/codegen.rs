@@ -764,6 +764,9 @@ struct Imports {
     /// `delulu:cap.http_post` — `Cap[Http].post(url, headers, body)`, performed host-side by the interpreter's own `post`
     /// (P9-05 (d), D-V2-183).
     http_post: u32,
+    /// `delulu:cap.http_get_with` — `Cap[Http].get_with(url, headers)`, a GET with headers, performed host-side by the
+    /// interpreter's own `get_with` (the agent campaign's A21).
+    http_get_with: u32,
     /// `delulu:cap.http_post_with_secret` — `Cap[Http].post_with_secret(url, headers, header, secret, body)`, a POST
     /// carrying a secret's handle, sent from the host as `get_with_secret`'s is (P9-05 (d), D-V2-183).
     http_post_with_secret: u32,
@@ -1340,6 +1343,7 @@ fn compile_module_typed(
         root_secret: u32::MAX,
         http_get_with_secret: u32::MAX,
         http_post: u32::MAX,
+        http_get_with: u32::MAX,
         http_post_with_secret: u32::MAX,
         secret_verify: u32::MAX,
         foreign_load: u32::MAX,
@@ -1422,6 +1426,12 @@ fn compile_module_typed(
     let needs_post = needs_http && module_calls_method(&env, module, &["post"]);
     if needs_post {
         imp.http_post = n_imports;
+        n_imports += 1;
+    }
+    // A21: `get_with` where a `Cap[Http]` is minted — `get_with` is no other receiver's method.
+    let needs_get_with = needs_http && module_calls_method(&env, module, &["get_with"]);
+    if needs_get_with {
+        imp.http_get_with = n_imports;
         n_imports += 1;
     }
     let needs_post_secret = needs_http && needs_secret && module_calls_method(&env, module, &["post_with_secret"]);
@@ -1652,6 +1662,13 @@ fn compile_module_typed(
         types.ty().function([ValType::I32; 8], [ValType::I32]);
         next_type += 1;
     }
+    let mut http_get_with_ty = 0;
+    if needs_get_with {
+        http_get_with_ty = next_type;
+        // http_get_with(cap, url, headers, desc, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 7], [ValType::I32]);
+        next_type += 1;
+    }
     let mut http_post_secret_ty = 0;
     if needs_post_secret {
         http_post_secret_ty = next_type;
@@ -1874,6 +1891,9 @@ fn compile_module_typed(
     }
     if needs_post {
         imports.import("delulu:cap", "http_post", EntityType::Function(http_post_ty));
+    }
+    if needs_get_with {
+        imports.import("delulu:cap", "http_get_with", EntityType::Function(http_get_with_ty));
     }
     if needs_post_secret {
         imports.import("delulu:cap", "http_post_with_secret", EntityType::Function(http_post_secret_ty));
@@ -4186,6 +4206,27 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     .ok_or_else(|| CompileError::Unsupported("http post without the NetErr prelude type".into()))?;
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.http_post));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
+            // `Cap[Http].get_with(url, headers)` -> `Result[Str, NetErr]` (A21): `post`'s URL and headers, by GET, no body.
+            if recv_ty == Ty::Http && name.name == "get_with" && args.len() == 2 {
+                if cx.imp.http_get_with == u32::MAX {
+                    return Err(CompileError::Unsupported("`get_with` on a Cap[Http] in a module that mints none".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http get of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http get without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_get_with));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
             }
             // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).

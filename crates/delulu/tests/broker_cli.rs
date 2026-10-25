@@ -727,6 +727,8 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
     for (file, call) in [
         ("post.delulu", "post(\"https://api.example.invalid/v1/items\", Map(), \"{}\")"),
         ("get.delulu", "get(\"https://api.example.invalid/v1/items\")"),
+        // A21: `get_with` is a GET too, on the WASM engine as on the others — refused here and judged by the custody.
+        ("get_with.delulu", "get_with(\"https://api.example.invalid/v1/items\", Map())"),
     ] {
         let program = format!(
             "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{scope}\"])\n    \
@@ -744,9 +746,15 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
         let o = run("post.delulu", extra);
         assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not answered\n"), "{extra:?}: {}", stderr(&o));
         assert!(!stderr(&o).contains("DL0904"), "{extra:?}: {}", stderr(&o));
-        let o = run("get.delulu", extra);
-        assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside the methods"), "{extra:?}: {}", stderr(&o));
-        assert!(!stdout(&o).contains("answered"), "{extra:?}: the program never got an answer: {}", stdout(&o));
+        for file in ["get.delulu", "get_with.delulu"] {
+            let o = run(file, extra);
+            assert!(
+                stderr(&o).contains("DL0904") && stderr(&o).contains("outside the methods"),
+                "{file} {extra:?}: {}",
+                stderr(&o)
+            );
+            assert!(!stdout(&o).contains("answered"), "{file} {extra:?}: the program never got an answer: {}", stdout(&o));
+        }
     };
     check(&[]);
     check(&["--engine", "wasm"]);
@@ -771,8 +779,8 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
     let (post, get) = ((Some("POST".to_string()), "allow".to_string()), (None, "deny".to_string()));
     assert_eq!(
         uses,
-        [post.clone(), get.clone(), post.clone(), get.clone(), post, get],
-        "the interpreter's two runs, then the guest's, then the WASM engine's: {v:#}"
+        [post.clone(), get.clone(), get.clone(), post.clone(), get.clone(), get.clone(), post, get.clone(), get],
+        "the interpreter's three runs (`post`, `get`, `get_with`), then the guest's, then the WASM engine's: {v:#}"
     );
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
