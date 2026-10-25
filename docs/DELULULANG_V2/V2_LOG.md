@@ -9479,3 +9479,25 @@ trace names the URL alone, never a header's value (D-V2-128).
   M853 (the import never made), M854 (the custody never asked).
 
 **A21 is closed.**
+
+## 2026-10-26 — the laptop: #71 to #74 landed; `launch/2.0.0` at `dcfd43c`, its criteria re-cited
+
+Each pull request was read green on every job of its own run (14 passed; `miri-slow` and `heavy-gates` skipped, as on every
+pull request). `master` was then fast-forwarded to it, and its branch deleted from `origin` under the new *Branches* rule:
+- #71 (the routine stops at one milestone; the branch cleanup): `40234008662` at `5aa72d9`.
+- #72 (A10 and A16): `40235828014` at `6932b06`.
+- #73 (A21): `40237687819` at `2108a5a`.
+- #74 (D-V2-189): `40237846599` at `5a1b75c`.
+
+`master` = `5a1b75c`. `origin` holds seven branches: `master`, `launch/2.0.0`, `rc/1.0.0-drill`,
+`archive/superseded-2026-10-26` and the three `autosave/*`.
+
+**`launch/2.0.0`** was merged with `master` in `D:\nelan\dl-launch`, now on `launch/2.0.0` itself:
+- `master`'s two new `## Unreleased` sections were moved into `## [2.0.0]` by a script that checks each heading first. It
+  found the earlier ones already there, so run 6's merges match.
+- The decision log keeps both sides.
+- CHECKLIST-2.0 criteria 1, 3 and 4 now cite the newest `everything` runs read green on the branch, `40185296917` and
+  `40191260368` (18 of 18 each). Criterion 8 now cites the newest release dry run, `40191262135`.
+- On the merged tree: `clippy.sh` clean; the Survey 1564 nodes, 0 errors; `doctor` 29 checks; 13 gate targets, 121 passed.
+- `dcfd43c` was pushed. Its `everything` run, `40240072174`, and its release dry run, `40240074649`, were dispatched and
+  are unread at this entry.

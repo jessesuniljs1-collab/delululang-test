@@ -5854,3 +5854,24 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. A decision on mixing the generator's seed.
   5. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — the laptop's handoff: #71 to #74 landed; `launch/2.0.0` at `dcfd43c` (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/handoff-2026-10-26` (on `master` `5a1b75c`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. On `launch/2.0.0`, outside this pull request: `dcfd43c` (the merge, the
+  CHANGELOG move, the CHECKLIST-2.0 re-citation).
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `launch/2.0.0`'s `everything` run `40240072174` and its release dry run `40240074649`, both at `dcfd43c`. Cite
+     them in CHECKLIST-2.0 when green, and fix what is red.
+  2. The first nightly with #69 (around 08:00 UTC on 2026-10-26): the broker's Miri time inside its 240-minute cap.
+  3. A15, a decision. `r.int(lo, hi)` with `hi <= lo` faults as DL0904, "capability scope violation", and a bad argument
+     is not that. The honest code is a new one (DL0908), which touches the registry, the reference and the entrenched
+     conformance witnesses (an `ENTRENCHED_CHANGE_RECORD.md` entry). Also document that the range is half-open.
+  4. A decision on mixing the generator's seed (splitmix64): a small seed's first draws are near 0, and seeds `2k` and
+     `2k+1` draw alike. It changes every seeded sequence.
+  5. The campaign's remaining items: A14 (the interpreter's speed), A11 (actor output order under `--seed`), and the
+     papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16). The ledger is on `origin/autosave/dogfood`.
+  6. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
