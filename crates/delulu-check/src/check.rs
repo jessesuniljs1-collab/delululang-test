@@ -1441,7 +1441,10 @@ impl<'a> Checker<'a> {
                             self.expect_type(&ret, &Type::Unit, *span, "return type mismatch");
                         }
                     }
-                    value_ty = Type::Unit;
+                    // A block that ENDS in `return` produces no value — control has left the function — so it takes
+                    // whatever type its context expects: a fresh variable, not `Unit`, which refused `fn f() -> Int { …
+                    // return x }` DL0401 (2026-10-25). The returned value was held to the return type just above.
+                    value_ty = if is_last { self.cx.fresh_type() } else { Type::Unit };
                 }
                 Stmt::Expr(e) => {
                     let (t, r) = self.check_expr(e, ctx);
