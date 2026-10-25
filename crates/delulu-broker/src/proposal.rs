@@ -119,6 +119,7 @@ pub fn join(held: &Authority, asks: &Authority) -> Authority {
             device,
             budget: h.budget,
             secret_to: u(&h.secret_to, &a.secret_to),
+            net_special: u(&h.net_special, &a.net_special),
         },
     }
     .canonicalized()

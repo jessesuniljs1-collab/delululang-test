@@ -11,6 +11,53 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — every route that runs a package holds its dependencies to their pins; a sandboxed run's report is the runtime's; DL1001's repair parses, 2026-10-25
+
+- **Fixed (supply chain, D-V2-186, RW 4.85): `delulu run DIR` ran a dependency its authority pin refuses** (RUN-PIN-1).
+  A dependency pinned `effects = []` that writes, or one with no pin, was DL1001 under `check`, `build` and `lock` and
+  ran under `run` — the interpreter, `--sandbox` and `--engine wasm` — and under `build --target wasm` (its `.dwx` too),
+  `test`, `deploy plan`, `publish`, `add` and `sandbox policy`. Every one of them now refuses it with DL1001 (or DL1009
+  for a package beyond its own manifest) before any code runs. `authority`, `why` and the Atlas still report on it.
+  **Breaking** only for a package whose dependencies break their pins: `build` already refused it.
+- **Fixed (D-V2-21, RW 4.84): `run --sandbox` accepted a `--report-out` inside a scope the program may write**, and
+  the guest could write a counterfeit report where the runtime's would go. It is refused before anything runs, as the
+  ordinary run refuses it — for `--grant` scopes, a dry run (`--mode audit`) included, and for a lease's once redeemed.
+- **Fixed (RW 6.16): DL1001's repair `insert_dependency_pin` wrote TOML that does not parse** for a dependency written
+  `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
+  refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
+  this dependency".
+- **Changed (RW 6.19, 6.20): two refusals say what is missing.** A method on a value whose type is not known yet named an
+  inference variable (`type 't9 has no method concat`); DL0405 now says the type is not known at that call and where to
+  write it. DL1703 for a test in a file no package encloses spoke of a `delulu.toml` there is none of; it now names
+  `--test-authority`.
+- **Fixed (RW 2.22): `return` ends a function, and a match arm or a branch, on both engines.** A function whose last
+  statement was `return x` was refused DL0401 ("expected `Int`, found `Unit`"); `None => return Err(…)` in a match arm was
+  DL0202 and ten diagnostics of cascade. A block that ends in `return` now takes whatever type its place expects (its value
+  is still held to the function's return type), and `return` may stand where an expression is expected — `delulu fmt`
+  writes it as a block. On `--engine wasm` a branch that returns no longer decides its `match`'s or `if`'s type (it was
+  refused DL1201).
+- **Fixed (RW 6.18): `grants propose` files the reach a special-use egress refusal asks for.** A request the egress
+  client refused because its host is a special-use address leaves no refused call — the program gets `Err` — and
+  `propose` answered "the report records no refusal". It now proposes `net.special=` for the run's node's own entry for
+  that host (or the host alone), filed and approved like any other proposal.
+- **Added (D-V2-188, RW 4.86): a lease can carry a special-use reach.** `grants delegate --net-special HOST` (and
+  `grants certify --net-special HOST`) gives a node the reach `--grant net.special=HOST` gives a run, so a run under the
+  lease may connect to that loopback, private-range or metadata host; before, a leased run reached none. A child holds the
+  reach only where its parent does (DL0802), `grants diff` names it, and a node without one is byte-identical to before.
+  `grants delegate --net` with a special-use host still makes the node, and says it has no special-use reach and which
+  spelling gives one (D-V2-187).
+- **Changed (RW 6.17): a network entry wider than its grant is named as that.** `root.http(["127.0.0.1:GET,POST,PUT"])`
+  under a grant of `127.0.0.1:GET,POST` was refused "`network host` was not granted — pass `--grant net=HOST`"; the
+  refusal now names the entry, the host and its grants, and the entry as the grant to pass. A special-use host's remedy is
+  `net.special=` (a plain `net=` never grants one). The code is DL0703 as before; `--within` and `deploy plan` say the
+  same.
+
+## Unreleased — `authority --within` decides a file use at its call, 2026-10-25
+
+- **Fixed (D-V2-185):** a file use whose path the source writes is decided at its call. A program reading
+  `../forbidden/secret.txt` through a capability for `./allowed` was *within* a boundary that `run` refused with DL0904;
+  it is now *exceeds* there, at that call.
+
 ## Unreleased — `% 0` faults alike on both engines; three stale doc passages, 2026-10-24
 
 - **Fixed: `x % 0` under `--engine wasm` reported DL0901 (integer overflow)**; it is DL0902 (division by zero), as

@@ -263,7 +263,12 @@ fn a_method_scoped_grant_takes_only_its_methods() {
         let dir = tmp(if sandbox { "method-mint-guest" } else { "method-mint-l0" });
         fetcher(&dir, "127.0.0.1", "https://127.0.0.1:9/x");
         let o = run(&dir, post);
-        assert!(out(&o).contains("was not granted"), "sandbox={sandbox}: the mint is refused:\n{}", out(&o));
+        // A20: named as what it is — the host granted, the entry wider than its grant — not as an ungranted host.
+        assert!(
+            out(&o).contains("`127.0.0.1` asks for more of `127.0.0.1` than this program was granted (`127.0.0.1:POST`)"),
+            "sandbox={sandbox}: the mint is refused:\n{}",
+            out(&o)
+        );
     }
     let dir = tmp("method-port");
     fetcher(&dir, "127.0.0.1", "https://127.0.0.1:9/x");

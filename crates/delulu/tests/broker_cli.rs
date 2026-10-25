@@ -930,6 +930,218 @@ fn a_delegation_narrows_a_host_to_its_paths_and_never_widens_one() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// B1 (the agent test campaign, D-V2-187): a node has no `net.special` dimension, so a run under a lease reaches no
+/// special-use address, and `grants delegate --net 127.0.0.1` was accepted without a word and then refused at every connect.
+/// It is still made — the tests above use such a node to witness the Guard on a leased send — and `delegate` says now, by
+/// every spelling a `net` entry takes, that its runs will be refused at the connect and which grant reaches the host;
+/// `certify`, the other place a node's `net` is written, says the same. The control: a public host gets no note.
+#[test]
+fn a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dbsu-{}-{}", std::process::id(), t % 1_000_000_000));
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let key = cwd.join("ground.key").to_string_lossy().to_string();
+    let subject = stdout(&delulu_in(&cwd, &state, &["grants", "pubkey", "--key", &key])).trim().to_string();
+    assert_eq!(subject.len(), 64, "a public key: {subject}");
+    for (n, entry) in ["127.0.0.1", "localhost", "10.0.0.7/health/**", "[::1]:GET,POST"].into_iter().enumerate() {
+        let delegated = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", entry, "--json"]);
+        let out = format!("c{n}.dlcert");
+        let certify =
+            ["grants", "certify", "--key", &key, "--subject", &subject, "--ttl", "20m", "--effects", "Net", "--net", entry];
+        let certified = delulu_in(&cwd, &state, &[&certify[..], &["--out", &out]].concat());
+        for (verb, o) in [("delegate", &delegated), ("certify", &certified)] {
+            assert!(o.status.success(), "`grants {verb} --net {entry}` is made: {}{}", stdout(o), stderr(o));
+            let said = stderr(o);
+            assert!(
+                said.contains("special-use") && said.contains(&format!("--grant net.special={entry}")),
+                "{verb} {entry}: {said}"
+            );
+            assert!(said.contains(&format!("`--net-special {entry}`")), "the spelling that reaches it (RW 4.86): {said}");
+        }
+    }
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", "api.example.invalid", "--json"]);
+    assert!(o.status.success(), "the control: {}{}", stdout(&o), stderr(&o));
+    assert!(!stderr(&o).contains("special-use"), "a public host gets no note: {}", stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// A loopback listener: the first bytes of the first connection, or None once `wait` has passed with none.
+fn listen_once(wait: std::time::Duration) -> (u16, std::thread::JoinHandle<Option<Vec<u8>>>) {
+    use std::io::Read;
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    let h = std::thread::spawn(move || {
+        let start = std::time::Instant::now();
+        loop {
+            match l.accept() {
+                Ok((mut s, _)) => {
+                    s.set_nonblocking(false).unwrap();
+                    s.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+                    let mut buf = vec![0u8; 3];
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    buf.truncate(n);
+                    return Some(buf);
+                }
+                Err(_) if start.elapsed() < wait => std::thread::sleep(std::time::Duration::from_millis(5)),
+                Err(_) => return None,
+            }
+        }
+    });
+    (port, h)
+}
+
+/// A19 (the agent test campaign's builder, D-V2-188): a request the egress client refuses for a special-use address leaves
+/// no diagnostic — the program gets `Err` — and `grants propose` used to answer "the report records no refusal". It
+/// proposes the reach now: `net.special=` for the node's own entry for that host, filed against the node; approving it under
+/// a node without the reach is DL0802, under one with it a new lease; and the program re-run under that lease connects.
+#[test]
+fn a_special_use_egress_refusal_is_proposed_approved_and_reached() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dbsp-{}-{}", std::process::id(), t % 1_000_000_000));
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let json_of = |o: &Output| -> serde_json::Value {
+        serde_json::from_str(&stdout(o)).unwrap_or_else(|e| panic!("not JSON ({e}): {}{}", stdout(o), stderr(o)))
+    };
+    let delegate = |extra: &[&str]| -> (String, String) {
+        let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--multi", "--json"];
+        args.extend_from_slice(extra);
+        let o = delulu_in(&cwd, &state, &args);
+        assert!(o.status.success(), "delegate: {}{}", stdout(&o), stderr(&o));
+        let v = json_of(&o);
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+    // The agent's node names a path, so its proposal is that entry with the reach — not the bare host.
+    let (agent, token) = delegate(&["--net", "127.0.0.1/x/**"]);
+    let (approver, _) = delegate(&["--net-special", "127.0.0.1"]);
+    let (plain_approver, _) = delegate(&["--net", "127.0.0.1"]);
+    let (port, seen) = listen_once(std::time::Duration::from_secs(3));
+    std::fs::write(
+        cwd.join("c.delulu"),
+        format!(
+            "module c\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+             let h = root.http([\"127.0.0.1/x/**\"])\n    match h.get(\"https://127.0.0.1:{port}/x/y\") {{\n        \
+             Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    let run = |token: &str| {
+        delulu_in(&cwd, &state, &["run", "c.delulu", "--lease", token, "--no-prompt", "--json", "--report-out", "r.json"])
+    };
+    let o = run(&token);
+    assert_eq!(stdout(&o), "not delivered\n", "{}", stderr(&o));
+    assert!(seen.join().unwrap().is_none(), "the plain node reaches nothing: {}", stderr(&o));
+
+    let o = delulu_in(&cwd, &state, &["grants", "propose", "r.json", "--node", &agent, "--json"]);
+    let p = json_of(&o);
+    assert_eq!(o.status.code(), Some(0), "{p:#}");
+    assert_eq!(p["proposal"], serde_json::json!(["net.special=127.0.0.1/x/**"]), "{p:#}");
+    assert_eq!(p["refusal"]["code"], "special-use", "{p:#}");
+    let id = p["filed"]["id"].as_str().unwrap_or_else(|| panic!("filed: {p:#}")).to_string();
+
+    let o = delulu_in(&cwd, &state, &["grants", "approve", &id, "--parent", &plain_approver, "--json"]);
+    assert_eq!(o.status.code(), Some(1), "an approver without the reach cannot grant it: {}{}", stdout(&o), stderr(&o));
+    assert_eq!(json_of(&o)["diagnostics"][0]["code"], "DL0802", "{}", stdout(&o));
+    let o = delulu_in(&cwd, &state, &["grants", "approve", &id, "--parent", &approver, "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}{}", stdout(&o), stderr(&o));
+    let approved = json_of(&o)["token"].as_str().unwrap().to_string();
+
+    let (port2, seen) = listen_once(std::time::Duration::from_secs(20));
+    let text = std::fs::read_to_string(cwd.join("c.delulu")).unwrap().replace(&format!(":{port}/"), &format!(":{port2}/"));
+    std::fs::write(cwd.join("c.delulu"), text).unwrap();
+    let o = run(&approved);
+    let first = seen
+        .join()
+        .unwrap()
+        .unwrap_or_else(|| panic!("nothing connected under the approved lease: {}{}", stdout(&o), stderr(&o)));
+    assert_eq!(first.first(), Some(&0x16), "TLS reached the loopback service: {first:02x?}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// RW 4.86 (B1's fix, D-V2-188): a node carries a special-use reach — `grants delegate --net-special HOST`, as a run is
+/// granted one with `--grant net.special=HOST` — so a leased run reaches a loopback service its lease names that way, and
+/// only that way. Witnessed by a listener on this host's loopback: the run under `--net-special` connects (the first byte
+/// is TLS's), the run under plain `--net` is refused `special-use` and nothing connects, a child cannot claim a reach its
+/// parent lacks (DL0802, the repair keeping the host), and `grants diff` names the reach as a widening.
+#[test]
+fn a_lease_reaches_a_special_use_host_only_when_its_node_names_one() {
+    use std::time::Duration;
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dbns-{}-{}", std::process::id(), t % 1_000_000_000));
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let listen = listen_once;
+    let program = |port: u16| {
+        let f = cwd.join(format!("p{port}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module p\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"127.0.0.1\"])\n    match h.get(\"https://127.0.0.1:{port}/x\") {{\n        \
+                 Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let delegate = |extra: &[&str]| -> Output {
+        let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--multi", "--json"];
+        args.extend_from_slice(extra);
+        delulu_in(&cwd, &state, &args)
+    };
+    let node_token = |o: &Output| -> (String, String) {
+        assert!(o.status.success(), "delegate: {}{}", stdout(o), stderr(o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(o)).expect("delegate --json");
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+    let (special_node, special) = node_token(&delegate(&["--net-special", "127.0.0.1"]));
+    let (plain_node, plain) = node_token(&delegate(&["--net", "127.0.0.1"]));
+    let run = |file: &str, token: &str| delulu_in(&cwd, &state, &["run", file, "--lease", token, "--no-prompt"]);
+
+    let (port, seen) = listen(Duration::from_secs(20));
+    let o = run(&program(port), &special);
+    let first =
+        seen.join().unwrap().unwrap_or_else(|| panic!("nothing connected under `--net-special`: {}{}", stdout(&o), stderr(&o)));
+    assert_eq!(first.first(), Some(&0x16), "TLS reached the loopback service: {first:02x?}");
+
+    let (port, seen) = listen(Duration::from_secs(3));
+    let o = run(&program(port), &plain);
+    assert_eq!(stdout(&o), "not delivered\n", "{}", stderr(&o));
+    assert!(seen.join().unwrap().is_none(), "plain `--net` reaches no special-use host: {}", stderr(&o));
+
+    // A child of the plain node cannot claim the reach; the repair keeps the host and drops the reach.
+    let o = delegate(&["--parent", &plain_node, "--net-special", "127.0.0.1"]);
+    assert!(!o.status.success(), "a reach the parent lacks: {}", stdout(&o));
+    let said = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(said.contains("DL0802"), "{said}");
+    let (_, narrower) = node_token(&delegate(&["--parent", &special_node, "--net", "127.0.0.1"]));
+    let (port, seen) = listen(Duration::from_secs(3));
+    let o = run(&program(port), &narrower);
+    assert!(seen.join().unwrap().is_none(), "a child delegated plain `--net` has no reach of its own: {}", stderr(&o));
+
+    let o = delulu_in(&cwd, &state, &["grants", "diff", &plain_node, &special_node, "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}{}", stdout(&o), stderr(&o));
+    assert!(stdout(&o).contains("net.special=127.0.0.1"), "the reach is a widening of its own: {}", stdout(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// MAP-HANDLE-1 (routine run 24): under the daemon a run's secret is a broker HANDLE, with no bytes in the program's process —
 /// and `Secret.map`'s function runs in that process. It was handed the empty string, and `s.map(f).expose(d)` printed `f("")`
 /// (here `!`) where embedded custody prints `f(bytes)` (`hunter2!`): a fabricated value, then exposed with no broker gate and no

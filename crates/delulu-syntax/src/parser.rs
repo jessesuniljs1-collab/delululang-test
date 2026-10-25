@@ -1896,6 +1896,17 @@ impl Parser {
                 Expr::List { items, id: self.node_id(), span }
             }
             TokenKind::KwIf => self.parse_if(),
+            // A9 (the agent test campaign of 2026-10-24): `return` where an expression is expected — a match arm, a `let`'s
+            // value, a branch — is that statement in a block of its own. It yields no value (control leaves the function),
+            // so the checker gives the block whatever type its place expects, and holds the returned value to the
+            // function's return type as anywhere else. It was DL0202, then ten diagnostics of cascade from one token.
+            TokenKind::KwReturn => {
+                self.bump();
+                let ends = [TokenKind::Term, TokenKind::RBrace, TokenKind::RParen, TokenKind::Comma];
+                let value = if ends.iter().any(|t| self.at(t)) { None } else { Some(self.parse_expr()) };
+                let span = start.to(self.prev_span());
+                Expr::Block(Block { stmts: vec![Stmt::Return { value, span }], id: self.node_id(), span })
+            }
             TokenKind::KwMatch => self.parse_match(),
             TokenKind::KwFn => self.parse_lambda(),
             // Stage 7: `spawn A(args)` — a primary, so `spawn A(1).ping(2)` chains a send

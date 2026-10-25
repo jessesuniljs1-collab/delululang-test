@@ -588,6 +588,19 @@ wins, and you should update the memory to match.
   he/his (stated 2026-10-17).
 - **Development never waits for the laptop** (owner, 2026-10-17): *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* Routine runs and interactive cloud
   sessions continue the work by `docs/CLOUD_ROUTINE.md`; a cloud session's pull request is merged by whoever comes next.
+- **A routine run is ONE milestone, then a clean stop** (owner, 2026-10-26: *"Update the routine instructions so that
+  each run stops at an appropriate major milestone … Do not make the routine run continuously until the usage limit hits.
+  However, do not make it stop merely because some time has passed or a small build or minor task has been completed"*).
+  Housekeeping, one named milestone built to done (tested, committed, pushed, its push run read), the handoff in the
+  sync-log entry, then `docs/CLOUD_ROUTINE.md` step 9. **"Continue cooking … till the limit hits" is his phrase for
+  terminal and interactive cloud sessions, never a routine run's stopping rule** (*"mainly for my regular Claude Code
+  terminal and cloud sessions, not for routine/scheduled task runs"*): those go milestone after milestone, each landed
+  and recorded before the next.
+- **Branches are cleaned as work lands** (owner, 2026-10-26: *"the repository has accumulated too many branches. Audit
+  them and safely clean up stale, redundant, and unnecessary branches while preserving valuable work"*): a `claude/*` or
+  `laptop/*` branch whose tip is in `master`'s history is deleted from `origin` once it has landed, each checked with
+  `git merge-base --is-ancestor` just before; one with a commit `master` lacks is landed, kept, or preserved under
+  `archive/*` first (`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`).
 - **Start every session by syncing with GitHub** (owner, 2026-10-17: *"save this to memory, So that u will check GitHub
   repo whenever u start session"*): `git fetch origin`, read `HEAD..origin/master` and the `origin/claude/*` branches,
   fast-forward before any edit, and read the CI runs of what came in — the on-demand routine (D-V2-146) pushes while the
@@ -783,7 +796,10 @@ wins, and you should update the memory to match.
   `medium` effort. The repository's `effortLevel: xhigh` was meant to raise them, and **since 2026-10-19 so is
   `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
   both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
-  environment variables on a trigger. A cybersecurity-flagged
+  environment variables on a trigger; the owner set the variable in the routine's cloud environment on 2026-10-23.
+  **Read the effort from the run, not a page** (2026-10-26): Claude Code sets `CLAUDE_EFFORT` in each Bash command's
+  environment to the level in effect, and a transcript's every reply carries `"effort":"…"`; `docs/CLOUD_ROUTINE.md`
+  step 0 records both each run. A cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.
 
@@ -1261,6 +1277,12 @@ spells the same thing?**
 - **A laundering witness must parse** (2026-10-24). F-3, F-3b and F-4 had two statements on one line (DL0209) since
   they were written, and met their codes through the parser's recovery. A refusal from a repaired program proves nothing
   about the program the test names. `rejects_with` now asserts no DL01xx or DL02xx.
+- **RUN-PIN-1 — the supply-chain gate held only where nothing runs** (on-demand routine run 6, 2026-10-25, D-V2-186; HIGH).
+  A dependency that breaks its authority pin, or carries none, was DL1001 under `check`, `build` and `lock`, and `run` ran
+  it on every engine and in the sandbox; `build --target wasm`, `test`, `deploy plan`, `publish`, `add` and `sandbox
+  policy` went ahead too. Their loaders checked types and never called the pin check. Every route that runs, ships or
+  plans a package calls `supply_chain_gate` now. Never soften this to "the pin is a build-time check": a pin is enforced
+  wherever the dependency's code can run. Search key: `resolve_workspace(` without `supply_chain_gate` on the same path.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1865,6 +1887,18 @@ Added in V2 (2026-09-17 → 2026-09-28):
   only after fixing the one before (5.8 s, then 261 s for `a == b`). A walk over a type follows each variable once, or is
   given the type written out once (`apply_type`, within its limit) and walks it as it stands. Time a twin, a field read
   and an `==` of the shape, not only the shape.
+
+- **Before refusing a spelling, read every test that writes it** (on-demand routine run 6, B1): `grants delegate --net
+  127.0.0.1` looked like a grant nothing can use, and the first fix refused it. Two suites delegate exactly that, on
+  purpose: such a node drives the custody, the Guard's permits and the audit of a leased send, with nothing leaving the
+  machine. A refusal would have removed a working grant to report a missing one. The fix was a note where the grant is
+  written, and then the missing dimension (D-V2-187, D-V2-188). `grep` the spelling in the tests before deciding what it
+  is for.
+- **A guarantee witnessed through one command is witnessed for that command** (on-demand routine run 6, RUN-PIN-1): the
+  xz scenario's test drove `build` and said the gate holds "BEFORE any code runs"; `run`, the command an author types
+  first, skipped the gate, and so did five more routes. When a guarantee says "before X", list every command that can
+  reach X (here: everything that resolves a workspace and then runs, ships or plans it), and drive the witness through each.
+  The finding came from checking a repair's result by running the repaired package, not by re-reading the diagnostic.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

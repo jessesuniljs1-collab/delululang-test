@@ -4820,3 +4820,116 @@ does the stdlib's `Promise[T, e]`. A program that relied on the hole is refused 
 **Evidence.** `laundering` 17 passed (12 before). Mutants red: the type guard dropped (three witnesses), the closed-row
 guard dropped, actor generics flexible. Agent C's programs (`p2_09`…`p2_13`, `p3_01`…`p3_03`) are refused DL0401.
 Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## D-V2-185 — `--within` decides a file use at its call, where the source writes its path (B9) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B9, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; confirmed by the head chef on
+the current binary).** `rd.read_text("../forbidden/secret.txt")` on a capability minted for `./allowed` was *within* a
+boundary of `console` and `fs.read=./allowed`, and `run` with exactly those grants refused it (DL0904). `--within` judged
+each file capability at its mint only; the use's path, checked by `prim::resolve_in_anchor` at the call, was never read.
+It is the class D-V2-180 and D-V2-181 closed for secret sends and request paths: a verdict that skips a use-time check.
+
+**Decision.** A use whose path the source writes (`read_text`, `list_dir` and `narrow` on `Cap[FsRead]`, `write_text`
+and `append_text` on `Cap[FsWrite]`, by the checker's type at the call) is decided at its call:
+- **The source shows the capability's mint** (`root.fs_read("DIR")` through a `let`, with `narrow`s of literals; any
+  rebinding forgets it, SEND-REBIND-1's walk): the runtime mints and narrows it and asks `resolve_in_anchor`. A use it
+  refuses is *exceeds*, refused whatever the boundary grants, as a URL the egress client will not read is (D-V2-181).
+  The finding is labelled with the capability's mint line, since no grant lets a capability's use leave its directory.
+- **The source does not show the capability** (a parameter, a field): a relative path that never climbs above where it
+  starts is *within*; a spelling every call refuses (D-NE-29) is *exceeds*; any other path is *inconclusive*.
+- **A computed path** is decided by its capability's mint, as a computed URL is (D-V2-181). **The limit, recorded:** such
+  a use can still be refused at its call (DL0904) under a *within* verdict. It asks for nothing beyond its capability,
+  and the verdict does not judge a name the source does not show.
+
+`--grants` is unchanged. Witness: `within_cli` `a_file_use_is_decided_by_its_path_against_its_capability`, holding each
+verdict on a written path to what `run` does with the same grants. It was red before the fix, and four mutants turn it
+red: a refused use answered within, every path taken as staying below, narrowings skipped, and hostile spellings unchecked.
+
+## D-V2-186 — The supply-chain gate (DL1009, DL1001) holds on every route that runs, ships or plans a package; reports keep answering (RUN-PIN-1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (RUN-PIN-1, on-demand routine run 6, found while verifying the agent campaign's A2 on the binary).** A
+dependency pinned `effects = []` that writes, or one that carries no pin, is DL1001 under `delulu check`, `build` and
+`lock`. `delulu run app` ran it, on the interpreter, in the sandbox and on the WASM engine; `build --target wasm` wrote a
+`.dwx` that ran it; `test` ran the package's tests; `deploy plan` planned it and `sandbox policy` previewed its run. Only
+`build_workspace` and `cmd_lock` called `check_self_authority` and `check_pins`; every other loader checked types alone.
+The specification, the book and `provenance.rs` all say the gate refuses "before any code runs", and its witness drove
+`build` alone.
+
+**Decision.** One function, `delulu_check::deps::supply_chain_gate` — every package within its own manifest (DL1009) and
+every dependency within its consumer's pin (DL1001) — and every route that **runs** a package's code (`run` on every
+engine, `run --sandbox`, `test`), **ships** it (`build`, `build --target wasm`, `lock`, `publish`), **plans or previews**
+it (`deploy plan`, `sandbox policy`) or **accepts** it as a dependency (`add`, which computes the authority it pins) calls
+it and refuses on its errors. The routes that only **report** — `authority`, `why`, the Atlas — keep answering for such a
+package: they run nothing, and an operator needs to read what a package does to decide its pin. No new code: the refusal is
+DL1001 or DL1009, as `build` says it.
+
+**Why.** A pin is the consumer's ceiling on a dependency, and the commonest command, `run`, is the one an author types
+first; a gate that `build` keeps and `run` skips protects only those who build first. The reports are left alone because
+refusing them would hide the answer the pin is decided from.
+
+Witness: `provenance` `no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` (seven routes, a broken pin and
+a missing one, and a control that goes through all seven); red on the old code; M806–M810 red.
+
+**What it moved in three existing tests (the full suite, 2,544 passed and these 3 failed).** Two `deploy_cli` fixtures
+were packages `build` refuses: each read a secret its own manifest never declares (DL1009), and `deploy plan` now refuses
+to plan them. They declare the secret now, and every assertion about the profile stands. `sandbox_run_cli`'s package
+whose manifest declares no effects was refused DL0701 by `run`'s manifest gate; the supply-chain gate now refuses it
+first, with DL1009, as `build` does, and the test asserts that code. A single file beside a manifest has no package
+check, and is still refused DL0701.
+
+## D-V2-187 — A special-use host in a delegation is named where it is written, and the node is still made; the `net.special` dimension on a node is the next slice (B1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B1, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; re-run by on-demand routine
+run 6).** `grants delegate --net 127.0.0.1` was accepted without a word, and every run under the lease was then refused at
+the connect (`special-use`). A broker node has no `net.special` dimension (`grants_from_lease` gives a leased run an empty
+`net_special`, PS-B-02), so no lease reaches a special-use address, whatever its `net` says.
+
+**Decision.** `grants delegate` and `grants certify` — the two places a node's `net` is written — print a note for an entry
+whose host is a special-use address or name (`netclass::special_use_class` of `netscope::host_of`, so a path or a method
+list is no way round it): the node cannot carry `net.special`, a run under it is refused at that connect, and `--grant
+net.special=HOST` on the run reaches it. The node is still made. **Refusing it was weighed and rejected:** such a node
+drives every decision before the connect — the custody, the Guard's permits per destination, the audit — and
+`broker_cli` and `federation_cli` use exactly that to witness a leased send with nothing leaving the machine; a refusal
+would remove a working grant to report a missing one. **The real fix is the dimension**, sized here for the next slice:
+`Scopes::net_special`, a set of `net` entries ordered by `netscope`'s own order and met by `set_meet`, well-formed only
+within `net` (as `secret_to` lives only beside its secret), emitted in JSON only when non-empty (no existing hash, chain
+or certificate moves); `--net-special` on `delegate` and `certify`; the certificate, `AuthoritySpec`, `NodeInfo`,
+`authority_spec_from_grants` and `grants_from_lease`; the Z3 model's dimension; and the proposal flow, whose filing says
+a special-use reach is never filed while a `net.special=HOST` line passes its check (code reading, unwitnessed). With the
+dimension, a plain `--net` special-use host can be refused as `--grant net=` refuses one (D-NE-28).
+
+Witness: `broker_cli` `a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four
+spellings, both verbs, a control); M811–M814 red.
+
+## D-V2-188 — A node carries a special-use reach: `net.special` joins the authority order as its twelfth dimension (RW 4.86, B1's fix) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Why.** A run is granted a special-use host only by `--grant net.special=HOST` (D-NE-28), and a node had no such
+dimension, so no lease could hand that reach on: an agent under a delegation could not reach a loopback test service or
+a private-range host its operator meant it to (B1; D-V2-187 named the gap where the grant is written, the same run).
+
+**Decision.** `Scopes::net_special`, a set of `net` entries in `net`'s grammar:
+- **Order and meet** are `net`'s own (`netscope::set_within`, `set_meet`): a child reaches a special-use host only where its
+  parent does, for the same host, methods and path or fewer.
+- **Within `net`**: an entry is kept only within some `net` entry — the runtime mints a capability by `net` first and asks
+  this set after — so `Scopes::canonicalized` drops an orphan, as it drops a `secret_to` pair beside no secret.
+- **Written only when non-empty** (`"net.special"` in the canonical JSON), so every existing node's hash, every chain record
+  and every certificate is byte-identical; a peer that predates the field reads "no reach" (`serde(default)`), the narrow
+  direction.
+- **Spelled** `--net-special HOST` on `grants delegate` and `grants certify`, which puts the host in `net` too, as
+  `--grant net.special=` puts it in both for a run. Plain `--net` with a special-use host still makes the node, with the
+  note of D-V2-187 (now naming `--net-special`): the tests that use such a node as a never-connecting stand-in keep their
+  meaning.
+- **Carried** by the certificate, the wire (`AuthoritySpec`, `NodeInfo`), the daemon's conversions, a `--broker daemon`
+  run's root (`authority_spec_from_grants`), a lease's run (`grants_from_lease`), proposals' join and `grants diff` (a
+  reach NEW holds and OLD lacks is a scope expansion of its own).
+- **Proved** in the Z3 model: §2f's seven obligations and the full conjunction's tenth set dimension with its own teeth
+  obligation (58 obligations); three new mutants, all caught.
+
+**Not witnessed by a mutant (code reading):** `authority_spec_of`'s field (it serves plugin attenuation and proposals'
+`asks`, neither of which carries a reach in any test) and `authority_spec_from_grants`'s (a `--broker daemon` run's root;
+its own egress already reads the run's grants).
+
+Witnesses: `broker_cli` `a_lease_reaches_a_special_use_host_only_when_its_node_names_one` (a loopback listener connected
+under `--net-special`, untouched under `--net`; DL0802 for a child claiming the reach; `grants diff`); the broker's
+`a_special_use_reach_lives_within_net_and_attenuates_like_it` and the certificate's every-dimension round trip. M818–M824
+red.

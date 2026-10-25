@@ -9204,3 +9204,144 @@ pairs, about 410,000 `judge` calls, all identical to the 3,510 needed. It now ju
 each distinct meet's once. Its domain is unchanged, nothing shrinks under `cfg!(miri)`, and two mutants still turn it
 red: a meet that unions the methods (line 741) and an order that ignores them (line 734). The `ci.yml` comment that
 said no run had confirmed the 240-minute budget now gives the measured times.
+
+## 2026-10-25 — the laptop: `--within` decides a file use at its call (B9, D-V2-185)
+
+See D-V2-185. `authority fsr.delulu --within console --within fs.read=./allowed` now answers *exceeds* at
+`fsr.delulu:14:10`, with the runtime's own reason (`path `../forbidden/secret.txt` escapes the granted scope (DL0904)`).
+`within_cli` 23 passed and `deploy_cli` 23 passed on the laptop. The full suite on three OSes is the pull request's CI run.
+
+## 2026-10-25 — on-demand routine run 6: #69 and #70 landed; A18, A2 and RUN-PIN-1 closed (D-V2-186)
+
+**The session.** Opus 5.5 (the system prompt names `claude-opus-5-5`; no fallback notice), `CLAUDE_CODE_EFFORT_LEVEL=xhigh`
+and `CLAUDE_EFFORT=xhigh` in its environment — the first run since the owner set the variable in the cloud environment on
+2026-10-23, and it shows `xhigh`. The owner's setup script ran: the 1.96.1 toolchain's directory was made at 09:37:57 UTC,
+before the session's first command, and the cargo registry already held 356 `.crate` archives, Windows' among them. No sous-chef.
+
+**Landed.** The laptop's session of 2026-10-25 stopped at about 05:35 UTC with two green pull requests open: #69
+(`2ddd15c`, the methods order test judges each entry once) and #70 (`daff3ec`, D-V2-185). Their runs `40165160695` and
+`40165944252` passed every job (`miri-slow` and `heavy-gates` skipped, as on every pull request), and #69's `miri-slow`
+dispatch `40165159856` passed inside its budget: delulu-broker 1 h 47 min, delulu-check 1 h 31 min, delulu-syntax 21 min.
+Re-run here before `master` moved: `within_cli` 23 passed, `deploy_cli` **11** passed (both records say 23; the target
+holds 11 tests), `netscope` 10 passed, and a mutant of D-V2-185 that answers every file use *within* turned
+`a_file_use_is_decided_by_its_path_against_its_capability` red. `master` was fast-forwarded `0549645` → `daff3ec`. The
+autosave snapshot `875c373` (05:31 UTC) is `daff3ec`'s code before its test was carried further, and the 2026-10-23
+snapshot of the launch worktree (`ccb3241`) equals `launch/2.0.0` outside the map: nothing to recover.
+
+**A18 — a sandboxed run let the program write the runtime's record of its run** (the agent test campaign's builder,
+Sonnet 5.5; reproduced). `run p.delulu --grant fs.write=./out --report-out out/r.json` is refused before anything runs
+(exit 2, D-V2-21); the same command with `--sandbox` ran, exit 0, and the guest wrote a counterfeit report where the
+runtime's would go. `cmd_run` returned to the sandboxed route before its D-V2-21 check, and `guest.rs` never made one. The
+sandboxed route now makes both checks the ordinary route makes: the command line's scopes before anything else (one
+function, `refuse_runtime_paths_in_command_line_scopes`, which both routes call; a dry run refuses too, since it says what
+the run would do), and the final grants, a lease's included, once the lease is redeemed and before a root is issued or a
+guest exists. Witnesses: `sandbox_modes_cli` `the_report_is_refused_inside_a_write_scope_inside_the_sandbox_too` (two
+spellings, strict and audit, a control outside every scope) and `sandbox_guard_e2e`'s lease step, sandboxed and not; both
+red on the old code. M801 (the first check removed) red on the audit row, M802 (the second) on the lease step, M803 (both)
+on both; the control green. Runners at `601d9bb`: macOS `40182254723`, Windows `40182256417` (json_contract 13 there, one
+test being Unix-only; sandbox_guard_e2e 1; sandbox_modes_cli 12). `master` took it before the next two slices.
+
+**A2 — DL1001's own repair wrote a manifest that does not parse** (the builder; reproduced). With `ratlib = { path =
+"../ratlib" }` the repair appended `[dependencies.ratlib.authority]`, which TOML refuses after an inline table, so applying
+it turned DL1001 into DL1004. The inline table is the form `delulu add` writes. The pin now goes inside an inline table,
+before its closing brace, at a place read from the TOML parser's own span of the value; a table or dotted keys keep the
+appended sub-table. The label reads "add an `authority` pin to this dependency". `fix_cli` said `tooling.rs` covered the
+repair, and nothing did. Witness: `delulu-check` `deps::tests::the_pin_repair_leaves_a_manifest_that_checks_whatever_form_the_dependency_takes`
+— six forms, each repair applied byte for byte, parsed again, its pin read back and the workspace re-checked; red on the
+old code. M804 (the old append) and M805 (inserted after the brace) red; the control green. The Stage 2 specification's
+§3.2 example showed the same invalid TOML (its §12a said so); it now shows the inline form.
+
+**RUN-PIN-1 — `run` ran a dependency its pin refuses** (found while verifying A2 on the binary; HIGH). A dependency pinned
+pure that writes, or one with no pin, is DL1001 under `check`, `build` and `lock`. `delulu run app` ran it — the
+interpreter, `--sandbox` and `--engine wasm` each printed the dependency's words and exited 0; `build --target wasm` wrote a
+`.dwx` that `run` then ran; `test` ran the package's tests; `deploy plan` planned it; `sandbox policy` previewed its run.
+Every loader but `build_workspace` and `cmd_lock` checked types and never called `check_self_authority` or `check_pins`,
+while the documents said the gate "runs BEFORE any code". `delulu_check::deps::supply_chain_gate` (DL1009 and DL1001) is
+now called by every route that runs, ships or plans a package (D-V2-186). Witness: `provenance`
+`no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` — seven routes, each refused with its reason, nothing of
+the dependency run, no `.dwx` written, for a broken pin and a missing one; the control, pinned to what the dependency does,
+goes through all seven. Red on the old code. M806 (`run`'s loader), M807 (the preview's), M808 (`test`'s), M809 (the
+planner's) and M810 (the gate emptied) red; the control green. Runners at `4ee928a`: macOS `40183138954` and Windows
+`40183140704`, provenance 17 passed (the witness among them) and fix_cli 13 on each.
+
+**The full suite at `4ee928a`** (alone, `-j 4`, the tree unmoved): 2,544 passed, **3 failed**, 16 ignored, 183 binaries.
+The three are D-V2-186 at work, each read: two `deploy_cli` services were packages `build` refuses (a secret read and never
+declared, DL1009), and `sandbox_run_cli`'s package with no declared effects is refused DL1009 by the gate before `run`'s
+DL0701. The fixtures declare their secrets now, and the package case asserts DL1009 (the single file beside a manifest
+keeps DL0701); `deploy_cli` 11 and `sandbox_run_cli` 19 passed.
+
+**B1 — a lease cannot carry `net.special`, and nothing said so until the connect** (the least-authority agent, Sonnet
+5.5; re-run here: `grants delegate --net 127.0.0.1` exit 0, no word). A broker node has no `net.special` dimension, so a
+leased run reaches no special-use address. `delegate` and `certify` now print a note naming the host, the missing
+dimension and `--grant net.special=HOST`; the node is still made, because the Guard and the audit decide a leased send
+before the connect and `broker_cli`'s and `federation_cli`'s witnesses rest on such a node (D-V2-187, which also sizes
+the dimension for the next slice). Witness `broker_cli`
+`a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four spellings, both verbs, a public
+host as the control); M811–M814 red, the control green; broker_cli 16, federation_cli 10, grants_cli 5, json_contract 14
+passed. A first form refused the host; reading the tests that delegate `127.0.0.1`, before running them, showed what such a
+node is used for, and the refusal became a note.
+
+**A20 — a network entry wider than its grant was called a host that was not granted** (the builder, Sonnet 5.5; reproduced
+here by `run` and `--within`). The `http` mint now names the entry no grant holds, the host and every grant for it, and
+gives the entry as the remedy (`net.special=` for a special-use host, never the `net=` the parser refuses); a host granted
+nothing keeps its words. Witness `within_cli` `a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds`,
+holding the verdict's reason and `run`'s refusal to the same words; M815 (the old refusal), M816 (the remedy always
+`net=`) and M817 (no grant found for the host) red, the control green. `egress_cli`'s GET-under-POST mint asserted "was
+not granted", the old words for this very case; it asserts the new ones. egress_cli 11, within_cli 24, wasm_cli 18, cli
+52, json_contract 14, core_invariance 1, fault_parity 7, delulu-runtime lib 297 passed.
+
+**`launch/2.0.0` at `0a55a44`:** `master` `ce25bc1..41f820f` merged in a worktree with its own target. The CHANGELOG's ten
+new sections moved under `## [2.0.0]`, the Breaking paragraph gains D-V2-184, RW 4.82, D-V2-185, D-V2-186 and A18, and
+the decision log kept D-V2-155 beside D-V2-182 to D-V2-187. Gates there: fmt, clippy.sh, the Survey (0 errors), `doctor
+--check` 26 and the eleven document gates passed. Its `everything` run and release dry run are dispatched; CHECKLIST-2.0's
+criteria 1, 3 and 4 are re-cited from that run once read.
+
+**RW 4.86 — the `net.special` dimension on a node (D-V2-188), B1's real fix, the same run.** `Scopes::net_special`: `net`
+entries ordered and met as `net`'s are, kept only within `net`, written in the canonical JSON only when non-empty (no
+existing hash, chain or certificate moves). `--net-special HOST` on `grants delegate` and `certify`; carried by the
+certificate, `AuthoritySpec` and `NodeInfo` (`serde(default)`), the daemon's three conversions (`authority_spec_of` by
+hand: it ends `..Default::default()`, the trap the code itself records), a `--broker daemon` run's root, a lease's run,
+proposals' join and `grants diff`. Witness `broker_cli` `a_lease_reaches_a_special_use_host_only_when_its_node_names_one`:
+a leased run under `--net-special 127.0.0.1` connects to a loopback listener (TLS's first byte), one under plain `--net` is
+refused and nothing connects, a child claiming the reach is DL0802, a child delegated plain `--net` under the reach has
+none, and `grants diff` names it. The broker's `a_special_use_reach_lives_within_net_and_attenuates_like_it` and the
+certificate's every-dimension round trip (its fixture's `net` now holds the special entry, or canonicalization would drop
+it and the round trip prove nothing). M818 (a lease given nothing), M819 (the order without it), M820 (`grants diff`
+without it), M821 (orphans kept), M822 (always written), M823 (the certificate ignoring it), M824 (a union meet): each red,
+the controls green. The Z3 model: §2f (seven obligations) and the tenth set dimension with its teeth, 58 obligations
+discharged here (z3 5.3.1 in a scratch virtualenv); all fourteen mutants caught, three of them new; `ci.yml` runs the
+fourteen. MATHEMATICS, the models README, the capstone, QUESTIONS and the book say twelve dimensions. The full suite
+alone at `f4285f2`: **2,551 passed, 0 failed**, 16 ignored, 183 binaries, cargo exit 0, the tree unmoved. Runners at `f4285f2`:
+macOS `40186634384` and Windows `40186636510` (`broker_cli` 16 with both new witnesses, `federation_cli` 10). A20's at
+`674d2a2`: macOS `40185761727`, Windows `40185763673` (`egress_cli` 11, `within_cli` 24).
+
+**A19 — `grants propose` filed nothing for a special-use egress refusal** (the builder, Sonnet 5.5; reproduced: a leased
+run under `--net 127.0.0.1`, exit 0, `egress` holding `"reason": "special-use"`, and `propose` answering "the report records
+no refusal"). With no refused call, `propose` now reads the first special-use egress record, takes its host by the egress
+client's own parser (`parse_target`), and proposes `net.special=` for each `net` entry the run's node grants for that host
+(read from the broker), or the host alone where no node is named. Witness `broker_cli`
+`a_special_use_egress_refusal_is_proposed_approved_and_reached`: the node's entry `127.0.0.1/x/**` (not the bare host) is
+what is proposed and filed; approval under a node without the reach is DL0802, under a `--net-special` node a new lease
+whose run connects to the loopback listener. M825 (the branch off) and M826 (the node ignored) red, the control green;
+broker_cli 18, within_cli 24, json_contract 14, grants_cli 5 passed.
+
+**A9 and RETURN-LAST-1 — `return` at the end of a function, in a match arm, on both engines** (A9: the builder, Sonnet 5.5,
+wrote `None => return Err(Lex(..))` and met eleven diagnostics, concluding the language has no `return`). It has one, as a
+statement, and no guide said so. Probing the claim found RETURN-LAST-1: a block whose LAST statement is `return` was typed
+`Unit`, so a function ending `return x / 2` was refused DL0401 while every early `return` checked. The checker now gives such
+a block a fresh variable; the parser reads `return [expr]` in expression position as that statement in a block of its own
+(the formatter prints it so, idempotently); and the WASM codegen no longer lets a returning branch decide its `match`'s
+(the first arm compiled, by tag) or `if`'s type (`ends_in_return`). Witnesses `delulu-check` `tests/returns.rs` (red on the
+old code) and `wasm_cli` `a_function_ending_in_return_runs_alike_on_both_engines`, whose returned types differ from their
+branches' — a first form whose types matched let M829 and M830 survive. M827, M828, M829, M830 and the double mutants M832,
+M833 red; M831, a change to `compile_stmt`'s reported type, survived every witness because no caller that passes an
+expected type reads it, so it was removed. delulu-check 296, delulu-wasm 204, wasm_cli 19 passed; the 50,000-program
+differential passed at `ab10f75` (103.8 s). The full suite alone at `ab10f75`: 2,556 passed, 0 failed, 16 ignored, 184 binaries, the tree unmoved; runners at `ab10f75`, macOS `40189206923` and Windows `40189209098` (`wasm_cli` and `broker_cli`, every new witness among them), and A19's at `0f0e75a`, macOS `40187811997` and Windows `40187823143`, success. `GETTING_STARTED.md` says what `return` is.
+
+**A12 and A22 — two refusals that named the wrong thing** (the builder, Sonnet 5.5; both reproduced). DL0405 on a receiver
+whose type has not settled printed the inference variable (`'t9`); it now says the type is not known at that call and where
+to write it. DL1703 for a test in a file no package encloses spoke of the package ceiling and `delulu.toml`; `TestCeiling`
+knows now that nothing set it (`no_package`), and the refusal names `--test-authority`. Witnesses `delulu-check`
+`tests/unknown_receiver.rs` and `test_runner_cli`'s outside-a-package step; M834 and M835 red, the control green. The first
+run of M835 read BUILD-ERROR and a red control: the VM's disk had filled (0 MB free) from the mutant runs' rebuilt test
+binaries; with the stale ones deleted both runs were clean.

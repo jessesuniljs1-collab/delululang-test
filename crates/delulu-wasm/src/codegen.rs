@@ -3287,8 +3287,12 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
         cx.emit(Instruction::I32Eq);
         ifs.push(cx.instrs.len());
         cx.emit(Instruction::If(BlockType::Empty));
-        let got = compile_arm(&arms[arm_idx(t)?], &ctors[t].1, sp, sty, cx, result_ty)?;
-        result_ty.get_or_insert(got);
+        let arm = &arms[arm_idx(t)?];
+        let got = compile_arm(arm, &ctors[t].1, sp, sty, cx, result_ty)?;
+        // An arm that ends in `return` leaves the function: its type says nothing about the match's.
+        if !ends_in_return(&arm.body) {
+            result_ty.get_or_insert(got);
+        }
         cx.emit(Instruction::Else);
     }
     let got = compile_arm(&arms[arm_idx(ntags - 1)?], &ctors[ntags - 1].1, sp, sty, cx, result_ty)?;
@@ -3300,6 +3304,12 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
         cx.emit(Instruction::End);
     }
     Ok(result_ty)
+}
+
+/// Does `e` end in `return` — a block whose last statement leaves the function (`None => return Err(…)` parses as one)?
+/// Such a branch produces no value, so the type it compiles to is not the type of the `match` or `if` it is a branch of.
+fn ends_in_return(e: &Expr) -> bool {
+    matches!(e, Expr::Block(b) if matches!(b.stmts.last(), Some(Stmt::Return { .. })))
 }
 
 /// Does `p` test something inside a constructor — a constructor or a literal among its fields (`Some(Red)`, `Ok(0)`)?
@@ -3340,7 +3350,10 @@ fn compile_match_ordered(arms: &[Arm], sp: u32, sty: Ty, cx: &mut Cx, expected: 
             None => compile_expr(&arm.body, cx),
         });
         cx.scopes.pop();
-        result_ty.get_or_insert(r?);
+        let got = r?;
+        if !ends_in_return(&arm.body) {
+            result_ty.get_or_insert(got);
+        }
         cx.emit(Instruction::Br(cx.depth - done));
         cx.emit(Instruction::End);
     }
@@ -3705,6 +3718,14 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             let at = cx.instrs.len();
             cx.emit(Instruction::If(BlockType::Empty));
             let tt = compile_block(then_, cx)?;
+            // A then-branch that ends in `return` leaves the function, so the else-branch says the `if`'s type.
+            if matches!(then_.stmts.last(), Some(Stmt::Return { .. })) {
+                cx.emit(Instruction::Else);
+                let et = compile_expr(else_, cx)?;
+                cx.instrs[at] = Instruction::If(block_type(et));
+                cx.emit(Instruction::End);
+                return Ok(et);
+            }
             cx.instrs[at] = Instruction::If(block_type(tt));
             cx.emit(Instruction::Else);
             compile_expr_as(else_, cx, tt).map_err(|e| match e {

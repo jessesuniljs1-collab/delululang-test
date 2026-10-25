@@ -1441,7 +1441,10 @@ impl<'a> Checker<'a> {
                             self.expect_type(&ret, &Type::Unit, *span, "return type mismatch");
                         }
                     }
-                    value_ty = Type::Unit;
+                    // A block that ENDS in `return` produces no value — control has left the function — so it takes
+                    // whatever type its context expects: a fresh variable, not `Unit`, which refused `fn f() -> Int { …
+                    // return x }` DL0401 (2026-10-25). The returned value was held to the return type just above.
+                    value_ty = if is_last { self.cx.fresh_type() } else { Type::Unit };
                 }
                 Stmt::Expr(e) => {
                     let (t, r) = self.check_expr(e, ctx);
@@ -2160,10 +2163,18 @@ impl<'a> Checker<'a> {
             return (ret, acc);
         }
 
-        self.diags.push(
-            Diagnostic::error("DL0405", format!("type `{}` has no method `{}`", self.ty(&rt), name.name))
-                .with_span(name.span, "unknown method"),
-        );
+        // A12 (the agent test campaign): a receiver whose type inference has not settled yet printed as its internal
+        // variable ("type `'t9` has no method `concat`"). Say what is missing and where to write it instead.
+        let message = if matches!(rt, Type::Var(_)) {
+            format!(
+                "the type of this value is not known at this call, so its method `{}` cannot be found — write the type where \
+                 the value is made (`let m: Map[Str, List[Str]] = Map()`, `let xs: List[Int] = []`) or give its parameter one",
+                name.name
+            )
+        } else {
+            format!("type `{}` has no method `{}`", self.ty(&rt), name.name)
+        };
+        self.diags.push(Diagnostic::error("DL0405", message).with_span(name.span, "unknown method"));
         (self.cx.fresh_type(), acc)
     }
 

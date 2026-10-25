@@ -469,7 +469,7 @@ The manifest is a *checked ceiling*, not a hopeful comment.
 
 **2. Authority pins (DL1001).** When you depend on `markdown = "1.2"`, your lockfile records the
 authority you accepted. If a later resolution would let `markdown` do *more* than you pinned, the
-build fails — before running anything. This is the anti-`xz` mechanism: a dependency cannot quietly
+build fails — and so do `run`, `test` and every other command that would run it, before running anything. This is the anti-`xz` mechanism: a dependency cannot quietly
 grow new powers.
 
 **3. The semver-authority law (DL1003).** Widening authority is a **major-version** change, always. A
@@ -1367,7 +1367,7 @@ DeluluLang **does not claim**, ever:
   4.32.2, effect soundness for the **higher-order fragment**, with `#print axioms` reporting no
   axioms at all — and the same file mechanizes C88, proving the calculus as written admits a program
   whose trace escapes its row. What is **not** mechanized is everything outside that fragment: the
-  full type system, the eleven-dimension authority order (proved separately in Z3, which is a
+  full type system, the twelve-dimension authority order (proved separately in Z3, which is a
   different kind of evidence), and the runtime. The soundness argument for the rest remains
   design-level, audit-rule-enforced, and test-enforced.
 - **A compiler that cannot be crashed.** Until 2026-08-04 it could be: a valid module nested 100,000
