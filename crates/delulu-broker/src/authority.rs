@@ -48,6 +48,13 @@ pub struct Scopes {
     /// [`Scopes::canonicalized`] drops one whose name is not there (it grants reach to nothing): every node is
     /// well-formed, and the meet of two well-formed authorities is well-formed.
     pub secret_to: BTreeSet<String>,
+    /// RW 4.86 (B1, D-V2-188): the `net` entries whose holder may reach a special-use address — loopback, a private range,
+    /// a link-local or metadata address — as `--grant net.special=` grants one to a run (D-NE-28). A set of `net` entries
+    /// in `net`'s own grammar, ordered by [`crate::netscope`]'s order and met by its meet, as `net` is. An entry is
+    /// meaningful only within some `net` entry (the runtime mints a capability by `net` first, then asks this set), so
+    /// [`Scopes::canonicalized`] drops one that is not: every node is well-formed. Before this field a node carried no such
+    /// reach, and a run under a lease reached no special-use address at all.
+    pub net_special: BTreeSet<String>,
 }
 
 /// The secret a `secret_to` pair names — the text before its first `@` (a secret's name holds none, D-V2-131).
@@ -85,7 +92,18 @@ impl Scopes {
             device: self.device.clone(),
             budget: self.budget,
             secret_to: self.well_formed_secret_to(),
+            net_special: self.well_formed_net_special(),
         }
+    }
+
+    /// `net_special` canonical (no entry within another) and without an entry no `net` entry holds: such an entry reaches
+    /// nothing, and keeping it would make two authorities that grant the same thing unequal under `⊑`.
+    fn well_formed_net_special(&self) -> BTreeSet<String> {
+        let net = crate::netscope::canonicalize_set(&self.net);
+        crate::netscope::canonicalize_set(&self.net_special)
+            .into_iter()
+            .filter(|e| net.iter().any(|g| crate::netscope::entry_within(e, g)))
+            .collect()
     }
 
     /// `secret_to` without a pair whose name `secrets` does not hold (P9-04 (d)): such a pair grants reach to
@@ -128,6 +146,7 @@ impl Authority {
             && path::canonicalize_set(&s.fs_write) == s.fs_write
             && crate::netscope::canonicalize_set(&s.net) == s.net
             && s.well_formed_secret_to() == s.secret_to
+            && s.well_formed_net_special() == s.net_special
     }
 
     /// Canonical JSON (sorted keys, sorted arrays). Effects render by their stable `name()` since
@@ -175,6 +194,14 @@ impl Authority {
                 .expect("json! built an object")
                 .insert("secret_to".into(), serde_json::json!(to_vec(&s.secret_to)));
         }
+        // RW 4.86: `net.special` follows the same rule, so every authority with no special-use reach keeps its canonical
+        // JSON, chain hash and certificate bytes.
+        if !s.net_special.is_empty() {
+            scopes
+                .as_object_mut()
+                .expect("json! built an object")
+                .insert("net.special".into(), serde_json::json!(to_vec(&s.net_special)));
+        }
         serde_json::json!({ "effects": effects, "scopes": scopes })
     }
 
@@ -187,6 +214,7 @@ impl Authority {
             ("fs.read", &s.fs_read),
             ("fs.write", &s.fs_write),
             ("net", &s.net),
+            ("net.special", &s.net_special),
             ("secrets", &s.secrets),
             ("secret_to", &s.secret_to),
             ("declassify", &s.declassify),
@@ -225,6 +253,9 @@ impl Authority {
                 device: device_scope::intersect_device_sets(&self.scopes.device, &other.scopes.device),
                 budget: budget_scope::meet(self.scopes.budget.as_ref(), other.scopes.budget.as_ref()),
                 secret_to: name_intersect(&self.scopes.secret_to, &other.scopes.secret_to),
+                // RW 4.86: entries, met as `net`'s are. The meet of two well-formed sets is well-formed: an entry within a
+                // parent entry on each side meets within the meet of those two.
+                net_special: crate::netscope::set_meet(&self.scopes.net_special, &other.scopes.net_special),
             },
         }
     }
@@ -253,6 +284,7 @@ pub fn attenuation_check(child: &Authority, parent: &Authority) -> Result<(), Au
         && path::all_within(&child.scopes.fs_read, &parent.scopes.fs_read)
         && path::all_within(&child.scopes.fs_write, &parent.scopes.fs_write)
         && crate::netscope::set_within(&child.scopes.net, &parent.scopes.net)
+        && crate::netscope::set_within(&child.scopes.net_special, &parent.scopes.net_special)
         && child.scopes.secrets.is_subset(&parent.scopes.secrets)
         && child.scopes.secret_to.is_subset(&parent.scopes.secret_to)
         && child.scopes.declassify.is_subset(&parent.scopes.declassify)
@@ -548,6 +580,36 @@ mod tests {
     /// nothing — canonicalization drops it (so `⊑` never refuses a delegation for a pair that grants nothing, and two
     /// authorities that grant the same thing are equal), `is_canonical` sees one kept, and the meet keeps every
     /// authority well-formed. An authority with no pair serializes as it did before the dimension existed.
+    /// RW 4.86 (D-V2-188): `net_special` is a set of `net` entries, kept only within `net`, ordered and met by `netscope`'s
+    /// order and meet. A child may reach a special-use host only where its parent may; a node with no such reach
+    /// serializes as before the dimension existed.
+    #[test]
+    fn a_special_use_reach_lives_within_net_and_attenuates_like_it() {
+        let s = |net: &[&str], special: &[&str]| Scopes { net: names(net), net_special: names(special), ..Default::default() };
+        // Within `net` only: an entry no `net` entry holds reaches nothing, and is dropped.
+        let wf =
+            auth(&["Net"], s(&["127.0.0.1", "10.0.0.7/h/**"], &["127.0.0.1", "192.168.1.1", "10.0.0.7/h/x"])).canonicalized();
+        assert_eq!(wf.scopes.net_special, names(&["127.0.0.1", "10.0.0.7/h/x"]), "{:?}", wf.scopes);
+        assert!(wf.is_canonical() && !auth(&["Net"], s(&["127.0.0.1"], &["192.168.1.1"])).is_canonical());
+        let parent = auth(&["Net"], s(&["127.0.0.1", "api.example.com"], &["127.0.0.1"])).canonicalized();
+        // A child with the same host but no special reach is within; one claiming a reach its parent lacks is not, and
+        // the repair keeps the host and drops the reach.
+        let plain = auth(&["Net"], s(&["127.0.0.1"], &[])).canonicalized();
+        assert_eq!(attenuation_check(&plain, &parent), Ok(()));
+        let wider = auth(&["Net"], s(&["api.example.com"], &["api.example.com"])).canonicalized();
+        let repair = attenuation_check(&wider, &parent).unwrap_err();
+        assert_eq!((repair.scopes.net.clone(), repair.scopes.net_special.clone()), (names(&["api.example.com"]), names(&[])));
+        // A narrower special entry (a path under the parent's host) is within, and the meet keeps it.
+        let narrow = auth(&["Net"], s(&["127.0.0.1/health/**"], &["127.0.0.1/health/**"])).canonicalized();
+        assert_eq!(attenuation_check(&narrow, &parent), Ok(()));
+        assert_eq!(narrow.intersect(&parent).scopes.net_special, names(&["127.0.0.1/health/**"]));
+        assert!(narrow.intersect(&parent).is_canonical(), "the meet of two well-formed authorities is well-formed");
+        // No reach, no key: the canonical JSON (and so every hash and certificate) is what it was.
+        assert!(!plain.to_json().to_string().contains("net.special"), "{}", plain.to_json());
+        assert!(parent.to_json()["scopes"]["net.special"] == serde_json::json!(["127.0.0.1"]), "{}", parent.to_json());
+        assert!(parent.render_compact().contains("net.special=[127.0.0.1]"), "{}", parent.render_compact());
+    }
+
     #[test]
     fn a_secret_to_pair_lives_only_beside_its_name() {
         let wf = Authority::new(

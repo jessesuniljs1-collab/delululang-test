@@ -188,6 +188,8 @@ pub(crate) fn authority_spec_of(a: &Authority) -> AuthoritySpec {
         device: a.scopes.device.values().map(|d| d.to_grant_string()).collect(),
         budget: a.scopes.budget.map(|b| b.to_grant_string()),
         secret_to: names(&a.scopes.secret_to),
+        // Named by hand: this literal ends `..Default::default()`, which would drop a dimension without a word.
+        net_special: names(&a.scopes.net_special),
         ..Default::default()
     }
 }
@@ -381,6 +383,8 @@ pub(crate) fn spec_to_authority(spec: &AuthoritySpec) -> Authority {
             // P9-04 (d), D-V2-133: kept as written. `Authority::new` canonicalizes, dropping a pair whose name `secrets`
             // does not hold; a spelling no origin has matches no destination, so it is reach to nothing either way.
             secret_to: spec.secret_to.iter().cloned().collect(),
+            // RW 4.86: kept as written; `Authority::new` canonicalizes, dropping an entry no `net` entry holds.
+            net_special: spec.net_special.iter().cloned().collect(),
         },
     )
 }
@@ -553,6 +557,7 @@ fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo 
         device: n.authority.scopes.device.values().map(|d| d.to_grant_string()).collect(),
         budget: n.authority.scopes.budget.map(|b| b.to_grant_string()),
         secret_to: names(&n.authority.scopes.secret_to),
+        net_special: names(&n.authority.scopes.net_special),
     }
 }
 

@@ -4917,3 +4917,36 @@ dimension, a plain `--net` special-use host can be refused as `--grant net=` ref
 
 Witness: `broker_cli` `a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four
 spellings, both verbs, a control); M811–M814 red.
+
+## D-V2-188 — A node carries a special-use reach: `net.special` joins the authority order as its twelfth dimension (RW 4.86, B1's fix) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Why.** A run is granted a special-use host only by `--grant net.special=HOST` (D-NE-28), and a node had no such
+dimension, so no lease could hand that reach on: an agent under a delegation could not reach a loopback test service or
+a private-range host its operator meant it to (B1; D-V2-187 named the gap where the grant is written, the same run).
+
+**Decision.** `Scopes::net_special`, a set of `net` entries in `net`'s grammar:
+- **Order and meet** are `net`'s own (`netscope::set_within`, `set_meet`): a child reaches a special-use host only where its
+  parent does, for the same host, methods and path or fewer.
+- **Within `net`**: an entry is kept only within some `net` entry — the runtime mints a capability by `net` first and asks
+  this set after — so `Scopes::canonicalized` drops an orphan, as it drops a `secret_to` pair beside no secret.
+- **Written only when non-empty** (`"net.special"` in the canonical JSON), so every existing node's hash, every chain record
+  and every certificate is byte-identical; a peer that predates the field reads "no reach" (`serde(default)`), the narrow
+  direction.
+- **Spelled** `--net-special HOST` on `grants delegate` and `grants certify`, which puts the host in `net` too, as
+  `--grant net.special=` puts it in both for a run. Plain `--net` with a special-use host still makes the node, with the
+  note of D-V2-187 (now naming `--net-special`): the tests that use such a node as a never-connecting stand-in keep their
+  meaning.
+- **Carried** by the certificate, the wire (`AuthoritySpec`, `NodeInfo`), the daemon's conversions, a `--broker daemon`
+  run's root (`authority_spec_from_grants`), a lease's run (`grants_from_lease`), proposals' join and `grants diff` (a
+  reach NEW holds and OLD lacks is a scope expansion of its own).
+- **Proved** in the Z3 model: §2f's seven obligations and the full conjunction's tenth set dimension with its own teeth
+  obligation (58 obligations); three new mutants, all caught.
+
+**Not witnessed by a mutant (code reading):** `authority_spec_of`'s field (it serves plugin attenuation and proposals'
+`asks`, neither of which carries a reach in any test) and `authority_spec_from_grants`'s (a `--broker daemon` run's root;
+its own egress already reads the run's grants).
+
+Witnesses: `broker_cli` `a_lease_reaches_a_special_use_host_only_when_its_node_names_one` (a loopback listener connected
+under `--net-special`, untouched under `--net`; DL0802 for a child claiming the reach; `grants diff`); the broker's
+`a_special_use_reach_lives_within_net_and_attenuates_like_it` and the certificate's every-dimension round trip. M818–M824
+red.

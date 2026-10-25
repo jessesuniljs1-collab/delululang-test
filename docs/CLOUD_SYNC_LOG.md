@@ -5734,3 +5734,90 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   V2_LOG). `601d9bb`'s push run `40182828236` **success**.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** RW 4.86's dimension (D-V2-187 sizes it) before the rest of the campaign list in the entry above.
+
+### 2026-10-25 — on-demand routine run 6 (continued): A20 — a network entry wider than its grant is named with it; `launch/2.0.0` at `0a55a44`
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`; `launch/2.0.0` (merge commit `0a55a44`)   Pull request: none
+  Base: `41f820f`
+- Commits: `674d2a2` (A20), this entry's commit; on `launch/2.0.0`: `0a55a44` (the merge of `master` `ce25bc1..41f820f`).
+- **What:** see V2_LOG's paragraphs on A20 and on `launch/2.0.0`.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. On
+  `launch/2.0.0`: everything `master` changed since `ce25bc1`, with `CHANGELOG.md` resolved by hand (the 2.0.0 section).
+  Added, deleted, renamed: nothing.
+- Verified: M815–M817 red; the targets in V2_LOG passed in the VM; runners for `674d2a2` dispatched (`within_cli`,
+  `egress_cli` on macOS and Windows). `launch/2.0.0`'s gates passed in its worktree; its `everything` run and release dry run
+  dispatched at `0a55a44`, unread at this entry. `master`'s `everything` sweep (`40184114103`, on `8a9bcf5`) running.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** read `launch/2.0.0`'s `everything` run and dry run, then re-cite CHECKLIST-2.0 criteria 1, 3 and 4 from them;
+  RW 4.86's dimension; the rest of the campaign list two entries above.
+
+### 2026-10-25 — on-demand routine run 6 (continued): RW 4.86 closed — a node carries a special-use reach, `net.special` (D-V2-188)
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `5410206`
+- Commits: `f4285f2` (the dimension), this entry's commit.
+- **What:** see D-V2-188 and V2_LOG's paragraph on RW 4.86: `Scopes::net_special` within `net`; `--net-special` on
+  `grants delegate` and `certify`; carried by the certificate, the wire, the daemon, a lease's run, proposals and `grants
+  diff`; the Z3 model's twelfth dimension (58 obligations, 14 mutants).
+- Files and folders: M `crates/delulu-broker/src/authority.rs`, `crates/delulu-broker/src/cert.rs`,
+  `crates/delulu-broker/src/proposal.rs`, `crates/delulu-runtime/src/plugin.rs`, `crates/delulu/src/broker_ipc.rs`,
+  `crates/delulu/src/brokerd.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/src/within.rs`, `crates/delulu/tests/broker_cli.rs`,
+  `.github/workflows/ci.yml` (14 Z3 mutants), `docs/design/models/authority_algebra.py`, `docs/design/models/README.md`,
+  `docs/MATHEMATICS.md`, `docs/QUESTIONS.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/design/AUTHORITY_GUARD_CAPSTONE.md`,
+  `docs/for-agents.md`, `CHANGELOG.md`, `HANDOFF.md` (§11.5), `docs/CLOUD_ROUTINE.md` (the Z3 model in the VM),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-188), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.86 closed),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: M818–M824 red; the Z3 model, 58 obligations, and its 14 mutants each caught, in the VM; the full suite alone at
+  `f4285f2`, 2,551 passed, 0 failed; runners macOS `40186634384`, Windows `40186636510` success. A20's runners
+  `40185761727`, `40185763673` success, and `master` took A20 at `5410206`.
+- Survey and doctor (after the last edit): in the commit message.
+- For the laptop's memory: `HANDOFF.md` §11.5 (before refusing a spelling, read every test that writes it).
+- Loop engineering: `docs/CLOUD_ROUTINE.md` — the Z3 model and its mutants run in the VM from a scratch virtualenv.
+- **Open / next:** the push run of this commit; `launch/2.0.0`'s `everything` (`40185296917`) to its end, then CHECKLIST-2.0's
+  criteria 1, 3 and 4 re-cited from it, and the next launch merge (A20 and the dimension); the campaign list two entries above
+  (A19, A17, A14, the papercuts).
+
+### 2026-10-25 — on-demand routine run 6 (continued): A19 — `grants propose` files the reach a special-use egress refusal asks for
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `bc4d9e7`
+- Commits: `0f0e75a` (A19), this entry's commit.
+- **What:** see V2_LOG's paragraph on A19.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/broker_cli.rs` (the loopback listener now a shared
+  helper), `docs/for-agents.md`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.18),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: M825, M826 red; the targets in V2_LOG passed in the VM; runners for `0f0e75a` dispatched (`broker_cli`'s three
+  special-use witnesses on macOS and Windows).
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** as the entry before, less A19: A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort),
+  the papercuts (A1, A4–A13, A15, A16, A21, A22, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19).
+
+### 2026-10-25 — on-demand routine run 6 (continued): A9 and RETURN-LAST-1 — `return` ends a function and an arm, on both engines
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `3bbaf90`
+- Commits: `ab10f75` (the fixes), this entry's commit.
+- **What:** see V2_LOG's paragraph on A9 and RETURN-LAST-1.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-syntax/src/parser.rs`,
+  `crates/delulu-wasm/src/codegen.rs`, `crates/delulu/tests/wasm_cli.rs`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (2.22), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-check/tests/returns.rs`. Deleted, renamed: nothing.
+- Verified: the mutants and gates in V2_LOG; The full suite alone at `ab10f75`: 2,556 passed, 0 failed, 16 ignored, 184 binaries, the tree unmoved; runners at `ab10f75`, macOS `40189206923` and Windows `40189209098` (`wasm_cli` and `broker_cli`, every new witness among them), and A19's at `0f0e75a`, macOS `40187811997` and Windows `40187823143`, success. Runners for `ab10f75` dispatched (`wasm_cli`, `broker_cli` on macOS and
+  Windows).
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
+  A12 (an internal type variable in a message), the other papercuts; the next launch merge (A20, RW 4.86, A19, RW 2.22).
+
+### 2026-10-25 — on-demand routine run 6 (continued): A12 and A22 — two refusals say what is missing
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `3b1aebd`
+- Commits: `784eb0b` (the fixes), this entry's commit.
+- **What:** see V2_LOG's paragraph on A12 and A22.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/test_runner_cli.rs`,
+  `CHANGELOG.md`, `docs/CLOUD_ROUTINE.md` (mutant batches fill the disk), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (6.19, 6.20), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-check/tests/unknown_receiver.rs`. Deleted, renamed: nothing.
+- Verified: M834, M835 red, the control green; `delulu-check` and `test_runner_cli` passed in the VM; runners for `784eb0b`
+  (`test_runner_cli`), macOS `40190613459` and Windows `40190611753`, success.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
+  the other papercuts (A1, A4–A8, A11, A13, A15, A16, A21, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19,
+  RW 2.22, RW 6.19, 6.20).

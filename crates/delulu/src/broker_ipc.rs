@@ -78,6 +78,11 @@ pub struct AuthoritySpec {
     /// bottom, sent nowhere — and not written when empty, so a request naming none is byte-identical to one sent before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secret_to: Vec<String>,
+    /// RW 4.86 (D-V2-188): the `net` entries whose holder may reach a special-use address
+    /// (`delulu_broker::Scopes::net_special`). `#[serde(default)]` so a peer that predates it decodes as "no special-use
+    /// reach" — the narrow direction; not written when empty, so every frame without one is what it was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_special: Vec<String>,
     pub holder_kind: String,
     pub holder_desc: String,
     /// Absolute epoch-millis TTL deadline, or `None` for no expiry.
@@ -122,6 +127,9 @@ pub struct NodeInfo {
     /// `grants list --json` for a node whose secrets name no audience is what it was before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secret_to: Vec<String>,
+    /// RW 4.86: the node's special-use reach. See [`AuthoritySpec::net_special`]. Not written when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_special: Vec<String>,
 }
 
 /// One guard rule on the wire (Stage 5 chunk 6): `class:pattern → tier`. Fixed-field struct →
@@ -193,6 +201,7 @@ impl NodeInfo {
             device: self.device.clone(),
             budget: self.budget.clone(),
             secret_to: self.secret_to.clone(),
+            net_special: self.net_special.clone(),
             holder_kind: String::new(),
             holder_desc: String::new(),
             ttl_millis: None,

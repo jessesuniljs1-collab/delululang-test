@@ -716,8 +716,8 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
     Ok(out)
 }
 
-/// P9-02 between two lease NODES: here the broker's `Authority` IS the domain — a node carries no `console` flag, no
-/// `net.special`, no sensor — so the lattice decides, and each item of NEW is asked of `attenuation_check` as a one-item
+/// P9-02 between two lease NODES: here the broker's `Authority` IS the domain — a node carries no `console` flag and no
+/// sensor (and, since RW 4.86, a `net.special` reach of its own) — so the lattice decides, and each item of NEW is asked of `attenuation_check` as a one-item
 /// authority. The probe carries OLD's budget, because an absent budget is the TOP of that dimension and would make every
 /// probe fail; the budget itself is decided once, by `budget_scope::within`. An effect NEW adds is an effect expansion;
 /// a path, host, name or library is a scope expansion; a device a device-reach expansion; a budget a budget expansion.
@@ -739,10 +739,12 @@ pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Au
     }
     let n = &new.scopes;
     type Pick = fn(&mut Scopes) -> &mut std::collections::BTreeSet<String>;
-    let dims: [(&str, &std::collections::BTreeSet<String>, Pick); 7] = [
+    let dims: [(&str, &std::collections::BTreeSet<String>, Pick); 8] = [
         ("fs.read", &n.fs_read, |s| &mut s.fs_read),
         ("fs.write", &n.fs_write, |s| &mut s.fs_write),
         ("net", &n.net, |s| &mut s.net),
+        // RW 4.86: a special-use reach NEW holds and OLD does not is a widening of its own, even for a host both hold.
+        ("net.special", &n.net_special, |s| &mut s.net_special),
         ("secret", &n.secrets, |s| &mut s.secrets),
         ("declassify", &n.declassify, |s| &mut s.declassify),
         ("foreign.c", &n.foreign_c, |s| &mut s.foreign_c),

@@ -1530,11 +1530,11 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `--measure-launcher FILE` binds the statement to that file's BLAKE3, refused for any other launcher)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--net-special H].. [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device DEV:dim=lo..hi,..].. [--ttl 1h] [--budget mem=N,cpu=S] [--multi] [--owner CODE]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (prints a lease token; a budget left unnamed is the parent's, and a `run --lease` is held to it;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a secret is sent only to the origins its `--secret-to` names — none is nowhere)\n\
-     \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
+     \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H].. [--net-special H]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. [--budget mem=N,cpu=S] --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (every dimension `delegate` names: under strict anchored roots a root enters only this way)\n\
@@ -1916,6 +1916,9 @@ struct TestCeiling {
     /// Given with `--test-authority` (D-NE-17) rather than read from a manifest: a refusal names
     /// the ceiling that actually applied.
     from_flag: bool,
+    /// No package encloses the file and no flag was given (A22): the ceiling is empty because nothing set one, and a
+    /// refusal says that and names the flag, not a `delulu.toml` that does not exist.
+    no_package: bool,
 }
 
 /// Why `row` is wider than `ceiling`, or `None` when it fits (D-NE-17). An effect must be one the
@@ -1939,7 +1942,7 @@ fn test_ceiling_excess(row: &TestCeiling, ceiling: &TestCeiling) -> Option<Strin
 }
 
 fn test_ceiling(dir: &std::path::Path) -> TestCeiling {
-    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false, no_package: false };
     let Ok(text) = std::fs::read_to_string(dir.join("delulu.toml")) else { return ceiling };
     let mut in_section = false;
     for raw in text.lines() {
@@ -2060,19 +2063,26 @@ fn run_module_tests(
 
         // DL1703: the test's declared row must fit the package ceiling.
         if let Some(excess) = declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e)) {
+            // A22 (the agent test campaign): a file no package encloses has no `delulu.toml` to widen; its ceiling is the
+            // flag's or none, and the refusal says so.
+            let (whose, label) = if ceiling.from_flag {
+                ("the --test-authority ceiling", "narrow the row, or widen --test-authority — a real review decision".to_string())
+            } else if ceiling.no_package {
+                (
+                    "no package encloses this file, so its tests hold no effect unless --test-authority names one; the ceiling",
+                    format!("narrow the row, or pass --test-authority 'effects = [\"{excess}\"]' — a real review decision"),
+                )
+            } else {
+                (
+                    "the package [test-authority] ceiling",
+                    "narrow the row, or widen delulu.toml's [test-authority] — a real review decision".to_string(),
+                )
+            };
             let d = Diagnostic::error(
                 "DL1703",
-                format!(
-                    "test \"{}\" declares effect `{excess}` but {} allows only {:?}",
-                    t.name,
-                    if ceiling.from_flag { "the --test-authority ceiling" } else { "the package [test-authority] ceiling" },
-                    ceiling.effects
-                ),
+                format!("test \"{}\" declares effect `{excess}` but {whose} allows only {:?}", t.name, ceiling.effects),
             )
-            .with_span(
-                delulu_diag::Span::new(id, name_span.start, name_span.end),
-                "narrow the row, or widen delulu.toml's [test-authority] — a real review decision",
-            );
+            .with_span(delulu_diag::Span::new(id, name_span.start, name_span.end), label);
             if st.json {
                 st.diags_json.extend(diagnostics_json(std::slice::from_ref(&d), map));
             } else {
@@ -2291,7 +2301,7 @@ fn cmd_test(rest: &[String]) -> i32 {
         }
     }
     let ceiling = test_ceiling(std::path::Path::new("."));
-    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false, no_package: true };
 
     // D-NE-17 (the owner, 2026-09-18): `--test-authority <row>` is a test ceiling given on the
     // command line, in the manifest's own `[test-authority]` syntax. Inside a package it may only
@@ -2302,7 +2312,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     let flag_ceiling = if authority_rows.is_empty() {
         None
     } else {
-        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true };
+        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true, no_package: false };
         for row in &authority_rows {
             if let Err(e) = test_authority_line(row, &mut c) {
                 eprintln!("error: bad --test-authority: {e}");
@@ -6583,6 +6593,13 @@ pub(crate) fn authority_spec_from_grants(grants: &Grants, program: &str) -> crat
         // (`run_cmd`), which is the only caller that knows what the run is held to.
         budget: None,
         secret_to,
+        // RW 4.86 (D-V2-188): a `net.special=` grant's reach travels with its host, where it was dropped.
+        net_special: {
+            let mut v = grants.net_special.clone();
+            v.sort();
+            v.dedup();
+            v
+        },
         holder_kind: "process".to_string(),
         holder_desc: program.to_string(),
         ttl_millis: None,
@@ -6603,11 +6620,9 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         fs_read: info.fs_read.clone(),
         fs_write: info.fs_write.clone(),
         net: info.net.clone(),
-        // PS-B-02: the broker's node has no `net.special` dimension, so a lease cannot say which of its
-        // hosts may reach a special-use address — and a leased run therefore reaches none. Fail
-        // closed and say so: the egress client refuses such a connection with `special-use`, and the
-        // dimension joining the grant tree is recorded as open work in `V2_LOG.md` (PS-B).
-        net_special: Vec::new(),
+        // RW 4.86 (D-V2-188): the node's own special-use reach, which `grants delegate --net-special` writes. Until
+        // 2026-10-25 a node had no such dimension, and a leased run reached no special-use address at all.
+        net_special: info.net_special.clone(),
         clock: has("Clock"),
         rand: has("Rand"),
         declassify: has("Declassify"),
@@ -7351,6 +7366,29 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         }
     };
     let d = &report["diagnostics"][0];
+    // A19 (the agent test campaign, D-V2-188): a request the egress client refused for a special-use address is refused
+    // with no diagnostic — the program is handed `Err` and may go on — and the report says so in `egress`. A grant answers
+    // it (`net.special=`, which a node carries since RW 4.86), so it is proposed like a refused call's requirement.
+    if d["code"].as_str().is_none() {
+        let refused = report["egress"]["records"].as_array().and_then(|rs| {
+            rs.iter().find(|r| r["delivered"] == false && r["reason"] == "special-use").and_then(|r| {
+                let url = r["url"].as_str()?;
+                delulu_runtime::egress::parse_target(url).ok().map(|t| (url.to_string(), t.host, r["explain"].clone()))
+            })
+        });
+        if let Some((url, host, explain)) = refused {
+            let lines = match special_use_asks(node.as_deref(), &host, state_dir, json) {
+                Ok(l) => l,
+                Err(code) => return code,
+            };
+            let refusal = json!({ "code": "special-use", "message": explain, "url": url, "at": Json::Null });
+            let reason = format!(
+                "the request to `{url}` was refused because `{host}` is a special-use address, which only a `net.special=` grant \
+                 reaches"
+            );
+            return answer(refusal, None, None, &lines, &reason);
+        }
+    }
     let Some(code) = d["code"].as_str() else {
         return answer(Json::Null, None, None, &[], "the report records no refusal — the run was not refused at a call");
     };
@@ -7448,6 +7486,30 @@ enum Filing {
     NotFiled(String),
 }
 
+/// A19 (D-V2-188): what a special-use egress refusal asks for — `net.special=` for each `net` entry the run's node grants
+/// for that host, read from the broker (the entries the program's capability was minted within, now with the reach), or
+/// the host alone where no node is named or the node names none for it.
+fn special_use_asks(node: Option<&str>, host: &str, state_dir: &std::path::Path, json: bool) -> Result<Vec<String>, i32> {
+    let mut lines = Vec::new();
+    if let Some(n) = node {
+        match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Inspect { node: n.to_string() }, json)? {
+            crate::broker_ipc::Response::Inspected { node: info } => {
+                for e in info.net.iter().filter(|e| delulu_broker::netscope::host_of(e) == host) {
+                    lines.push(format!("net.special={e}"));
+                }
+            }
+            other => {
+                eprintln!("error: unexpected inspect response for `{n}`: {other:?}");
+                return Err(2);
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push(format!("net.special={host}"));
+    }
+    Ok(lines)
+}
+
 /// File `lines` with the broker as `node`'s proposal (P9-03 step 3, D-V2-125): each line is converted as a lease's grant is
 /// (`authority_spec_from_grants`), and one with no form in a node — a sensor, a compute device, a plugin, a special-use
 /// reach — is not filed, said, since an approval could not carry it. The claim (program, call, place, code) is data.
@@ -7476,7 +7538,7 @@ fn file_proposal(
         };
         if !carried {
             return Ok(Filing::NotFiled(format!(
-                "`{line}` has no form in a lease node (a node carries no sensor, compute, plugin or special-use reach), so \
+                "`{line}` has no form in a lease node (a node carries no sensor, compute or plugin reach), so \
                  an approval could not carry it — the operator grants it on the run itself, `--grant {line}`"
             )));
         }
@@ -7868,18 +7930,18 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     0
 }
 
-/// B1 (D-V2-187): the note `grants delegate` and `grants certify` print for a `--net` entry whose host is a special-use
-/// address or name. A node has no `net.special` dimension, so a run under it reaches no special-use address
-/// (`grants_from_lease`): the custody and the Guard decide its uses, and the egress client then refuses every connect.
-/// Such a node is made — it still drives every decision before the connect — and the operator is told so, here, rather
-/// than at the first refused connect.
+/// B1 (D-V2-187, D-V2-188): the note `grants delegate` and `grants certify` print for a `--net` entry whose host is a
+/// special-use address or name. Plain `--net` gives a node no special-use reach, as plain `--grant net=` gives a run none
+/// (D-NE-28): a run under it has its uses decided by the custody and the Guard, and the egress client then refuses the
+/// connect. Such a node is made — it still drives every decision before the connect — and the operator is told so, and
+/// given the spelling that reaches the host, here rather than at the first refused connect.
 fn special_use_net_note(entry: &str, what: &str) -> Option<String> {
     let host = delulu_broker::netscope::host_of(entry);
     let class = delulu_runtime::netclass::special_use_class(host)?;
     Some(format!(
-        "note: `{host}` (`--net {entry}`) is a special-use address ({class}), and {what} cannot carry `net.special` — a \
-         node has no such dimension yet — so a run under it is refused when it connects there (`special-use`). To reach \
-         it, grant it on the run itself: `--grant net.special={entry}`"
+        "note: `{host}` (`--net {entry}`) is a special-use address ({class}), and plain `--net` gives {what} no \
+         special-use reach, so a run under it is refused when it connects there (`special-use`). To reach it, name it \
+         with `--net-special {entry}`, as a run is granted one with `--grant net.special={entry}`"
     ))
 }
 
@@ -7937,6 +7999,7 @@ fn secret_audiences(secrets: &[String], pairs: &[String], who: &str) -> Result<V
 fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
     let mut effects: Vec<String> = Vec::new();
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
+    let mut net_special: Vec<String> = Vec::new();
     let (mut secrets, mut secret_to, mut declassify) = (Vec::new(), Vec::new(), Vec::new());
     let (mut foreign_c, mut foreign_python) = (Vec::new(), Vec::new());
     let mut budget: Option<String> = None;
@@ -7968,6 +8031,15 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
                 eprintln!("{note}");
             }
             net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--net-special") {
+            // RW 4.86 (D-V2-188): `net.special=`'s reach for a certificate's root — the host in `net` too, as the run's
+            // grant puts it in both.
+            if let Err(why) = delulu_broker::netscope::check_entry(&v) {
+                eprintln!("error: `--net-special {v}` is refused: {why}");
+                return 2;
+            }
+            net.push(v.clone());
+            net_special.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
             if let Err(why) = secret_name_flag(&v, "a certificate") {
                 eprintln!("{why}");
@@ -8154,6 +8226,7 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             foreign_python: foreign_python.into_iter().collect(),
             device: device_canon.into_iter().map(|d| (d.device.clone(), d)).collect(),
             budget,
+            net_special: net_special.into_iter().collect(),
         },
     );
     // Catch a widening at MINT time rather than letting the holder discover it at use time. The
@@ -8483,6 +8556,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     let mut budget: Option<String> = None;
     // P9-04 (d), D-V2-133: where each delegated secret may be sent — `NAME@HOST[:PORT]`, canonicalized below.
     let mut secret_to: Vec<String> = Vec::new();
+    let mut net_special: Vec<String> = Vec::new();
     let mut ttl: Option<String> = None;
     let mut parent: Option<String> = None;
     let mut multi = false;
@@ -8516,6 +8590,14 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 eprintln!("{note}");
             }
             net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--net-special") {
+            // RW 4.86 (D-V2-188): the reach `--grant net.special=` gives a run, delegated — the host in `net` too.
+            if let Err(why) = delulu_broker::netscope::check_entry(&v) {
+                eprintln!("error: `--net-special {v}` is refused: {why}");
+                return 2;
+            }
+            net.push(v.clone());
+            net_special.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
             if let Err(why) = secret_name_flag(&v, "a delegation") {
                 eprintln!("{why}");
@@ -8650,6 +8732,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 device: device.clone(),
                 budget: budget.clone(),
                 secret_to: secret_to.clone(),
+                net_special: net_special.clone(),
                 // Provenance honesty (DISC-1): this root is minted by whatever process invoked the
                 // CLI — the broker cannot verify a human typed it, so it must not be recorded as
                 // `human`. `holder` is DATA (never switched on, KIND_IS_DATA); this only affects what
@@ -8681,6 +8764,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         device,
         budget,
         secret_to,
+        net_special,
         holder_kind: "delegate".to_string(),
         holder_desc,
         ttl_millis,

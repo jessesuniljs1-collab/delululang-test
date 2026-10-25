@@ -278,6 +278,8 @@ fn authority_from_json(v: &serde_json::Value) -> Result<Authority, Denial> {
             // P9-04 (d): read as written — `Authority::canonicalized` (every node's ingest) drops a pair whose
             // name the certificate's `secrets` does not hold, and an old build refuses the key whole (above).
             "secret_to" => scopes.secret_to = list()?,
+            // RW 4.86: read as written; `Authority::canonicalized` drops an entry no `net` entry holds.
+            "net.special" => scopes.net_special = list()?,
             "device" => {
                 for spec in list()? {
                     let d = device_scope::parse(&spec).map_err(|e| bad(&format!("device scope `{spec}`: {e}")))?;
@@ -1638,7 +1640,8 @@ mod tests {
         let scopes = Scopes {
             fs_read: ["/srv/in".to_string()].into_iter().collect(),
             fs_write: ["/srv/out".to_string()].into_iter().collect(),
-            net: ["api.example.com".to_string()].into_iter().collect(),
+            // `127.0.0.1` in `net` too: `net_special` is kept only within `net` (RW 4.86), and the round trip must carry it.
+            net: ["api.example.com".to_string(), "127.0.0.1".to_string()].into_iter().collect(),
             secrets: ["API_KEY".to_string()].into_iter().collect(),
             declassify: ["API_KEY".to_string()].into_iter().collect(),
             foreign_c: ["libm".to_string()].into_iter().collect(),
@@ -1649,11 +1652,23 @@ mod tests {
                 .collect(),
             budget: Some(crate::budget_scope::BudgetScope { memory_bytes: 268_435_456, cpu_seconds: 60 }),
             secret_to: ["API_KEY@api.example.com:443".to_string()].into_iter().collect(),
+            net_special: ["127.0.0.1".to_string()].into_iter().collect(),
         };
         // Exhaustive by construction: a new field breaks this pattern at compile time. (It did, for
         // `budget` at PS-B-05, which is how the dimension got its serialization decided.)
-        let Scopes { fs_read, fs_write, net, secrets, declassify, foreign_c, foreign_python, device, budget, secret_to } =
-            &scopes;
+        let Scopes {
+            fs_read,
+            fs_write,
+            net,
+            secrets,
+            declassify,
+            foreign_c,
+            foreign_python,
+            device,
+            budget,
+            secret_to,
+            net_special,
+        } = &scopes;
         for (what, empty) in [
             ("fs_read", fs_read.is_empty()),
             ("fs_write", fs_write.is_empty()),
@@ -1665,6 +1680,7 @@ mod tests {
             ("device", device.is_empty()),
             ("budget", budget.is_none()),
             ("secret_to", secret_to.is_empty()),
+            ("net_special", net_special.is_empty()),
         ] {
             assert!(!empty, "the fixture must populate `{what}`, or the round trip proves nothing");
         }
@@ -1676,6 +1692,7 @@ mod tests {
         let json = original.to_json();
         let parsed = authority_from_json(&json).expect("the canonical form must parse back");
         assert_eq!(parsed, original, "an authority must survive write -> read unchanged");
+        assert!(!original.scopes.net_special.is_empty(), "the canonical form kept `net.special`: {json}");
 
         // And the rendering a human reads must mention every non-empty dimension, since it is the
         // same hand-written list and feeds DL0802's repair text.
@@ -1686,6 +1703,7 @@ mod tests {
             "net",
             "secrets",
             "secret_to",
+            "net.special",
             "declassify",
             "foreign.c",
             "foreign.python",

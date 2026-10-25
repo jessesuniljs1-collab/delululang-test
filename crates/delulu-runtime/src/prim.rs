@@ -530,7 +530,29 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                     .collect();
                 Ok(cap(ResourceKind::Http, CapScope::Net { allow: hosts, special }))
             } else {
-                Err(refused("network host", "net=HOST"))
+                // A20 (the agent test campaign): an entry whose host IS granted, with fewer methods or a narrower path, is
+                // named with the grant it exceeds, rather than called a host that was not granted; and a special-use host's
+                // remedy is `net.special=`, the only spelling that grants one (D-NE-28).
+                let short = hosts.iter().find(|h| !root.net.iter().any(|g| delulu_broker::netscope::entry_within(h, g)));
+                let Some(entry) = short else { return Err(refused("network host", "net=HOST")) };
+                let host = delulu_broker::netscope::host_of(entry);
+                let key = if crate::netclass::special_use_class(host).is_some() { "net.special" } else { "net" };
+                let same: Vec<String> =
+                    root.net.iter().filter(|g| delulu_broker::netscope::host_of(g) == host).map(|g| format!("`{g}`")).collect();
+                if same.is_empty() {
+                    Err(refused("network host", &format!("{key}=HOST")))
+                } else {
+                    Err(Fault::at(
+                        "DL0703",
+                        format!(
+                            "`{entry}` asks for more of `{host}` than this program was granted ({}): a method or a path it names \
+                             is outside the grant — {}",
+                            same.join(", "),
+                            remedy(&format!("{key}={entry}"))
+                        ),
+                        span,
+                    ))
+                }
             }
         }
         "clock" => {

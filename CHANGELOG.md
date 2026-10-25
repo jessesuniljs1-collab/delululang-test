@@ -51,10 +51,31 @@ The sections below are V2's development record, newest first, exactly as each wa
   `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
   refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
   this dependency".
-- **Changed (D-V2-187, RW 4.86): `grants delegate` and `grants certify` name a special-use `--net` host** (`127.0.0.1`,
-  `localhost`, a private range) when the grant is written: a node cannot carry `net.special` yet, so a run under it is
-  refused at that connect, and the note gives `--grant net.special=HOST`, the grant that reaches it. The node is still
-  made.
+- **Changed (RW 6.19, 6.20): two refusals say what is missing.** A method on a value whose type is not known yet named an
+  inference variable (`type 't9 has no method concat`); DL0405 now says the type is not known at that call and where to
+  write it. DL1703 for a test in a file no package encloses spoke of a `delulu.toml` there is none of; it now names
+  `--test-authority`.
+- **Fixed (RW 2.22): `return` ends a function, and a match arm or a branch, on both engines.** A function whose last
+  statement was `return x` was refused DL0401 ("expected `Int`, found `Unit`"); `None => return Err(…)` in a match arm was
+  DL0202 and ten diagnostics of cascade. A block that ends in `return` now takes whatever type its place expects (its value
+  is still held to the function's return type), and `return` may stand where an expression is expected — `delulu fmt`
+  writes it as a block. On `--engine wasm` a branch that returns no longer decides its `match`'s or `if`'s type (it was
+  refused DL1201).
+- **Fixed (RW 6.18): `grants propose` files the reach a special-use egress refusal asks for.** A request the egress
+  client refused because its host is a special-use address leaves no refused call — the program gets `Err` — and
+  `propose` answered "the report records no refusal". It now proposes `net.special=` for the run's node's own entry for
+  that host (or the host alone), filed and approved like any other proposal.
+- **Added (D-V2-188, RW 4.86): a lease can carry a special-use reach.** `grants delegate --net-special HOST` (and
+  `grants certify --net-special HOST`) gives a node the reach `--grant net.special=HOST` gives a run, so a run under the
+  lease may connect to that loopback, private-range or metadata host; before, a leased run reached none. A child holds the
+  reach only where its parent does (DL0802), `grants diff` names it, and a node without one is byte-identical to before.
+  `grants delegate --net` with a special-use host still makes the node, and says it has no special-use reach and which
+  spelling gives one (D-V2-187).
+- **Changed (RW 6.17): a network entry wider than its grant is named as that.** `root.http(["127.0.0.1:GET,POST,PUT"])`
+  under a grant of `127.0.0.1:GET,POST` was refused "`network host` was not granted — pass `--grant net=HOST`"; the
+  refusal now names the entry, the host and its grants, and the entry as the grant to pass. A special-use host's remedy is
+  `net.special=` (a plain `net=` never grants one). The code is DL0703 as before; `--within` and `deploy plan` say the
+  same.
 
 ### `authority --within` decides a file use at its call, 2026-10-25
 

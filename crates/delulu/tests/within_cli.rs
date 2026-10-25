@@ -1982,3 +1982,42 @@ fn a_file_use_is_decided_by_its_path_against_its_capability() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A20 (the agent test campaign's builder, Sonnet 5.5): a program minting `root.http(["127.0.0.1:GET,POST,PUT"])` under
+/// `net.special=127.0.0.1:GET,POST` was told "`network host` was not granted to this program — pass `--grant net=HOST`" by
+/// `--within` and by `run` alike: the host IS granted, only `PUT` is short, and `net=` never grants a special-use host
+/// (D-NE-28). Both now name the entry, the grant it exceeds and `net.special=`; a host granted nothing keeps the old words,
+/// with the spelling that grants it.
+#[test]
+fn a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-net-short-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("client.delulu");
+    std::fs::write(
+        &f,
+        "module client\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"127.0.0.1:GET,POST,PUT\"])\n    out.println(\"minted\")\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let says = |grant: &str| -> (String, String) {
+        let (code, v) = within(&f, &["console".to_string(), grant.to_string()]);
+        assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{grant}: {v:#}");
+        let reason = v["counterexample"]["reason"].as_str().unwrap_or_default().to_string();
+        let o = delulu(&["run", &f, "--grant", "console", "--grant", grant]);
+        assert_eq!(o.status.code(), Some(1), "{grant}: {}", out(&o));
+        assert!(!out(&o).contains("minted"), "{grant}: nothing minted: {}", out(&o));
+        (reason, out(&o))
+    };
+    for said in <[String; 2]>::from(says("net.special=127.0.0.1:GET,POST")) {
+        assert!(said.contains("`127.0.0.1:GET,POST,PUT` asks for more of `127.0.0.1`"), "the short entry: {said}");
+        assert!(said.contains("`127.0.0.1:GET,POST`"), "the grant it exceeds: {said}");
+        assert!(said.contains("--grant net.special=127.0.0.1:GET,POST,PUT"), "the spelling that grants it: {said}");
+        assert!(!said.contains("`network host` was not granted"), "not called ungranted: {said}");
+    }
+    for said in <[String; 2]>::from(says("net.special=10.0.0.9")) {
+        assert!(said.contains("`network host` was not granted") && said.contains("--grant net.special=HOST"), "{said}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

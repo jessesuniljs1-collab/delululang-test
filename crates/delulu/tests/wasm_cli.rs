@@ -80,6 +80,37 @@ fn what_a_program_printed_before_a_fault_reaches_stdout_on_both_engines() {
     assert!(we.contains("DL0902") && ie.contains("DL0902"), "a division by zero on both:\n{we}\n{ie}");
 }
 
+/// A function whose last statement is `return`, and `return` in a match arm or an `if` used as a value (on-demand routine
+/// run 6, the campaign's A9): refused DL0401 and DL0202 until 2026-10-25; they run now, and print the same on both engines
+/// (the WASM codegen let a returning branch decide a `match`'s or an `if`'s type, and refused the next branch DL1201).
+#[test]
+fn a_function_ending_in_return_runs_alike_on_both_engines() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-return-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("ret.delulu");
+    std::fs::write(
+        &f,
+        "module ret\n\nfn half(x: Int) -> Int {\n    if x < 0 {\n        return 0\n    }\n    return x / 2\n}\n\n\
+         fn f(c: Bool) -> Str {\n    let y = if c { return \"one\" } else { 2 }\n    str(y + 10)\n}\n\n\
+         fn g(o: Option[Str]) -> Result[Str, Int] {\n    let s = match o {\n        None => return Err(7),\n        Some(v) => v\n    }\n    Ok(s + \"!\")\n}\n\n\
+         fn show(r: Result[Str, Int]) -> Str {\n    match r {\n        Ok(s) => s,\n        Err(n) => \"err \" + str(n)\n    }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(str(half(8)))\n    out.println(str(half(-3)))\n    \
+         out.println(f(true))\n    out.println(f(false))\n    out.println(show(g(None)))\n    out.println(show(g(Some(\"late\"))))\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let interp = delulu(&["run", &f, "--grant", "console"]);
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "4\n0\none\n12\nerr 7\nlate!\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
+    let wasm = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+    assert_eq!((wasm.status.code(), stdout(&wasm)), (Some(0), stdout(&interp)), "{}", String::from_utf8_lossy(&wasm.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn run_engine_wasm_ungranted_console_is_refused() {
     // No console grant → root.console() is refused host-side; the run fails.
