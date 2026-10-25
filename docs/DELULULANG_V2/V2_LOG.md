@@ -9324,3 +9324,16 @@ client's own parser (`parse_target`), and proposes `net.special=` for each `net`
 what is proposed and filed; approval under a node without the reach is DL0802, under a `--net-special` node a new lease
 whose run connects to the loopback listener. M825 (the branch off) and M826 (the node ignored) red, the control green;
 broker_cli 18, within_cli 24, json_contract 14, grants_cli 5 passed.
+
+**A9 and RETURN-LAST-1 — `return` at the end of a function, in a match arm, on both engines** (A9: the builder, Sonnet 5.5,
+wrote `None => return Err(Lex(..))` and met eleven diagnostics, concluding the language has no `return`). It has one, as a
+statement, and no guide said so. Probing the claim found RETURN-LAST-1: a block whose LAST statement is `return` was typed
+`Unit`, so a function ending `return x / 2` was refused DL0401 while every early `return` checked. The checker now gives such
+a block a fresh variable; the parser reads `return [expr]` in expression position as that statement in a block of its own
+(the formatter prints it so, idempotently); and the WASM codegen no longer lets a returning branch decide its `match`'s
+(the first arm compiled, by tag) or `if`'s type (`ends_in_return`). Witnesses `delulu-check` `tests/returns.rs` (red on the
+old code) and `wasm_cli` `a_function_ending_in_return_runs_alike_on_both_engines`, whose returned types differ from their
+branches' — a first form whose types matched let M829 and M830 survive. M827, M828, M829, M830 and the double mutants M832,
+M833 red; M831, a change to `compile_stmt`'s reported type, survived every witness because no caller that passes an
+expected type reads it, so it was removed. delulu-check 296, delulu-wasm 204, wasm_cli 19 passed; the 50,000-program
+differential passed at `ab10f75` (103.8 s). The full suite alone at `ab10f75`: 2,556 passed, 0 failed, 16 ignored, 184 binaries, the tree unmoved; runners at `ab10f75`, macOS `40189206923` and Windows `40189209098` (`wasm_cli` and `broker_cli`, every new witness among them), and A19's at `0f0e75a`, macOS `40187811997` and Windows `40187823143`, success. `GETTING_STARTED.md` says what `return` is.

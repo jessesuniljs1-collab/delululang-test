@@ -5749,3 +5749,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** as the entry before, less A19: A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort),
   the papercuts (A1, A4–A13, A15, A16, A21, A22, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19).
+
+### 2026-10-25 — on-demand routine run 6 (continued): A9 and RETURN-LAST-1 — `return` ends a function and an arm, on both engines
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `3bbaf90`
+- Commits: `ab10f75` (the fixes), this entry's commit.
+- **What:** see V2_LOG's paragraph on A9 and RETURN-LAST-1.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-syntax/src/parser.rs`,
+  `crates/delulu-wasm/src/codegen.rs`, `crates/delulu/tests/wasm_cli.rs`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (2.22), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-check/tests/returns.rs`. Deleted, renamed: nothing.
+- Verified: the mutants and gates in V2_LOG; The full suite alone at `ab10f75`: 2,556 passed, 0 failed, 16 ignored, 184 binaries, the tree unmoved; runners at `ab10f75`, macOS `40189206923` and Windows `40189209098` (`wasm_cli` and `broker_cli`, every new witness among them), and A19's at `0f0e75a`, macOS `40187811997` and Windows `40187823143`, success. Runners for `ab10f75` dispatched (`wasm_cli`, `broker_cli` on macOS and
+  Windows).
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
+  A12 (an internal type variable in a message), the other papercuts; the next launch merge (A20, RW 4.86, A19, RW 2.22).

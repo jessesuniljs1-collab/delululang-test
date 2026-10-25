@@ -26,6 +26,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
   refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
   this dependency".
+- **Fixed (RW 2.22): `return` ends a function, and a match arm or a branch, on both engines.** A function whose last
+  statement was `return x` was refused DL0401 ("expected `Int`, found `Unit`"); `None => return Err(…)` in a match arm was
+  DL0202 and ten diagnostics of cascade. A block that ends in `return` now takes whatever type its place expects (its value
+  is still held to the function's return type), and `return` may stand where an expression is expected — `delulu fmt`
+  writes it as a block. On `--engine wasm` a branch that returns no longer decides its `match`'s or `if`'s type (it was
+  refused DL1201).
 - **Fixed (RW 6.18): `grants propose` files the reach a special-use egress refusal asks for.** A request the egress
   client refused because its host is a special-use address leaves no refused call — the program gets `Err` — and
   `propose` answered "the report records no refusal". It now proposes `net.special=` for the run's node's own entry for

@@ -224,6 +224,9 @@ fn read_two(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
 }
 ```
 
+`return` leaves a function early, with a value its return type must accept — as a statement, or where an expression
+is expected, such as a match arm: `None => return Err(NotANumber(s))` (`delulu fmt` writes that arm as a block).
+
 **Filesystem calls fail with `IoErr`; network calls fail with `NetErr`.** Different sums, different
 variants, and `?` will not bridge them for you.
 
