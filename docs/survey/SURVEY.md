@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 330 |
-| Rust lines | 190792 |
+| Rust lines | 190859 |
 | Rust files outside `src/` (test/bench targets) | 160 |
 | Markdown documents | 270 |
 | Markdown lines | 86637 |
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 46975 lines
+- **Modules:** 44 files, 46994 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -116,7 +116,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fix.rs` | 438 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 513 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 705 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 3045 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/guest.rs` | 3056 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1223 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
 | `src/jail.rs` | 1737 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/launcher.rs` | 184 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
@@ -132,7 +132,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/pipe_channel.rs` | 582 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
 | `src/policy.rs` | 526 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 161 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
-| `src/run_cmd.rs` | 2209 | `delulu run` — the command that actually executes a program. |
+| `src/run_cmd.rs` | 2217 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 689 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
 | `src/schema.rs` | 1055 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 896 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |

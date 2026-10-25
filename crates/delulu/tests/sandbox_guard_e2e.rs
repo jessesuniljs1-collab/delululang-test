@@ -180,6 +180,15 @@ fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
         args.extend_from_slice(extra);
         delulu_in(&cwd, &state, &args)
     };
+    // D-V2-21 under a lease (A18): a report inside the lease's write scope is refused once the lease is redeemed, before a
+    // guest exists — as the ordinary lease run refuses it. Until 2026-10-25 the sandboxed run never checked.
+    let report = format!("{o}/report.json");
+    for sandbox in [true, false] {
+        let r = run("writer.delulu", sandbox, &["--json", "--report-out", &report]);
+        assert_eq!(r.status.code(), Some(2), "sandbox {sandbox}: {}", text(&r));
+        assert!(text(&r).contains("D-V2-21"), "sandbox {sandbox}: {}", text(&r));
+        assert!(std::fs::read_dir(&out).unwrap().next().is_none(), "nothing ran, nothing written: {}", text(&r));
+    }
     let r = run("writer.delulu", true, &[]);
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
     assert!(text(&r).contains("DL1410"), "a guarded write, refused for the guest: {}", text(&r));

@@ -531,6 +531,20 @@ pub(crate) fn refuse_runtime_paths_in_write_scopes(opts: &Opts, write_roots: &[s
     None
 }
 
+/// D-V2-21 before anything else, on every route that runs a program (the sandboxed one too — A18): the scopes the
+/// command line's `--grant` flags would let the program write, each read as `Grants::add` reads it. A lease's scopes are
+/// known only once it is redeemed, and each route checks them again then.
+pub(crate) fn refuse_runtime_paths_in_command_line_scopes(opts: &Opts) -> Option<i32> {
+    if opts.report_out.is_none() && opts.trace_out.is_none() {
+        return None;
+    }
+    let mut g = Grants::default();
+    for spec in &opts.grants {
+        let _ = g.add(spec);
+    }
+    refuse_runtime_paths_in_write_scopes(opts, &g.build_root().fs_write)
+}
+
 /// Write a runtime-owned file without following a symbolic link at its final component.
 pub(crate) fn write_nofollow(path: &str, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write as _;
@@ -1074,14 +1088,8 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     }
     // The grants named on the command line are refused here, before anything else; a lease's or a
     // manifest's are refused again once known (`cmd_run_inner`).
-    if opts.report_out.is_some() || opts.trace_out.is_some() {
-        let mut g = Grants::default();
-        for spec in &opts.grants {
-            let _ = g.add(spec);
-        }
-        if let Some(code) = refuse_runtime_paths_in_write_scopes(&opts, &g.build_root().fs_write) {
-            return code;
-        }
+    if let Some(code) = refuse_runtime_paths_in_command_line_scopes(&opts) {
+        return code;
     }
     // PS-B-01 (D-V2-25): the main program's budgets, decided before anything runs — a budget that
     // cannot be meant (zero, or a dimension nobody enforces) is refused here, not discovered later.
