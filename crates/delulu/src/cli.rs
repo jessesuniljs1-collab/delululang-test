@@ -3450,8 +3450,8 @@ fn cmd_authority(rest: &[String]) -> i32 {
     }
     let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
     if asks_within {
-        let requests = crate::within::request_sites(&checked.module, &checked.result.node_types);
-        return authority_within(&map, &[&checked.module], requests, report, &opts);
+        let uses = crate::within::use_sites(&checked.module, &checked.result.node_types);
+        return authority_within(&map, &[&checked.module], uses, report, &opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -3473,7 +3473,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
 fn authority_within(
     map: &SourceMap,
     modules: &[&delulu_syntax::ast::Module],
-    requests: Vec<crate::within::RequestSite>,
+    uses: crate::within::UseSites,
     mut report: Json,
     opts: &Opts,
 ) -> i32 {
@@ -3501,7 +3501,8 @@ fn authority_within(
         }
     }
     let mut walk = requested_scopes(modules);
-    walk.requests = requests;
+    walk.requests = uses.requests;
+    walk.files = uses.files;
     let (reqs, unsupported) = requirements(&report, &walk);
     let v = crate::within::verdict(&reqs, &unsupported, &boundary);
     let code = if v.outcome == crate::within::Outcome::Within { 0 } else { 1 };
@@ -3650,6 +3651,8 @@ pub(crate) struct ScopeWalk {
     /// Each request, by the checker's type at its call (`within::request_sites`), set only by a caller that decides a verdict
     /// and holds the types — empty for `--grants`, whose line for a request is its mint's (D-V2-181).
     pub(crate) requests: Vec<crate::within::RequestSite>,
+    /// Each file use whose path the source writes (D-V2-185), set as `requests` is.
+    pub(crate) files: Vec<crate::within::FileUseSite>,
 }
 
 /// One capability-minting call (P9-03): where it is, the kind it mints, the literal scopes it writes, and whether it asks for
@@ -3861,6 +3864,7 @@ pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> Scope
         sites: Vec::new(),
         sends: crate::within::secret_sends(modules),
         requests: Vec::new(),
+        files: Vec::new(),
     };
     for m in modules {
         for item in &m.items {
@@ -3924,6 +3928,10 @@ pub(crate) enum Ask {
     /// path too where an entry names a pattern (P9-05 (a); D-V2-181). Decided by a verdict; the line an operator types for
     /// it is its mint's. By its HTTP `method` (P9-05 (d), D-V2-183: `post` a POST, every other request a GET).
     Request { url: Option<String>, method: &'static str },
+    /// A file use whose path the source writes, judged at its call against its capability's directory (D-V2-185): through
+    /// the capability's mint where the source shows it (`cap`), by the path alone where it does not. Decided by a verdict;
+    /// the line an operator types for it is its mint's.
+    FileUse { call: &'static str, path: String, cap: Option<crate::within::FsHeld> },
     /// A Python import: a module the program imports, or a pattern its manifest allows.
     PythonImport { name: String, pattern: bool },
     /// Python, with no import the source or the manifest names.
@@ -4135,6 +4143,17 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
             None => format!("net=HOST{methods}/PATH"),
         };
         out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone(), method: site.method }, at: Some(site.at) });
+    }
+    // Each file use whose path the source writes, when the caller set them (D-V2-185): named by its capability's mint where
+    // the source shows it — no grant lets a capability's own use leave its directory, so no wider line is proposed.
+    for site in &walk.files {
+        let key = if site.kind == "fs_read" { "fs.read" } else { "fs.write" };
+        let grant = match &site.cap {
+            Some(c) => format!("{key}={}", c.root),
+            None => format!("{key}=PATH"),
+        };
+        let ask = Ask::FileUse { call: site.call, path: site.path.clone(), cap: site.cap.clone() };
+        out.push(Requirement { grant, ask, at: Some(site.at) });
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
     // and the list named no secret at all.
@@ -5691,7 +5710,9 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let refs: Vec<&delulu_syntax::ast::Module> = modules.iter().collect();
     let unit_refs: Vec<&str> = units.iter().map(String::as_str).collect();
     let mut walk = requested_scopes(&refs);
-    walk.requests = package_request_sites(&program, &refs, &unit_refs);
+    let uses = package_use_sites(&program, &refs, &unit_refs);
+    walk.requests = uses.requests;
+    walk.files = uses.files;
     let (requirements, unsupported) = requirements(&report, &walk);
     Some(CheckedPackage { report, requirements, unsupported, map })
 }
@@ -5758,21 +5779,22 @@ fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
     emit_authority(&program, &name, dir, &pkg.source_map, (&modules, &units), opts)
 }
 
-/// A package's requests, each module's by its own node types, keyed by its unit as the check keyed them (node ids are per
-/// module) — what `--within` and `deploy plan` decide each request by (D-V2-181).
-fn package_request_sites(
+/// A package's requests and file uses, each module's by its own node types, keyed by its unit as the check keyed them (node
+/// ids are per module) — what `--within` and `deploy plan` decide each use by (D-V2-181, D-V2-185).
+fn package_use_sites(
     program: &delulu_check::Program,
     modules: &[&delulu_syntax::ast::Module],
     units: &[&str],
-) -> Vec<crate::within::RequestSite> {
-    modules
-        .iter()
-        .zip(units)
-        .flat_map(|(m, unit)| match program.node_types.get(*unit) {
-            Some(types) => crate::within::request_sites(m, types),
-            None => Vec::new(),
-        })
-        .collect()
+) -> crate::within::UseSites {
+    let mut all = crate::within::UseSites::default();
+    for (m, unit) in modules.iter().zip(units) {
+        if let Some(types) = program.node_types.get(*unit) {
+            let uses = crate::within::use_sites(m, types);
+            all.requests.extend(uses.requests);
+            all.files.extend(uses.files);
+        }
+    }
+    all
 }
 
 /// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
@@ -5807,7 +5829,7 @@ fn emit_authority(
     }
     // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
     if !opts.within.is_empty() || opts.within_file.is_some() {
-        return authority_within(map, modules, package_request_sites(program, modules, units), report, opts);
+        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));

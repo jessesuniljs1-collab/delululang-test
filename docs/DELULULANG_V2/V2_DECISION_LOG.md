@@ -4820,3 +4820,27 @@ does the stdlib's `Promise[T, e]`. A program that relied on the hole is refused 
 **Evidence.** `laundering` 17 passed (12 before). Mutants red: the type guard dropped (three witnesses), the closed-row
 guard dropped, actor generics flexible. Agent C's programs (`p2_09`…`p2_13`, `p3_01`…`p3_03`) are refused DL0401.
 Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## D-V2-185 — `--within` decides a file use at its call, where the source writes its path (B9) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B9, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; confirmed by the head chef on
+the current binary).** `rd.read_text("../forbidden/secret.txt")` on a capability minted for `./allowed` was *within* a
+boundary of `console` and `fs.read=./allowed`, and `run` with exactly those grants refused it (DL0904). `--within` judged
+each file capability at its mint only; the use's path, checked by `prim::resolve_in_anchor` at the call, was never read.
+It is the class D-V2-180 and D-V2-181 closed for secret sends and request paths: a verdict that skips a use-time check.
+
+**Decision.** A use whose path the source writes (`read_text`, `list_dir` and `narrow` on `Cap[FsRead]`, `write_text`
+and `append_text` on `Cap[FsWrite]`, by the checker's type at the call) is decided at its call:
+- **The source shows the capability's mint** (`root.fs_read("DIR")` through a `let`, with `narrow`s of literals; any
+  rebinding forgets it, SEND-REBIND-1's walk): the runtime mints and narrows it and asks `resolve_in_anchor`. A use it
+  refuses is *exceeds*, refused whatever the boundary grants, as a URL the egress client will not read is (D-V2-181).
+  The finding is labelled with the capability's mint line, since no grant lets a capability's use leave its directory.
+- **The source does not show the capability** (a parameter, a field): a relative path that never climbs above where it
+  starts is *within*; a spelling every call refuses (D-NE-29) is *exceeds*; any other path is *inconclusive*.
+- **A computed path** is decided by its capability's mint, as a computed URL is (D-V2-181). **The limit, recorded:** such
+  a use can still be refused at its call (DL0904) under a *within* verdict. It asks for nothing beyond its capability,
+  and the verdict does not judge a name the source does not show.
+
+`--grants` is unchanged. Witness: `within_cli` `a_file_use_is_decided_by_its_path_against_its_capability`, holding each
+verdict on a written path to what `run` does with the same grants. It was red before the fix, and four mutants turn it
+red: a refused use answered within, every path taken as staying below, narrowings skipped, and hostile spellings unchecked.

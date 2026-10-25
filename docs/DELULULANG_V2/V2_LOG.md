@@ -9204,3 +9204,9 @@ pairs, about 410,000 `judge` calls, all identical to the 3,510 needed. It now ju
 each distinct meet's once. Its domain is unchanged, nothing shrinks under `cfg!(miri)`, and two mutants still turn it
 red: a meet that unions the methods (line 741) and an order that ignores them (line 734). The `ci.yml` comment that
 said no run had confirmed the 240-minute budget now gives the measured times.
+
+## 2026-10-25 — the laptop: `--within` decides a file use at its call (B9, D-V2-185)
+
+See D-V2-185. `authority fsr.delulu --within console --within fs.read=./allowed` now answers *exceeds* at
+`fsr.delulu:14:10`, with the runtime's own reason (`path `../forbidden/secret.txt` escapes the granted scope (DL0904)`).
+`within_cli` 23 passed and `deploy_cli` 23 passed on the laptop. The full suite on three OSes is the pull request's CI run.

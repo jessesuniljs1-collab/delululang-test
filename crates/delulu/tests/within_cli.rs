@@ -1878,3 +1878,107 @@ fn a_secret_reassigned_in_a_branch_a_loop_or_a_closure_is_not_attributed_to_its_
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// B9 (the agent test campaign of 2026-10-24, the least-authority agent; D-V2-185): a file use is decided at its call against
+/// its capability's directory (`prim::resolve_in_anchor`), and `--within` decided only the mint. `rd.read_text("../forbidden/
+/// secret.txt")` on a capability minted for `allowed` was *within* a boundary of `fs.read=…/allowed`, while `run` with exactly
+/// those grants refuses it (DL0904). A use whose capability the source shows minted from a literal (through a `let`, and a
+/// `narrow` of a literal) is now decided by the runtime's own containment, at its call: *exceeds* where the run refuses it,
+/// whatever the boundary. A use whose capability the source does not show (a parameter) is *within* only for a relative path
+/// that never climbs above where it starts, and *inconclusive* otherwise. A computed path is decided by its capability's mint,
+/// as a computed URL is (D-V2-181). Each verdict on a path the source writes is held to what `run` does with the same grants.
+#[test]
+fn a_file_use_is_decided_by_its_path_against_its_capability() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-file-use-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["allowed/sub", "forbidden", "out"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::write(dir.join("allowed/ok.txt"), "hi").unwrap();
+    std::fs::write(dir.join("allowed/sub/s.txt"), "sub").unwrap();
+    std::fs::write(dir.join("forbidden/secret.txt"), "SECRET").unwrap();
+    let r = dir.to_string_lossy().replace('\\', "/");
+    let program = |name: &str, top: &str, prelude: &str, call: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n{top}\nfn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    \
+                 let rd = root.fs_read(\"{r}/allowed\")\n    let w = root.fs_write(\"{r}/out\")\n{prelude}    match {call} {{\n        \
+                 Ok(v) => out.println(\"DONE\")\n        Err(e) => out.println(\"ERR\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let boundary = |read: &str| vec!["console".to_string(), format!("fs.read={r}/{read}"), format!("fs.write={r}/out")];
+    // The verdict, and what `run` does with the same grants: the two must agree.
+    let decided = |f: &str, read: &str, want: &str, line: Option<u64>| {
+        let b = boundary(read);
+        let (code, v) = within(f, &b);
+        assert_eq!((code, v["result"].as_str()), (if want == "within" { 0 } else { 1 }, Some(want)), "{f}: {v:#}");
+        if let Some(line) = line {
+            assert_eq!(v["counterexample"]["at"]["line"].as_u64(), Some(line), "at the use's call: {v:#}");
+        }
+        let mut args: Vec<&str> = vec!["run", f];
+        for g in &b {
+            args.push("--grant");
+            args.push(g);
+        }
+        let o = delulu(&args);
+        let ran = out(&o);
+        match want {
+            "exceeds" => assert!(ran.contains("DL0904") && !ran.contains("DONE"), "the run refuses it: {ran}"),
+            "within" => assert!(o.status.success() && ran.contains("DONE"), "the run performs it: {ran}"),
+            _ => {}
+        }
+        v
+    };
+    // `main` opens on line 3 and binds `out`, `rd` and `w` on lines 4–6: a prelude is line 7, the use after it line 8.
+    let escape = program("escape", "", "", "rd.read_text(\"../forbidden/secret.txt\")");
+    let mut req = required(&escape);
+    req.sort();
+    assert_eq!(req, ["console", &format!("fs.read={r}/allowed"), &format!("fs.write={r}/out")], "the line to type is the mint's");
+    let v = decided(&escape, "allowed", "exceeds", Some(7));
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("escapes the granted scope"), "{v:#}");
+    assert_eq!(v["counterexample"]["grant"].as_str(), Some(format!("fs.read={r}/allowed").as_str()), "its capability's line");
+    decided(&escape, "", "exceeds", Some(7));
+    decided(&program("back_in", "", "", "rd.read_text(\"../allowed/ok.txt\")"), "allowed", "within", None);
+    let sub = "    let sub = rd.narrow(\"sub\")\n";
+    decided(&program("narrowed_up", "", sub, "sub.read_text(\"../ok.txt\")"), "allowed", "exceeds", Some(8));
+    decided(&program("narrowed_in", "", sub, "sub.read_text(\"s.txt\")"), "allowed", "within", None);
+    decided(&program("narrowed_back", "", sub, "sub.read_text(\"../sub/s.txt\")"), "allowed", "within", None);
+    let up = "    let up = rd.narrow(\"../forbidden\")\n";
+    decided(&program("narrow_out", "", up, "up.read_text(\"secret.txt\")"), "allowed", "exceeds", Some(7));
+    decided(&program("write_out", "", "", "w.write_text(\"../escaped.txt\", \"x\")"), "allowed", "exceeds", Some(7));
+    assert!(!dir.join("escaped.txt").exists(), "nothing was written outside");
+    decided(&program("write_in", "", "", "w.write_text(\"in.txt\", \"x\")"), "allowed", "within", None);
+    // A computed path asks for nothing beyond its capability, and the verdict does not judge what the source does not show:
+    // within, while the run's containment refuses the name it computes (the limit, recorded with D-V2-185).
+    let computed = program("computed", "", "", "rd.read_text(\"../forbidden/\" + \"secret.txt\")");
+    assert_eq!(within(&computed, &boundary("allowed")).1["result"], "within");
+    let ran = out(&delulu(&[
+        "run",
+        &computed,
+        "--grant",
+        "console",
+        "--grant",
+        &format!("fs.read={r}/allowed"),
+        "--grant",
+        &format!("fs.write={r}/out"),
+    ]));
+    assert!(ran.contains("DL0904"), "{ran}");
+
+    // A capability the source does not show: a parameter.
+    let load =
+        |path: &str| format!("\nfn fetch(d: Cap[FsRead]) -> Result[Str, IoErr] ! {{Read}} {{\n    d.read_text(\"{path}\")\n}}\n");
+    let v = decided(&program("param_up", &load("../forbidden/secret.txt"), "", "fetch(rd)"), "allowed", "inconclusive", Some(4));
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("climbs above"), "{v:#}");
+    decided(&program("param_in", &load("sub/s.txt"), "", "fetch(rd)"), "allowed", "within", None);
+    if cfg!(windows) {
+        // A spelling refused at every call, whatever the capability (D-NE-29).
+        let v = decided(&program("param_device", &load("CON"), "", "fetch(rd)"), "allowed", "exceeds", Some(4));
+        assert!(v["counterexample"]["reason"].as_str().unwrap().contains("reserved device name"), "{v:#}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

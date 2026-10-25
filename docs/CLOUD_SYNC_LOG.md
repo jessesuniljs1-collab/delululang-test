@@ -5613,3 +5613,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** `--within` and a use path escaping its capability (B9); the dependency-pin repair's TOML (A2);
   `--report-out` under `--sandbox` (A18); leases and `net.special` (B1).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-25 — `--within` decides a file use at its call (B9, D-V2-185) (made on the laptop)
+- Session: `https://claude.ai/code/session_01KUXP3DH8XB3jydsTC8AtuD`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/within-file-use` (on `laptop/miri-methods` `2ddd15c`, PR #69)   Pull request: opened with this commit
+- **What:** see D-V2-185 and V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/within.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/within_cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** land #69 after its `miri-slow` run (40165159856) is read; then this PR on green CI. A2 (pin repair TOML),
+  A18 (`--report-out` under `--sandbox`), B1 (leases and `net.special`).
+- Survey and doctor (after the last edit): in the commit message.

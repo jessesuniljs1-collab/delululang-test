@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `authority --within` decides a file use at its call, 2026-10-25
+
+- **Fixed (D-V2-185):** a file use whose path the source writes is decided at its call. A program reading
+  `../forbidden/secret.txt` through a capability for `./allowed` was *within* a boundary that `run` refused with DL0904;
+  it is now *exceeds* there, at that call.
+
 ## Unreleased — `% 0` faults alike on both engines; three stale doc passages, 2026-10-24
 
 - **Fixed: `x % 0` under `--engine wasm` reported DL0901 (integer overflow)**; it is DL0902 (division by zero), as
