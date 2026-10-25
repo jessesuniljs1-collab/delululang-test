@@ -930,6 +930,46 @@ fn a_delegation_narrows_a_host_to_its_paths_and_never_widens_one() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// B1 (the agent test campaign, D-V2-187): a node has no `net.special` dimension, so a run under a lease reaches no
+/// special-use address, and `grants delegate --net 127.0.0.1` was accepted without a word and then refused at every connect.
+/// It is still made — the tests above use such a node to witness the Guard on a leased send — and `delegate` says now, by
+/// every spelling a `net` entry takes, that its runs will be refused at the connect and which grant reaches the host;
+/// `certify`, the other place a node's `net` is written, says the same. The control: a public host gets no note.
+#[test]
+fn a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dbsu-{}-{}", std::process::id(), t % 1_000_000_000));
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let key = cwd.join("ground.key").to_string_lossy().to_string();
+    let subject = stdout(&delulu_in(&cwd, &state, &["grants", "pubkey", "--key", &key])).trim().to_string();
+    assert_eq!(subject.len(), 64, "a public key: {subject}");
+    for (n, entry) in ["127.0.0.1", "localhost", "10.0.0.7/health/**", "[::1]:GET,POST"].into_iter().enumerate() {
+        let delegated = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", entry, "--json"]);
+        let out = format!("c{n}.dlcert");
+        let certify =
+            ["grants", "certify", "--key", &key, "--subject", &subject, "--ttl", "20m", "--effects", "Net", "--net", entry];
+        let certified = delulu_in(&cwd, &state, &[&certify[..], &["--out", &out]].concat());
+        for (verb, o) in [("delegate", &delegated), ("certify", &certified)] {
+            assert!(o.status.success(), "`grants {verb} --net {entry}` is made: {}{}", stdout(o), stderr(o));
+            let said = stderr(o);
+            assert!(
+                said.contains("special-use") && said.contains(&format!("--grant net.special={entry}")),
+                "{verb} {entry}: {said}"
+            );
+        }
+    }
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", "api.example.invalid", "--json"]);
+    assert!(o.status.success(), "the control: {}{}", stdout(&o), stderr(&o));
+    assert!(!stderr(&o).contains("special-use"), "a public host gets no note: {}", stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// MAP-HANDLE-1 (routine run 24): under the daemon a run's secret is a broker HANDLE, with no bytes in the program's process —
 /// and `Secret.map`'s function runs in that process. It was handed the empty string, and `s.map(f).expose(d)` printed `f("")`
 /// (here `!`) where embedded custody prints `f(bytes)` (`hunter2!`): a fabricated value, then exposed with no broker gate and no

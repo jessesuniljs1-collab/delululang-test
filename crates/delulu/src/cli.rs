@@ -7868,6 +7868,21 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     0
 }
 
+/// B1 (D-V2-187): the note `grants delegate` and `grants certify` print for a `--net` entry whose host is a special-use
+/// address or name. A node has no `net.special` dimension, so a run under it reaches no special-use address
+/// (`grants_from_lease`): the custody and the Guard decide its uses, and the egress client then refuses every connect.
+/// Such a node is made — it still drives every decision before the connect — and the operator is told so, here, rather
+/// than at the first refused connect.
+fn special_use_net_note(entry: &str, what: &str) -> Option<String> {
+    let host = delulu_broker::netscope::host_of(entry);
+    let class = delulu_runtime::netclass::special_use_class(host)?;
+    Some(format!(
+        "note: `{host}` (`--net {entry}`) is a special-use address ({class}), and {what} cannot carry `net.special` — a \
+         node has no such dimension yet — so a run under it is refused when it connects there (`special-use`). To reach \
+         it, grant it on the run itself: `--grant net.special={entry}`"
+    ))
+}
+
 /// `--secret NAME` as `grants delegate` and `grants certify` read it: a grant NAMES a secret the broker holds and never
 /// carries its value. `NAME=VALUE` was accepted once and stored as a name no program could ever mint (agent pass 2).
 fn secret_name_flag(v: &str, who: &str) -> Result<(), String> {
@@ -7948,6 +7963,9 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             if let Err(why) = delulu_broker::netscope::check_entry(&v) {
                 eprintln!("error: `--net {v}` is refused: {why}");
                 return 2;
+            }
+            if let Some(note) = special_use_net_note(&v, "this certificate") {
+                eprintln!("{note}");
             }
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
@@ -8493,6 +8511,9 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             if let Err(why) = delulu_broker::netscope::check_entry(&v) {
                 eprintln!("error: `--net {v}` is refused: {why}");
                 return 2;
+            }
+            if let Some(note) = special_use_net_note(&v, "this delegation") {
+                eprintln!("{note}");
             }
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {

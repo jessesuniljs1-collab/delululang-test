@@ -692,7 +692,9 @@ overstate it downstream:
 - **The network client is `GET` over verified HTTPS, host-side, and nothing more.** `http.get` is
   performed by the runtime (for a `--sandbox` guest, by the HOST — the guest has no socket and no
   resolver): allowlisted host, name resolved once and pinned, special-use addresses refused unless the
-  host was granted with `--grant net.special=HOST` (never plain `net=`), every redirect re-checked,
+  host was granted with `--grant net.special=HOST` (never plain `net=`, and not yet under a lease: a broker node has no
+  `net.special` dimension, so a leased run is refused at that connect, which `grants delegate` and `certify` say when the
+  grant is written — D-V2-187), every redirect re-checked,
   a grant's path pattern held on every hop (`--grant net=api.example.com/v1/**`, P9-05 (a): `*` one
   segment, `**` the rest; the program asks for the same scope, `root.http(["api.example.com/v1/**"])`;
   a path outside it, or one a server could read another way — `..`, `//`, `;`, an escaped `/` — is
