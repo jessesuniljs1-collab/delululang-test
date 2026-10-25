@@ -1916,6 +1916,9 @@ struct TestCeiling {
     /// Given with `--test-authority` (D-NE-17) rather than read from a manifest: a refusal names
     /// the ceiling that actually applied.
     from_flag: bool,
+    /// No package encloses the file and no flag was given (A22): the ceiling is empty because nothing set one, and a
+    /// refusal says that and names the flag, not a `delulu.toml` that does not exist.
+    no_package: bool,
 }
 
 /// Why `row` is wider than `ceiling`, or `None` when it fits (D-NE-17). An effect must be one the
@@ -1939,7 +1942,7 @@ fn test_ceiling_excess(row: &TestCeiling, ceiling: &TestCeiling) -> Option<Strin
 }
 
 fn test_ceiling(dir: &std::path::Path) -> TestCeiling {
-    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false, no_package: false };
     let Ok(text) = std::fs::read_to_string(dir.join("delulu.toml")) else { return ceiling };
     let mut in_section = false;
     for raw in text.lines() {
@@ -2060,19 +2063,26 @@ fn run_module_tests(
 
         // DL1703: the test's declared row must fit the package ceiling.
         if let Some(excess) = declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e)) {
+            // A22 (the agent test campaign): a file no package encloses has no `delulu.toml` to widen; its ceiling is the
+            // flag's or none, and the refusal says so.
+            let (whose, label) = if ceiling.from_flag {
+                ("the --test-authority ceiling", "narrow the row, or widen --test-authority — a real review decision".to_string())
+            } else if ceiling.no_package {
+                (
+                    "no package encloses this file, so its tests hold no effect unless --test-authority names one; the ceiling",
+                    format!("narrow the row, or pass --test-authority 'effects = [\"{excess}\"]' — a real review decision"),
+                )
+            } else {
+                (
+                    "the package [test-authority] ceiling",
+                    "narrow the row, or widen delulu.toml's [test-authority] — a real review decision".to_string(),
+                )
+            };
             let d = Diagnostic::error(
                 "DL1703",
-                format!(
-                    "test \"{}\" declares effect `{excess}` but {} allows only {:?}",
-                    t.name,
-                    if ceiling.from_flag { "the --test-authority ceiling" } else { "the package [test-authority] ceiling" },
-                    ceiling.effects
-                ),
+                format!("test \"{}\" declares effect `{excess}` but {whose} allows only {:?}", t.name, ceiling.effects),
             )
-            .with_span(
-                delulu_diag::Span::new(id, name_span.start, name_span.end),
-                "narrow the row, or widen delulu.toml's [test-authority] — a real review decision",
-            );
+            .with_span(delulu_diag::Span::new(id, name_span.start, name_span.end), label);
             if st.json {
                 st.diags_json.extend(diagnostics_json(std::slice::from_ref(&d), map));
             } else {
@@ -2291,7 +2301,7 @@ fn cmd_test(rest: &[String]) -> i32 {
         }
     }
     let ceiling = test_ceiling(std::path::Path::new("."));
-    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false, no_package: true };
 
     // D-NE-17 (the owner, 2026-09-18): `--test-authority <row>` is a test ceiling given on the
     // command line, in the manifest's own `[test-authority]` syntax. Inside a package it may only
@@ -2302,7 +2312,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     let flag_ceiling = if authority_rows.is_empty() {
         None
     } else {
-        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true };
+        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true, no_package: false };
         for row in &authority_rows {
             if let Err(e) = test_authority_line(row, &mut c) {
                 eprintln!("error: bad --test-authority: {e}");
