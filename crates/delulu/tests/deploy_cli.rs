@@ -353,8 +353,12 @@ fn a_secret_is_bounded_by_name_and_a_special_use_host_is_no_boundary() {
     let dir = tmp("secret");
     let svc = dir.join("keyed");
     std::fs::create_dir_all(svc.join("src")).unwrap();
-    std::fs::write(svc.join("delulu.toml"), "[package]\nname = \"keyed\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n")
-        .unwrap();
+    // The package declares the secret it reads (DL1009), so it builds: what is judged here is the profile.
+    std::fs::write(
+        svc.join("delulu.toml"),
+        "[package]\nname = \"keyed\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\nsecrets = [\"API_KEY\"]\n",
+    )
+    .unwrap();
     std::fs::write(svc.join("src/main.delulu"), "module keyed\nfn main(root: Root) {\n  let k = root.secret(\"API_KEY\")\n}\n")
         .unwrap();
     let svc_arg = format!("keyed={}", svc.to_string_lossy());
@@ -381,7 +385,7 @@ fn a_secret_a_service_sends_is_bounded_by_its_audience() {
     std::fs::create_dir_all(svc.join("src")).unwrap();
     std::fs::write(
         svc.join("delulu.toml"),
-        "[package]\nname = \"sender\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\n",
+        "[package]\nname = \"sender\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\nsecrets = [\"API_TOKEN\"]\n",
     )
     .unwrap();
     std::fs::write(
