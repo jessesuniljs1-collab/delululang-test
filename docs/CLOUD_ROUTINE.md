@@ -148,12 +148,13 @@ ran. The first run after 2026-10-23 records that in its sync-log entry, with the
 first:** the session's environment held `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh`, and the setup script had
 run — the 1.96.1 toolchain installed at 09:37:57 UTC, before the session's first command, and 356 `.crate`
 archives fetched, Windows' among them.
-**2026-10-26 — what `CLAUDE_EFFORT` means.** The owner still saw *medium*. But Claude Code itself sets `CLAUDE_EFFORT` in
+**2026-10-26 — what `CLAUDE_EFFORT` means.** The owner still saw *medium*. Claude Code itself sets `CLAUDE_EFFORT` in
 every Bash command's environment to *"the effort level in effect when the subprocess starts"* (the environment-variable
-reference, read 2026-10-26), so run 6's `CLAUDE_EFFORT=xhigh` is the run's own word that it ran at `xhigh`. The routine's
-stored configuration has no effort field at all (`session_request.config` lists every field, empty ones included, and
-none is an effort), so whatever a page shows for the routine is not read from the run. Step 0 now records the level from
-the run itself — `CLAUDE_EFFORT` and the `effort` field the transcript writes with every reply — and a **Run now** with
+reference, read 2026-10-26), and run 6 read `CLAUDE_EFFORT=xhigh`. The routine's stored configuration has no effort field
+(`session_request.config` lists every field, empty ones included, and none is an effort), so the routine API cannot set
+one. Every lever a repository and an owner hold is already set. The owner, 2026-10-26: *"Leave it for now. Only
+anthropic can do something about it I guess."* So it is left, and step 0 only records the level from the run itself —
+`CLAUDE_EFFORT` and the `effort` field the transcript writes with every reply — at no cost. A **Run now** with
 `CHECK ONLY` does just that.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
@@ -536,7 +537,8 @@ in *Open / next* as pending with its id; no background job left (`jobs`; stop a 
 one short final message — the milestone, its commits, the CI runs and their state, *Open / next* — and start nothing
 after it.
 
-**Branches** (2026-10-26: `origin` held 91, of which 77 were already in `master`'s history — removed, every name and tip in
+**Branches** (2026-10-26: `origin` held 91; 84 were removed — 80 already in `master`'s history, one in `launch/2.0.0`'s,
+three superseded ones kept reachable on `archive/superseded-2026-10-26` — every name and tip in
 `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`). A cloud session makes a `claude/…` branch on every fire, and the laptop
 one per pull request. So at step 1, after landing what came in, delete from `origin` each `claude/*` and `laptop/*` branch
 whose tip is in `master`'s history — checked with `git merge-base --is-ancestor origin/BRANCH origin/master` immediately
