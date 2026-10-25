@@ -1,6 +1,0 @@
-module agenttool_base
-
-// agent-tool server: this layer formats a tool result
-pub fn agenttool_base_entry(root: Root, x: Str) -> Str {
-  x.trim()
-}

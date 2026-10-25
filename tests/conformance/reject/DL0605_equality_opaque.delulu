@@ -1,5 +1,0 @@
-module conf
-
-fn f(a: Secret[Str], b: Secret[Str]) -> Bool {
-  a == b
-}

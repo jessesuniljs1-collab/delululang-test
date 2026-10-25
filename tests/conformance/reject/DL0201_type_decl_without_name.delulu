@@ -1,4 +1,0 @@
-// anchors: ref.grammar.type_decl
-module conf
-
-type = { a: Int }

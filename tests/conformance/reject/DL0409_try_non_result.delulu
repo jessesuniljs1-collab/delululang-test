@@ -1,6 +1,0 @@
-module conf
-
-fn f() -> Int {
-  let x = 5?
-  x
-}

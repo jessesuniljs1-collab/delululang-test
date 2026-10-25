@@ -1,7 +1,0 @@
-[package]
-name = "agenttool_base"
-version = "0.1.0"
-kind = "lib"
-
-[authority]
-effects = []

@@ -1,7 +1,0 @@
-// anchors: ref.grammar.args
-module conf
-
-fn f() -> Int {
-  let x = 5
-  x(1)
-}

@@ -1,6 +1,0 @@
-// anchors: ref.grammar.generics
-module conf
-
-// `e` is used as both a type (parameter `x: e`) and an effect row (`! e`).
-fn f[e](x: e) -> Unit ! e {
-}

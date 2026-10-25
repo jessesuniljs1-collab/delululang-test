@@ -1,6 +1,0 @@
-// anchors: ref.prim.list.find
-module conf
-
-fn f(xs: List[Int]) -> Option[Int] {
-    xs.find(42)
-}

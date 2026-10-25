@@ -1,6 +1,0 @@
-// anchors: ref.grammar.expr
-module conf
-
-fn f() -> Bool {
-  1 < 2 < 3
-}

@@ -1,6 +1,0 @@
-// anchors: ref.prim.list.join
-module conf
-
-fn f(xs: List[Int]) -> Str {
-    xs.join(", ")
-}

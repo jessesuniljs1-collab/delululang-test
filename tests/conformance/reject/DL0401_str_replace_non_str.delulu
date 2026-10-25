@@ -1,6 +1,0 @@
-// anchors: ref.prim.str.replace
-module conf
-
-fn f(s: Str) -> Str {
-    s.replace(1, "b")
-}

@@ -1,6 +1,0 @@
-module hello
-
-fn main(root: Root) ! {Write} {
-    let out = root.console()
-    out.println("Hello, Delulu")
-}

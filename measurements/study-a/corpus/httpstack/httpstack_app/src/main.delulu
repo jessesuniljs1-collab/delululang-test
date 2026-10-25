@@ -1,7 +1,0 @@
-module httpstack_app
-import httpstack_api
-
-fn main(root: Root) ! {Write} {
-  let out = root.console()
-  out.println(httpstack_api_entry(root, "input"))
-}

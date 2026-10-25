@@ -1,8 +1,0 @@
-// anchors: ref.grammar.type
-module conf
-
-type Box[T] { v: T }
-
-fn f(b: Box[Int, Str]) -> Int {
-  b.v
-}

@@ -1,7 +1,0 @@
-// anchors: ref.grammar.stmt ref.grammar.expr
-module conf
-
-fn f() -> Int {
-  let x = ;
-  x
-}

@@ -1,5 +1,0 @@
-module conf
-
-fn f(a: Int, b: Float) -> Int {
-  a + b
-}

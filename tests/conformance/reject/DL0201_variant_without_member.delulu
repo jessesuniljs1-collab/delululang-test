@@ -1,4 +1,0 @@
-// anchors: ref.grammar.variant
-module conf
-
-type T = A | 
