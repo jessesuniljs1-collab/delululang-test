@@ -7356,6 +7356,29 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         }
     };
     let d = &report["diagnostics"][0];
+    // A19 (the agent test campaign, D-V2-188): a request the egress client refused for a special-use address is refused
+    // with no diagnostic — the program is handed `Err` and may go on — and the report says so in `egress`. A grant answers
+    // it (`net.special=`, which a node carries since RW 4.86), so it is proposed like a refused call's requirement.
+    if d["code"].as_str().is_none() {
+        let refused = report["egress"]["records"].as_array().and_then(|rs| {
+            rs.iter().find(|r| r["delivered"] == false && r["reason"] == "special-use").and_then(|r| {
+                let url = r["url"].as_str()?;
+                delulu_runtime::egress::parse_target(url).ok().map(|t| (url.to_string(), t.host, r["explain"].clone()))
+            })
+        });
+        if let Some((url, host, explain)) = refused {
+            let lines = match special_use_asks(node.as_deref(), &host, state_dir, json) {
+                Ok(l) => l,
+                Err(code) => return code,
+            };
+            let refusal = json!({ "code": "special-use", "message": explain, "url": url, "at": Json::Null });
+            let reason = format!(
+                "the request to `{url}` was refused because `{host}` is a special-use address, which only a `net.special=` grant \
+                 reaches"
+            );
+            return answer(refusal, None, None, &lines, &reason);
+        }
+    }
     let Some(code) = d["code"].as_str() else {
         return answer(Json::Null, None, None, &[], "the report records no refusal — the run was not refused at a call");
     };
@@ -7451,6 +7474,30 @@ enum Filing {
     NotAsked,
     Filed { id: String, deduped: bool },
     NotFiled(String),
+}
+
+/// A19 (D-V2-188): what a special-use egress refusal asks for — `net.special=` for each `net` entry the run's node grants
+/// for that host, read from the broker (the entries the program's capability was minted within, now with the reach), or
+/// the host alone where no node is named or the node names none for it.
+fn special_use_asks(node: Option<&str>, host: &str, state_dir: &std::path::Path, json: bool) -> Result<Vec<String>, i32> {
+    let mut lines = Vec::new();
+    if let Some(n) = node {
+        match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Inspect { node: n.to_string() }, json)? {
+            crate::broker_ipc::Response::Inspected { node: info } => {
+                for e in info.net.iter().filter(|e| delulu_broker::netscope::host_of(e) == host) {
+                    lines.push(format!("net.special={e}"));
+                }
+            }
+            other => {
+                eprintln!("error: unexpected inspect response for `{n}`: {other:?}");
+                return Err(2);
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push(format!("net.special={host}"));
+    }
+    Ok(lines)
 }
 
 /// File `lines` with the broker as `node`'s proposal (P9-03 step 3, D-V2-125): each line is converted as a lease's grant is

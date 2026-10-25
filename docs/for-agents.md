@@ -402,8 +402,10 @@ path-scoped entry *exceeds*, named at the request by the narrowest line that tak
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the
 runtime or the program worded; `proposes` is `false` (exit 1) with a `reason` when there is none — a scope the source
-computes, a refusal a grant does not answer, a program changed since the run. It grants nothing: whoever holds the
-authority decides, and `grants diff` tells them what the proposal adds.
+computes, a refusal a grant does not answer, a program changed since the run. A request the egress client refused
+because its host is a special-use address leaves no refused call (the program got `Err`), and is proposed from the report's
+`egress` record: `net.special=` for the run's node's own entry for that host, or the host alone (A19, D-V2-188). It grants
+nothing: whoever holds the authority decides, and `grants diff` tells them what the proposal adds.
 
 **To ask for it, file it** (D-V2-125): a `run --lease` run prints the node it holds; `delulu grants propose FILE --node g_ID
 --json` files the proposal with the broker as that node's request — `filed.id` is its `pp_` id. Nothing is granted until an
