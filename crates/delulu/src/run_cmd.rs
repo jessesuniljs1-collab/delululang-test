@@ -83,9 +83,11 @@ pub(crate) fn load_package_flattened(
     }
     let program = delulu_check::deps::check_workspace(&ws);
 
-    // The authoritative gate.
+    // The authoritative gate, the supply chain's included (RUN-PIN-1): code runs here, so a dependency its pin refuses,
+    // or a package beyond its own manifest, is refused here as `build` refuses it.
     let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
     diags.extend(program.diagnostics.iter().cloned());
+    diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
     if errors(&diags) > 0 {
         print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
         return Err(1);
@@ -158,7 +160,8 @@ pub(crate) fn flattened_package(dir: &str) -> Option<String> {
         return None;
     }
     let program = delulu_check::deps::check_workspace(&ws);
-    if errors(&ws.diagnostics) + errors(&program.diagnostics) > 0 {
+    let gate = delulu_check::deps::supply_chain_gate(&ws, &program);
+    if errors(&ws.diagnostics) + errors(&program.diagnostics) + errors(&gate) > 0 {
         return None;
     }
     let entry = program.entry_module.clone().or_else(|| ws.root_entry_module())?;

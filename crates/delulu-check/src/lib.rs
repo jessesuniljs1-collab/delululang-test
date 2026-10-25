@@ -32,8 +32,8 @@ pub mod unify;
 pub use authority::{authority_report, ScopeInfo};
 pub use check::{CheckResult, FnFacts};
 pub use deps::{
-    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, PackageAuthority, ResolvedPackage,
-    Workspace,
+    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, supply_chain_gate, PackageAuthority,
+    ResolvedPackage, Workspace,
 };
 pub use dir::{deserialize as dir_deserialize, serialize as dir_serialize, verify as dir_verify, Dir, DirError};
 pub use lockfile::{

@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use delulu_atlas::{Atlas, BuildInput, ModuleView, PackageView};
 use delulu_check::lockfile::api_row_hash;
 use delulu_check::{
-    authority_report, authority_widened, check_pins, check_program, check_self_authority, check_source, check_workspace,
-    compute_lockfile, enforce_semver_law, load_package, program_authority, resolve_workspace, verify_locked, Checked, Effect,
-    Lockfile, Program, Row, Workspace,
+    authority_report, authority_widened, check_program, check_source, check_workspace, compute_lockfile, enforce_semver_law,
+    load_package, program_authority, resolve_workspace, supply_chain_gate, verify_locked, Checked, Effect, Lockfile, Program,
+    Row, Workspace,
 };
 use delulu_diag::{
     color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role, SourceMap, Theme,
@@ -2397,7 +2397,11 @@ fn cmd_test(rest: &[String]) -> i32 {
         let label = dir.display().to_string();
         let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
         if !ws.modules.is_empty() {
-            diags.extend(delulu_check::deps::check_workspace(&ws).diagnostics);
+            // A package's tests run its dependencies' code, so the supply-chain gate holds here as it does for `run`
+            // (RUN-PIN-1).
+            let program = delulu_check::deps::check_workspace(&ws);
+            diags.extend(program.diagnostics.iter().cloned());
+            diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
         }
         if errors(&diags) > 0 {
             if st.json {
@@ -5327,8 +5331,7 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     let mut diags: Vec<Diagnostic> = Vec::new();
     diags.extend(ws.diagnostics.iter().cloned());
     diags.extend(program.diagnostics.iter().cloned());
-    diags.extend(check_self_authority(&ws, &program));
-    diags.extend(check_pins(&ws, &program));
+    diags.extend(supply_chain_gate(&ws, &program));
 
     if locked {
         match std::fs::read_to_string(std::path::Path::new(dir).join("delulu.lock")) {
@@ -5617,8 +5620,7 @@ fn cmd_lock(rest: &[String]) -> i32 {
     let mut diags: Vec<Diagnostic> = Vec::new();
     diags.extend(ws.diagnostics.iter().cloned());
     diags.extend(program.diagnostics.iter().cloned());
-    diags.extend(check_self_authority(&ws, &program));
-    diags.extend(check_pins(&ws, &program));
+    diags.extend(supply_chain_gate(&ws, &program));
     if !ws.git_deferred.is_empty() {
         diags.push(Diagnostic::error(
             "DL1007",
@@ -5684,7 +5686,9 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let (program, name, map, modules, units) = if path.join("delulu.toml").is_file() {
         let ws = resolve_workspace(dir);
         let program = check_workspace(&ws);
-        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 {
+        // `deploy plan`, `publish` and `add` plan or advertise a package as it would run: the supply-chain gate too
+        // (RUN-PIN-1).
+        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 || errors(&supply_chain_gate(&ws, &program)) > 0 {
             return None;
         }
         let name = program

@@ -115,6 +115,88 @@ fn missing_pin_is_dl1001_with_widening_repair() {
     assert_eq!(o.status.code(), Some(1));
 }
 
+/// RUN-PIN-1 (2026-10-25): the supply-chain gate held only where nothing runs. `build`, `check` and `lock` refused a
+/// dependency that breaks its pin (DL1001), while `run` — on every engine and in the sandbox — ran its code, `build
+/// --target wasm` wrote a `.dwx` that ran it, `test` ran the package's tests, `deploy plan` planned it and `sandbox
+/// policy` previewed its run: their loaders checked types and never the pins. Each route here must refuse before any code runs, whether the pin is broken or
+/// missing; the control, pinned to what the dependency does, must go through every route.
+#[test]
+fn no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin() {
+    let ws = scratch("run_pin");
+    let state = ws.join("state");
+    let go = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_STATE_DIR", &state)
+            .output()
+            .expect("failed to run delulu")
+    };
+    // `lib` writes and declares that it does, so DL1009 holds and the consumer's pin is the only gate in question. Its
+    // words are joined at run time, so a diagnostic quoting its source never prints them.
+    write(&ws, "lib/delulu.toml", "[package]\nname=\"lib\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[\"Write\"]\n");
+    write(
+        &ws,
+        "lib/src/lib.delulu",
+        "module lib\npub fn shout(c: Cap[Console]) ! {Write} { c.println(\"the dependency \" + \"wrote\") }\n",
+    );
+    write(
+        &ws,
+        "app/src/main.delulu",
+        "module app\nimport lib\nfn main(root: Root) ! {Write} { shout(root.console()) }\ntest \"pure\" { assert_eq(1, 1) }\n",
+    );
+    write(&ws, "env.toml", "[authority]\neffects = [\"Write\"]\n");
+    let app = ws.join("app");
+    let (a, env) = (app.to_str().unwrap(), ws.join("env.toml"));
+    let svc = format!("app={a}");
+    let routes: [&[&str]; 7] = [
+        &["run", a, "--grant", "console"],
+        &["run", a, "--grant", "console", "--sandbox"],
+        &["run", a, "--grant", "console", "--engine", "wasm"],
+        &["build", a, "--target", "wasm"],
+        &["test", a],
+        &["deploy", "plan", "--service", &svc, "--env", env.to_str().unwrap()],
+        // The preview of the sandboxed run asks what `run` would hand its guest (`run_cmd::flattened_package`).
+        &["sandbox", "policy", a],
+    ];
+    let manifest = |pin: &str| {
+        let _ = std::fs::remove_dir_all(app.join("target"));
+        write(
+            &ws,
+            "app/delulu.toml",
+            &format!(
+                "[package]\nname=\"app\"\nversion=\"0.1.0\"\nkind=\"bin\"\n[authority]\neffects=[\"Write\"]\n\
+                 [dependencies]\nlib = {{ path = \"../lib\"{pin} }}\n"
+            ),
+        );
+    };
+    for (tag, pin) in [("pinned pure", ", authority = { effects = [] }"), ("no pin", "")] {
+        manifest(pin);
+        for args in routes {
+            let o = go(args);
+            let all = format!("{}{}", stdout(&o), String::from_utf8_lossy(&o.stderr));
+            let (code, why) = match args[0] {
+                "deploy" => (1, "does not check cleanly"),
+                "sandbox" => (2, "is not a package `delulu run` would run"),
+                _ => (1, "DL1001"),
+            };
+            assert_eq!(o.status.code(), Some(code), "{tag}: `{}` must refuse: {all}", args.join(" "));
+            assert!(all.contains(why), "{tag}: `{}` names why: {all}", args.join(" "));
+            assert!(!all.contains("the dependency wrote"), "{tag}: `{}` ran the dependency: {all}", args.join(" "));
+        }
+        assert!(!app.join("target").join("app").join("app.dwx").exists(), "{tag}: no artifact was written");
+    }
+    manifest(", authority = { effects = [\"Write\"] }");
+    for args in routes {
+        let o = go(args);
+        let all = format!("{}{}", stdout(&o), String::from_utf8_lossy(&o.stderr));
+        assert_eq!(o.status.code(), Some(0), "the control: `{}`: {all}", args.join(" "));
+        if args[0] == "run" {
+            assert!(all.contains("the dependency wrote"), "the control ran: {all}");
+        }
+    }
+}
+
 // ===== the lockfile =============================================================================
 
 fn clean_two_package_ws(name: &str) -> PathBuf {

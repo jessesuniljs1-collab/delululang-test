@@ -856,6 +856,18 @@ fn compute_exports_gi(
     ex
 }
 
+// ===== the supply-chain gate =====================================================================
+
+/// The supply-chain gate (§3.2, §A.3): every package within its own manifest (DL1009) and every dependency within its
+/// consumer's pin (DL1001). Every route that runs, ships or plans a package's code applies it — `build`, `check`, `lock`,
+/// `run` on every engine and in the sandbox, `build --target wasm`, `test`, `deploy plan`, `publish` and `add`. Until
+/// 2026-10-25 only the first three did, so the commonest command, `run`, ran a dependency its pin refuses (RUN-PIN-1).
+pub fn supply_chain_gate(ws: &Workspace, program: &Program) -> Vec<Diagnostic> {
+    let mut diags = check_self_authority(ws, program);
+    diags.extend(check_pins(ws, program));
+    diags
+}
+
 // ===== DL1001: dependency authority pin check ===================================================
 
 /// For every dependency edge, verify the dependency's computed authority is within its pin
