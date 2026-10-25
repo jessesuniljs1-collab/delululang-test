@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `% 0` faults alike on both engines; three stale doc passages, 2026-10-24
+
+- **Fixed: `x % 0` under `--engine wasm` reported DL0901 (integer overflow)**; it is DL0902 (division by zero), as
+  on the interpreter (RW 4.83). `INT_MIN % -1` stays DL0901 on both.
+- **Docs:** `for-agents.md` said `--lease` and `--broker` are refused under `--sandbox`; they apply there (RW 4.20),
+  and each use the guest asks of the host is judged by the lease's node. `GETTING_STARTED.md` and `for-agents.md`
+  said a secret-carrying request is "not yet" under `--engine wasm`; it runs there (D-V2-174, and `post_with_secret`
+  since 2026-10-23).
+
 ## Unreleased — a top-level constant's value is checked, 2026-10-24
 
 - **Fixed: `let NAME[: T] = value` at module level was never checked** (CONST-UNCHECKED-1, RW 4.82). Its value is

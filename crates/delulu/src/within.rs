@@ -382,7 +382,84 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
                 )
             }
         }
+        Ask::FileUse { call, path, cap, .. } => file_use(call, path, cap.as_ref(), root, span),
     }
+}
+
+/// D-V2-185 (B9): a file use whose path the source writes, decided as its call decides it. Through a capability the source
+/// shows minted from a literal, the runtime mints it (and narrows it) and asks `prim::resolve_in_anchor` of its directory: a
+/// use it refuses is refused whatever the boundary grants. Through one the source does not show, a path that leaves no
+/// directory it could start in is within, a spelling every call refuses is not, and any other is decided by that capability.
+fn file_use(call: &str, path: &str, cap: Option<&FsHeld>, root: &RootVal, span: Span) -> (Outcome, String) {
+    let what = match call {
+        "read_text" => "read",
+        "list_dir" => "listing",
+        "narrow" => "narrowing",
+        _ => "write",
+    };
+    let Some(cap) = cap else {
+        if let Some(why) = delulu_runtime::prim::hostile_path(path, false) {
+            return (
+                Outcome::Exceeds,
+                format!("the {what} of `{path}` is refused at its call whatever the boundary grants: {why} (DL0904)"),
+            );
+        }
+        if stays_below(path) {
+            return (Outcome::Within, String::new());
+        }
+        return (
+            Outcome::Inconclusive,
+            format!(
+                "`{path}` climbs above the directory it starts in, or names one of its own, and the source does not show which \
+                 capability this {what} goes through: whether it stays inside that capability is decided when the program runs"
+            ),
+        );
+    };
+    use delulu_runtime::value::CapScope;
+    // A mint, or a narrowing, that the run refuses is its own requirement's finding, at its own call.
+    let Ok(Value::Cap(mut capv)) = delulu_runtime::prim::call_root_method(root, cap.mint, &[Value::str(cap.root.clone())], span)
+    else {
+        return (Outcome::Within, String::new());
+    };
+    for sub in &cap.narrows {
+        match delulu_runtime::prim::call_cap_method(&capv, "narrow", &[Value::str(sub.clone())], span) {
+            Ok(Value::Cap(next)) => capv = next,
+            _ => return (Outcome::Within, String::new()),
+        }
+    }
+    let CapScope::Fs { root: dir, anchor, .. } = &capv.scope else {
+        return (Outcome::Inconclusive, format!("the capability for `{}` holds no directory this reading can judge", cap.root));
+    };
+    match delulu_runtime::prim::resolve_in_anchor(dir, anchor, path, span) {
+        Ok(_) => (Outcome::Within, String::new()),
+        Err(f) => (
+            Outcome::Exceeds,
+            format!(
+                "the {what} of `{path}` through the capability for `{}` is refused at its call whatever the boundary grants: {} \
+                 ({})",
+                cap.root, f.message, f.code
+            ),
+        ),
+    }
+}
+
+/// A relative path that never climbs above the directory it starts in: inside every directory, as the runtime's lexical
+/// check reads it (`prim::resolve_norm`).
+fn stays_below(path: &str) -> bool {
+    use std::path::Component;
+    let mut depth = 0usize;
+    for c in std::path::Path::new(path).components() {
+        match c {
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => {}
+            Component::ParentDir => match depth.checked_sub(1) {
+                Some(d) => depth = d,
+                None => return false,
+            },
+            Component::RootDir | Component::Prefix(_) => return false,
+        }
+    }
+    true
 }
 
 /// Whether an audience names the origin `to` (`host:port`, the egress client's spelling), compared as the egress client
@@ -734,6 +811,7 @@ pub(crate) fn secret_destinations(modules: &[&delulu_syntax::ast::Module], map: 
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        files: Vec::new(),
         mutated: Default::default(),
         consts: BTreeMap::new(),
     };
@@ -759,11 +837,45 @@ pub(crate) struct RequestSite {
     pub(crate) at: Span,
 }
 
-/// [`request_destinations`] as data, for the requirement list (D-V2-181): what `--within` decides each request by.
-pub(crate) fn request_sites(
+/// A file capability as the source shows it minted (D-V2-185): `root.fs_read("DIR")` or `root.fs_write("DIR")` with the literal
+/// it writes, and each `narrow` of a literal after it, in order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FsHeld {
+    /// `fs_read` or `fs_write`: the `Root` method that mints it.
+    pub(crate) mint: &'static str,
+    pub(crate) root: String,
+    pub(crate) narrows: Vec<String>,
+}
+
+/// One file use whose path the source writes (D-V2-185): `read_text`, `list_dir` or `narrow` on a `Cap[FsRead]`, `write_text` or
+/// `append_text` on a `Cap[FsWrite]`, by the checker's type at its call; the capability where the source shows its mint (`None`:
+/// a parameter, a field, a name bound again). A computed path is not one: its capability's mint decides it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FileUseSite {
+    /// `fs_read` or `fs_write`, by the receiver's type.
+    pub(crate) kind: &'static str,
+    pub(crate) call: &'static str,
+    pub(crate) path: String,
+    pub(crate) cap: Option<FsHeld>,
+    pub(crate) at: Span,
+}
+
+/// The uses `--within` and `deploy plan` decide at their calls: each request (D-V2-181) and each file use (D-V2-185).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct UseSites {
+    pub(crate) requests: Vec<RequestSite>,
+    pub(crate) files: Vec<FileUseSite>,
+}
+
+/// The methods of a file capability that take a path, as the primitive table names them.
+const FILE_USES: &[&str] = &["read_text", "list_dir", "narrow", "write_text", "append_text"];
+
+/// [`request_destinations`] as data, with each file use, for the requirement list (D-V2-181, D-V2-185): what `--within`
+/// decides each use by.
+pub(crate) fn use_sites(
     module: &delulu_syntax::ast::Module,
     types: &std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>,
-) -> Vec<RequestSite> {
+) -> UseSites {
     let map = SourceMap::new();
     let mut w = SendWalk {
         map: &map,
@@ -773,11 +885,12 @@ pub(crate) fn request_sites(
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        files: Vec::new(),
         mutated: Default::default(),
         consts: BTreeMap::new(),
     };
     w.modules(&[module]);
-    w.sites
+    UseSites { requests: w.sites, files: w.files }
 }
 
 /// [`secret_destinations`] as data, for the requirement list (RW 2.11, D-V2-180): what `--grants` names as each secret's
@@ -792,6 +905,7 @@ pub(crate) fn secret_sends(modules: &[&delulu_syntax::ast::Module]) -> Vec<Secre
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        files: Vec::new(),
         mutated: Default::default(),
         consts: BTreeMap::new(),
     };
@@ -817,6 +931,7 @@ pub(crate) fn request_destinations(
         requests: Vec::new(),
         sends: Vec::new(),
         sites: Vec::new(),
+        files: Vec::new(),
         mutated: Default::default(),
         consts: BTreeMap::new(),
     };
@@ -872,6 +987,8 @@ enum Held {
     Secret(String),
     /// This string literal: a URL a request or a send names through a `let` or a `const`.
     Str(String),
+    /// This file capability (D-V2-185).
+    Fs(FsHeld),
 }
 
 /// The walk behind [`secret_destinations`]: `vars` maps a name in scope to what it is known to hold (`None`: a name known
@@ -887,6 +1004,7 @@ struct SendWalk<'a> {
     requests: Vec<Json>,
     sends: Vec<SecretSend>,
     sites: Vec<RequestSite>,
+    files: Vec<FileUseSite>,
     /// Every name the body being walked assigns anywhere (`assigned`): what a closure in it reads as unknown, since it may
     /// run after any of those assignments (SEND-REBIND-1).
     mutated: std::collections::BTreeSet<String>,
@@ -1065,7 +1183,30 @@ impl SendWalk<'_> {
 
     /// What a `let` or an assignment binds its name to.
     fn held(&self, e: &delulu_syntax::ast::Expr) -> Option<Held> {
-        self.secret_of(e).map(Held::Secret).or_else(|| self.str_of(e).map(Held::Str))
+        self.secret_of(e).map(Held::Secret).or_else(|| self.str_of(e).map(Held::Str)).or_else(|| self.fs_of(e).map(Held::Fs))
+    }
+
+    /// The file capability `e` evaluates to, when the source shows it minted from a literal (D-V2-185): `.fs_read("DIR")` or
+    /// `.fs_write("DIR")` (only `Root` has those methods — `secret_of`'s rule), a `narrow` of one by a literal, or a name bound
+    /// to one that nothing may have bound again.
+    fn fs_of(&self, e: &delulu_syntax::ast::Expr) -> Option<FsHeld> {
+        use delulu_syntax::ast::Expr;
+        match e {
+            Expr::Method { name, args, .. } if matches!(name.name.as_str(), "fs_read" | "fs_write") && args.len() == 1 => {
+                let mint = if name.name == "fs_read" { "fs_read" } else { "fs_write" };
+                self.str_of(&args[0]).map(|root| FsHeld { mint, root, narrows: Vec::new() })
+            }
+            Expr::Method { recv, name, args, .. } if name.name == "narrow" && args.len() == 1 => {
+                let mut held = self.fs_of(recv)?;
+                held.narrows.push(self.str_of(&args[0])?);
+                Some(held)
+            }
+            Expr::Var { path, .. } if path.segs.len() == 1 => match self.vars.get(&path.segs[0].name) {
+                Some(Some(Held::Fs(h))) => Some(h.clone()),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     fn expr(&mut self, e: &delulu_syntax::ast::Expr) {
@@ -1091,6 +1232,17 @@ impl SendWalk<'_> {
                     }));
                     let method = delulu_runtime::prim::http_method_of(&name.name);
                     self.sites.push(RequestSite { url, method, at: *span });
+                }
+                // D-V2-185: a file use, by the checker's type at its call, where the source writes its path.
+                let kind = self.types.and_then(|t| t.get(&recv.id())).and_then(|t| match t {
+                    delulu_check::Type::Cap(delulu_check::ResourceKind::FsRead) => Some("fs_read"),
+                    delulu_check::Type::Cap(delulu_check::ResourceKind::FsWrite) => Some("fs_write"),
+                    _ => None,
+                });
+                if let (Some(kind), Some(call)) = (kind, FILE_USES.iter().find(|m| **m == name.name)) {
+                    if let Some(path) = args.first().and_then(|p| self.str_of(p)) {
+                        self.files.push(FileUseSite { kind, call, path, cap: self.fs_of(recv), at: *span });
+                    }
                 }
                 // The secret is argument four of both (P9-05 (d), D-V2-183: `post_with_secret` adds the body after it).
                 if (name.name == "get_with_secret" && args.len() == 4) || (name.name == "post_with_secret" && args.len() == 5) {

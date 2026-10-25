@@ -9173,3 +9173,34 @@ An unannotated constant's uses share the type its value has (`const_types`), whe
 removed, the purity check removed, the use-site type ignored. Agent C's `p5_01`, `p5_02`, `p5_05` and `p5_06` are
 refused.
 Full workspace suite on the laptop (`cargo test --workspace --no-fail-fast -j 4`): 2,472 passed; the 4 failures were `doctor_cli` (3) and the Survey's `freshness` (1), which fail until the map is regenerated after the last edit, and pass after it (below).
+
+## 2026-10-24 — the laptop: `% 0` faults alike on both engines (RW 4.83); three stale doc passages (campaign B10)
+
+**`% 0`.** The builder agent (Sonnet 5.5) found `str(id(1) % id(0))` reported DL0902 on the interpreter and DL0901 on
+WASM, while `/` agreed. The head chef reproduced it. `chk_rem_fn` trapped `b == 0` with `unreachable`, which the host's
+`clean_trap` can only read as overflow; HARDENING_CAMPAIGN C20 had recorded the mismatch as a residual. `i64.rem_s`
+traps `IntegerDivisionByZero` by itself, so the helper now leaves `b == 0` to it and keeps `unreachable` for `INT_MIN %
+-1` alone. `fault_parity` gains `7 % 0` and `INT_MIN % -1`; it was red before the fix and is green after. `delulu-wasm`
+199 passed; `core_invariance` and `wasm_cli` passed.
+
+**Docs (B10, the least-authority agent, Sonnet 5.5; confirmed by the head chef).** `for-agents.md` said `--lease` and
+`--broker` are refused under `--sandbox`. A leased `--sandbox` run works, and the lease judges the guest's uses
+(`guest: error[DL0904]: lease … does not grant …`); `APPLIED_UNDER_SANDBOX` has listed both since RW 4.20. Two
+passages said a secret-carrying request is "not yet" under `--engine wasm`, a claim stale since D-V2-174. All three now
+say what the binary does.
+
+## 2026-10-25 — the laptop: #66, #67 and #68 landed; the nightly Miri run of the broker back inside its budget
+
+**Landed.** PRs #66 (GENERIC-RIGID-1), #67 (CONST-UNCHECKED-1) and #68 (`% 0` on WASM) were green on every job of
+their own runs (40015000010, 40016786869, 40017678424: 14 passed, `miri-slow` and `heavy-gates` skipped as on every
+pull request). `master` was fast-forwarded through them in order: `bf922f6` → `85f5f7a` → `0f79ac4` → `0549645`.
+
+**The nightly run of 2026-10-24 (40075722165) was cancelled.** Every job passed except `miri-slow (delulu-broker)`,
+cancelled at its 240-minute cap. Its log shows why: `netscope::tests::the_order_and_the_meet_with_methods_are_exact_over_a_bounded_domain`
+(D-V2-182) ran from 08:24:57 to 11:09:59, 2 h 45 min, and the run then reached
+`path::tests::canonicalization_laws_hold_on_generated_paths`, which took 66 min on 2026-10-23. The whole crate had
+taken 1 h 25 min that night (39922976338). The test judged every request afresh for both entries of each of the 1,521
+pairs, about 410,000 `judge` calls, all identical to the 3,510 needed. It now judges each entry's requests once and
+each distinct meet's once. Its domain is unchanged, nothing shrinks under `cfg!(miri)`, and two mutants still turn it
+red: a meet that unions the methods (line 741) and an order that ignores them (line 734). The `ci.yml` comment that
+said no run had confirmed the 240-minute budget now gives the measured times.

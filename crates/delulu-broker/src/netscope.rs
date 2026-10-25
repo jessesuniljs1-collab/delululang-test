@@ -722,19 +722,23 @@ mod tests {
         let requests: Vec<(&str, &String)> =
             ["GET", "POST", "PUT"].iter().flat_map(|m| paths.iter().map(move |p| (*m, p))).collect();
         let takes = |e: &str| -> Vec<bool> { requests.iter().map(|(m, p)| judge(e, m, "h.com", p) == Verdict::Allow).collect() };
+        // Each entry's requests are judged once, and each distinct meet's once: judged afresh for every pair, the same
+        // domain took 2 h 45 min under Miri and ran the nightly `miri-slow (delulu-broker)` past its budget (2026-10-24).
+        let taken: Vec<Vec<bool>> = entries.iter().map(|e| takes(e)).collect();
+        let mut taken_by_meet: std::collections::HashMap<String, Vec<bool>> = std::collections::HashMap::new();
         let mut within_pairs = 0;
-        for c in &entries {
+        for (c, tc) in entries.iter().zip(&taken) {
             assert_eq!(check_entry(c), Ok(()), "{c}");
-            for p in &entries {
-                let (tc, tp) = (takes(c), takes(p));
-                let semantic = tc.iter().zip(&tp).all(|(x, y)| !x || *y);
+            for (p, tp) in entries.iter().zip(&taken) {
+                let semantic = tc.iter().zip(tp).all(|(x, y)| !x || *y);
                 assert_eq!(entry_within(c, p), semantic, "{c} within {p}");
                 within_pairs += usize::from(semantic);
-                let both: Vec<bool> = tc.iter().zip(&tp).map(|(x, y)| *x && *y).collect();
+                let both: Vec<bool> = tc.iter().zip(tp).map(|(x, y)| *x && *y).collect();
                 match entry_meet(c, p) {
                     Some(m) => {
                         assert_eq!(check_entry(&m), Ok(()), "the meet is an entry: {m}");
-                        assert_eq!(takes(&m), both, "{c} ⊓ {p} = {m}");
+                        let tm = taken_by_meet.entry(m.clone()).or_insert_with(|| takes(&m));
+                        assert_eq!(*tm, both, "{c} ⊓ {p} = {m}");
                     }
                     None => assert!(both.iter().all(|x| !x), "{c} ⊓ {p} is empty, yet a request is taken by both"),
                 }
