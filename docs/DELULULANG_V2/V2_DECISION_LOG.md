@@ -4950,3 +4950,22 @@ Witnesses: `broker_cli` `a_lease_reaches_a_special_use_host_only_when_its_node_n
 under `--net-special`, untouched under `--net`; DL0802 for a child claiming the reach; `grants diff`); the broker's
 `a_special_use_reach_lives_within_net_and_attenuates_like_it` and the certificate's every-dimension round trip. M818–M824
 red.
+
+## D-V2-189 — `Async` is not authority: a lease bounds what a run reaches, and its budget bounds what it computes (A17) — TAKEN (head chef, 2026-10-26, under the owner's delegation)
+
+**Finding (A17, the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, low/medium).** A lease whose conditions
+read *"Write only: the console"* ran an actor program, because `spawn` and behaviour sends (the effect `Async`) are not
+gated by a lease. The agent's own check: an actor "bomb" under that lease (each behaviour spawns two more actors, to a
+depth of 40), run with `--limits mem=268435456,cpu=20,wall=30`, was stopped after 2 s at 258.1 MiB by the memory budget,
+exit 1, and its report says `stopped_by: memory`. The ledger asked for a decision.
+
+**Decision: kept as it is, and said where an operator will read it.** `Async` names nothing outside the run: no file,
+host, device, secret or foreign library. No capability carries it, and no lease dimension could. Spawning an actor is
+computation inside the run, as a loop is, and computation is bounded by the run's budget (`--limits mem,cpu,wall`), which
+covers every actor the run starts. A lease that says "the console only" reaches the console only, actors or not. Gating
+`Async` by a lease would make it authority over nothing. It would also be a new dimension of the authority order, which
+is redefining Authority rather than hardening it.
+- `delulu authority` already lists `Async` among a program's effects (checked on the builder's `actors/primes.delulu`:
+  *effects: Async, Write*), so an operator who wants no actors sees it before running the program.
+- `docs/for-agents.md` (*The effect kinds*) now says all of this.
+- Nothing in the runtime changes.

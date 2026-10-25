@@ -204,7 +204,13 @@ fn a_str_field_actor_refuses_as_dl1201() {
     let checked = check_source(0, src);
     assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
     match compile_module(&checked.module) {
-        Err(e) => assert_eq!(e.code(), "DL1201", "an out-of-subset actor field must be DL1201, got {}", e.message()),
+        Err(e) => {
+            assert_eq!(e.code(), "DL1201", "an out-of-subset actor field must be DL1201, got {}", e.message());
+            // The refusal is placed at the field's type and says which field (the campaign's A16: it named no line).
+            let at = src.find("label: Str").unwrap() + "label: ".len();
+            assert_eq!(e.span().map(|s| (s.start as usize, s.end as usize)), Some((at, at + 3)), "{}", e.message());
+            assert!(e.message().contains("an actor field `Named.label` of a type outside"), "{}", e.message());
+        }
         Ok(_) => panic!("a Str-field actor must not compile to WASM (it belongs on the interpreter)"),
     }
 }
@@ -224,10 +230,11 @@ fn a_list_param_behavior_refuses_as_dl1201() {
         }\n";
     let checked = check_source(0, src);
     assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
-    assert!(
-        matches!(compile_module(&checked.module), Err(ref e) if e.code() == "DL1201"),
-        "an out-of-subset behaviour parameter must refuse as DL1201"
-    );
+    let e = compile_module(&checked.module).expect_err("an out-of-subset behaviour parameter must not compile to WASM");
+    assert_eq!(e.code(), "DL1201", "an out-of-subset behaviour parameter must refuse as DL1201: {}", e.message());
+    // Placed at the parameter's type (A16).
+    let at = src.find("xs: List[Int]").unwrap() + "xs: ".len();
+    assert_eq!(e.span().map(|s| (s.start as usize, s.end as usize)), Some((at, at + "List[Int]".len())), "{}", e.message());
 }
 
 /// A behaviour named like a capability method is the actor's: a send. The WASM codegen matched fifteen such names

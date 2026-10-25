@@ -5821,3 +5821,77 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
   the other papercuts (A1, A4–A8, A11, A13, A15, A16, A21, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19,
   RW 2.22, RW 6.19, 6.20).
+
+### 2026-10-26 — the routine stops at a milestone; 84 of `origin`'s 91 branches removed (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/routine-milestones` (on `master` `8c9ccc9`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. The routine's prompt was updated through the API, and is still paused.
+  `docs/CLOUD_ROUTINE.md` gains the milestone rule, step 9 and *Branches*. The branch cleanup is in
+  `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`.
+- Start of session (on `8c9ccc9`, after fast-forwarding through on-demand run 6): `survey check` ok (1561 nodes, 16858
+  edges); `doctor --check` ok (29 checks).
+- Files and folders: M `docs/CLOUD_ROUTINE.md`, `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md` (§11.1, §11.3),
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/REPOSITORY_STRUCTURE.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`.
+  Deleted, renamed: nothing.
+- On GitHub, outside any commit: 84 branches deleted and `archive/superseded-2026-10-26` (`7d92a8a`) created.
+- For the laptop's memory: `cloud-routine-on-demand-2026-10-17.md` (the milestone rule and the effort note), copied both ways.
+- **Open / next, in order:** (1) **land A10** from `claude/peaceful-carson-crfvfa` `16470ed` (run 6's fix for an empty
+  list filled later with a sum or a record on WASM). Its runner witnesses are green (`40191526037`, `40191528017`), but its
+  full suite result and records are missing: verify, record, fast-forward `master`, then delete the branch. (2) Re-cite
+  CHECKLIST-2.0 criteria 1, 3 and 4 from `40191260368` (`launch/2.0.0` `f0cb42b`, 18/18), and record run 6's launch merge.
+  (3) The first nightly with #69 (2026-10-26 03:00 UTC): the broker's Miri time. (4) The campaign's remaining items: A17
+  (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A11, and the papercuts (A1, A4–A8, A13, A15, A16,
+  A21, B4–B8, B11, C6–C16). (5) *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — A10 closed: run 6's list fix landed, and a WASM refusal names its line (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/a10-wasm` (on `laptop/routine-milestones`, #71)   Pull request: #72
+- Commits: `500de3b` (run 6's `16470ed`, cherry-picked); `647ecc3` (the refusal's place and the records); the A16 commit
+  (an actor field's or parameter's refusal placed at its type).
+- **What:** see V2_LOG's entry of the same name. A16's span is closed too.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-wasm/src/codegen.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/wasm_cli.rs`, `crates/delulu-wasm/tests/actors_parity.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.21, 6.22), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** land #71, then this PR, each on green CI (fast-forward), and delete both branches and
+  `claude/peaceful-carson-crfvfa`. Then: CHECKLIST-2.0 re-cite from `40191260368`; the first nightly with #69; A17, A14,
+  A11 and the papercuts.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — `r.float()` and `http.get_with` run on WASM (A21) (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/a21-rand-float` (on `laptop/a10-wasm`, #72)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/src/lib.rs`,
+  `crates/delulu-runtime/src/plugin.rs`, `crates/delulu/tests/egress_cli.rs`, `crates/delulu/tests/broker_cli.rs`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.23),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #72, then this PR, each on green CI, and delete the branches.
+  2. Merge `master` into `launch/2.0.0`: #71, #72 and this PR. Re-cite CHECKLIST-2.0 criteria 1, 3 and 4 from its
+     `everything` run. The last ones read green are `40185296917` (`0a55a44`) and `40191260368` (`f0cb42b`).
+  3. A15 is a decision. `r.int(lo, hi)` with `hi <= lo` faults as DL0904, "capability scope violation", and a bad
+     argument is not that. The honest code is a new runtime one (DL0908, "an argument outside what the operation
+     accepts"), but it touches the diagnostic registry, the reference and the entrenched conformance witnesses. Also
+     document that the range is half-open.
+  4. A decision on mixing the seed (splitmix64) so a small seed's first draws are not near 0. It changes every seeded
+     sequence.
+  5. A17, a decision: `Async` is not authority, and the run's budget bounds an actor program.
+  6. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — A17 decided: `Async` is not authority, and the budget bounds actors (D-V2-189) (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/a17-async-decision` (on `laptop/a21-rand-float`, #73)   Pull request: opened with this commit
+- **What:** D-V2-189. Documents and a decision only; nothing in the code changes.
+- Files and folders: M `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` (6.24),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #73, then this PR, each on green CI, and delete the branches.
+  2. Merge `master` into `launch/2.0.0` (#71–#74), dispatch `everything` and the release dry run, and re-cite
+     CHECKLIST-2.0 criteria 1, 3 and 4.
+  3. A15, a decision on a code for a bad argument (DL0908), with documentation of the half-open range.
+  4. A decision on mixing the generator's seed.
+  5. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+- Survey and doctor (after the last edit): in the commit message.

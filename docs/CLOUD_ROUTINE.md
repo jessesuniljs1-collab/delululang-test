@@ -24,7 +24,48 @@ every limit here.
 **Interactive cloud sessions too (the owner, 2026-10-17):** *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* An interactive cloud session on this repository that the
 owner opens without a narrower request follows this file exactly as a routine run does — steps 1–8 — except that it can push
 only its own `claude/…` branch: it pushes there, opens one pull request into `master`, and records itself in
-`docs/CLOUD_SYNC_LOG.md` in that pull request; whoever comes next reads the branch's CI and merges it (step 1).
+`docs/CLOUD_SYNC_LOG.md` in that pull request; whoever comes next reads the branch's CI and merges it (step 1). **Its
+stopping rule is not a routine run's** (the next section): it goes on as long as the owner's words for that session say.
+
+## A routine run is one milestone, then a clean stop (the owner, 2026-10-26)
+
+The owner, 2026-10-26: *"Currently, the routine/scheduled task keeps working continuously instead of stopping after
+completing a major build or fix, committing the work to GitHub, and recording everything properly for the next session.
+This can lead to unfinished or uncommitted work and an incomplete handoff. … Do not make the routine run continuously
+until the usage limit hits. However, do not make it stop merely because some time has passed or a small build or minor
+task has been completed. It should work toward a meaningful milestone before stopping."* On-demand run 6 (2026-10-25) is
+the case: it closed eleven items in 2 h 27 min, then the weekly limit cut it off mid-slice — A10's fix committed on its
+session branch only, its suite still running, nothing recorded, and the A10 probe it had just started unread.
+
+So every routine run has this shape:
+
+1. **Housekeeping** (steps 0–3): sync, health, the previous run verified, waiting branches landed, a red `master` made
+   green. It is not the run's milestone unless it took real work (a red `master` whose cause had to be found is one).
+2. **Name ONE milestone before building it** (step 4): one line in the scratchpad — what it is and what *done* means
+   for it — which becomes the first line of the sync-log entry's *What*. A milestone is a substantial, coherent unit that
+   moves the work order: a defect class closed end to end (witnessed red, fixed, mutants, suite, runners); a feature or
+   phase slice built, tested and documented; a decision taken with its evidence and records; a related group of smaller
+   items closed together (three to six papercuts of one subsystem from the campaign ledger, say); `launch/2.0.0` brought
+   current with its `everything` run read. One records edit, one trivial papercut, or reading CI alone is not a
+   milestone: when such a thing is done and the inbox holds more, go on until the named milestone is done.
+3. **Build it to done** (steps 5–7): every change through the inner loop, each verified slice committed and pushed as
+   soon as it is green — a usage limit can still end a run early, and a pushed checkpoint is never lost work — and the
+   push run read.
+4. **Hand off** (step 6): the sync-log entry says what the milestone delivered, the state of everything still in flight
+   (each CI run by id, read, unread or pending), and *Open / next* in order, written so the next session can start from it
+   cold; the other records as step 6 lists them.
+5. **Stop** (step 9). Budget left over is not a reason to start a second milestone: the next run takes it.
+
+**Not the clock.** A run does not stop because time has passed. If the milestone proves bigger than one run (a redesign
+appears halfway), cut it at the last verified sub-slice: land what is green, make the rest the first *Open / next* item
+with where it stands, and stop — a clean handoff, not a failure.
+
+**Only routine runs stop this way.** The owner's *"Continue cooking and improving DeluluLang … till the limit hits"* is
+for his terminal sessions and interactive cloud sessions (the owner, 2026-10-26: *"mainly for my regular Claude Code
+terminal and cloud sessions, not for routine/scheduled task runs"*). There a session goes from milestone to milestone
+until the limit, landing and recording each before it starts the next. A routine run never takes that phrase as its
+stopping rule, wherever a file quotes it; only a **Run now** direction from the owner that says in words to go past the
+milestone changes it, for that run.
 
 **What this was (2026-09-28 → 2026-10-16).** From 2026-09-28 the owner is away until **2026-10-16** and asked for development to
 continue without him: *"I want the development of delululang to be continued in my absentia. No need to
@@ -112,6 +153,14 @@ ran. The first run after 2026-10-23 records that in its sync-log entry, with the
 first:** the session's environment held `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh`, and the setup script had
 run — the 1.96.1 toolchain installed at 09:37:57 UTC, before the session's first command, and 356 `.crate`
 archives fetched, Windows' among them.
+**2026-10-26 — what `CLAUDE_EFFORT` means.** The owner still saw *medium*. Claude Code itself sets `CLAUDE_EFFORT` in
+every Bash command's environment to *"the effort level in effect when the subprocess starts"* (the environment-variable
+reference, read 2026-10-26), and run 6 read `CLAUDE_EFFORT=xhigh`. The routine's stored configuration has no effort field
+(`session_request.config` lists every field, empty ones included, and none is an effort), so the routine API cannot set
+one. Every lever a repository and an owner hold is already set. The owner, 2026-10-26: *"Leave it for now. Only
+anthropic can do something about it I guess."* So it is left, and step 0 only records the level from the run itself —
+`CLAUDE_EFFORT` and the `effort` field the transcript writes with every reply — at no cost. A **Run now** with
+`CHECK ONLY` does just that.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
@@ -150,8 +199,14 @@ it). **The closing entry exists since run 19 (2026-10-12)**: the section *The cl
 `docs/CLOUD_SYNC_LOG.md`, begun early because a weekly limit can end the period's last runs. Every run before
 2026-10-16 keeps it current IN PLACE as part of its close (step 6) — its "as of" line, the defects and decisions
 it adds, the open list; a run on or after that date only refreshes it, pushes, and stops.
-Otherwise note the start time: **stop starting new work about three hours after it**, and always leave
-the tree committed and pushed — the VM is discarded when the run ends, and anything uncommitted is lost.
+Note the start time for the record. **Since 2026-10-26 the clock does not end a run — its milestone does** (the
+section above; until then this step said to stop starting new work about three hours in). Always leave the tree
+committed and pushed — the VM is discarded when the run ends, and anything uncommitted is lost.
+**Read the effort in effect, from the run itself** (2026-10-26): `echo "CLAUDE_EFFORT=$CLAUDE_EFFORT"; grep -oh
+'"effort":"[a-z]*"' ~/.claude/projects/*/*.jsonl | sort | uniq -c`. Claude Code sets `CLAUDE_EFFORT` in every Bash
+command's environment to the effort level in effect (the environment-variable reference, read 2026-10-26), and the
+session's transcript records the level each reply was sent at. Write both into the sync-log entry; anything but `xhigh`
+is the run's first finding.
 
 **1. Orient.** Read `HANDOFF.md` §0, the newest entries of `docs/CLOUD_SYNC_LOG.md` (their "Open / next"
 lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE_STATUS.md`.
@@ -287,8 +342,9 @@ another OS, and then takes about seven minutes itself (run 5).
    4.x, proof: 5.x, tooling: 6.x), from what the sweeps find, and from what would make the language
    better for its users — developers, AI agents, robots — each change small, witnessed and recorded.
 
-Size the work to finish, verified and pushed, inside the run's budget. A phase is several runs: finish a
-self-contained slice, record where the next run picks up.
+**The chosen work is the run's ONE milestone** (since 2026-10-26, the section above): name it before building, size it
+to finish verified and pushed in one run, and when it is done, hand off and stop (step 9) rather than choose again. A
+phase is several runs: finish a self-contained slice, record where the next run picks up.
 
 **5. Build it — the inner loop, for every change.** Ask the Survey first (`impact`, `affected-by`,
 `query`; a test file's node is `test:<path>`, a source file's `mod:<path>`). **Witness the defect failing before fixing it; falsify every new test** (reintroduce the
@@ -479,13 +535,30 @@ it where it lives — this file, `AGENTS.md`, a script, a test — in the same r
 the sync-log entry. The loop is a program too: each run should leave the next one faster and harder to
 fool. Keep this file short enough to read at the start of every run.
 
+**9. Stop cleanly** (the owner, 2026-10-26). Once the milestone is landed and recorded: `git status` clean; nothing
+unpushed (`git log origin/master..HEAD` empty, or the branch's work recorded as waiting); this run's own `claude/…` branch
+deleted from `origin` once its commits are in `master` (*Branches*, below); every CI run this run started read, or named
+in *Open / next* as pending with its id; no background job left (`jobs`; stop a waiter by its PID). Then end the run with
+one short final message — the milestone, its commits, the CI runs and their state, *Open / next* — and start nothing
+after it.
+
+**Branches** (2026-10-26: `origin` held 91; 84 were removed — 80 already in `master`'s history, one in `launch/2.0.0`'s,
+three superseded ones kept reachable on `archive/superseded-2026-10-26` — every name and tip in
+`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`). A cloud session makes a `claude/…` branch on every fire, and the laptop
+one per pull request. So at step 1, after landing what came in, delete from `origin` each `claude/*` and `laptop/*` branch
+whose tip is in `master`'s history — checked with `git merge-base --is-ancestor origin/BRANCH origin/master` immediately
+before `git push origin --delete BRANCH` — and at step 9 this run's own the same way. Never one with a commit `master`
+lacks (land it or record it first), and never `master`, `launch/*`, `rc/*`, `archive/*` or `autosave/*`. If the git proxy
+refuses a deletion, name the branch in *Open / next* for the laptop.
+
 ## Rules a run never bends
 
 - Everything in `AGENTS.md` *Hard rules*, and the five reserved decisions above.
-- **Never leave work uncommitted or unpushed at the end of a run** — and a run can END AT ANY MOMENT: a
+- **Never leave work uncommitted or unpushed at the end of a run** — and a run can still END EARLY: a
   usage limit stops it mid-step, and the VM is discarded. So commit and push each verified slice as soon
   as it is green, with its sync-log line, rather than one commit at the end; half-done work goes on
-  `claude/cloud-dev` with an "Open / next" line, never lost.
+  `claude/cloud-dev` with an "Open / next" line, never lost. **One milestone per run, then step 9** (since 2026-10-26):
+  a run that keeps choosing new work until a limit ends it leaves exactly this half-done state behind.
 - **One writer at a time.** If `git fetch` shows another run pushed since this one started, rebase before
   pushing; if the other run is still working on the same files, choose different work.
 - **Never weaken a test to make it pass, never lengthen a sleep to make a timing test green** — a timing
@@ -529,6 +602,8 @@ paused or deleted at [claude.ai/code/routines](https://claude.ai/code/routines).
 
 **Since 2026-10-17 (the on-demand routine):** switch `trig_01HFG6usfzmDAPQigiDu9DLq` on at
 [claude.ai/code/routines](https://claude.ai/code/routines) when you leave the laptop, and off when you are back.
+**Since 2026-10-26** each run does one milestone, hands off and stops; the next scheduled fire takes the next one. A
+**Run now** whose text is `CHECK ONLY` makes a run report its model and the effort in effect, and do nothing else.
 **Run now** starts a run at once and can carry a direction for that run. Each run's session is listed under the
 routine, and a push and an e-mail say when it ends. Every run draws on the same subscription as the laptop
 ([claude.ai/settings/usage](https://claude.ai/settings/usage)). Back on the laptop, every session starts by

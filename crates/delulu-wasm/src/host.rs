@@ -1389,6 +1389,33 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // A21: `r.float()` — the same capability check, trace and custody gate as `int`, one step of the same generator,
+    // mapped exactly as the interpreter maps it (`next_rand() as f64 / u64::MAX as f64`), so a seeded run draws alike.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "rand_float",
+            |mut caller: Caller<'_, HostState>, cap: i32, file: i32, start: i32, end: i32| -> f64 {
+                if caller.data().refused.is_some() {
+                    return 0.0;
+                }
+                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
+                if !ok {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                    return 0.0;
+                }
+                caller.data_mut().push_trace("Rand", "float", "Rand", None, file, start, end);
+                if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
+                    caller.data_mut().push_refusal_trace("Rand", "float", "Rand", file, start, end);
+                    return 0.0;
+                }
+                let st = caller.data_mut();
+                let x = xorshift64(st.rng);
+                st.rng = x;
+                (x as f64) / (u64::MAX as f64)
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "root_fs_read", |mut caller: Caller<'_, HostState>, root: i32, path_ptr: i32| -> i32 {
             if caller.data().refused.is_some() {
@@ -1691,6 +1718,81 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         0
                     }
                     None => unheld(&mut caller, "http.post", &answer, 0),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // `Cap[Http].get_with(url, headers)` (the agent campaign's A21), as `http_get` is with `post`'s headers: the custody on
+    // the URL's host and path (a GET), unless the URL is not `https://`; then the interpreter's own `get_with`. The trace
+    // names the URL alone, never a header's value (P9-04 (a), D-V2-128).
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_get_with",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (allow, special) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Http capability"));
+                        return 0;
+                    }
+                };
+                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
+                    caller.data_mut().refused = Some("DL0903: http get URL pointer is out of bounds".into());
+                    return 0;
+                };
+                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
+                let headers = hs.pop().unwrap_or(Value::Unit);
+                caller.data_mut().push_trace("Net", "get_with", "Http", Some(url.clone()), file, start, end);
+                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+                if let Some(h) = &host {
+                    let url_path = delulu_runtime::prim::request_path(&url);
+                    if !caller.data_mut().custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
+                        caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
+                        return 0;
+                    }
+                    delulu_runtime::egress::begin_fetch();
+                }
+                let capv = delulu_runtime::value::CapVal {
+                    kind: delulu_check::ResourceKind::Http,
+                    scope: delulu_runtime::value::CapScope::Net { allow, special },
+                };
+                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+                let answer = delulu_runtime::prim::call_cap_method(&capv, "get_with", &[Value::str(url.clone()), headers], span);
+                if let Some(h) = &host {
+                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+                        if let Some(custody) = &caller.data().custody {
+                            custody.borrow_mut().note_egress_refusal(h, reason);
+                        }
+                    }
+                }
+                let answer = match answer {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
+                        return 0;
+                    }
+                };
+                match build_net_answer(&mut caller, &answer) {
+                    Some(Ok(ptr)) => ptr,
+                    Some(Err(())) => {
+                        caller.data_mut().refused = Some("guest heap exhausted building the http result".into());
+                        0
+                    }
+                    None => unheld(&mut caller, "http.get_with", &answer, 0),
                 }
             },
         )

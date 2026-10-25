@@ -679,7 +679,9 @@ The two dated disk-cleanup records that used to be listed here are now in
 `docs/maintenance/DISK-CLEANUP-2026-10-17.md` — the laptop's 178 GB Rust build cache after the cloud
 period, two spent build clones, and WSL's disk (57.97 → 12.84 GB): what was deleted, how each was
 checked first, and what was kept. `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md` — the two agent worktrees of 2026-09-17,
-removed on the owner's word after their notes were kept and both checks passed.
+removed on the owner's word after their notes were kept and both checks passed. `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`
+— 84 of `origin`'s 91 branches removed on the owner's word: each name and tip, the check each passed, the three
+superseded ones kept reachable on `archive/superseded-2026-10-26`, and the eight branches kept and why.
 
 ### 5.9 `measurements/` and `rfcs/`
 

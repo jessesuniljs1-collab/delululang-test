@@ -111,6 +111,137 @@ fn a_function_ending_in_return_runs_alike_on_both_engines() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// An empty list filled later with a sum or a record (the campaign's A10, on-demand routine run 6): `let out = []`, then
+/// `out.push(TNum(1))`, was refused on WASM — DL1201, "an empty list whose element type the backend was not given", with
+/// no line — though the checker had inferred `List[Tok]`; an annotation or a first item ran. It runs now and prints what
+/// the interpreter prints: a sum with payloads, a sum of constructors only returned inside a `Result`, and a record.
+#[test]
+fn an_empty_list_filled_later_with_sums_or_records_runs_alike_on_both_engines() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-empty-sums-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("toks.delulu");
+    std::fs::write(
+        &f,
+        r#"module toks
+
+type Tok = TNum(Int) | TPlus | TEnd
+
+type Dir = North | South
+
+type P {
+  x: Int,
+  name: Str,
+}
+
+fn lex() -> List[Tok] {
+    let out = []
+    out.push(TNum(1))
+    out.push(TPlus)
+    out.push(TNum(2))
+    out.push(TEnd)
+    out
+}
+
+fn dirs(n: Int) -> Result[List[Dir], Str] {
+    let ds = []
+    var i = 0
+    while i < n {
+        if i % 2 == 0 { ds.push(North) } else { ds.push(South) }
+        i = i + 1
+    }
+    Ok(ds)
+}
+
+fn show(t: Tok) -> Str {
+    match t {
+        TNum(n) => str(n),
+        TPlus => "+",
+        TEnd => "."
+    }
+}
+
+fn way(d: Dir) -> Str {
+    match d {
+        North => "north",
+        South => "south"
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    var s = ""
+    for t in lex() { s = s + show(t) }
+    out.println(s)
+    match dirs(3) {
+        Ok(ds) => out.println(str(ds.len()) + " " + way(ds[1])),
+        Err(e) => out.println(e)
+    }
+    let ps = []
+    ps.push(P { x: 3, name: "c" })
+    out.println(ps[0].name + str(ps[0].x))
+}
+"#,
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let interp = delulu(&["run", &f, "--grant", "console"]);
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "1+2.\n3 south\nc3\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
+    let wasm = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+    assert_eq!((wasm.status.code(), stdout(&wasm)), (Some(0), stdout(&interp)), "{}", String::from_utf8_lossy(&wasm.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A construct the WASM backend refuses is refused AT ITS LINE (the campaign's A10, second half): DL1201 named no line
+/// and carried no span, so a program of any size left its author to guess which expression the backend could not
+/// compile, while every checker refusal points at its own. The innermost expression it refused is the span now — the
+/// closure inside the list on line 6, not the list, the `for` around it or `main` — on `run --engine wasm` (human and `--json`) and on
+/// `build --target wasm`, and the message is the one it was.
+#[test]
+fn a_wasm_refusal_names_the_line_it_refuses() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-refusal-line-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("noline.delulu");
+    std::fs::write(
+        &f,
+        "module noline\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    var t = 0\n    for g in [fn(x: Int) -> Int { x }] { t = t + g(1) }\n    out.println(\"done\")\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let interp = delulu(&["run", &f, "--grant", "console"]);
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "done\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
+
+    let run = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+    let err = String::from_utf8_lossy(&run.stderr).to_string();
+    assert_eq!(run.status.code(), Some(1), "{err}");
+    assert!(
+        err.contains("error[DL1201]: WASM codegen does not support this expression form"),
+        "the message is the one it was:\n{err}"
+    );
+    assert!(err.contains("noline.delulu:6:15"), "the refusal names the closure, line 6 column 15:\n{err}");
+
+    let json = delulu(&["run", &f, "--grant", "console", "--engine", "wasm", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&json.stdout).expect("a JSON envelope");
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["code"], "DL1201", "{v}");
+    assert_eq!((d["spans"][0]["start"]["line"].as_u64(), d["spans"][0]["start"]["col"].as_u64()), (Some(6), Some(15)), "{v}");
+
+    let build = delulu(&["build", &f, "--target", "wasm", "--out", &dir.join("noline.dwx").to_string_lossy()]);
+    let err = String::from_utf8_lossy(&build.stderr).to_string();
+    assert_eq!(build.status.code(), Some(1), "{err}");
+    assert!(err.contains("DL1201") && err.contains("noline.delulu:6:15"), "`build --target wasm` names the line too:\n{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn run_engine_wasm_ungranted_console_is_refused() {
     // No console grant → root.console() is refused host-side; the run fails.

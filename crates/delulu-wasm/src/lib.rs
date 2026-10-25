@@ -423,6 +423,19 @@ mod tests {
         assert!((-50..50).contains(&vals[3]), "draw {} out of [-50,50)", vals[3]);
     }
 
+    /// `r.float()` on WASM (the agent campaign's A21: DL1201 "does not support the method `.float`", though `r.int`
+    /// compiled). A float and an int drawn in turn come from ONE stream on each engine, so under one seed both print
+    /// alike, and each float is in [0, 1].
+    #[test]
+    fn rand_float_sequence_matches_the_interpreter() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n let f = r.float()\n out.println(str(f))\n out.println(str(r.int(0, 100)))\n let g = r.float()\n out.println(str(g))\n out.println(str(f >= 0.0 && f <= 1.0 && g >= 0.0 && g <= 1.0 && f != g)) }\n";
+        let out = main_rand_parity(src, 4242);
+        assert_eq!(out.lines().count(), 4, "{out:?}");
+        assert_eq!(out.lines().last(), Some("true"), "{out:?}");
+        // A seed is made odd (`seed | 1`), so 4242 and 4243 are one seed; 4244 is another.
+        assert_ne!(main_rand_parity(src, 4242), main_rand_parity(src, 4244), "the seed decides the draws");
+    }
+
     #[test]
     fn same_seed_reproduces_the_same_sequence_across_engines() {
         // Determinism: the same seed yields the same output every run (and across both engines).
