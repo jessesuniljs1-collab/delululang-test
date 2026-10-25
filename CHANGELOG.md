@@ -11,6 +11,22 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — every route that runs a package holds its dependencies to their pins; a sandboxed run's report is the runtime's; DL1001's repair parses, 2026-10-25
+
+- **Fixed (supply chain, D-V2-186, RW 4.85): `delulu run DIR` ran a dependency its authority pin refuses** (RUN-PIN-1).
+  A dependency pinned `effects = []` that writes, or one with no pin, was DL1001 under `check`, `build` and `lock` and
+  ran under `run` — the interpreter, `--sandbox` and `--engine wasm` — and under `build --target wasm` (its `.dwx` too),
+  `test`, `deploy plan`, `publish`, `add` and `sandbox policy`. Every one of them now refuses it with DL1001 (or DL1009
+  for a package beyond its own manifest) before any code runs. `authority`, `why` and the Atlas still report on it.
+  **Breaking** only for a package whose dependencies break their pins: `build` already refused it.
+- **Fixed (D-V2-21, RW 4.84): `run --sandbox` accepted a `--report-out` inside a scope the program may write**, and
+  the guest could write a counterfeit report where the runtime's would go. It is refused before anything runs, as the
+  ordinary run refuses it — for `--grant` scopes, a dry run (`--mode audit`) included, and for a lease's once redeemed.
+- **Fixed (RW 6.16): DL1001's repair `insert_dependency_pin` wrote TOML that does not parse** for a dependency written
+  `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
+  refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
+  this dependency".
+
 ## Unreleased — `authority --within` decides a file use at its call, 2026-10-25
 
 - **Fixed (D-V2-185):** a file use whose path the source writes is decided at its call. A program reading

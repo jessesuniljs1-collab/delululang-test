@@ -4844,3 +4844,35 @@ and `append_text` on `Cap[FsWrite]`, by the checker's type at the call) is decid
 `--grants` is unchanged. Witness: `within_cli` `a_file_use_is_decided_by_its_path_against_its_capability`, holding each
 verdict on a written path to what `run` does with the same grants. It was red before the fix, and four mutants turn it
 red: a refused use answered within, every path taken as staying below, narrowings skipped, and hostile spellings unchecked.
+
+## D-V2-186 — The supply-chain gate (DL1009, DL1001) holds on every route that runs, ships or plans a package; reports keep answering (RUN-PIN-1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (RUN-PIN-1, on-demand routine run 6, found while verifying the agent campaign's A2 on the binary).** A
+dependency pinned `effects = []` that writes, or one that carries no pin, is DL1001 under `delulu check`, `build` and
+`lock`. `delulu run app` ran it, on the interpreter, in the sandbox and on the WASM engine; `build --target wasm` wrote a
+`.dwx` that ran it; `test` ran the package's tests; `deploy plan` planned it and `sandbox policy` previewed its run. Only
+`build_workspace` and `cmd_lock` called `check_self_authority` and `check_pins`; every other loader checked types alone.
+The specification, the book and `provenance.rs` all say the gate refuses "before any code runs", and its witness drove
+`build` alone.
+
+**Decision.** One function, `delulu_check::deps::supply_chain_gate` — every package within its own manifest (DL1009) and
+every dependency within its consumer's pin (DL1001) — and every route that **runs** a package's code (`run` on every
+engine, `run --sandbox`, `test`), **ships** it (`build`, `build --target wasm`, `lock`, `publish`), **plans or previews**
+it (`deploy plan`, `sandbox policy`) or **accepts** it as a dependency (`add`, which computes the authority it pins) calls
+it and refuses on its errors. The routes that only **report** — `authority`, `why`, the Atlas — keep answering for such a
+package: they run nothing, and an operator needs to read what a package does to decide its pin. No new code: the refusal is
+DL1001 or DL1009, as `build` says it.
+
+**Why.** A pin is the consumer's ceiling on a dependency, and the commonest command, `run`, is the one an author types
+first; a gate that `build` keeps and `run` skips protects only those who build first. The reports are left alone because
+refusing them would hide the answer the pin is decided from.
+
+Witness: `provenance` `no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` (seven routes, a broken pin and
+a missing one, and a control that goes through all seven); red on the old code; M806–M810 red.
+
+**What it moved in three existing tests (the full suite, 2,544 passed and these 3 failed).** Two `deploy_cli` fixtures
+were packages `build` refuses: each read a secret its own manifest never declares (DL1009), and `deploy plan` now refuses
+to plan them. They declare the secret now, and every assertion about the profile stands. `sandbox_run_cli`'s package
+whose manifest declares no effects was refused DL0701 by `run`'s manifest gate; the supply-chain gate now refuses it
+first, with DL1009, as `build` does, and the test asserts that code. A single file beside a manifest has no package
+check, and is still refused DL0701.

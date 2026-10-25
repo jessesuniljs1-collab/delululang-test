@@ -9210,3 +9210,62 @@ said no run had confirmed the 240-minute budget now gives the measured times.
 See D-V2-185. `authority fsr.delulu --within console --within fs.read=./allowed` now answers *exceeds* at
 `fsr.delulu:14:10`, with the runtime's own reason (`path `../forbidden/secret.txt` escapes the granted scope (DL0904)`).
 `within_cli` 23 passed and `deploy_cli` 23 passed on the laptop. The full suite on three OSes is the pull request's CI run.
+
+## 2026-10-25 — on-demand routine run 6: #69 and #70 landed; A18, A2 and RUN-PIN-1 closed (D-V2-186)
+
+**The session.** Opus 5.5 (the system prompt names `claude-opus-5-5`; no fallback notice), `CLAUDE_CODE_EFFORT_LEVEL=xhigh`
+and `CLAUDE_EFFORT=xhigh` in its environment — the first run since the owner set the variable in the cloud environment on
+2026-10-23, and it shows `xhigh`. The owner's setup script ran: the 1.96.1 toolchain's directory was made at 09:37:57 UTC,
+before the session's first command, and the cargo registry already held 356 `.crate` archives, Windows' among them. No sous-chef.
+
+**Landed.** The laptop's session of 2026-10-25 stopped at about 05:35 UTC with two green pull requests open: #69
+(`2ddd15c`, the methods order test judges each entry once) and #70 (`daff3ec`, D-V2-185). Their runs `40165160695` and
+`40165944252` passed every job (`miri-slow` and `heavy-gates` skipped, as on every pull request), and #69's `miri-slow`
+dispatch `40165159856` passed inside its budget: delulu-broker 1 h 47 min, delulu-check 1 h 31 min, delulu-syntax 21 min.
+Re-run here before `master` moved: `within_cli` 23 passed, `deploy_cli` **11** passed (both records say 23; the target
+holds 11 tests), `netscope` 10 passed, and a mutant of D-V2-185 that answers every file use *within* turned
+`a_file_use_is_decided_by_its_path_against_its_capability` red. `master` was fast-forwarded `0549645` → `daff3ec`. The
+autosave snapshot `875c373` (05:31 UTC) is `daff3ec`'s code before its test was carried further, and the 2026-10-23
+snapshot of the launch worktree (`ccb3241`) equals `launch/2.0.0` outside the map: nothing to recover.
+
+**A18 — a sandboxed run let the program write the runtime's record of its run** (the agent test campaign's builder,
+Sonnet 5.5; reproduced). `run p.delulu --grant fs.write=./out --report-out out/r.json` is refused before anything runs
+(exit 2, D-V2-21); the same command with `--sandbox` ran, exit 0, and the guest wrote a counterfeit report where the
+runtime's would go. `cmd_run` returned to the sandboxed route before its D-V2-21 check, and `guest.rs` never made one. The
+sandboxed route now makes both checks the ordinary route makes: the command line's scopes before anything else (one
+function, `refuse_runtime_paths_in_command_line_scopes`, which both routes call; a dry run refuses too, since it says what
+the run would do), and the final grants, a lease's included, once the lease is redeemed and before a root is issued or a
+guest exists. Witnesses: `sandbox_modes_cli` `the_report_is_refused_inside_a_write_scope_inside_the_sandbox_too` (two
+spellings, strict and audit, a control outside every scope) and `sandbox_guard_e2e`'s lease step, sandboxed and not; both
+red on the old code. M801 (the first check removed) red on the audit row, M802 (the second) on the lease step, M803 (both)
+on both; the control green. Runners at `601d9bb`: macOS `40182254723`, Windows `40182256417` (json_contract 13 there, one
+test being Unix-only; sandbox_guard_e2e 1; sandbox_modes_cli 12). `master` took it before the next two slices.
+
+**A2 — DL1001's own repair wrote a manifest that does not parse** (the builder; reproduced). With `ratlib = { path =
+"../ratlib" }` the repair appended `[dependencies.ratlib.authority]`, which TOML refuses after an inline table, so applying
+it turned DL1001 into DL1004. The inline table is the form `delulu add` writes. The pin now goes inside an inline table,
+before its closing brace, at a place read from the TOML parser's own span of the value; a table or dotted keys keep the
+appended sub-table. The label reads "add an `authority` pin to this dependency". `fix_cli` said `tooling.rs` covered the
+repair, and nothing did. Witness: `delulu-check` `deps::tests::the_pin_repair_leaves_a_manifest_that_checks_whatever_form_the_dependency_takes`
+— six forms, each repair applied byte for byte, parsed again, its pin read back and the workspace re-checked; red on the
+old code. M804 (the old append) and M805 (inserted after the brace) red; the control green. The Stage 2 specification's
+§3.2 example showed the same invalid TOML (its §12a said so); it now shows the inline form.
+
+**RUN-PIN-1 — `run` ran a dependency its pin refuses** (found while verifying A2 on the binary; HIGH). A dependency pinned
+pure that writes, or one with no pin, is DL1001 under `check`, `build` and `lock`. `delulu run app` ran it — the
+interpreter, `--sandbox` and `--engine wasm` each printed the dependency's words and exited 0; `build --target wasm` wrote a
+`.dwx` that `run` then ran; `test` ran the package's tests; `deploy plan` planned it; `sandbox policy` previewed its run.
+Every loader but `build_workspace` and `cmd_lock` checked types and never called `check_self_authority` or `check_pins`,
+while the documents said the gate "runs BEFORE any code". `delulu_check::deps::supply_chain_gate` (DL1009 and DL1001) is
+now called by every route that runs, ships or plans a package (D-V2-186). Witness: `provenance`
+`no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` — seven routes, each refused with its reason, nothing of
+the dependency run, no `.dwx` written, for a broken pin and a missing one; the control, pinned to what the dependency does,
+goes through all seven. Red on the old code. M806 (`run`'s loader), M807 (the preview's), M808 (`test`'s), M809 (the
+planner's) and M810 (the gate emptied) red; the control green. Runners at `4ee928a`: macOS `40183138954` and Windows
+`40183140704`, provenance 17 passed (the witness among them) and fix_cli 13 on each.
+
+**The full suite at `4ee928a`** (alone, `-j 4`, the tree unmoved): 2,544 passed, **3 failed**, 16 ignored, 183 binaries.
+The three are D-V2-186 at work, each read: two `deploy_cli` services were packages `build` refuses (a secret read and never
+declared, DL1009), and `sandbox_run_cli`'s package with no declared effects is refused DL1009 by the gate before `run`'s
+DL0701. The fixtures declare their secrets now, and the package case asserts DL1009 (the single file beside a manifest
+keeps DL0701); `deploy_cli` 11 and `sandbox_run_cli` 19 passed.

@@ -1261,6 +1261,12 @@ spells the same thing?**
 - **A laundering witness must parse** (2026-10-24). F-3, F-3b and F-4 had two statements on one line (DL0209) since
   they were written, and met their codes through the parser's recovery. A refusal from a repaired program proves nothing
   about the program the test names. `rejects_with` now asserts no DL01xx or DL02xx.
+- **RUN-PIN-1 — the supply-chain gate held only where nothing runs** (on-demand routine run 6, 2026-10-25, D-V2-186; HIGH).
+  A dependency that breaks its authority pin, or carries none, was DL1001 under `check`, `build` and `lock`, and `run` ran
+  it on every engine and in the sandbox; `build --target wasm`, `test`, `deploy plan`, `publish`, `add` and `sandbox
+  policy` went ahead too. Their loaders checked types and never called the pin check. Every route that runs, ships or
+  plans a package calls `supply_chain_gate` now. Never soften this to "the pin is a build-time check": a pin is enforced
+  wherever the dependency's code can run. Search key: `resolve_workspace(` without `supply_chain_gate` on the same path.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1865,6 +1871,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   only after fixing the one before (5.8 s, then 261 s for `a == b`). A walk over a type follows each variable once, or is
   given the type written out once (`apply_type`, within its limit) and walks it as it stands. Time a twin, a field read
   and an `==` of the shape, not only the shape.
+
+- **A guarantee witnessed through one command is witnessed for that command** (on-demand routine run 6, RUN-PIN-1): the
+  xz scenario's test drove `build` and said the gate holds "BEFORE any code runs"; `run`, the command an author types
+  first, skipped the gate, and so did five more routes. When a guarantee says "before X", list every command that can
+  reach X (here: everything that resolves a workspace and then runs, ships or plans it), and drive the witness through each.
+  The finding came from checking a repair's result by running the repaired package, not by re-reading the diagnostic.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

@@ -5624,3 +5624,57 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** land #69 after its `miri-slow` run (40165159856) is read; then this PR on green CI. A2 (pin repair TOML),
   A18 (`--report-out` under `--sandbox`), B1 (leases and `net.special`).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-25 — on-demand routine run 6: the laptop's #69 and #70 landed; A18, A2 and RUN-PIN-1 closed (D-V2-186)
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (the system prompt names
+  `claude-opus-5-5`; no fallback notice; no sous-chef). **Effort:** `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh`
+  in the session's environment — the first run since the owner set the variable in the cloud environment (2026-10-23).
+  **The setup script ran:** the 1.96.1 toolchain installed at 09:37:57 UTC, before the session's first command, and 356
+  `.crate` archives already fetched, Windows' among them.
+- Branch: `master`; the code's runner reads on `claude/peaceful-carson-crfvfa` (this session's branch)   Pull request: none
+  (#69 and #70 landed by fast-forward)   Base: `0549645`
+- Commits: `2ddd15c`, `daff3ec` (the laptop's, #69 and #70 — `master` fast-forwarded to them); `601d9bb` (A18); `301a58d`
+  (A2); `4ee928a` (RUN-PIN-1); `94efbb3` (three tests meet the gate); this entry's commit.
+- Start of session (on `0549645`, 09:38 UTC): `survey check` ok (1558 nodes, 16632 edges); `doctor --check` ok (26 checks in
+  this VM). `gh` is at `/usr/local/bin/gh` (not used; CI read through the REST API and the GitHub MCP tools).
+- **Read first:** `origin/laptop/miri-methods` and `origin/laptop/within-file-use` were 1 and 2 commits ahead of `master`, with
+  #69 and #70 open and green (`40165160695`, `40165944252`, every job; #69's `miri-slow` dispatch `40165159856`: the broker
+  1 h 47 min, the checker 1 h 31 min, the syntax crate 21 min, inside the 240-minute budget). Re-run here: `within_cli` 23,
+  `deploy_cli` 11 (the laptop's records say 23), `netscope` 10; one D-V2-185 mutant red. `master` fast-forwarded to
+  `daff3ec`; its push run `40181838959` **success**. `autosave/laptop`'s newest snapshot `875c373` is `daff3ec`'s code;
+  `autosave/laptop-dl-launch` `ccb3241` equals `launch/2.0.0` outside the map; `autosave/dogfood` is the agent campaign's
+  workdirs (never merged) — its `_head-chef/VERIFIED.md` gave this run its inbox (A2, A18, B1). Every other branch: 0
+  commits `master` lacks, or recorded as superseded (`7d6a22b`, `d3f0d52`; `laptop/wasm-handles-in-slots` folded in).
+- **The nightly of 2026-10-25** (`40175136208`, on `0549645`, before #69): every job success except `miri-slow
+  (delulu-broker)`, still running at this entry — it carries the test #69 fixed, so its cap is expected.
+- **Built:** A18 — `run --sandbox` refuses a `--report-out` inside a write scope (D-V2-21) as the ordinary run does;
+  A2 — DL1001's repair writes the pin inside an inline-table dependency; RUN-PIN-1 (HIGH, found here) — `run` on every engine,
+  `--sandbox`, `build --target wasm`, `test`, `deploy plan`, `publish`, `add` and `sandbox policy` ran or shipped a dependency
+  its pin refuses; one `supply_chain_gate` on every route now (D-V2-186). V2_LOG's entry of the same name has each witness
+  (red first) and mutant (M801–M810, each red, controls green).
+- Files and folders: M `crates/delulu/src/guest.rs`, `crates/delulu/src/run_cmd.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu-check/src/deps.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu/tests/sandbox_modes_cli.rs`,
+  `crates/delulu/tests/sandbox_guard_e2e.rs`, `crates/delulu/tests/provenance.rs`, `crates/delulu/tests/fix_cli.rs`,
+  `crates/delulu/tests/deploy_cli.rs`, `crates/delulu/tests/sandbox_run_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4, §11.5),
+  `docs/CLOUD_ROUTINE.md` (the effort and setup script seen; two traps), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-186),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.84, 4.85, 6.16), `docs/design/STAGE2_SPECIFICATION.md` (§3.2's
+  example valid TOML), `docs/book/THE_DELULULANG_BOOK.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `docs/assistant-memory/a-guarantee-witnessed-through-one-command.md`. Deleted, renamed: nothing.
+- Verified: runners at `601d9bb` — macOS `40182254723`, Windows `40182256417` (json_contract, sandbox_guard_e2e,
+  sandbox_modes_cli); at `4ee928a` — macOS `40183138954`, Windows `40183140704` (provenance 17, fix_cli 13). The full suite
+  alone at `4ee928a`: 2,544 passed, 3 failed (D-V2-186's, fixed in `94efbb3`), 16 ignored, 183 binaries; after the fix
+  `deploy_cli` 11, `sandbox_run_cli` 19. `601d9bb`'s push run `40182828236` running at this entry.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: mark A2 and A18 FIXED in `D:\nelan\dogfood-campaign\…\_head-chef\VERIFIED.md`, and add RUN-PIN-1.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RUN-PIN-1) and §11.5 (a guarantee witnessed through one command is witnessed
+  for that command); `docs/assistant-memory/a-guarantee-witnessed-through-one-command.md`, copied both ways.
+- Loop engineering: `docs/CLOUD_ROUTINE.md` — what the first run after 2026-10-23 saw (effort, setup script); a sentinel a
+  witness looks for is joined at run time (DL1001 quotes the source it refuses); the agent campaign's ledger is on
+  `origin/autosave/dogfood`.
+- **Open / next, in order:** (1) the push runs of `601d9bb`…this commit, and the nightly `40175136208`'s broker Miri job —
+  then the first nightly with #69 (2026-10-26); (2) B1 — a lease cannot carry `net.special` (`delegate --net 127.0.0.1` is
+  accepted and can never connect); (3) the campaign's other findings, each verified first: A19 (`grants propose` files no
+  ask for an egress refusal), A20 (`--within` names the wrong grant when only the methods are short), A17 (a decision:
+  `Async` under a lease), A14 (the interpreter's merge sort), the papercuts (A1, A4–A13, A15, A16, A21, A22, B4–B8, B11,
+  C6–C16); (4) `launch/2.0.0`: merge `master` (#61 … this run), dispatch `everything` and the release dry run; (5)
+  *[laptop]* the launch, only on the owner's word.
