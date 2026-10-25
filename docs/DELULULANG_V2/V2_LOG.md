@@ -9337,3 +9337,11 @@ branches' — a first form whose types matched let M829 and M830 survive. M827, 
 M833 red; M831, a change to `compile_stmt`'s reported type, survived every witness because no caller that passes an
 expected type reads it, so it was removed. delulu-check 296, delulu-wasm 204, wasm_cli 19 passed; the 50,000-program
 differential passed at `ab10f75` (103.8 s). The full suite alone at `ab10f75`: 2,556 passed, 0 failed, 16 ignored, 184 binaries, the tree unmoved; runners at `ab10f75`, macOS `40189206923` and Windows `40189209098` (`wasm_cli` and `broker_cli`, every new witness among them), and A19's at `0f0e75a`, macOS `40187811997` and Windows `40187823143`, success. `GETTING_STARTED.md` says what `return` is.
+
+**A12 and A22 — two refusals that named the wrong thing** (the builder, Sonnet 5.5; both reproduced). DL0405 on a receiver
+whose type has not settled printed the inference variable (`'t9`); it now says the type is not known at that call and where
+to write it. DL1703 for a test in a file no package encloses spoke of the package ceiling and `delulu.toml`; `TestCeiling`
+knows now that nothing set it (`no_package`), and the refusal names `--test-authority`. Witnesses `delulu-check`
+`tests/unknown_receiver.rs` and `test_runner_cli`'s outside-a-package step; M834 and M835 red, the control green. The first
+run of M835 read BUILD-ERROR and a red control: the VM's disk had filled (0 MB free) from the mutant runs' rebuilt test
+binaries; with the stale ones deleted both runs were clean.

@@ -341,6 +341,10 @@ run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dis
 **A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
 `target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
 the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
+**Mutant batches fill the disk** (on-demand run 6, twice): each mutant of the `delulu` crate relinks its test binaries, and
+about ten of them took the VM from 20 GB free to 0 — a build then fails `linking with cc`, which `scripts/mutants.py` reads as
+BUILD-ERROR and its control as red. `df -h /` before a batch; between batches delete the stale binaries (`find
+target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' -mmin +10 -delete`) and `target/debug/incremental`.
 **The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
 install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
 `formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.

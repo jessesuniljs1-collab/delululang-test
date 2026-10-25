@@ -5764,3 +5764,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
   A12 (an internal type variable in a message), the other papercuts; the next launch merge (A20, RW 4.86, A19, RW 2.22).
+
+### 2026-10-25 — on-demand routine run 6 (continued): A12 and A22 — two refusals say what is missing
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `3b1aebd`
+- Commits: `784eb0b` (the fixes), this entry's commit.
+- **What:** see V2_LOG's paragraph on A12 and A22.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/test_runner_cli.rs`,
+  `CHANGELOG.md`, `docs/CLOUD_ROUTINE.md` (mutant batches fill the disk), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (6.19, 6.20), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-check/tests/unknown_receiver.rs`. Deleted, renamed: nothing.
+- Verified: M834, M835 red, the control green; `delulu-check` and `test_runner_cli` passed in the VM; runners for `784eb0b`
+  (`test_runner_cli`), macOS `40190613459` and Windows `40190611753`, success.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort), A10 (a list of sums on WASM),
+  the other papercuts (A1, A4–A8, A11, A13, A15, A16, A21, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19,
+  RW 2.22, RW 6.19, 6.20).
