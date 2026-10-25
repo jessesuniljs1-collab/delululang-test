@@ -26,6 +26,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
   refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
   this dependency".
+- **Fixed (RW 6.18): `grants propose` files the reach a special-use egress refusal asks for.** A request the egress
+  client refused because its host is a special-use address leaves no refused call — the program gets `Err` — and
+  `propose` answered "the report records no refusal". It now proposes `net.special=` for the run's node's own entry for
+  that host (or the host alone), filed and approved like any other proposal.
 - **Added (D-V2-188, RW 4.86): a lease can carry a special-use reach.** `grants delegate --net-special HOST` (and
   `grants certify --net-special HOST`) gives a node the reach `--grant net.special=HOST` gives a run, so a run under the
   lease may connect to that loopback, private-range or metadata host; before, a leased run reached none. A child holds the

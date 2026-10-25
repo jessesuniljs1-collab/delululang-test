@@ -9314,3 +9314,13 @@ fourteen. MATHEMATICS, the models README, the capstone, QUESTIONS and the book s
 alone at `f4285f2`: **2,551 passed, 0 failed**, 16 ignored, 183 binaries, cargo exit 0, the tree unmoved. Runners at `f4285f2`:
 macOS `40186634384` and Windows `40186636510` (`broker_cli` 16 with both new witnesses, `federation_cli` 10). A20's at
 `674d2a2`: macOS `40185761727`, Windows `40185763673` (`egress_cli` 11, `within_cli` 24).
+
+**A19 — `grants propose` filed nothing for a special-use egress refusal** (the builder, Sonnet 5.5; reproduced: a leased
+run under `--net 127.0.0.1`, exit 0, `egress` holding `"reason": "special-use"`, and `propose` answering "the report records
+no refusal"). With no refused call, `propose` now reads the first special-use egress record, takes its host by the egress
+client's own parser (`parse_target`), and proposes `net.special=` for each `net` entry the run's node grants for that host
+(read from the broker), or the host alone where no node is named. Witness `broker_cli`
+`a_special_use_egress_refusal_is_proposed_approved_and_reached`: the node's entry `127.0.0.1/x/**` (not the bare host) is
+what is proposed and filed; approval under a node without the reach is DL0802, under a `--net-special` node a new lease
+whose run connects to the loopback listener. M825 (the branch off) and M826 (the node ignored) red, the control green;
+broker_cli 18, within_cli 24, json_contract 14, grants_cli 5 passed.

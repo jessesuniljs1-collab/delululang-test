@@ -5735,3 +5735,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** the push run of this commit; `launch/2.0.0`'s `everything` (`40185296917`) to its end, then CHECKLIST-2.0's
   criteria 1, 3 and 4 re-cited from it, and the next launch merge (A20 and the dimension); the campaign list two entries above
   (A19, A17, A14, the papercuts).
+
+### 2026-10-25 — on-demand routine run 6 (continued): A19 — `grants propose` files the reach a special-use egress refusal asks for
+- Session: `https://claude.ai/code/session_016JcP7cJhRuvey8v7njVXC4`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; runner reads on `claude/peaceful-carson-crfvfa`   Pull request: none   Base: `bc4d9e7`
+- Commits: `0f0e75a` (A19), this entry's commit.
+- **What:** see V2_LOG's paragraph on A19.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/broker_cli.rs` (the loopback listener now a shared
+  helper), `docs/for-agents.md`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.18),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: M825, M826 red; the targets in V2_LOG passed in the VM; runners for `0f0e75a` dispatched (`broker_cli`'s three
+  special-use witnesses on macOS and Windows).
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** as the entry before, less A19: A17 (a decision: `Async` under a lease), A14 (the interpreter's merge sort),
+  the papercuts (A1, A4–A13, A15, A16, A21, A22, B4–B8, B11, C6–C16); the next launch merge (A20, RW 4.86, A19).
