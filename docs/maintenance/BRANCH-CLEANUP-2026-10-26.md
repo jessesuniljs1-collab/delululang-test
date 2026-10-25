@@ -132,6 +132,12 @@ before. Their tips are parents of one commit with no files, `7d92a8a`, on the ne
 | `autosave/dogfood` | `ba3f0f2` | the 2026-10-24 agent campaign's workdirs and ledger (`docs/CLOUD_ROUTINE.md` cites its `VERIFIED.md`) |
 | `claude/peaceful-carson-crfvfa` | `16470ed` | on-demand run 6's A10 fix (an empty list filled later with a sum or a record on WASM): committed, unrecorded, not landed when the weekly limit ended the run. The next item, not stale |
 
+**Later the same day.** The A10 fix landed on `master` as `500de3b`, a cherry-pick with the same code (#72). The branch
+was then removed. `16470ed` is kept reachable by a second archive commit, `bfb5b99`, a fast-forward of
+`archive/superseded-2026-10-26` whose parents are `7d92a8a` and `16470ed`. All four tips are in its history, and run 6's
+witness runs (`40191526037`, `40191528017`) still name a commit anyone can fetch. #71's and #72's own branches
+(`laptop/routine-milestones`, `laptop/a10-wasm`) were removed once each had landed, under the rule above.
+
 ## On the laptop
 
 Every local branch whose tip is in `master`'s history was deleted with `git branch -d`, which refuses a branch that is
