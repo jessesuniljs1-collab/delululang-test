@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 330 |
-| Rust lines | 191101 |
+| Rust lines | 191167 |
 | Rust files outside `src/` (test/bench targets) | 160 |
 | Markdown documents | 271 |
 | Markdown lines | 86896 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1559 / 16748 |
+| Nodes / edges in this map | 1559 / 16752 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 23709 lines
+- **Modules:** 24 files, 23731 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -325,7 +325,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2200 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 484 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
-| `src/prim.rs` | 1950 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
+| `src/prim.rs` | 1972 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 328 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
 | `src/sim.rs` | 399 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 104 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
