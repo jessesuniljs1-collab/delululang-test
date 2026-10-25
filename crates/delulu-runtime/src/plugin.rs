@@ -90,6 +90,8 @@ impl Grant {
                 budget: None,
                 // P9-04 (d): a plugin grant names no audience, so its secrets are sent nowhere (the bottom).
                 secret_to: Default::default(),
+                // RW 4.86: a plugin grant names no special-use reach (the bottom), as it names no audience.
+                net_special: Default::default(),
             },
         }
     }
@@ -217,6 +219,8 @@ impl PluginArtifact {
                 budget: None,
                 // P9-04 (d): a plugin grant names no audience, so its secrets are sent nowhere (the bottom).
                 secret_to: Default::default(),
+                // RW 4.86: a plugin grant names no special-use reach (the bottom), as it names no audience.
+                net_special: Default::default(),
             },
         }
     }

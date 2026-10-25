@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The DeluluLang authority order, verified symbolically with Z3 across ALL eleven dimensions.
+"""The DeluluLang authority order, verified symbolically with Z3 across ALL twelve dimensions.
 
     python docs/design/models/authority_algebra.py          # needs `pip install z3-solver`
 
@@ -11,6 +11,7 @@ the result to the whole conjunction `attenuation_check` actually computes:
                      ∧ fs_read, fs_write   path-descendant cover
                      ∧ net                entries ⊆ by host string, methods ⊆, then path-pattern containment (§2d, §2e)
                      ∧ secrets, secret_to, declassify, foreign_c, foreign_python   exact-set ⊆
+                     ∧ net_special        entries ⊆ as `net`'s, each within `net` (§2f)
                      ∧ device             per-device interval containment
                      ∧ budget             componentwise ≤ on (memory, processor time); absent = TOP
 
@@ -32,6 +33,9 @@ Each dimension is modelled from the code, not from the prose:
                       `NAME@host:port` pairs, ordered by inclusion like every exact-set dimension —
                       plus the one rule the others lack, a pair lives only beside its NAME in
                       `secrets` (`Scopes::canonicalized` drops an orphan), proved in §2c.
+  * net_special     — `authority.rs` (RW 4.86, D-V2-188): the `net` entries whose holder may reach a special-use
+                      address, ordered and met as `net` is — plus `secret_to`'s kind of rule, an entry lives only
+                      within `net` (`Scopes::canonicalized` drops an orphan), proved in §2f.
 
 Until PS-B-05 the full conjunction below modelled SEVEN set dimensions while its obligation said
 "all nine dimensions at once"; the code has eight (effects and seven scopes, the two path
@@ -79,6 +83,9 @@ MUTANTS = {
     "net-meet-star-wins": "the meet of `*` and a literal is `*` (a widening meet)",
     "net-method-dropped": "an entry's methods are left out of its order (a POST entry within a GET one)",
     "net-method-meet-union": "the meet of two entries' methods is their UNION (a widening meet)",
+    "net-special-dropped": "the special-use reach is left out of the full conjunction",
+    "net-special-meet-union": "the special-use reach's meet is the UNION (a widening meet)",
+    "net-special-keeps-orphans": "canonicalization keeps a special-use entry no `net` entry holds",
 }
 MUTANT = os.environ.get("DELULU_Z3_MUTANT", "")
 if MUTANT and MUTANT not in MUTANTS:
@@ -504,14 +511,61 @@ prove("a child taking a method its parent does not is never within it",
 
 print()
 print("=" * 78)
+print("(2f) SPECIAL-USE REACH — authority.rs `net_special` within `net` (RW 4.86, D-V2-188)")
+print("     an entry is a bit; `net`'s order on entries is represented by the set laws, as in (3)")
+print("=" * 78)
+
+def ns(n):
+    """An authority's (net, net_special): N the `net` entries, S the entries that may reach a special-use address."""
+    return {"N": BitVec(f"{n}_NN", W), "S": BitVec(f"{n}_NS", W)}
+
+def nsvars(x):
+    return [x["N"], x["S"]]
+
+def ns_wf(x):
+    """Every special-use entry within `net`."""
+    return sub(x["S"], x["N"])
+
+def ns_canon(x):
+    """`Scopes::canonicalized`: an entry no `net` entry holds is dropped (`well_formed_net_special`)."""
+    if MUTANT == "net-special-keeps-orphans":
+        return {"N": x["N"], "S": x["S"]}
+    return {"N": x["N"], "S": x["S"] & x["N"]}
+
+def ns_le(x, y):
+    return And(sub(x["N"], y["N"]), sub(x["S"], y["S"]))
+
+def ns_meet(x, y):
+    sm = (x["S"] | y["S"]) if MUTANT == "net-special-meet-union" else (x["S"] & y["S"])
+    return {"N": x["N"] & y["N"], "S": sm}
+
+def ns_eq(x, y):
+    return And(x["N"] == y["N"], x["S"] == y["S"])
+
+NX, NY = ns("NX"), ns("NY")
+prove("canon is well-formed            wf(canon x)", ns_wf(ns_canon(NX)), nsvars(NX))
+prove("canon never widens              canon x ⊑ x", ns_le(ns_canon(NX), NX), nsvars(NX))
+prove("canon idempotent                canon(canon x) = canon x", ns_eq(ns_canon(ns_canon(NX)), ns_canon(NX)), nsvars(NX))
+prove("canon keeps a well-formed x     wf x → canon x = x", Implies(ns_wf(NX), ns_eq(ns_canon(NX), NX)), nsvars(NX))
+prove("canon monotone                  x ⊑ y → canon x ⊑ canon y",
+      Implies(ns_le(NX, NY), ns_le(ns_canon(NX), ns_canon(NY))), nsvars(NX) + nsvars(NY))
+prove("meet keeps well-formedness      wf x ∧ wf y → wf(x⊓y)",
+      Implies(And(ns_wf(NX), ns_wf(NY)), ns_wf(ns_meet(NX, NY))), nsvars(NX) + nsvars(NY))
+prove("meet ⊑ both                     x⊓y ⊑ x ∧ x⊓y ⊑ y",
+      And(ns_le(ns_meet(NX, NY), NX), ns_le(ns_meet(NX, NY), NY)), nsvars(NX) + nsvars(NY))
+
+print()
+print("=" * 78)
 print("(3) THE FULL CONJUNCTION — attenuation_check, authority.rs")
 print("=" * 78)
 
 # The product order: ⊑ is the AND of every dimension. The code's nine set-like dimensions (effects
 # and eight scopes; the two path dimensions represented by the set laws; `secret_to` the ninth, P9-04
-# (d)), the device dimension and the budget dimension: eleven, as `attenuation_check` computes them.
-NSETS = 9
+# (d)), `net_special` the tenth (RW 4.86), the device dimension and the budget dimension: twelve, as
+# `attenuation_check` computes them.
+NSETS = 10
 ST = 8   # the index of `secret_to` among the set dimensions
+NS = 9   # the index of `net_special` among the set dimensions
 
 def au(n):
     return {"sets": [BitVec(f"{n}_s{i}", W) for i in range(NSETS)], "dev": dev(n + "d"), "bud": bud(n + "b")}
@@ -521,14 +575,17 @@ def avars(x):
 
 def ale(p, q):
     budget = True if MUTANT == "budget-dropped" else bwithin(p["bud"], q["bud"])
-    sets = [i for i in range(NSETS) if not (MUTANT == "secret-to-dropped" and i == ST)]
+    sets = [i for i in range(NSETS)
+            if not (MUTANT == "secret-to-dropped" and i == ST) and not (MUTANT == "net-special-dropped" and i == NS)]
     return And(*[sub(p["sets"][i], q["sets"][i]) for i in sets], within(p["dev"], q["dev"]), budget)
 
 def awf(x):
     return And(wf(x["dev"]), bwf(x["bud"]))
 
 A, B, C = au("A"), au("B"), au("C")
-Mset = [(A["sets"][i] | B["sets"][i]) if (MUTANT == "secret-to-meet-union" and i == ST) else (A["sets"][i] & B["sets"][i])
+Mset = [(A["sets"][i] | B["sets"][i])
+        if (MUTANT == "secret-to-meet-union" and i == ST) or (MUTANT == "net-special-meet-union" and i == NS)
+        else (A["sets"][i] & B["sets"][i])
         for i in range(NSETS)]
 MD, mddef = dmeet(A["dev"], B["dev"], "AB")
 MB, mbdef = bmeet(A["bud"], B["bud"], "ABb")
@@ -538,7 +595,7 @@ prove("FULL reflexive   a ⊑ a", Implies(awf(A), ale(A, A)), avars(A))
 prove("FULL transitive  a⊑b ∧ b⊑c → a⊑c",
       Implies(And(awf(A), awf(B), awf(C), ale(A, B), ale(B, C)), ale(A, C)),
       avars(A) + avars(B) + avars(C))
-prove("FULL meet ⊑ both — THE NO-WIDENING LAW, all eleven dimensions at once",
+prove("FULL meet ⊑ both — THE NO-WIDENING LAW, all twelve dimensions at once",
       Implies(And(awf(A), awf(B), dmeet_ok(A["dev"], B["dev"]), mddef, mbdef), And(ale(AM, A), ale(AM, B))),
       avars(A) + avars(B) + dvars(MD) + bvars(MB))
 prove("FULL meet is GLB c⊑a ∧ c⊑b → c ⊑ a⊓b",
@@ -557,6 +614,10 @@ prove("FULL no budget under a budgeted parent is never ⊑ (the asymmetry reache
 # the whole order: a pair the parent does not hold is never within it.
 prove("FULL a secret_to pair the parent lacks is never ⊑ (the audience reaches the product)",
       Implies(Not(sub(A["sets"][ST], B["sets"][ST])), Not(ale(A, B))),
+      avars(A) + avars(B))
+# And for `net_special` (RW 4.86): a special-use reach the parent does not hold is never within it, whatever else matches.
+prove("FULL a special-use reach the parent lacks is never ⊑ (the reach reaches the product)",
+      Implies(Not(sub(A["sets"][NS], B["sets"][NS])), Not(ale(A, B))),
       avars(A) + avars(B))
 
 print()

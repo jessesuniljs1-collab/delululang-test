@@ -961,11 +961,108 @@ fn a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_conn
                 said.contains("special-use") && said.contains(&format!("--grant net.special={entry}")),
                 "{verb} {entry}: {said}"
             );
+            assert!(said.contains(&format!("`--net-special {entry}`")), "the spelling that reaches it (RW 4.86): {said}");
         }
     }
     let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Net", "--net", "api.example.invalid", "--json"]);
     assert!(o.status.success(), "the control: {}{}", stdout(&o), stderr(&o));
     assert!(!stderr(&o).contains("special-use"), "a public host gets no note: {}", stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// RW 4.86 (B1's fix, D-V2-188): a node carries a special-use reach — `grants delegate --net-special HOST`, as a run is
+/// granted one with `--grant net.special=HOST` — so a leased run reaches a loopback service its lease names that way, and
+/// only that way. Witnessed by a listener on this host's loopback: the run under `--net-special` connects (the first byte
+/// is TLS's), the run under plain `--net` is refused `special-use` and nothing connects, a child cannot claim a reach its
+/// parent lacks (DL0802, the repair keeping the host), and `grants diff` names the reach as a widening.
+#[test]
+fn a_lease_reaches_a_special_use_host_only_when_its_node_names_one() {
+    use std::io::Read;
+    use std::time::{Duration, Instant};
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dbns-{}-{}", std::process::id(), t % 1_000_000_000));
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    // The first bytes of the first connection, or None once `wait` has passed with none.
+    let listen = |wait: Duration| {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.set_nonblocking(true).unwrap();
+        let port = l.local_addr().unwrap().port();
+        let h = std::thread::spawn(move || {
+            let start = Instant::now();
+            loop {
+                match l.accept() {
+                    Ok((mut s, _)) => {
+                        s.set_nonblocking(false).unwrap();
+                        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+                        let mut buf = vec![0u8; 3];
+                        let n = s.read(&mut buf).unwrap_or(0);
+                        buf.truncate(n);
+                        return Some(buf);
+                    }
+                    Err(_) if start.elapsed() < wait => std::thread::sleep(Duration::from_millis(5)),
+                    Err(_) => return None,
+                }
+            }
+        });
+        (port, h)
+    };
+    let program = |port: u16| {
+        let f = cwd.join(format!("p{port}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module p\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"127.0.0.1\"])\n    match h.get(\"https://127.0.0.1:{port}/x\") {{\n        \
+                 Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let delegate = |extra: &[&str]| -> Output {
+        let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--multi", "--json"];
+        args.extend_from_slice(extra);
+        delulu_in(&cwd, &state, &args)
+    };
+    let node_token = |o: &Output| -> (String, String) {
+        assert!(o.status.success(), "delegate: {}{}", stdout(o), stderr(o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(o)).expect("delegate --json");
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+    let (special_node, special) = node_token(&delegate(&["--net-special", "127.0.0.1"]));
+    let (plain_node, plain) = node_token(&delegate(&["--net", "127.0.0.1"]));
+    let run = |file: &str, token: &str| delulu_in(&cwd, &state, &["run", file, "--lease", token, "--no-prompt"]);
+
+    let (port, seen) = listen(Duration::from_secs(20));
+    let o = run(&program(port), &special);
+    let first =
+        seen.join().unwrap().unwrap_or_else(|| panic!("nothing connected under `--net-special`: {}{}", stdout(&o), stderr(&o)));
+    assert_eq!(first.first(), Some(&0x16), "TLS reached the loopback service: {first:02x?}");
+
+    let (port, seen) = listen(Duration::from_secs(3));
+    let o = run(&program(port), &plain);
+    assert_eq!(stdout(&o), "not delivered\n", "{}", stderr(&o));
+    assert!(seen.join().unwrap().is_none(), "plain `--net` reaches no special-use host: {}", stderr(&o));
+
+    // A child of the plain node cannot claim the reach; the repair keeps the host and drops the reach.
+    let o = delegate(&["--parent", &plain_node, "--net-special", "127.0.0.1"]);
+    assert!(!o.status.success(), "a reach the parent lacks: {}", stdout(&o));
+    let said = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(said.contains("DL0802"), "{said}");
+    let (_, narrower) = node_token(&delegate(&["--parent", &special_node, "--net", "127.0.0.1"]));
+    let (port, seen) = listen(Duration::from_secs(3));
+    let o = run(&program(port), &narrower);
+    assert!(seen.join().unwrap().is_none(), "a child delegated plain `--net` has no reach of its own: {}", stderr(&o));
+
+    let o = delulu_in(&cwd, &state, &["grants", "diff", &plain_node, &special_node, "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}{}", stdout(&o), stderr(&o));
+    assert!(stdout(&o).contains("net.special=127.0.0.1"), "the reach is a widening of its own: {}", stdout(&o));
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
