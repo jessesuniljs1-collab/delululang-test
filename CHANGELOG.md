@@ -26,10 +26,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
   refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
   this dependency".
-- **Changed (D-V2-187, RW 4.86): `grants delegate` and `grants certify` name a special-use `--net` host** (`127.0.0.1`,
-  `localhost`, a private range) when the grant is written: a node cannot carry `net.special` yet, so a run under it is
-  refused at that connect, and the note gives `--grant net.special=HOST`, the grant that reaches it. The node is still
-  made.
+- **Added (D-V2-188, RW 4.86): a lease can carry a special-use reach.** `grants delegate --net-special HOST` (and
+  `grants certify --net-special HOST`) gives a node the reach `--grant net.special=HOST` gives a run, so a run under the
+  lease may connect to that loopback, private-range or metadata host; before, a leased run reached none. A child holds the
+  reach only where its parent does (DL0802), `grants diff` names it, and a node without one is byte-identical to before.
+  `grants delegate --net` with a special-use host still makes the node, and says it has no special-use reach and which
+  spelling gives one (D-V2-187).
 - **Changed (RW 6.17): a network entry wider than its grant is named as that.** `root.http(["127.0.0.1:GET,POST,PUT"])`
   under a grant of `127.0.0.1:GET,POST` was refused "`network host` was not granted — pass `--grant net=HOST`"; the
   refusal now names the entry, the host and its grants, and the entry as the grant to pass. A special-use host's remedy is

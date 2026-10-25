@@ -1872,6 +1872,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   given the type written out once (`apply_type`, within its limit) and walks it as it stands. Time a twin, a field read
   and an `==` of the shape, not only the shape.
 
+- **Before refusing a spelling, read every test that writes it** (on-demand routine run 6, B1): `grants delegate --net
+  127.0.0.1` looked like a grant nothing can use, and the first fix refused it. Two suites delegate exactly that, on
+  purpose: such a node drives the custody, the Guard's permits and the audit of a leased send, with nothing leaving the
+  machine. A refusal would have removed a working grant to report a missing one. The fix was a note where the grant is
+  written, and then the missing dimension (D-V2-187, D-V2-188). `grep` the spelling in the tests before deciding what it
+  is for.
 - **A guarantee witnessed through one command is witnessed for that command** (on-demand routine run 6, RUN-PIN-1): the
   xz scenario's test drove `build` and said the gate holds "BEFORE any code runs"; `run`, the command an author types
   first, skipped the gate, and so did five more routes. When a guarantee says "before X", list every command that can

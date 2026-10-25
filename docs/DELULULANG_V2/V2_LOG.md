@@ -9295,3 +9295,22 @@ new sections moved under `## [2.0.0]`, the Breaking paragraph gains D-V2-184, RW
 the decision log kept D-V2-155 beside D-V2-182 to D-V2-187. Gates there: fmt, clippy.sh, the Survey (0 errors), `doctor
 --check` 26 and the eleven document gates passed. Its `everything` run and release dry run are dispatched; CHECKLIST-2.0's
 criteria 1, 3 and 4 are re-cited from that run once read.
+
+**RW 4.86 — the `net.special` dimension on a node (D-V2-188), B1's real fix, the same run.** `Scopes::net_special`: `net`
+entries ordered and met as `net`'s are, kept only within `net`, written in the canonical JSON only when non-empty (no
+existing hash, chain or certificate moves). `--net-special HOST` on `grants delegate` and `certify`; carried by the
+certificate, `AuthoritySpec` and `NodeInfo` (`serde(default)`), the daemon's three conversions (`authority_spec_of` by
+hand: it ends `..Default::default()`, the trap the code itself records), a `--broker daemon` run's root, a lease's run,
+proposals' join and `grants diff`. Witness `broker_cli` `a_lease_reaches_a_special_use_host_only_when_its_node_names_one`:
+a leased run under `--net-special 127.0.0.1` connects to a loopback listener (TLS's first byte), one under plain `--net` is
+refused and nothing connects, a child claiming the reach is DL0802, a child delegated plain `--net` under the reach has
+none, and `grants diff` names it. The broker's `a_special_use_reach_lives_within_net_and_attenuates_like_it` and the
+certificate's every-dimension round trip (its fixture's `net` now holds the special entry, or canonicalization would drop
+it and the round trip prove nothing). M818 (a lease given nothing), M819 (the order without it), M820 (`grants diff`
+without it), M821 (orphans kept), M822 (always written), M823 (the certificate ignoring it), M824 (a union meet): each red,
+the controls green. The Z3 model: §2f (seven obligations) and the tenth set dimension with its teeth, 58 obligations
+discharged here (z3 5.3.1 in a scratch virtualenv); all fourteen mutants caught, three of them new; `ci.yml` runs the
+fourteen. MATHEMATICS, the models README, the capstone, QUESTIONS and the book say twelve dimensions. The full suite
+alone at `f4285f2`: **2,551 passed, 0 failed**, 16 ignored, 183 binaries, cargo exit 0, the tree unmoved. Runners at `f4285f2`:
+macOS `40186634384` and Windows `40186636510` (`broker_cli` 16 with both new witnesses, `federation_cli` 10). A20's at
+`674d2a2`: macOS `40185761727`, Windows `40185763673` (`egress_cli` 11, `within_cli` 24).

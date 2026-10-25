@@ -341,6 +341,9 @@ run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dis
 **A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
 `target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
 the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
+**The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
+install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
+`formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.
 **A sentinel a witness looks for in a program's output is joined at run time** (on-demand run 6): DL1001 quotes the
 dependency's source, so a literal `println("the dependency wrote")` was found in the refusal itself, and the fixed run
 read as one that ran. **The agent campaign's ledger is a file on `origin/autosave/dogfood`** (on-demand run 6): `git show
