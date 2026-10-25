@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 330 |
-| Rust lines | 190859 |
+| Rust lines | 190934 |
 | Rust files outside `src/` (test/bench targets) | 160 |
 | Markdown documents | 270 |
 | Markdown lines | 86637 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1558 / 16658 |
+| Nodes / edges in this map | 1558 / 16667 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -192,14 +192,14 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 16190 lines
+- **Modules:** 18 files, 16265 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
 | `src/check.rs` | 4326 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
-| `src/deps.rs` | 1452 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
+| `src/deps.rs` | 1527 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 863 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
 | `src/lib.rs` | 2143 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |

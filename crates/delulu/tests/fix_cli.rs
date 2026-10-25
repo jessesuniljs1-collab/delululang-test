@@ -373,7 +373,7 @@ fn repair_ids_in_source() -> Vec<String> {
 /// Repair ids no single-file `check` can provoke, each with the reason. Everything else must be
 /// exercised by the corpus below, so a new repair cannot be born unexamined.
 const REPAIRS_NOT_REACHABLE_FROM_ONE_FILE: &[(&str, &str)] = &[
-    ("insert_dependency_pin", "needs a PACKAGE with an unpinned dependency, not a single file (covered by `tooling.rs`)"),
+    ("insert_dependency_pin", "needs a PACKAGE with an unpinned dependency, not a single file (covered by `delulu-check`'s `deps::tests::the_pin_repair_leaves_a_manifest_that_checks_whatever_form_the_dependency_takes`)"),
     ("regenerate_manifest_export", "needs a plugin manifest that disagrees with its code (covered by `plugin_cli.rs`)"),
     (
         "R-DL0802-attenuate-to-intersection",

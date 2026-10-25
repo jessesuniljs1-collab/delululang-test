@@ -885,7 +885,7 @@ pub fn check_pins(ws: &Workspace, program: &Program) -> Vec<Diagnostic> {
                                 comma(&auth.effects)
                             ),
                         )
-                        .with_span(pkg.manifest.dep_span(&dep.name), "add a `[dependencies.<name>.authority]` pin")
+                        .with_span(pkg.manifest.dep_span(&dep.name), "add an `authority` pin to this dependency")
                         .with_repair(repair),
                     );
                 }
@@ -1040,10 +1040,18 @@ fn normalize_path(p: &str) -> String {
 }
 
 /// Build the `insert-pin` repair for a missing pin. Flagged `authority_widening` (§3.2).
+///
+/// Where the dependency is an inline table (`lib = { path = "…" }`, the form `delulu add` writes), the pin goes inside it:
+/// TOML refuses a `[dependencies.lib.authority]` table after an inline one, so appending one turned DL1001 into DL1004
+/// (the agent test campaign's A2). A dependency written as a table, or by dotted keys, takes the appended sub-table.
 fn pin_insert_repair(pkg: &ResolvedPackage, dep: &crate::manifest::Dependency, auth: &PackageAuthority) -> Repair {
     let effects = auth.effects.iter().map(|e| format!("\"{e}\"")).collect::<Vec<_>>().join(", ");
-    let insert = format!("\n[dependencies.{}.authority]\neffects = [{}]\n", dep.name, effects);
-    let at = pkg.manifest.raw.len() as u32;
+    let raw = &pkg.manifest.raw;
+    let (at, insert) = match inline_table_end(raw, &dep.name) {
+        Some(at) => (at, format!(", authority = {{ effects = [{effects}] }}")),
+        None => (raw.len(), format!("\n[dependencies.{}.authority]\neffects = [{}]\n", dep.name, effects)),
+    };
+    let at = at as u32;
     Repair {
         id: "insert_dependency_pin",
         confidence: Confidence::Suggest,
@@ -1052,6 +1060,22 @@ fn pin_insert_repair(pkg: &ResolvedPackage, dep: &crate::manifest::Dependency, a
         edits: vec![Edit { file: pkg.manifest.file, start_byte: at, end_byte: at, insert }],
         reason: None,
     }
+}
+
+/// Where an inline-table dependency's last entry ends — the byte a new entry is inserted at, before the closing brace and
+/// any space ahead of it; `None` when the dependency is not an inline table. Read from the parser's own span of the value,
+/// never by searching the text for the name. (Never empty: a dependency without `path` or `git` is DL1004, not DL1001.)
+fn inline_table_end(raw: &str, name: &str) -> Option<usize> {
+    #[derive(serde::Deserialize)]
+    struct Deps {
+        #[serde(default)]
+        dependencies: std::collections::BTreeMap<String, toml::Spanned<toml::Value>>,
+    }
+    let deps: Deps = toml::from_str(raw).ok()?;
+    let span = deps.dependencies.get(name)?.span();
+    let text = raw.get(span.clone())?;
+    let inner = text.strip_prefix('{')?.strip_suffix('}')?;
+    Some(span.start + 1 + inner.trim_end().len())
 }
 
 /// Find a public function in the dependency whose effects include an excess effect, for a span.
@@ -1277,6 +1301,57 @@ mod tests {
         let d = diags.iter().find(|d| d.code == "DL1001").unwrap_or_else(|| panic!("expected DL1001, got {diags:?}"));
         assert!(d.message.contains("DB_PASSWORD"), "the message must name the secret outside the pin: {}", d.message);
         assert!(!d.message.contains("TELEMETRY_TOKEN"), "the pinned secret is permitted and must not be reported: {}", d.message);
+    }
+
+    /// The agent test campaign's A2: DL1001's own repair must leave a manifest that checks. It appended a
+    /// `[dependencies.<name>.authority]` table, which TOML refuses after an inline table (`lib = { path = … }`, the form
+    /// `delulu add` writes), so applying the suggestion turned DL1001 into DL1004. Every way a manifest can declare the
+    /// dependency is written here, the repair applied byte for byte, and the result read again: it must parse and pin.
+    #[test]
+    fn the_pin_repair_leaves_a_manifest_that_checks_whatever_form_the_dependency_takes() {
+        let head = "[package]\nname=\"app\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[\"Write\"]\n";
+        let forms = [
+            ("inline", "[dependencies]\nlib = { path = \"../lib\" }\n"),
+            ("inline-tight", "[dependencies]\nlib={path=\"../lib\"}"),
+            ("inline-comment", "[dependencies]\nlib = { path = \"../lib\" }   # the parser\n\n[package.metadata]\nx = 1\n"),
+            (
+                "inline-second",
+                "[dependencies]\nzed = { path = \"../zed\", authority = { effects = [] } }\nlib = { path = \"../lib\" }\n",
+            ),
+            ("table", "[dependencies.lib]\npath = \"../lib\"\n"),
+            ("dotted", "[dependencies]\nlib.path = \"../lib\"\n"),
+        ];
+        for (tag, deps) in forms {
+            let root = std::env::temp_dir().join(format!("delulu_deps_test_pin_repair_{tag}"));
+            let _ = fs::remove_dir_all(&root);
+            let (app, lib, zed) = (root.join("app"), root.join("lib"), root.join("zed"));
+            write(&lib, "delulu.toml", &LIB.replace("\"p\"", "\"lib\"").replace("effects=[]", "effects=[\"Write\"]"));
+            write(&lib, "src/root.delulu", "module lib\npub fn say(c: Cap[Console]) ! {Write} { c.println(\"hi\") }\n");
+            write(&zed, "delulu.toml", &LIB.replace("\"p\"", "\"zed\""));
+            write(&zed, "src/root.delulu", "module zed\npub fn one() -> Int { 1 }\n");
+            let manifest = format!("{head}{deps}");
+            write(&app, "delulu.toml", &manifest);
+            write(&app, "src/root.delulu", "module app\nimport lib\npub fn go() -> Int { 1 }\n");
+            let ws = resolve_workspace(&app);
+            let diags = check_pins(&ws, &check_workspace(&ws));
+            let d = diags.iter().find(|d| d.code == "DL1001").unwrap_or_else(|| panic!("{tag}: expected DL1001, got {diags:?}"));
+            let edit = &d.repairs.first().unwrap_or_else(|| panic!("{tag}: DL1001 carries its repair")).edits[0];
+            let mut repaired = manifest.clone();
+            repaired.replace_range(edit.start_byte as usize..edit.end_byte as usize, &edit.insert);
+            let (parsed, errs) = crate::manifest::Manifest::parse(&repaired, 0);
+            assert!(errs.is_empty(), "{tag}: the repaired manifest must parse:\n{repaired}\n{errs:?}");
+            let pin = parsed.unwrap().dependencies.into_iter().find(|x| x.name == "lib").and_then(|x| x.pin);
+            assert_eq!(
+                pin.map(|p| p.effects),
+                Some(vec!["Write".to_string()]),
+                "{tag}: the pin is the dependency's authority:\n{repaired}"
+            );
+            write(&app, "delulu.toml", &repaired);
+            let ws = resolve_workspace(&app);
+            let prog = check_workspace(&ws);
+            assert!(err_codes(&prog).is_empty(), "{tag}: {:?}", prog.diagnostics);
+            assert!(check_pins(&ws, &prog).is_empty(), "{tag}: the repaired manifest pins:\n{repaired}");
+        }
     }
 
     /// **DEPPIN-LEX-1 regression lock.** Two spellings of the same out-of-pin location must both be
