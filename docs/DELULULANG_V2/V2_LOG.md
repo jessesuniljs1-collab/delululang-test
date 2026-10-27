@@ -9681,3 +9681,31 @@ no KVM.
 
 **Evidence.** `clippy.sh` is clean, and the file compiles on Windows, where its 10 gated tests are ignored. The pull
 request's `microvm` job is the run that boots them.
+
+## 2026-10-27 — the laptop: `str()` of a `Float` that only a method made runs on WASM
+
+**Why.** While witnessing D-V2-191, `delulu run --engine wasm` refused a program printing `str(r.float())`: DL1201
+*"str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)"*. `codegen.rs` imports
+`float_to_str`, which formats with `Value::Float`'s display, when a module "makes or takes a `Float`". The test for that,
+`module_uses_floats`, looked only for:
+- a float literal;
+- a `float(…)` or `parse_float(…)` call;
+- a `Float` in a function's signature.
+
+A Float from `r.float()` was none of these. A21's own test passed only because it also compared `f >= 0.0`.
+
+**What changed.**
+- `module_uses_floats` also asks the checker's types for any expression typed `Float`, as `module_uses_lists` does.
+- That map is empty under `compile_module`, the type-less entry, which the lib tests' `main_rand_parity` used. A debug
+  print showed `n_types=0`. The helper now compiles with `compile_checked`, as `run --engine wasm` does, so those parity
+  tests exercise the command line's path.
+- The stale comment there is corrected: it said seeds 4242 and 4243 are one seed. The test now asserts they differ,
+  which is D-V2-191 on WASM.
+- The refusal's text lists what compiles.
+
+**Evidence.**
+- `str_of_a_float_only_a_method_made_runs_on_wasm` was red before, with the same DL1201.
+- Mutant M869 (the checker's types not asked) is red, with the control green.
+- `delulu-wasm` lib: 100 passed.
+- On the command line, the program prints the same line on both engines.
+- The suites are in the commit message.

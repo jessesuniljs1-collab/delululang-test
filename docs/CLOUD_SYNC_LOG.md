@@ -6001,3 +6001,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. A14, and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
   4. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — `str()` of a `Float` that only a method made runs on WASM (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-str-float` (on `laptop/microvm-sweep-race`, #81)   Pull request: opened with this push
+- **What:** the WASM codegen asks the checker's types whether a module makes a `Float`, so `str(r.float())` compiles.
+  See V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/lib.rs`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.29), `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #79, #80, #81 and this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8.
+  3. A14 (the interpreter's speed), and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16).
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
