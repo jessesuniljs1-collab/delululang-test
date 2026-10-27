@@ -6017,3 +6017,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. A14 (the interpreter's speed), and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16).
   4. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — the laptop's handoff: #76 to #82 landed; `launch/2.0.0` at `0cea85d` (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/handoff-2026-10-27` (on `master` `9be923a`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. On `launch/2.0.0`, outside this pull request: `0cea85d` (the merge, the
+  CHANGELOG move, CHECKLIST-2.0 re-cited).
+- **Also, at the owner's request:** the laptop's autosave task was checked and renewed to 2026-11-03. It pushed snapshot
+  `7fb4e21` (10 uncommitted paths) at 16:05 UTC while a branch was open.
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `launch/2.0.0`'s `everything` `40551800164` and release dry run `40551806058`, both at `0cea85d`. Cite them in
+     CHECKLIST-2.0 when green; fix what is red. The broker's Miri ran 3 h 00 to 3 h 12 min in the last four runs, under
+     its 240-minute cap.
+  2. A14: the interpreter's speed. Merge sort of 100,000 `Int`s took 28 s on the interpreter, and the whole program
+     (with a quicksort and a generator) about 1 s on WASM.
+  3. The papercuts: A4–A8, A13, B4–B8, B11, C6–C16. The ledger is on `origin/autosave/dogfood`
+     (`2026-10-24/A-builder/REPORT.txt`, `_head-chef/VERIFIED.md`).
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
