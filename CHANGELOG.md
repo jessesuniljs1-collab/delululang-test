@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `zstd` leaves the build: wasmtime is built without its compilation cache, 2026-10-27
+
+- **Security: RUSTSEC-2026-0391, -0398, -0403 and -0410, published by 2026-10-27, no longer apply: the crates they name
+  are gone from the build.** All four are against `zstd` 0.13.3, `zstd-safe` 7.2.4 and `zstd-sys` 2.0.16. Only
+  wasmtime's compilation cache brought them in: an optional feature that keeps compiled native code in a directory on
+  disk and loads it back. wasmtime 48.0.7 is the newest release of the 48 long-term-support line, and it still needs
+  `zstd` 0.13. DeluluLang never turned the cache on, so this code was compiled in but never ran: wasmtime's `Config::new()`
+  leaves it off, and nothing here calls `Config::cache`. `delulu-wasm` now builds wasmtime with its default features
+  except `cache`, and every other feature resolves as before. 21 packages leave the lockfile, the three `zstd` crates
+  among them; none is added, and no remaining crate changes version.
+
 ## Unreleased — `r.float()` and `http.get_with` run on WASM, 2026-10-26
 
 - **Added (A21):** `Cap[Rand].float()` compiles to WASM (`--engine wasm`, `build --target wasm`, a contained plugin granted

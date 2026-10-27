@@ -5875,3 +5875,32 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16). The ledger is on `origin/autosave/dogfood`.
   6. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — `zstd` leaves the build: wasmtime without its compilation cache (RUSTSEC-2026-0391, -0398, -0403, -0410) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/zstd-advisories` (on `master` `b18ddf3`)   Pull request: opened with this push
+- **Read first:**
+  - `launch/2.0.0` `dcfd43c`'s `everything` `40240072174`: **18 of 18 jobs success**. The broker's Miri took 3 h 00 min,
+    the checker's 1 h 09 min.
+  - Its release dry run `40240074649`: the four packages success, release skipped.
+  - The first nightly with #69, `40292304609` (2026-10-26, at `b18ddf3`): **18 of 18 success**. The broker's Miri took
+    3 h 07 min, inside its 240-minute cap.
+  - The next nightly, `40474545633` (2026-10-27, same tree): `supply-chain` red, the 17 others success (the broker's
+    Miri 3 h 01 min).
+- **What:** the four advisories are against `zstd`, which only wasmtime's unused `cache` feature brought in. The
+  feature is now off, and a new test holds it off in the resolved graph. See V2_LOG's entry of the same name.
+- **Also:** the laptop's autosave task (`DeluluLang-autosave`) was checked at the owner's request: Ready, every
+  10 minutes, last result 0, the installed copy equal to `scripts/autosave.ps1`, and every branch equal to `origin`. It
+  was renewed for 7 days (`-Install -Hours 168`, to 2026-11-03).
+- Files and folders: A `crates/delulu-wasm/tests/wasmtime_features.rs`. M `crates/delulu-wasm/Cargo.toml`, `Cargo.lock`,
+  `CHANGELOG.md`, `.github/workflows/ci.yml` (a comment), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this on green, then merge `master` into `launch/2.0.0`. Its `supply-chain` is red the same way until then.
+     Dispatch `everything` and the release dry run there, and cite `40240072174`, `40240074649` and the new runs in
+     CHECKLIST-2.0 (criterion 4 gains these advisories).
+  2. A15, a decision on a code for a bad argument (DL0908), with documentation of the half-open range.
+  3. A decision on mixing the generator's seed (splitmix64).
+  4. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

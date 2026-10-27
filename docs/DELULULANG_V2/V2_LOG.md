@@ -9501,3 +9501,45 @@ pull request). `master` was then fast-forwarded to it, and its branch deleted fr
 - On the merged tree: `clippy.sh` clean; the Survey 1564 nodes, 0 errors; `doctor` 29 checks; 13 gate targets, 121 passed.
 - `dcfd43c` was pushed. Its `everything` run, `40240072174`, and its release dry run, `40240074649`, were dispatched and
   are unread at this entry.
+
+## 2026-10-27 — the laptop: `zstd` leaves the build, because wasmtime is built without its compilation cache
+
+**Found by** the nightly `40474545633` at `b18ddf3`: `supply-chain` red on four advisories. 17 other jobs passed; the
+broker's Miri took 3 h 01 min. The tree had not changed since the green nightly `40292304609`, so what moved was
+cargo-deny's database. The four:
+- RUSTSEC-2026-0391 against `zstd` 0.13.3: a stream abandoned on a reused context leaks into the next one.
+- RUSTSEC-2026-0398 against `zstd-safe` 7.2.4: `Seekable::decompress` sets a `Vec`'s length past its capacity.
+- RUSTSEC-2026-0403 against `zstd-safe` 7.2.4: a failed legacy-frame decompression exposes uninitialized memory.
+- RUSTSEC-2026-0410 against `zstd-sys` 2.0.16: on wasm32, the allocator shim writes at address 0 when an allocation fails.
+
+`master` and `launch/2.0.0` carry the same lockfile, so both are red the same way. Locally on `master`,
+`cargo deny check advisories` printed the four, then `advisories FAILED`, exit 1 (the witness).
+
+**What reached them.** `cargo tree -i zstd` showed a single path, through `wasmtime-internal-cache` 48.0.7: wasmtime's
+`cache` feature, which is on by default. The cache keeps compiled native code in a directory on disk and loads it back.
+wasmtime 48.0.7's `Config::new()` sets `cache: None`, and nothing in the tree calls `Config::cache`, so this code was
+compiled in but never ran. No update was possible: 48.0.7 is the newest 48 release and needs `zstd` 0.13, while the fixes
+are in `zstd` 0.14.3, `zstd-safe` 8.2.0 and `zstd-sys` 2.1.2. Leaving the 48 long-term-support line (D-V2-67) for
+wasmtime 50 would be a far larger change than a feature nobody uses.
+
+**The change.** `crates/delulu-wasm/Cargo.toml` names wasmtime 48.0.7's `default` features except `cache`. The resolved
+features from `cargo metadata` lost only `cache` and the `default` meta-feature, and every other one is as it was. 21
+packages leave the lockfile: the three `zstd` crates, `wasmtime-internal-cache`, `directories-next` and its
+platform crates, a second `toml` with its parsers, `thiserror` 1, `jobserver`, `pkg-config` and `winapi`. None is added,
+and no remaining crate changed version.
+
+**The gate.** `crates/delulu-wasm/tests/wasmtime_features.rs` asks the resolved graph, as `egress_features` does for
+reqwest, because a manifest line does not keep a feature off when another crate can ask for it. It checks three things:
+- wasmtime's `cache` and `default` are off;
+- none of the four crates only the cache brings is present;
+- as a control, `cranelift`, `runtime` and `pooling-allocator` are on, so the query reads the real engine.
+
+Falsified twice: on `master`'s manifest and lock it went red, naming `["cache", "default"]`; with only `"cache"` added
+back to the new list, red naming `["cache"]`. It passed again once restored.
+
+**Evidence.** Locally:
+- every `cargo deny` check: `advisories ok, bans ok, licenses ok, sources ok`;
+- `clippy.sh` clean and stamped;
+- the `delulu-wasm` suite, and the CLI's `governance`, `wasm_cli`, `egress_cli` and `broker_cli`: in the commit message.
+
+The pull request's CI is the rest.
