@@ -9576,3 +9576,27 @@ value, is D-V2-190.
 - Mutants M855–M858 (D-V2-190), each red with the control green.
 - `delulu-conform --coverage`: 100%.
 - `clippy.sh` clean; the tests in the commit message.
+
+## 2026-10-27 — the laptop: every `--seed` draws its own sequence (D-V2-191)
+
+**Why.** A21's entry recorded it, *seen on the way, not changed*: the generator started at `seed | 1`. Witnessed again at
+`ac2920e` with `delulu run --seed N` on a program drawing two floats and two ints:
+- seeds 2 and 3 printed the same line, and so did 4 and 5;
+- seeds 0, `2654435768` and `2654435769` printed one line between them;
+- seed 1's first float was `5.866996130457838e-11`.
+
+Changing it changes every seeded sequence, so it is a decision. D-V2-191 takes it now, before 2.0.0, a major release.
+
+**What changed.**
+- `delulu-runtime` `prim.rs`: `rng_state_from_seed`, splitmix64 with a guard for the one seed that mixes to zero.
+  `set_rand_seed` and the unseeded default both start through it. `delulu test`'s per-test seeds and the sandboxed
+  guest's go through `set_rand_seed`.
+- `delulu-wasm` `host.rs`: `seed_rng` calls the same function, for a given seed and for the wall-clock default.
+- The change was made in two steps. First the function was introduced with the old `| 1` mapping, and the new tests
+  were witnessed red against it. Then splitmix64 replaced the mapping.
+
+**Evidence.**
+- The witnesses and mutants are in D-V2-191.
+- After the change, the same program under seeds 0–5, `2654435768` and `2654435769` printed eight different lines. The
+  first floats ran from 0.104 to 0.951.
+- Clippy is clean. The suites are in the commit message.

@@ -443,6 +443,19 @@ mod tests {
         assert_eq!(main_rand_parity(src, 999), main_rand_parity(src, 999));
     }
 
+    /// The WASM host starts its generator where the interpreter does (`rng_state_from_seed`, D-V2-191), so
+    /// neighbouring seeds draw differently there too, and alike on both engines (`main_rand_parity` asserts it).
+    #[test]
+    fn neighbouring_seeds_draw_differently_on_both_engines() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(0, 1000000000)))\n out.println(str(r.int(0, 1000000000))) }\n";
+        let outs: Vec<String> = (0..8u64).map(|s| main_rand_parity(src, s)).collect();
+        for i in 0..outs.len() {
+            for j in i + 1..outs.len() {
+                assert_ne!(outs[i], outs[j], "seeds {i} and {j} draw the same sequence");
+            }
+        }
+    }
+
     #[test]
     fn rand_is_refused_on_wasm_when_not_granted() {
         let src = "module m\nfn main(root: Root) ! {Rand} { let r = root.rand()\n let _v = r.int(0, 10) }\n";

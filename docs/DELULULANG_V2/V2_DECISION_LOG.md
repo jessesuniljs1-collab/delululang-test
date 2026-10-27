@@ -5004,3 +5004,44 @@ anchor `ref.diag.DL0908`). Both are recorded in `ENTRENCHED_CHANGE_RECORD.md`.
 
   M857 and M858 panic the host with *"attempt to calculate the remainder with a divisor of zero"*, so the guard is
   load-bearing.
+
+## D-V2-191 — `--seed` is mixed (splitmix64) before it starts the generator, so every seed draws its own sequence; every seeded sequence changes in 2.0.0 — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (seen on the way in A21's change, 2026-10-25; V2_LOG *Seen on the way, not changed*).** Both engines started
+their xorshift64 generator at `(seed == 0 ? 0x9E3779B9 : seed) | 1`. Witnessed on the interpreter at `ac2920e`:
+- **Seed pairs collided.** `--seed 2` and `--seed 3` drew the same sequence, as did 4 and 5, and every even seed and
+  the odd one after it. Seeds 0, `2654435768` and `2654435769` drew one sequence between them. Half of all seeds were
+  duplicates, so a sweep over seeds 0..N ran each case about twice.
+- **A small seed drew tiny numbers first.** Its state has few bits set, and xorshift needs steps to spread them. Seed 1's
+  first `r.float()` was `5.9e-11`, and every seed from 1 to 64 drew a first float below 0.01 (their mean `1.9e-9`).
+
+`different_seeds_diverge` compared seeds 1 and 2, which never collided (1 | 1 = 1, 2 | 1 = 3).
+
+**Decision: mix the seed with splitmix64 before it becomes the state, on both engines and in every path.** This covers
+`--seed`, `delulu test`'s per-test seeds, the sandboxed guest's, and the unseeded wall-clock default.
+- splitmix64 is a bijection on `u64`, so distinct seeds start in distinct states.
+- **The one exception.** xorshift stays at zero forever, and exactly one seed mixes to zero:
+  `0x61C8864680B583EB`, which is `2^64 - 0x9E3779B97F4A7C15`. That seed starts at the constant instead, where
+  `0xCD36DA00563C5EF6` also starts. 2^64 seeds into 2^64 − 1 nonzero states must share at least one state, and this is
+  the only shared pair. Both seeds were found by inverting splitmix64.
+- One function, `delulu_runtime::prim::rng_state_from_seed`, is called by the interpreter and by the WASM host, so the
+  engines cannot start differently.
+
+**Why now: it changes every seeded sequence.** A run recorded under `--seed N` with 1.x draws different numbers under
+2.0.0. Nothing in this repository stores a seed for replay. The device simulator reports its seed, and no test or
+`.delulu` program pins a seeded value; the tests compare the two engines, or a run with itself. `STABILITY.md` promises
+nothing about seeded sequences. 2.0.0 is a major release, and after it this change would have to wait for 3.0. The
+generator itself (xorshift64), and the mapping of a draw to `r.int` and `r.float`, are unchanged.
+
+**Evidence:**
+- `prim.rs` `determinism_tests`, each red before the change (the first three):
+  - `neighbouring_seeds_draw_different_sequences`: seeds 0–63, `0x9E3779B8`, `0x9E3779B9`, `u64::MAX - 1` and
+    `u64::MAX` draw distinct sequences. Before: *"seeds 2 and 3 draw the same sequence"*.
+  - `a_small_seeds_first_draw_is_spread_over_the_range`: the first draws of seeds 1–64 average between 0.3 and 0.7,
+    with at most 4 below 0.01. Before: a mean of `1.9e-9`.
+  - `the_seed_that_mixes_to_zero_still_draws`.
+- `delulu-wasm` `neighbouring_seeds_draw_differently_on_both_engines`: seeds 0–7 are distinct, and alike on both
+  engines. Before, red with *"seeds 2 and 3 draw the same sequence"*.
+- Mutants, each red with the control green:
+  - M859, no zero-state guard: the zero-state test fails.
+  - M860, the WASM host keeps `| 1`: the two engines part under seed 0.

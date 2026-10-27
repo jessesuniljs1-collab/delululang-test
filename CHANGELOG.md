@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — every `--seed` draws its own sequence; seeded sequences change, 2026-10-27
+
+- **Changed: a seed is mixed (splitmix64) before it starts the random generator, so every seed draws a sequence of its
+  own** (D-V2-191). Before, the generator started at `seed | 1`, which caused two problems:
+  - `--seed 2` and `--seed 3` drew the same numbers, as did every even seed and the odd one after it. A sweep over seeds
+    ran each case about twice.
+  - A small seed drew tiny numbers first. Seed 1's first `r.float()` was `5.9e-11`.
+
+  This covers `run --seed`, `delulu test`, sandboxed runs and the unseeded default, on the interpreter and the WASM
+  engine alike.
+- **Breaking for recorded seeds:** a run recorded under `--seed N` with 1.x draws different numbers under 2.0.0. The
+  same seed still draws the same sequence every run, on both engines.
+
 ## Unreleased — an empty `rand.int` range is DL0908, not a scope violation, 2026-10-27
 
 - **Changed: `r.int(lo, hi)` with `hi <= lo` faults with the new code `DL0908`, *an argument outside what the operation

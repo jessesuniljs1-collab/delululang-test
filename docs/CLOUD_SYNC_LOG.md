@@ -5926,3 +5926,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
   5. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — every `--seed` draws its own sequence (splitmix64, D-V2-191) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/rand-seed-mix` (on `laptop/a15-dl0908`, #77)   Pull request: opened with this push
+- **What:** D-V2-191. The seed is mixed before it starts the generator, on both engines and every path, so seeds 2 and
+  3 no longer draw alike and a small seed's first draws are not tiny. Every seeded sequence changes in 2.0.0. See
+  V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu-wasm/src/lib.rs`, `docs/for-agents.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.26), `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #77, then this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 (`dcfd43c`'s `40240072174` and `40240074649`, and the `zstd` advisories under 4).
+  3. A14 (the interpreter's speed), A11 (actor output order under `--seed`), and the papercuts (A1, A4–A8, A13,
+     B4–B8, B11, C6–C16). One more seen 2026-10-27: `str()` of a `Float` is DL1201 on `--engine wasm`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
