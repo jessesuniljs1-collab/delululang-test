@@ -9510,3 +9510,233 @@ trace names the URL alone, never a header's value (D-V2-128).
   M853 (the import never made), M854 (the custody never asked).
 
 **A21 is closed.**
+
+## 2026-10-26 — the laptop: #71 to #74 landed; `launch/2.0.0` at `dcfd43c`, its criteria re-cited
+
+Each pull request was read green on every job of its own run (14 passed; `miri-slow` and `heavy-gates` skipped, as on every
+pull request). `master` was then fast-forwarded to it, and its branch deleted from `origin` under the new *Branches* rule:
+- #71 (the routine stops at one milestone; the branch cleanup): `40234008662` at `5aa72d9`.
+- #72 (A10 and A16): `40235828014` at `6932b06`.
+- #73 (A21): `40237687819` at `2108a5a`.
+- #74 (D-V2-189): `40237846599` at `5a1b75c`.
+
+`master` = `5a1b75c`. `origin` holds seven branches: `master`, `launch/2.0.0`, `rc/1.0.0-drill`,
+`archive/superseded-2026-10-26` and the three `autosave/*`.
+
+**`launch/2.0.0`** was merged with `master` in `D:\nelan\dl-launch`, now on `launch/2.0.0` itself:
+- `master`'s two new `## Unreleased` sections were moved into `## [2.0.0]` by a script that checks each heading first. It
+  found the earlier ones already there, so run 6's merges match.
+- The decision log keeps both sides.
+- CHECKLIST-2.0 criteria 1, 3 and 4 now cite the newest `everything` runs read green on the branch, `40185296917` and
+  `40191260368` (18 of 18 each). Criterion 8 now cites the newest release dry run, `40191262135`.
+- On the merged tree: `clippy.sh` clean; the Survey 1564 nodes, 0 errors; `doctor` 29 checks; 13 gate targets, 121 passed.
+- `dcfd43c` was pushed. Its `everything` run, `40240072174`, and its release dry run, `40240074649`, were dispatched and
+  are unread at this entry.
+
+## 2026-10-27 — the laptop: `zstd` leaves the build, because wasmtime is built without its compilation cache
+
+**Found by** the nightly `40474545633` at `b18ddf3`: `supply-chain` red on four advisories. 17 other jobs passed; the
+broker's Miri took 3 h 01 min. The tree had not changed since the green nightly `40292304609`, so what moved was
+cargo-deny's database. The four:
+- RUSTSEC-2026-0391 against `zstd` 0.13.3: a stream abandoned on a reused context leaks into the next one.
+- RUSTSEC-2026-0398 against `zstd-safe` 7.2.4: `Seekable::decompress` sets a `Vec`'s length past its capacity.
+- RUSTSEC-2026-0403 against `zstd-safe` 7.2.4: a failed legacy-frame decompression exposes uninitialized memory.
+- RUSTSEC-2026-0410 against `zstd-sys` 2.0.16: on wasm32, the allocator shim writes at address 0 when an allocation fails.
+
+`master` and `launch/2.0.0` carry the same lockfile, so both are red the same way. Locally on `master`,
+`cargo deny check advisories` printed the four, then `advisories FAILED`, exit 1 (the witness).
+
+**What reached them.** `cargo tree -i zstd` showed a single path, through `wasmtime-internal-cache` 48.0.7: wasmtime's
+`cache` feature, which is on by default. The cache keeps compiled native code in a directory on disk and loads it back.
+wasmtime 48.0.7's `Config::new()` sets `cache: None`, and nothing in the tree calls `Config::cache`, so this code was
+compiled in but never ran. No update was possible: 48.0.7 is the newest 48 release and needs `zstd` 0.13, while the fixes
+are in `zstd` 0.14.3, `zstd-safe` 8.2.0 and `zstd-sys` 2.1.2. Leaving the 48 long-term-support line (D-V2-67) for
+wasmtime 50 would be a far larger change than a feature nobody uses.
+
+**The change.** `crates/delulu-wasm/Cargo.toml` names wasmtime 48.0.7's `default` features except `cache`. The resolved
+features from `cargo metadata` lost only `cache` and the `default` meta-feature, and every other one is as it was. 21
+packages leave the lockfile: the three `zstd` crates, `wasmtime-internal-cache`, `directories-next` and its
+platform crates, a second `toml` with its parsers, `thiserror` 1, `jobserver`, `pkg-config` and `winapi`. None is added,
+and no remaining crate changed version.
+
+**The gate.** `crates/delulu-wasm/tests/wasmtime_features.rs` asks the resolved graph, as `egress_features` does for
+reqwest, because a manifest line does not keep a feature off when another crate can ask for it. It checks three things:
+- wasmtime's `cache` and `default` are off;
+- none of the four crates only the cache brings is present;
+- as a control, `cranelift`, `runtime` and `pooling-allocator` are on, so the query reads the real engine.
+
+Falsified twice: on `master`'s manifest and lock it went red, naming `["cache", "default"]`; with only `"cache"` added
+back to the new list, red naming `["cache"]`. It passed again once restored.
+
+**Evidence.** Locally:
+- every `cargo deny` check: `advisories ok, bans ok, licenses ok, sources ok`;
+- `clippy.sh` clean and stamped;
+- the `delulu-wasm` suite, and the CLI's `governance`, `wasm_cli`, `egress_cli` and `broker_cli`: in the commit message.
+
+The pull request's CI is the rest.
+
+## 2026-10-27 — the laptop: an empty `rand.int` range is DL0908 (A15, D-V2-190)
+
+**Why.** The agent test campaign's A15: `r.int(5, 5)` faulted DL0904, which `delulu explain` calls a capability scope
+violation, a path or host outside a grant. Nothing said the range is half-open. Checked at `d2752cf`, both engines
+faulted alike, with the same `int.refused` trace record. The one test of an empty range, `refusal_trace_parity`, pinned
+DL0904 as the code both traces must share. The decision, and why the fault is not DL0904, an existing code, or a drawn
+value, is D-V2-190.
+
+**What changed.**
+- `delulu-diag`: DL0908 registered, *"an argument outside what the operation accepts"*, with its `explain` text.
+- `delulu-runtime` `prim.rs`: the empty range faults DL0908. Its words come from `rand_int_range_fault`, which the WASM
+  host calls too, so the two texts cannot drift apart.
+- `delulu-wasm` `host.rs`: the same code and words. `refusal_trace_parity` expects DL0908 for the empty range.
+- `delulu-conform` `rules.rs` and `tests/conformance/witnesses.toml` (entrenched; `ENTRENCHED_CHANGE_RECORD.md`): the
+  rule `ref.rule.runtime.faults-are-diagnostics` names DL0908, which gains a rejecting and an accepting witness. The
+  generated reference shows 358 of 358 anchors and 155 diagnostics.
+- Documented: the half-open range in `docs/for-agents.md` (*Determinism*, which now lists both `Cap[Rand]` methods) and
+  in the book's determinism paragraph.
+- Counts: the slang catalog's coverage is now *8 of 155* diagnostic codes in `docs/lang/delulu-slang.md`,
+  `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` and REMAINING_WORK 1.8 and 6.2. The Survey flagged them, and DL0908 has no
+  slang message yet. An older entry of this log gives the count of its day; it was true when written and is left as it
+  is.
+
+**Evidence.**
+- `fault_parity`: `an_empty_rand_range_is_dl0908_on_both_engines` covers four empty ranges, `Int::MAX` to `Int::MIN`
+  among them. It was red before (`WASM trap: DL0904: rand.int requires lo < hi`) and is green now.
+  `a_one_wide_rand_range_draws_its_one_value_on_both_engines` is green.
+- The CLI, at `--seed 7 --trace-effects`, on the interpreter and on `--engine wasm`: the same three trace records,
+  ending in `int.refused` with DL0908's text; `error[DL0908]`, exit 1.
+- Mutants M855–M858 (D-V2-190), each red with the control green.
+- `delulu-conform --coverage`: 100%.
+- `clippy.sh` clean; the tests in the commit message.
+
+## 2026-10-27 — the laptop: every `--seed` draws its own sequence (D-V2-191)
+
+**Why.** A21's entry recorded it, *seen on the way, not changed*: the generator started at `seed | 1`. Witnessed again at
+`ac2920e` with `delulu run --seed N` on a program drawing two floats and two ints:
+- seeds 2 and 3 printed the same line, and so did 4 and 5;
+- seeds 0, `2654435768` and `2654435769` printed one line between them;
+- seed 1's first float was `5.866996130457838e-11`.
+
+Changing it changes every seeded sequence, so it is a decision. D-V2-191 takes it now, before 2.0.0, a major release.
+
+**What changed.**
+- `delulu-runtime` `prim.rs`: `rng_state_from_seed`, splitmix64 with a guard for the one seed that mixes to zero.
+  `set_rand_seed` and the unseeded default both start through it. `delulu test`'s per-test seeds and the sandboxed
+  guest's go through `set_rand_seed`.
+- `delulu-wasm` `host.rs`: `seed_rng` calls the same function, for a given seed and for the wall-clock default.
+- The change was made in two steps. First the function was introduced with the old `| 1` mapping, and the new tests
+  were witnessed red against it. Then splitmix64 replaced the mapping.
+
+**Evidence.**
+- The witnesses and mutants are in D-V2-191.
+- After the change, the same program under seeds 0–5, `2654435768` and `2654435769` printed eight different lines. The
+  first floats ran from 0.104 to 0.951.
+- Clippy is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: `--seed` and `--clock fixed:` reach every actor (ACTOR-DETERMINISM-1, A11; D-V2-192)
+
+**Why.** Looking at A11 (an actor program's lines in different orders under `--seed 7`), a program that gave an actor
+a `Cap[Rand]` and a `Cap[Clock]` showed that `--seed` and `--clock fixed:` never reached an actor at all:
+- under `--seed 7`, the actor's draw changed on every run, even on one worker;
+- under `--clock fixed:1000`, the actor read the wall clock.
+
+Both settings are thread-locals that `run` sets on the main thread. The decision, and why the interleaving itself stays
+unordered, is D-V2-192.
+
+**What changed.**
+- `delulu-runtime` `prim.rs`: `RandStream`, `next_spawn_key`, `swap_rand_stream` and `fixed_clock_ms`.
+  `set_rand_seed` also sets the key the main thread's spawns derive from.
+- `actors.rs`:
+  - a spawn draws its child's key on the spawner's thread and sends it with the create job;
+  - each cell carries its actor's stream, installed for the actor's constructor and every behaviour, and saved after;
+  - every worker adopts the fixed clock read when the actor system starts.
+- Docs: `docs/for-agents.md` (*Determinism*, **Actors**), `docs/design/STAGE7_ACTORS_GUIDE.md` (the ordering line),
+  and HANDOFF §11.5 (*A thread-local setting reaches only the thread that sets it*).
+
+**Evidence.**
+- The test and the mutants M861–M865 are listed in D-V2-192.
+- The program's sorted output hashed alike on 1, 4 and 8 workers under `--seed 7`.
+- `clippy.sh` is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: a write refused after a `val` lift names the call that lifted it (A1)
+
+**Why.** The agent test campaign's A1 is a `let` list passed once to an ordinary function and pushed to later. The
+refusal is right. C64 (ruling D62) lifts a fresh, unannotated literal to `val` at a `val` argument, and the binding
+gives up its write access so the callee may keep the value. But the DL1604 stood at the write alone, and nothing pointed
+at the call. `GETTING_STARTED.md` §10 still said the call is DL1603, which is true only of a binding whose `ref` the
+author wrote, and `delulu explain DL1604` spoke only of `box` and `tag`. Reproduced at `3c8bf56`: one span, at
+`xs.push(4)`.
+
+**What changed.**
+- `delulu-check` `rcap_check.rs`: a binding remembers the call that lifted it (`Lift`: the argument, the callee and its
+  parameter). All five write checks follow the receiver to the binding at its root, through fields and indexes: a field
+  or element assignment, the builtin `push`, the list mutators and the map mutators. A refusal through a lifted binding:
+  - names the callee and its parameter;
+  - labels the argument (*"`xs` became `val` here"*);
+  - says what to write instead.
+- What to write instead was checked on the binary: with `fn len_of(xs: box List[Int])`, A1's program runs and prints
+  `2 3`; with the push before the call, it prints `3 3`. A `box` or `ref` parameter also takes an author-annotated
+  `ref` list (both run).
+- `delulu explain DL1604` and `GETTING_STARTED.md` §10 (a corrected DL1603 row and a new DL1604 row).
+
+**Evidence.**
+- `a_write_refused_after_a_lift_names_the_call_that_lifted_it` covers four shapes: a list's `push`, a record field, a
+  nested field, and a method on a field. Each must carry a secondary label at the argument, name the callee and offer
+  `box`. Red before (*"no label at the lifting call"*).
+- Mutants, each red with the control green:
+  - M866: the lift is never recorded.
+  - M867: an assignment's target is not followed to its root.
+  - M868: a method's receiver is not followed to its root.
+
+  M867 survived the first version of the test, which wrote `p.x` (a target whose base is the variable itself). The two
+  nested shapes were added for it.
+- `clippy.sh` is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: a microVM test raced its neighbours' sweeps
+
+**Found by** `master`'s push run `40544536339` at `ac2920e` (#77 landed), whose `microvm` job failed on
+`a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left`: *"the killed host's directory"*, left 0,
+right 1. The same job passed on #77's own run, and #77 does not touch the microVM path.
+
+**Why.** The test kills a host mid-run and then asserts its VM directory is still there, before the next launch sweeps
+it. But `microvm.rs` calls `sweep_orphans` at the start of every launch, and it removes the directory of any host that
+is gone. CI runs this binary with `--test-threads=2`, so another test's launch could sweep the killed host's directory
+inside the window the test counts it in. This was read from the code. It was not reproduced, because this laptop has
+no KVM.
+
+**The fix**, in the test alone:
+- Every VM-booting test in `microvm_cli.rs` (11, each found by its `delulu_kvm` gate) takes a shared lock.
+- The host-death test takes the lock alone, for its whole body, so its window and its own sweeping launch run with no
+  other VM starting. Its last assertion, *the next launch sweeps it*, is now about its own launch.
+- The other tests still run beside each other.
+- The product is unchanged.
+
+**Evidence.** `clippy.sh` is clean, and the file compiles on Windows, where its 10 gated tests are ignored. The pull
+request's `microvm` job is the run that boots them.
+
+## 2026-10-27 — the laptop: `str()` of a `Float` that only a method made runs on WASM
+
+**Why.** While witnessing D-V2-191, `delulu run --engine wasm` refused a program printing `str(r.float())`: DL1201
+*"str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)"*. `codegen.rs` imports
+`float_to_str`, which formats with `Value::Float`'s display, when a module "makes or takes a `Float`". The test for that,
+`module_uses_floats`, looked only for:
+- a float literal;
+- a `float(…)` or `parse_float(…)` call;
+- a `Float` in a function's signature.
+
+A Float from `r.float()` was none of these. A21's own test passed only because it also compared `f >= 0.0`.
+
+**What changed.**
+- `module_uses_floats` also asks the checker's types for any expression typed `Float`, as `module_uses_lists` does.
+- That map is empty under `compile_module`, the type-less entry, which the lib tests' `main_rand_parity` used. A debug
+  print showed `n_types=0`. The helper now compiles with `compile_checked`, as `run --engine wasm` does, so those parity
+  tests exercise the command line's path.
+- The stale comment there is corrected: it said seeds 4242 and 4243 are one seed. The test now asserts they differ,
+  which is D-V2-191 on WASM.
+- The refusal's text lists what compiles.
+
+**Evidence.**
+- `str_of_a_float_only_a_method_made_runs_on_wasm` was red before, with the same DL1201.
+- Mutant M869 (the checker's types not asked) is red, with the control green.
+- `delulu-wasm` lib: 100 passed.
+- On the command line, the program prints the same line on both engines.
+- The suites are in the commit message.

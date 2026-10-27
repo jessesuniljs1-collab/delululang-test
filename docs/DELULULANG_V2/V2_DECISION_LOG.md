@@ -4969,3 +4969,140 @@ is redefining Authority rather than hardening it.
   *effects: Async, Write*), so an operator who wants no actors sees it before running the program.
 - `docs/for-agents.md` (*The effect kinds*) now says all of this.
 - Nothing in the runtime changes.
+
+## D-V2-190 — An empty `rand.int` range is DL0908, an argument outside what the operation accepts, not DL0904 (A15) — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (A15, the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, low).** `r.int(lo, hi)` draws from `lo` up
+to but not including `hi`, and nothing said so: 6,000 draws of `r.int(1, 6)` never produced 6. `r.int(5, 5)` aborted the
+run as `error[DL0904]: rand.int requires lo < hi`. `delulu explain DL0904` says *"An operation reached outside its
+capability's SCOPE — a path outside the granted prefix, a host not on the granted list"*. A bad argument is not that.
+Checked again on 2026-10-27 at `d2752cf`: both engines faulted DL0904 with that text. Both also recorded
+`int.refused` with it in the effect trace. One test drew from an empty range: `refusal_trace_parity` (RW 4.64), which
+pinned DL0904 as the code the two engines' traces must agree on. It checked that the engines agree, not that the code
+was right.
+
+**Decision: a new code, DL0908, "an argument outside what the operation accepts".** It is a runtime fault, beside
+DL0901–DL0905.
+- **Why not keep DL0904.** It is the capability-scope code, the one an operator, a monitor or an agent reads as an
+  authority event. `STABILITY.md` §1 makes a code's identity add-only. Filing a bad argument under it was a misfiling
+  that blurs that identity, not part of it. 2.0.0 is a major release, and moving a fault to its proper code is
+  allowed there in any case.
+- **Why not an existing code.** DL0901–DL0903 name overflow, division and indexing. DL0907 is the compiler-bug class,
+  and an empty range is the program's own value, not a broken static guarantee.
+- **Why not draw something anyway.** An empty range names no value. Returning `lo`, or swapping the bounds, would turn
+  a bug into data that flows onward, which is what DL0901 refuses for arithmetic.
+
+**The fault itself.** Both engines report the same text, from one function (`delulu_runtime::prim::rand_int_range_fault`):
+*"rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = 5, hi = 5"*. The
+effect trace keeps its `int.refused` record, now naming DL0908. By RW 4.62 that record means *"it did not happen, and
+why"*, whether the custody, the broker or the effect itself stopped the operation, and its detail carries the code.
+
+**Documented:**
+- the half-open range in `delulu explain DL0908`, `docs/for-agents.md` *Determinism*, and the book's determinism
+  paragraph;
+- `ref.rule.runtime.faults-are-diagnostics` (`crates/delulu-conform/src/rules.rs`) gains DL0908 in its statement and its
+  `enforced_by`.
+
+**Entrenched files:** `crates/delulu-conform/src/rules.rs` and `tests/conformance/witnesses.toml` (two rows, for the
+anchor `ref.diag.DL0908`). Both are recorded in `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Evidence:**
+- `refusal_trace_parity`'s `an_operation_its_effect_refuses_is_traced_the_same_by_both_engines` now expects DL0908. It
+  went red on the change (*left: "DL0908", right: "DL0904"*), and it still asserts the two traces are byte-identical and
+  end in `int.refused`.
+- `fault_parity`'s `an_empty_rand_range_is_dl0908_on_both_engines` covers `(5, 5)`, `(6, 5)`, `(0, Int::MIN)` and
+  `(Int::MAX, Int::MIN)`. It was red before the change (`WASM trap: DL0904: rand.int requires lo < hi`) and green after.
+- `a_one_wide_rand_range_draws_its_one_value_on_both_engines`: `r.int(5, 6)` is 5 under three seeds, the engines alike.
+- Mutants, each red with the control green:
+  - M855: the interpreter keeps DL0904.
+  - M856: the WASM host keeps DL0904.
+  - M857: the interpreter's guard is `hi < lo`.
+  - M858: the WASM host's guard is `hi < lo`.
+
+  M857 and M858 panic the host with *"attempt to calculate the remainder with a divisor of zero"*, so the guard is
+  load-bearing.
+
+## D-V2-191 — `--seed` is mixed (splitmix64) before it starts the generator, so every seed draws its own sequence; every seeded sequence changes in 2.0.0 — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (seen on the way in A21's change, 2026-10-25; V2_LOG *Seen on the way, not changed*).** Both engines started
+their xorshift64 generator at `(seed == 0 ? 0x9E3779B9 : seed) | 1`. Witnessed on the interpreter at `ac2920e`:
+- **Seed pairs collided.** `--seed 2` and `--seed 3` drew the same sequence, as did 4 and 5, and every even seed and
+  the odd one after it. Seeds 0, `2654435768` and `2654435769` drew one sequence between them. Half of all seeds were
+  duplicates, so a sweep over seeds 0..N ran each case about twice.
+- **A small seed drew tiny numbers first.** Its state has few bits set, and xorshift needs steps to spread them. Seed 1's
+  first `r.float()` was `5.9e-11`, and every seed from 1 to 64 drew a first float below 0.01 (their mean `1.9e-9`).
+
+`different_seeds_diverge` compared seeds 1 and 2, which never collided (1 | 1 = 1, 2 | 1 = 3).
+
+**Decision: mix the seed with splitmix64 before it becomes the state, on both engines and in every path.** This covers
+`--seed`, `delulu test`'s per-test seeds, the sandboxed guest's, and the unseeded wall-clock default.
+- splitmix64 is a bijection on `u64`, so distinct seeds start in distinct states.
+- **The one exception.** xorshift stays at zero forever, and exactly one seed mixes to zero:
+  `0x61C8864680B583EB`, which is `2^64 - 0x9E3779B97F4A7C15`. That seed starts at the constant instead, where
+  `0xCD36DA00563C5EF6` also starts. 2^64 seeds into 2^64 − 1 nonzero states must share at least one state, and this is
+  the only shared pair. Both seeds were found by inverting splitmix64.
+- One function, `delulu_runtime::prim::rng_state_from_seed`, is called by the interpreter and by the WASM host, so the
+  engines cannot start differently.
+
+**Why now: it changes every seeded sequence.** A run recorded under `--seed N` with 1.x draws different numbers under
+2.0.0. Nothing in this repository stores a seed for replay. The device simulator reports its seed, and no test or
+`.delulu` program pins a seeded value; the tests compare the two engines, or a run with itself. `STABILITY.md` promises
+nothing about seeded sequences. 2.0.0 is a major release, and after it this change would have to wait for 3.0. The
+generator itself (xorshift64), and the mapping of a draw to `r.int` and `r.float`, are unchanged.
+
+**Evidence:**
+- `prim.rs` `determinism_tests`, each red before the change (the first three):
+  - `neighbouring_seeds_draw_different_sequences`: seeds 0–63, `0x9E3779B8`, `0x9E3779B9`, `u64::MAX - 1` and
+    `u64::MAX` draw distinct sequences. Before: *"seeds 2 and 3 draw the same sequence"*.
+  - `a_small_seeds_first_draw_is_spread_over_the_range`: the first draws of seeds 1–64 average between 0.3 and 0.7,
+    with at most 4 below 0.01. Before: a mean of `1.9e-9`.
+  - `the_seed_that_mixes_to_zero_still_draws`.
+- `delulu-wasm` `neighbouring_seeds_draw_differently_on_both_engines`: seeds 0–7 are distinct, and alike on both
+  engines. Before, red with *"seeds 2 and 3 draw the same sequence"*.
+- Mutants, each red with the control green:
+  - M859, no zero-state guard: the zero-state test fails.
+  - M860, the WASM host keeps `| 1`: the two engines part under seed 0.
+
+## D-V2-192 — `--seed` and `--clock fixed:` reach every actor: each actor draws from a stream of its own, keyed by its spawner; the interleaving of actors stays unordered (ACTOR-DETERMINISM-1, A11) — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (the laptop, 2026-10-27, while looking at A11).** The generator and the fixed clock are thread-locals in
+`prim.rs`, and `run` sets them on the main thread, where `main` runs. An actor's turns run on a worker thread, which
+never saw either setting. Witnessed with `--seed 7`:
+- `main` drew 220748 on every run, but an actor holding the same `Cap[Rand]` drew 395444, 186614 and 634774 on three
+  runs with `--actors-threads 1`, and other values with 4.
+- Under `--clock fixed:1000`, `main` read 1000 and an actor read the wall clock (`1793119167378`).
+
+Spec §6.2 says *"`--seed <u64>` fixes `Cap[Rand]`; `--clock fixed:<ms>` fixes `Cap[Clock]`"*, with no exception for
+actors, and `docs/for-agents.md` says `--seed N --clock fixed:MS` *"fixes randomness and time"*. A11 of the agent test
+campaign (three runs of an 8-worker prime counter under `--seed 7` printed their lines in three orders) had looked like
+an ordering question. Its programs drew nothing at random, so this defect stayed out of sight.
+
+**Decision.**
+- **The clock.** The actor system reads the run's fixed clock when it starts, and every worker adopts it.
+- **The generator.** Each actor has a `Cap[Rand]` stream of its own (`prim::RandStream`), carried in its cell and
+  installed on the worker for each of its turns (`swap_rand_stream`). A stream starts from a key that its spawner
+  derives when spawning (`next_spawn_key`): the spawner's own key and how many actors it has spawned, mixed by
+  splitmix64. `main`'s key is the run's seed (`set_rand_seed`), or the wall clock when there is none. An actor's turns
+  run one at a time, so its draws depend only on its key and its own messages, not on which worker runs it or how many
+  workers there are.
+- Drawing a spawn key draws nothing from anyone's `Cap[Rand]`, so a program's own sequence of draws is unchanged by
+  spawning.
+- **What stays unordered.** The interleaving of different actors' turns. Stage 7 promises ordering per sender only
+  (*"no global order"*), and that is kept. Even one worker does not promise a single order, because `main` keeps
+  sending while the worker runs. `docs/for-agents.md` and the actors guide now say so, which closes A11.
+
+**Evidence.**
+- `actors_cli` `seed_and_fixed_clock_reach_every_actor_on_any_number_of_workers` drives the binary. Two actors each
+  spawn a child, one of them takes two turns, and a third reads the clock. It checks:
+  - the sorted lines are identical across two runs on one worker and one on four, and differ under another seed;
+  - an actor reads `clock 1000`;
+  - the actor's second turn draws on from its first.
+
+  It was red before the change (*"an actor reads the fixed clock: … clock 1793119228350"*), passed 15 of 15 runs after
+  it, and the program's sorted output hashed alike on 1, 4 and 8 workers.
+- Mutants, each red with the control green:
+  - M861: a worker never adopts the fixed clock.
+  - M862: a behaviour's turn runs on the worker's own generator.
+  - M863: a spawn key ignores its spawner's key.
+  - M864: `--seed` never sets `main`'s key.
+  - M865: a turn's stream is not saved for the next.

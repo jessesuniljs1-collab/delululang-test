@@ -394,7 +394,8 @@ mod tests {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
 
-        let wasm = compile_module(&checked.module).expect("compile");
+        // As `run --engine wasm` compiles: with the checker's types.
+        let wasm = compile_checked(&checked.module, &checked.result).expect("compile");
         let cfg = HostConfig { console: true, rand: true, rand_seed: Some(seed), ..HostConfig::default() };
         let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
 
@@ -432,8 +433,19 @@ mod tests {
         let out = main_rand_parity(src, 4242);
         assert_eq!(out.lines().count(), 4, "{out:?}");
         assert_eq!(out.lines().last(), Some("true"), "{out:?}");
-        // A seed is made odd (`seed | 1`), so 4242 and 4243 are one seed; 4244 is another.
-        assert_ne!(main_rand_parity(src, 4242), main_rand_parity(src, 4244), "the seed decides the draws");
+        // Every seed draws its own sequence, neighbours included (D-V2-191; 4242 and 4243 drew alike under `seed | 1`).
+        assert_ne!(main_rand_parity(src, 4242), main_rand_parity(src, 4243), "the seed decides the draws");
+    }
+
+    /// `str()` of a `Float` that only `r.float()` made: a module carries `float_to_str` when it "makes or takes a
+    /// `Float`", and the test for that looked for a float literal, a `float`/`parse_float` call or a `Float` in a
+    /// signature. A program whose floats all came from a method, as this one's do, was refused DL1201 at the `str`
+    /// (2026-10-27). The checker's types now say where a `Float` is.
+    #[test]
+    fn str_of_a_float_only_a_method_made_runs_on_wasm() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.float()) + \" \" + str(r.float())) }\n";
+        let out = main_rand_parity(src, 7);
+        assert_eq!(out.split_whitespace().count(), 2, "{out:?}");
     }
 
     #[test]
@@ -441,6 +453,19 @@ mod tests {
         // Determinism: the same seed yields the same output every run (and across both engines).
         let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(1, 1000000)))\n out.println(str(r.int(1, 1000000))) }\n";
         assert_eq!(main_rand_parity(src, 999), main_rand_parity(src, 999));
+    }
+
+    /// The WASM host starts its generator where the interpreter does (`rng_state_from_seed`, D-V2-191), so
+    /// neighbouring seeds draw differently there too, and alike on both engines (`main_rand_parity` asserts it).
+    #[test]
+    fn neighbouring_seeds_draw_differently_on_both_engines() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(0, 1000000000)))\n out.println(str(r.int(0, 1000000000))) }\n";
+        let outs: Vec<String> = (0..8u64).map(|s| main_rand_parity(src, s)).collect();
+        for i in 0..outs.len() {
+            for j in i + 1..outs.len() {
+                assert_ne!(outs[i], outs[j], "seeds {i} and {j} draw the same sequence");
+            }
+        }
     }
 
     #[test]

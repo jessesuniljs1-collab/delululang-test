@@ -548,6 +548,13 @@ jobs:
   # line (D-V2-67), and 0315's door shut too: both engines refuse the WebAssembly 3.0 proposals
   # (D-V2-68). Nothing is ignored for them.
   #
+  # And on 2026-10-27 (nightly 40474545633): RUSTSEC-2026-0391, -0398, -0403 and -0410 against zstd
+  # 0.13.3, zstd-safe 7.2.4 and zstd-sys 2.0.16. Only wasmtime's compilation cache brought them in,
+  # and nothing here turns that cache on. wasmtime 48.0.7, the newest of the 48 LTS line, still needs
+  # zstd 0.13, so there was nothing to update to. Closed by building wasmtime without its `cache`
+  # feature, which removes the code itself; `delulu-wasm/tests/wasmtime_features.rs` holds the
+  # feature off in the resolved graph. Nothing is ignored for them.
+  #
   # Two pyo3 entries remain ignored on reachability grounds, and that argument is itself gated by
   # `governance.rs::the_ignored_pyo3_advisories_are_still_unreachable` — because an `ignore` whose
   # reason has quietly stopped being true is worse than no gate at all: the tool prints a green

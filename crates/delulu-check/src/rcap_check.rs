@@ -72,6 +72,16 @@ struct Binding {
     /// and silently demoting it would override an annotation — which is the class of behaviour this
     /// language exists to refuse. Such a binding keeps its annotation and its DL1603.
     rcap_written: bool,
+    /// The call that lifted this binding to `val` (C64), if one did: a later refused write names it (A1).
+    lifted: Option<Lift>,
+}
+
+/// Where a binding was lifted to `val` at a call (C64): the argument, the callee, and its parameter.
+#[derive(Clone)]
+struct Lift {
+    at: Span,
+    callee: String,
+    param: String,
 }
 
 pub fn check_rcaps(
@@ -277,7 +287,7 @@ impl<'a> Pass<'a> {
         for (i, p) in f.params.iter().enumerate() {
             let ty = sig_params.get(i).cloned();
             let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false, lifted: None });
         }
         let ret_dest = f.ret.as_ref().and_then(|r| r.written_rcap()).or_else(|| match self.fn_types.get(&f.name.name) {
             Some(Type::Fn { ret, .. }) => self.default_of(ret),
@@ -294,7 +304,10 @@ impl<'a> Pass<'a> {
         self.push_scope();
         let root = Type::Root;
         let rcap = self.default_of(&root);
-        self.bind("test_root", Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None, rcap_written: false });
+        self.bind(
+            "test_root",
+            Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+        );
         let ret_dest = self.default_of(&Type::Unit);
         self.walk_block_with_tail(&t.body, ret_dest, false);
         self.pop_scope();
@@ -378,7 +391,14 @@ impl<'a> Pass<'a> {
         // external reference is tag (spec §2 default + DL1607).
         self.bind(
             "self",
-            Binding { rcap: Some(Rcap::Ref), ty: Some(self_ty.clone()), fresh_lift: None, consumed: None, rcap_written: false },
+            Binding {
+                rcap: Some(Rcap::Ref),
+                ty: Some(self_ty.clone()),
+                fresh_lift: None,
+                consumed: None,
+                rcap_written: false,
+                lifted: None,
+            },
         );
         let key = format!("{actor}.{member}");
         let sig_params: Vec<Type> = match self.fn_types.get(&key) {
@@ -388,7 +408,7 @@ impl<'a> Pass<'a> {
         for (i, p) in params.iter().enumerate() {
             let ty = sig_params.get(i).cloned();
             let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false, lifted: None });
         }
         let ret_dest = has_ret
             .then(|| match self.fn_types.get(&key) {
@@ -514,7 +534,10 @@ impl<'a> Pass<'a> {
                         self.mark_escaped(&path.segs[0].name);
                     }
                 }
-                self.bind(&name.name, Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some() });
+                self.bind(
+                    &name.name,
+                    Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some(), lifted: None },
+                );
             }
             Stmt::Assign { target, value, span } => {
                 let vk = self.walk_expr(value);
@@ -563,7 +586,10 @@ impl<'a> Pass<'a> {
                 });
                 let rcap = elem_ty.as_ref().and_then(|t| self.default_of(t));
                 self.push_scope();
-                self.bind(&var.name, Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false });
+                self.bind(
+                    &var.name,
+                    Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+                );
                 self.walk_block_with_tail(body, None, false);
                 self.pop_scope();
             }
@@ -638,7 +664,7 @@ impl<'a> Pass<'a> {
     /// Scoped deliberately to `val` destinations. `iso`/`trn` mean *transfer*, and the right spelling
     /// for that is `consume` — quietly consuming a binding because it happened to be fresh would be a
     /// second, invisible way to move a unique reference.
-    fn lift_fresh_arg(&mut self, arg: &Expr, dest: Rcap, k: K, captured: Option<(bool, bool)>) -> K {
+    fn lift_fresh_arg(&mut self, arg: &Expr, dest: Rcap, k: K, captured: Option<(bool, bool)>, callee: &str, param: &str) -> K {
         if dest != Rcap::Val {
             return k;
         }
@@ -658,6 +684,7 @@ impl<'a> Pass<'a> {
         if let Some(b) = self.lookup_mut(&name) {
             b.rcap = Some(Rcap::Val);
             b.fresh_lift = None;
+            b.lifted = Some(Lift { at: arg.span(), callee: callee.to_string(), param: param.to_string() });
         }
         K::Fresh { natural, lift_val, lift_iso, blame: None }
     }
@@ -728,7 +755,8 @@ impl<'a> Pass<'a> {
             }
             LValue::Field(base, fname) => {
                 let (recv_k, recv_ty) = self.resolve_lvalue(base);
-                self.require_writable_receiver(recv_k, target.span(), "field");
+                let lift = self.lift_of_lvalue(base);
+                self.require_writable_receiver(recv_k, target.span(), "field", lift);
                 // Value side: storable at the field's declared rcap (alias table unless
                 // consumed). Undeterminable field rcap ⇒ the value check is skipped (the
                 // receiver check above — the race-relevant half — already ran).
@@ -738,7 +766,8 @@ impl<'a> Pass<'a> {
             }
             LValue::Index(base, _) => {
                 let (recv_k, recv_ty) = self.resolve_lvalue(base);
-                self.require_writable_receiver(recv_k, target.span(), "element");
+                let lift = self.lift_of_lvalue(base);
+                self.require_writable_receiver(recv_k, target.span(), "element", lift);
                 if let Some(Type::List(elem)) = recv_ty {
                     if let Some(d) = self.default_of(&elem) {
                         self.check_storable(vk, d, span, "list element", false);
@@ -748,7 +777,29 @@ impl<'a> Pass<'a> {
         }
     }
 
-    fn require_writable_receiver(&mut self, k: K, span: Span, what: &str) {
+    /// The binding at the root of a receiver (`xs`, `p.q`, `p.items`), and the call that lifted it to `val`, if one did.
+    fn lift_of_expr(&self, e: &Expr) -> Option<(String, Lift)> {
+        match e {
+            Expr::Var { path, .. } if path.segs.len() == 1 => {
+                let name = &path.segs[0].name;
+                self.lookup(name).and_then(|b| b.lifted.clone()).map(|l| (name.clone(), l))
+            }
+            Expr::Field { recv, .. } | Expr::Index { recv, .. } => self.lift_of_expr(recv),
+            _ => None,
+        }
+    }
+
+    /// [`Self::lift_of_expr`] for an assignment's target.
+    fn lift_of_lvalue(&self, lv: &LValue) -> Option<(String, Lift)> {
+        match lv {
+            LValue::Var(id) => self.lookup(&id.name).and_then(|b| b.lifted.clone()).map(|l| (id.name.clone(), l)),
+            LValue::Field(base, _) | LValue::Index(base, _) => self.lift_of_lvalue(base),
+        }
+    }
+
+    /// `lift`: the receiver's binding and the call that lifted it to `val` (C64), which the refusal names (A1). Without
+    /// it the write was refused at the write alone, and nothing pointed at the call that took the write access away.
+    fn require_writable_receiver(&mut self, k: K, span: Span, what: &str, lift: Option<(String, Lift)>) {
         let refusal = match k {
             K::Known(kk) | K::Unaliased(kk) => {
                 if can_write(kk) {
@@ -772,7 +823,21 @@ impl<'a> Pass<'a> {
             }
         };
         if let Some(msg) = refusal {
-            self.diags.push(Diagnostic::error("DL1604", msg).with_span(span, "write refused"));
+            let d = match lift {
+                Some((name, l)) => {
+                    let msg = format!(
+                        "{msg}: `{name}` became `val` where it was passed to `{}`'s parameter `{}`, which is `val` and may \
+                         keep it. If `{}` only reads it, declare that parameter `box`, which reads a `ref` without keeping \
+                         it; otherwise write before the call",
+                        l.callee, l.param, l.callee
+                    );
+                    Diagnostic::error("DL1604", msg)
+                        .with_span(span, "write refused")
+                        .with_secondary_span(l.at, format!("`{name}` became `val` here"))
+                }
+                None => Diagnostic::error("DL1604", msg).with_span(span, "write refused"),
+            };
+            self.diags.push(d);
         }
     }
 
@@ -1026,7 +1091,12 @@ impl<'a> Pass<'a> {
                                 if let Some(recv) = args.first() {
                                     let rk = self.walk_expr(recv);
                                     if matches!(self.node_types.get(&recv.id()), Some(Type::List(_))) {
-                                        self.require_writable_receiver(rk, recv.span(), "list element (push)");
+                                        self.require_writable_receiver(
+                                            rk,
+                                            recv.span(),
+                                            "list element (push)",
+                                            self.lift_of_expr(recv),
+                                        );
                                     }
                                 }
                                 for a in args.iter().skip(1) {
@@ -1086,7 +1156,7 @@ impl<'a> Pass<'a> {
                             for (i, p) in sig.params.iter().enumerate() {
                                 let dest = p.ty.written_rcap().or_else(|| sig_tys.get(i).and_then(|t| self.default_of(t)));
                                 if let (Some(d), Some((k, lift)), Some(a)) = (dest, arg_ks.get(i), args.get(i)) {
-                                    let k = self.lift_fresh_arg(a, d, *k, *lift);
+                                    let k = self.lift_fresh_arg(a, d, *k, *lift, &path.segs[0].name, &p.name.name);
                                     self.check_storable(
                                         k,
                                         d,
@@ -1129,7 +1199,7 @@ impl<'a> Pass<'a> {
                     && matches!(recv_ty, Some(Type::List(_)))
                 {
                     let what = format!("list element ({})", name.name);
-                    self.require_writable_receiver(rk, *span, &what);
+                    self.require_writable_receiver(rk, *span, &what, self.lift_of_expr(recv));
                 }
                 // The same rule for a `Map`. Stated as its own condition rather than folded into the
                 // one above because the receiver TYPE is part of the rule: `insert` on a record field
@@ -1139,7 +1209,7 @@ impl<'a> Pass<'a> {
                     && matches!(recv_ty, Some(Type::Map(_, _)))
                 {
                     let what = format!("map entry ({})", name.name);
-                    self.require_writable_receiver(rk, *span, &what);
+                    self.require_writable_receiver(rk, *span, &what, self.lift_of_expr(recv));
                 }
                 // T-Send argument sendability (7f, spec §4): everything crossing an actor
                 // boundary must ARRIVE at the parameter's rcap, and an unconsumed iso gets
@@ -1296,7 +1366,10 @@ impl<'a> Pass<'a> {
                 self.push_scope();
                 for p in params {
                     let rcap = p.ty.written_rcap();
-                    self.bind(&p.name.name, Binding { rcap, ty: None, fresh_lift: None, consumed: None, rcap_written: false });
+                    self.bind(
+                        &p.name.name,
+                        Binding { rcap, ty: None, fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+                    );
                 }
                 self.walk_block_with_tail(body, None, false);
                 self.pop_scope();
@@ -1368,7 +1441,10 @@ impl<'a> Pass<'a> {
     fn bind_pattern(&mut self, p: &Pattern) {
         match p {
             Pattern::Bind(id) => {
-                self.bind(&id.name, Binding { rcap: None, ty: None, fresh_lift: None, consumed: None, rcap_written: false });
+                self.bind(
+                    &id.name,
+                    Binding { rcap: None, ty: None, fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+                );
             }
             Pattern::Variant { fields, .. } => {
                 for f in fields {

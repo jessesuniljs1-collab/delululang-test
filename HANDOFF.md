@@ -1900,6 +1900,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   first, skipped the gate, and so did five more routes. When a guarantee says "before X", list every command that can
   reach X (here: everything that resolves a workspace and then runs, ships or plans it), and drive the witness through each.
   The finding came from checking a repair's result by running the repaired package, not by re-reading the diagnostic.
+- **A thread-local setting reaches only the thread that sets it** (the laptop, 2026-10-27, ACTOR-DETERMINISM-1,
+  D-V2-192): `--seed` and `--clock fixed:` were thread-locals that `run` set on the main thread, and every actor runs
+  on a worker thread, so an actor's draws and clock ignored both. Every test of `--seed` drove `main`, and the
+  campaign's actor programs drew nothing at random, so it surfaced only when a program put a `Cap[Rand]` in an actor.
+  When a setting is a `thread_local!`, list every thread that runs program code, the actor workers among them, and
+  test the setting from each.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

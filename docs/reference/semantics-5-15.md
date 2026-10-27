@@ -8,9 +8,9 @@ Each statement below is normative and carries a stable anchor id that conformanc
 
 ## `ref.rule.runtime.faults-are-diagnostics`
 
-A runtime fault — overflow, division by zero, index out of bounds, recursion depth — is a diagnostic with a code, never a host crash or silent wrap.
+A runtime fault — overflow, division by zero, index out of bounds, recursion depth, an argument outside what an operation accepts — is a diagnostic with a code, never a host crash or silent wrap.
 
-- **Enforced by:** `DL0901`, `DL0902`, `DL0903`, `DL0905`
+- **Enforced by:** `DL0901`, `DL0902`, `DL0903`, `DL0905`, `DL0908`
 - **Coverage:** covered
 
 ## `ref.rule.runtime.trace-is-within-the-row`

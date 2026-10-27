@@ -5895,3 +5895,166 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. A decision on mixing the generator's seed.
   5. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — the laptop's handoff: #71 to #74 landed; `launch/2.0.0` at `dcfd43c` (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/handoff-2026-10-26` (on `master` `5a1b75c`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. On `launch/2.0.0`, outside this pull request: `dcfd43c` (the merge, the
+  CHANGELOG move, the CHECKLIST-2.0 re-citation).
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `launch/2.0.0`'s `everything` run `40240072174` and its release dry run `40240074649`, both at `dcfd43c`. Cite
+     them in CHECKLIST-2.0 when green, and fix what is red.
+  2. The first nightly with #69 (around 08:00 UTC on 2026-10-26): the broker's Miri time inside its 240-minute cap.
+  3. A15, a decision. `r.int(lo, hi)` with `hi <= lo` faults as DL0904, "capability scope violation", and a bad argument
+     is not that. The honest code is a new one (DL0908), which touches the registry, the reference and the entrenched
+     conformance witnesses (an `ENTRENCHED_CHANGE_RECORD.md` entry). Also document that the range is half-open.
+  4. A decision on mixing the generator's seed (splitmix64): a small seed's first draws are near 0, and seeds `2k` and
+     `2k+1` draw alike. It changes every seeded sequence.
+  5. The campaign's remaining items: A14 (the interpreter's speed), A11 (actor output order under `--seed`), and the
+     papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16). The ledger is on `origin/autosave/dogfood`.
+  6. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — `zstd` leaves the build: wasmtime without its compilation cache (RUSTSEC-2026-0391, -0398, -0403, -0410) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/zstd-advisories` (on `master` `b18ddf3`)   Pull request: opened with this push
+- **Read first:**
+  - `launch/2.0.0` `dcfd43c`'s `everything` `40240072174`: **18 of 18 jobs success**. The broker's Miri took 3 h 00 min,
+    the checker's 1 h 09 min.
+  - Its release dry run `40240074649`: the four packages success, release skipped.
+  - The first nightly with #69, `40292304609` (2026-10-26, at `b18ddf3`): **18 of 18 success**. The broker's Miri took
+    3 h 07 min, inside its 240-minute cap.
+  - The next nightly, `40474545633` (2026-10-27, same tree): `supply-chain` red, the 17 others success (the broker's
+    Miri 3 h 01 min).
+- **What:** the four advisories are against `zstd`, which only wasmtime's unused `cache` feature brought in. The
+  feature is now off, and a new test holds it off in the resolved graph. See V2_LOG's entry of the same name.
+- **Also:** the laptop's autosave task (`DeluluLang-autosave`) was checked at the owner's request: Ready, every
+  10 minutes, last result 0, the installed copy equal to `scripts/autosave.ps1`, and every branch equal to `origin`. It
+  was renewed for 7 days (`-Install -Hours 168`, to 2026-11-03).
+- Files and folders: A `crates/delulu-wasm/tests/wasmtime_features.rs`. M `crates/delulu-wasm/Cargo.toml`, `Cargo.lock`,
+  `CHANGELOG.md`, `.github/workflows/ci.yml` (a comment), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this on green, then merge `master` into `launch/2.0.0`. Its `supply-chain` is red the same way until then.
+     Dispatch `everything` and the release dry run there, and cite `40240072174`, `40240074649` and the new runs in
+     CHECKLIST-2.0 (criterion 4 gains these advisories).
+  2. A15, a decision on a code for a bad argument (DL0908), with documentation of the half-open range.
+  3. A decision on mixing the generator's seed (splitmix64).
+  4. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — A15: an empty `rand.int` range is DL0908, not a scope violation (D-V2-190) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/a15-dl0908` (on `laptop/zstd-advisories`, #76)   Pull request: opened with this push
+- **What:** D-V2-190, a new code (DL0908), for both engines alike. See V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-diag/src/codes.rs`, `crates/delulu-runtime/src/prim.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `crates/delulu-wasm/tests/refusal_trace_parity.rs`, `crates/delulu-conform/src/rules.rs`
+  (entrenched), `tests/conformance/witnesses.toml` (entrenched), `docs/reference/README.md`, `docs/reference/coverage.md`,
+  `docs/reference/diagnostics.md`, `docs/reference/semantics-5-15.md` (generated), `docs/for-agents.md`,
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.25),
+  `CHANGELOG.md`, `docs/lang/delulu-slang.md`, `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (both: 8 of 155 codes),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #76, then this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 (`dcfd43c`'s `40240072174` and `40240074649`, and the `zstd` advisories under 4).
+  3. A decision on mixing the generator's seed (splitmix64).
+  4. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — every `--seed` draws its own sequence (splitmix64, D-V2-191) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/rand-seed-mix` (on `laptop/a15-dl0908`, #77)   Pull request: opened with this push
+- **What:** D-V2-191. The seed is mixed before it starts the generator, on both engines and every path, so seeds 2 and
+  3 no longer draw alike and a small seed's first draws are not tiny. Every seeded sequence changes in 2.0.0. See
+  V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu-wasm/src/lib.rs`, `docs/for-agents.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.26), `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #77, then this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 (`dcfd43c`'s `40240072174` and `40240074649`, and the `zstd` advisories under 4).
+  3. A14 (the interpreter's speed), A11 (actor output order under `--seed`), and the papercuts (A1, A4–A8, A13,
+     B4–B8, B11, C6–C16). One more seen 2026-10-27: `str()` of a `Float` is DL1201 on `--engine wasm`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — `--seed` and `--clock fixed:` reach every actor (ACTOR-DETERMINISM-1, A11; D-V2-192) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/actor-determinism` (on `laptop/rand-seed-mix`, #78)   Pull request: opened with this push
+- **What:** each actor draws from a stream of its own, keyed by its spawner, and every worker reads the run's fixed
+  clock. A11 is closed by documenting what `--seed` does not fix: the interleaving of actors. See V2_LOG's entry of the
+  same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/actors.rs`,
+  `crates/delulu/tests/actors_cli.rs`, `docs/for-agents.md`, `docs/design/STAGE7_ACTORS_GUIDE.md`, `HANDOFF.md`
+  (§11.5), `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.27),
+  `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #77, #78 and this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 (`dcfd43c`'s `40240072174` and `40240074649`, and the `zstd` advisories under 4).
+  3. A14 (the interpreter's speed), A1 (a frozen `let` list's error lands at the later write, not at the call), and the
+     papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — A1: a write refused after a `val` lift names the call that lifted it (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/a1-lift-names-its-call` (on `laptop/actor-determinism`, #79)   Pull request: opened with this push
+- **What:** the DL1604 after C64's lift names the call, the callee and its parameter, and says what to write instead.
+  See V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/src/lib.rs`,
+  `crates/delulu-diag/src/codes.rs` (DL1604's explanation), `docs/GETTING_STARTED.md` (§10),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.28), `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #78, #79 and this, each on green CI.
+  2. `master`'s push run `40544536339` at `ac2920e`: `microvm` red on
+     `a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left` (left 0, right 1). The other tests in
+     the binary launch VMs in parallel, and every launch sweeps a dead host's directory, inside the window the test
+     counts it in. The fix is the next pull request.
+  3. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8.
+  4. A14, and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — a microVM test raced its neighbours' sweeps (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/microvm-sweep-race` (on `laptop/a1-lift-names-its-call`, #80)   Pull request: opened with this push
+- **What:** `master`'s push run `40544536339` failed `microvm` on a race between one test's window and its neighbours'
+  orphan sweeps. The VM-booting tests now share a lock, which the host-death test takes alone. See V2_LOG's entry of the
+  same name.
+- Files and folders: M `crates/delulu/tests/microvm_cli.rs`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (7.24), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #78, #79, #80 and this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 (`dcfd43c`'s `40240072174` and `40240074649`, and the `zstd` advisories under 4).
+  3. A14, and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — `str()` of a `Float` that only a method made runs on WASM (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-str-float` (on `laptop/microvm-sweep-race`, #81)   Pull request: opened with this push
+- **What:** the WASM codegen asks the checker's types whether a module makes a `Float`, so `str(r.float())` compiles.
+  See V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/lib.rs`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.29), `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #79, #80, #81 and this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8.
+  3. A14 (the interpreter's speed), and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16).
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

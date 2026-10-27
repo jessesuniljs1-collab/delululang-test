@@ -615,6 +615,19 @@ install anything.
 construction. Byte-identical output across runs is a tested property for `--json`, the atlas, and
 plugin inspection — if you see nondeterminism there, it is a bug.
 
+A `Cap[Rand]` has two methods. `r.int(lo, hi)` draws an `Int` from `lo` up to but **not including** `hi`, so
+`r.int(1, 7)` rolls a die and `r.int(5, 6)` is always 5. A range holding no value, `hi <= lo`, faults with `DL0908`, an
+argument the operation does not accept (D-V2-190). `r.float()` draws a `Float` between 0 and 1. Under `--seed N` both
+draw the same sequence on the interpreter and the WASM engine, and each seed draws a sequence of its own (D-V2-191: since
+2.0.0 the seed is mixed first, so a sequence recorded under 1.x differs).
+
+**Actors.** `--seed` and `--clock fixed:` reach every actor (D-V2-192). Each actor draws from a stream of its own,
+derived from who spawned it and when, so its draws are the same on one worker thread or many; every worker reads the
+fixed clock. What they do not fix is the **order** in which different actors' turns interleave: messages are ordered per
+sender only (Stage 7), so the lines several actors print may come in another order on another run, even on one worker
+(`--actors-threads 1` narrows the orders but does not promise one). Compare such output as a set, or let one actor
+collect the results and print them in an order the program decides.
+
 ## [agents.env] Environment variables
 
 | Variable | Effect |

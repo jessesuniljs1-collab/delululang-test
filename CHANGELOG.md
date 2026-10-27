@@ -28,13 +28,89 @@ is refused when the program runs (D-V2-180, D-V2-181, D-V2-185); a generic's own
 body (DL0401, D-V2-184); a top-level constant's value is checked and must be pure (RW 4.82); `run` on every engine, `run
 --sandbox`, `build --target wasm`, `test`, `deploy plan`, `publish` and `add` refuse a package whose dependency breaks its
 authority pin or carries none, as `build` does (DL1001, D-V2-186); `run --sandbox` refuses a `--report-out` inside a scope
-the program may write, as the ordinary run does (D-V2-21, RW 4.84).
+the program may write, as the ordinary run does (D-V2-21, RW 4.84); `r.int(lo, hi)` with `hi <= lo` faults with DL0908
+instead of DL0904 (D-V2-190); every `--seed` draws a different sequence than under 1.x, since the seed is mixed first
+(D-V2-191), and an actor's draws now follow `--seed` too (D-V2-192).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### `str()` of a `Float` from `r.float()` runs on WASM, 2026-10-27
+
+
+- **Fixed: `str(r.float())` was refused on `--engine wasm`** with DL1201 *"str() of this type … compile so far"*. The
+  WASM engine prints a `Float` through the interpreter's own formatting. It brought that in only when the program had
+  a float literal, a `float(…)` or `parse_float(…)` call, or a `Float` in a function's signature, so a program whose
+  floats all came from `r.float()` had none. It now asks the checker for any `Float` value. Both engines print
+  alike, and the refusal's text no longer says a `Float` needs the foreign interface.
+
+### a write refused after a call names that call, 2026-10-27
+
+
+- **Improved: DL1604 names the call that made a variable `val`** (A1). Take `let xs = [1, 2]`, then `len_of(xs)`,
+  where the parameter has no capability keyword and so is `val`, then `xs.push(4)`. The call is accepted, and `xs`
+  becomes `val` from then on, because the callee may keep it. The write was refused at the write alone, with nothing
+  pointing at the call. Now the error:
+  - names the callee and its parameter, and labels the argument at the call, *"`xs` became `val` here"*;
+  - says what to write instead: declare the parameter `box` if the function only reads (it then reads a `ref` without
+    keeping it), or write before the call.
+
+  The rule itself is unchanged. `GETTING_STARTED.md` §10 described the older behaviour (a DL1603 at the call) and is
+  corrected, and `delulu explain DL1604` describes the case.
+
+### `--seed` and `--clock fixed:` reach every actor, 2026-10-27
+
+
+- **Fixed: an actor's `Cap[Rand]` and `Cap[Clock]` ignored `--seed` and `--clock fixed:`** (ACTOR-DETERMINISM-1,
+  D-V2-192). Both settings were held per thread, and an actor runs on a worker thread that never saw them. So under
+  `--seed 7`, `main` drew the same numbers on every run but an actor did not, even with `--actors-threads 1`. Under
+  `--clock fixed:1000`, an actor read the wall clock.
+  - Now every actor reads the fixed clock.
+  - Each actor draws from a stream of its own, keyed by who spawned it and when. Its draws are the same on one worker
+    or many, and spawning draws nothing from the program's own sequence.
+- **Documented:** what `--seed` does not fix is the order in which different actors' turns interleave. Messages are
+  ordered per sender only (Stage 7), so the lines several actors print may come in another order on another run (A11).
+
+### every `--seed` draws its own sequence; seeded sequences change, 2026-10-27
+
+
+- **Changed: a seed is mixed (splitmix64) before it starts the random generator, so every seed draws a sequence of its
+  own** (D-V2-191). Before, the generator started at `seed | 1`, which caused two problems:
+  - `--seed 2` and `--seed 3` drew the same numbers, as did every even seed and the odd one after it. A sweep over seeds
+    ran each case about twice.
+  - A small seed drew tiny numbers first. Seed 1's first `r.float()` was `5.9e-11`.
+
+  This covers `run --seed`, `delulu test`, sandboxed runs and the unseeded default, on the interpreter and the WASM
+  engine alike.
+- **Breaking for recorded seeds:** a run recorded under `--seed N` with 1.x draws different numbers under 2.0.0. The
+  same seed still draws the same sequence every run, on both engines.
+
+### an empty `rand.int` range is DL0908, not a scope violation, 2026-10-27
+
+
+- **Changed: `r.int(lo, hi)` with `hi <= lo` faults with the new code `DL0908`, *an argument outside what the operation
+  accepts*, instead of `DL0904`, *capability scope violation*** (A15, D-V2-190). The range names no value to draw, which
+  is the program's own bug, not an authority event. Both engines say why in the same words:
+  *"rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = 5, hi = 5"*.
+  A harness that matched `DL0904` for this fault now sees `DL0908`. `DL0904` still means what it always meant: a path or
+  host outside a grant.
+- **Documented:** `r.int(lo, hi)` draws from `lo` up to but not including `hi`, so `r.int(1, 7)` rolls a die. See
+  `delulu explain DL0908`, `docs/for-agents.md` (*Determinism*) and the book.
+
+### `zstd` leaves the build: wasmtime is built without its compilation cache, 2026-10-27
+
+
+- **Security: RUSTSEC-2026-0391, -0398, -0403 and -0410, published by 2026-10-27, no longer apply: the crates they name
+  are gone from the build.** All four are against `zstd` 0.13.3, `zstd-safe` 7.2.4 and `zstd-sys` 2.0.16. Only
+  wasmtime's compilation cache brought them in: an optional feature that keeps compiled native code in a directory on
+  disk and loads it back. wasmtime 48.0.7 is the newest release of the 48 long-term-support line, and it still needs
+  `zstd` 0.13. DeluluLang never turned the cache on, so this code was compiled in but never ran: wasmtime's `Config::new()`
+  leaves it off, and nothing here calls `Config::cache`. `delulu-wasm` now builds wasmtime with its default features
+  except `cache`, and every other feature resolves as before. 21 packages leave the lockfile, the three `zstd` crates
+  among them; none is added, and no remaining crate changes version.
 
 ### `r.float()` and `http.get_with` run on WASM, 2026-10-26
 

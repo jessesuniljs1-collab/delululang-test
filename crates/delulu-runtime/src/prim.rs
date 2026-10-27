@@ -892,7 +892,9 @@ pub fn call_cap_method_pinned(
             let lo = int_arg(args, 0, span)?;
             let hi = int_arg(args, 1, span)?;
             if hi <= lo {
-                return Err(Fault::at("DL0904", "rand.int requires lo < hi", span));
+                // An argument outside what the operation accepts, not a scope violation (A15, D-V2-190). The WASM host
+                // says the same words (`rand_int_range_fault`).
+                return Err(Fault::at("DL0908", rand_int_range_fault(lo, hi), span));
             }
             // The span `hi - lo` is up to 2^64 - 1, past `Int`'s range: computed modulo 2^64 it is exact as a `u64`,
             // and the drawn offset added modulo 2^64 lands exactly in `lo..hi`. Plain `-` and `+` panicked a debug
@@ -1241,6 +1243,11 @@ pub(crate) fn str_arg(args: &[Value], i: usize, span: Span) -> Result<String, Fa
         _ => Err(Fault::at("DL0907", format!("expected a Str argument at position {i}"), span)),
     }
 }
+/// The text of `rand.int`'s DL0908, the one both engines report for a range with no value in it (A15, D-V2-190).
+pub fn rand_int_range_fault(lo: i64, hi: i64) -> String {
+    format!("rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = {lo}, hi = {hi}")
+}
+
 fn int_arg(args: &[Value], i: usize, span: Span) -> Result<i64, Fault> {
     match args.get(i) {
         Some(Value::Int(n)) => Ok(*n),
@@ -1290,6 +1297,9 @@ fn scope_bug(span: Span) -> Fault {
 use std::cell::Cell;
 thread_local! {
     static RNG: Cell<u64> = Cell::new(seed());
+    /// The key the next actor spawned from this thread derives its generator from, and how many it has derived so far
+    /// ([`next_spawn_key`]; ACTOR-DETERMINISM-1, D-V2-192).
+    static SPAWN: Cell<(u64, u64)> = Cell::new((wall_nanos(), 0));
     static FIXED_CLOCK: Cell<Option<i64>> = const { Cell::new(None) };
     /// When `Some`, `Cap[Console]` output is captured into this buffer instead of stdout — used by
     /// tests and by the WASM backend's two-engine parity harness (§9). Off by default.
@@ -1328,8 +1338,11 @@ fn emit_console(s: &str, newline: bool) {
         }
     }
 }
+fn wall_nanos() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)
+}
 fn seed() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E3779B9) | 1
+    rng_state_from_seed(wall_nanos())
 }
 fn next_rand() -> u64 {
     RNG.with(|r| {
@@ -1344,12 +1357,68 @@ fn next_rand() -> u64 {
 
 /// Deterministic replay (spec §6.2): reseed `Cap[Rand]`'s thread-local xorshift generator. Two
 /// runs on the same thread that call `set_rand_seed` with the same value produce identical
-/// `rand.int`/`rand.float` sequences; different seeds (almost always) diverge. The xorshift
-/// generator gets stuck at zero, so a zero seed is mapped to a fixed nonzero value, matching the
-/// `| 1` bias `seed()` already applies for the non-deterministic default.
+/// `rand.int`/`rand.float` sequences; different seeds diverge, every seed but one pair starting from a state of its
+/// own ([`rng_state_from_seed`], which `seed()` applies to the non-deterministic default too).
 pub fn set_rand_seed(seed: u64) {
-    let s = if seed == 0 { 0x9E3779B9 } else { seed } | 1;
-    RNG.with(|r| r.set(s));
+    RNG.with(|r| r.set(rng_state_from_seed(seed)));
+    SPAWN.with(|s| s.set((seed, 0)));
+}
+
+/// An actor's own `Cap[Rand]` stream (ACTOR-DETERMINISM-1, D-V2-192). The generator is a thread-local and an actor runs
+/// on a worker thread, which `--seed` never reached, so an actor's draws differed on every run. Each actor now carries
+/// its stream between turns, installed for a turn by [`swap_rand_stream`]; its turns run one at a time, so its draws
+/// depend on its key and its own messages, not on which worker runs it.
+#[derive(Clone, Copy, Debug)]
+pub struct RandStream {
+    state: u64,
+    key: u64,
+    spawned: u64,
+}
+
+impl RandStream {
+    /// The stream of an actor spawned with `key` ([`next_spawn_key`]).
+    pub fn from_key(key: u64) -> RandStream {
+        RandStream { state: rng_state_from_seed(key), key, spawned: 0 }
+    }
+}
+
+/// The key for the next actor spawned from this thread's current stream: the stream's own key and how many actors it
+/// has spawned, mixed. `main`'s key is the run's seed; an actor's is the one its spawner gave it.
+pub fn next_spawn_key() -> u64 {
+    SPAWN.with(|s| {
+        let (key, n) = s.get();
+        s.set((key, n + 1));
+        rng_state_from_seed(key ^ rng_state_from_seed(n))
+    })
+}
+
+/// Make `stream` this thread's generator for one actor turn; returns the one it replaces, to be put back after the turn.
+pub fn swap_rand_stream(stream: RandStream) -> RandStream {
+    let state = RNG.with(|r| r.replace(stream.state));
+    let (key, spawned) = SPAWN.with(|s| s.replace((stream.key, stream.spawned)));
+    RandStream { state, key, spawned }
+}
+
+/// The fixed clock this thread reads, if any — for an actor worker to adopt the run's (ACTOR-DETERMINISM-1).
+pub fn fixed_clock_ms() -> Option<i64> {
+    FIXED_CLOCK.with(|c| c.get())
+}
+
+/// The generator's starting state for a seed, the same on both engines: the seed mixed by splitmix64, a bijection on
+/// `u64`, so every seed starts somewhere of its own (D-V2-191). It was `seed | 1`: every even seed drew its odd
+/// neighbour's sequence, and a small seed started xorshift so near zero that its first draws were tiny (seed 1's first
+/// `r.float()` was 5.9e-11). xorshift stays at zero forever, so the one seed that mixes to zero
+/// (`2^64 - 0x9E37_79B9_7F4A_7C15`) starts at that constant instead, where `0xCD36_DA00_563C_5EF6` also starts: 2^64
+/// seeds into 2^64 - 1 nonzero states share at least one, and this is the only pair.
+pub fn rng_state_from_seed(seed: u64) -> u64 {
+    const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut z = seed.wrapping_add(GAMMA);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    match z ^ (z >> 31) {
+        0 => GAMMA,
+        state => state,
+    }
 }
 
 /// Deterministic replay (spec §6.2): fix `Cap[Clock].now_ms()` to always return `ms` on this
@@ -1378,6 +1447,46 @@ mod determinism_tests {
         set_rand_seed(2);
         let b: Vec<u64> = (0..8).map(|_| next_rand()).collect();
         assert_ne!(a, b, "different seeds should (overwhelmingly likely) diverge");
+    }
+
+    /// Every seed its own sequence (D-V2-191). The state was `seed | 1`, so `--seed 2` and `--seed 3` drew one sequence,
+    /// as did every even seed and the odd one after it, and seed 0 shared its sequence with `0x9E3779B8` and `0x9E3779B9`.
+    #[test]
+    fn neighbouring_seeds_draw_different_sequences() {
+        let mut seen = std::collections::HashMap::new();
+        for seed in (0..64u64).chain([0x9E37_79B8, 0x9E37_79B9, u64::MAX - 1, u64::MAX]) {
+            set_rand_seed(seed);
+            let draws: Vec<u64> = (0..4).map(|_| next_rand()).collect();
+            if let Some(other) = seen.insert(draws, seed) {
+                panic!("seeds {other} and {seed} draw the same sequence");
+            }
+        }
+    }
+
+    /// A small seed was a nearly empty xorshift state, so its first draws were tiny: seed 1's first `r.float()` was
+    /// 5.9e-11, and every seed from 1 to 64 drew a first float below 0.01. Mixed, they spread over the range.
+    #[test]
+    fn a_small_seeds_first_draw_is_spread_over_the_range() {
+        let firsts: Vec<f64> = (1..=64u64)
+            .map(|s| {
+                set_rand_seed(s);
+                next_rand() as f64 / u64::MAX as f64
+            })
+            .collect();
+        let mean = firsts.iter().sum::<f64>() / firsts.len() as f64;
+        assert!((0.3..0.7).contains(&mean), "the first draws of seeds 1..=64 average {mean}: {firsts:?}");
+        let tiny = firsts.iter().filter(|f| **f < 0.01).count();
+        assert!(tiny <= 4, "{tiny} of 64 small seeds draw a first float below 0.01: {firsts:?}");
+    }
+
+    /// The one seed that splitmix64 mixes to zero, where xorshift would draw zeros forever, starts where
+    /// `0xCD36_DA00_563C_5EF6` does. Both seeds come from inverting splitmix64: `0x61C8_8646_80B5_83EB` is
+    /// `2^64 - 0x9E37_79B9_7F4A_7C15`, and the other mixes to `0x9E37_79B9_7F4A_7C15`.
+    #[test]
+    fn the_seed_that_mixes_to_zero_still_draws() {
+        assert_eq!(rng_state_from_seed(0x61C8_8646_80B5_83EB), rng_state_from_seed(0xCD36_DA00_563C_5EF6));
+        set_rand_seed(0x61C8_8646_80B5_83EB);
+        assert!((0..4).map(|_| next_rand()).all(|x| x != 0), "a zero state draws zeros forever");
     }
 
     #[test]

@@ -544,3 +544,44 @@ witness, present and future, prove it parses.
 git checkout <this-commit>^ -- crates/delulu-check/tests/laundering.rs
 ```
 — together with D-V2-184's code, or the generic witnesses fail.
+
+## 2026-10-27 — `crates/delulu-conform/src/rules.rs` and `tests/conformance/witnesses.toml`: DL0908, an argument outside what the operation accepts
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `crates/delulu-conform/src/rules.rs`: the rule `ref.rule.runtime.faults-are-diagnostics` names *"an argument outside what an operation accepts"* among runtime faults in its statement, and `DL0908` in its `enforced_by`. `tests/conformance/witnesses.toml`: two `[[witness]]` rows for the new anchor `ref.diag.DL0908`, a rejecting one after DL0907's and an accepting one after DL0907's. No existing row or rule is touched otherwise. |
+| Entrenched by | `.github/CODEOWNERS:32` and `:33` → `@jessesuniljs1-collab` |
+| Campaign | the agent test campaign of 2026-10-24 (A15); `REMAINING_WORK.md` 6.25; decision D-V2-190 |
+| Approved by | **the head chef, 2026-10-27, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, a new `DL` code where a refusal needs one among them |
+
+**Why**
+
+D-V2-190 registers DL0908 for `r.int(lo, hi)` with `hi <= lo`, which both engines had reported as DL0904, a capability
+scope violation. The coverage law (invariant 42) demands an accepting and a rejecting witness for every registered code,
+so without these rows the reference would carry an uncovered anchor. The rows name `fault_parity`'s
+`an_empty_rand_range_is_dl0908_on_both_engines` (rejecting; its body names `DL0908`, as C37 requires) and
+`a_one_wide_rand_range_draws_its_one_value_on_both_engines` (accepting). The rule is the one that says a runtime fault is a
+diagnostic with a code. DL0908 is such a fault, so leaving it out would make the rule's list incomplete.
+
+**Why this is not an RFC**
+
+`STABILITY.md` §5 lists a new diagnostic code as a minor, additive change. No rule changes meaning; one rule's list of
+codes grows by the new one. The fault moves from DL0904 to DL0908 in a major release (2.0.0), and DL0904 keeps its
+identity: an operation reaching outside its capability's scope.
+
+**Verified before the change**
+
+1. The rejecting witness was red on the unchanged engines (`WASM trap: DL0904: rand.int requires lo < hi`) and is green
+   with D-V2-190's code. The accepting witness is green on both.
+2. `delulu-conform --coverage`: *PASS: 100% anchor coverage*. `--reference` regenerated the reference: 358 of 358
+   anchors, 155 diagnostics.
+3. Mutants M855–M858 of D-V2-190's code turn the rejecting witness red (see the decision).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- crates/delulu-conform/src/rules.rs tests/conformance/witnesses.toml
+```
+— together with D-V2-190's code and the registry entry, or the coverage gate fails on an unwitnessed DL0908.
