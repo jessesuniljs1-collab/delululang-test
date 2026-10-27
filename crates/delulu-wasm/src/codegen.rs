@@ -1130,12 +1130,14 @@ fn module_calls_builtin(env: &EnumEnv, module: &Module, name: &str) -> bool {
 /// Does any function whose body is compiled make or take a `Float` — a literal, `float(…)`, `parse_float(…)`, or a
 /// `Float` written in its signature? Only these bring a `Float` into a compiled body, so only such a module carries the
 /// `delulu:float` interface, and every other module is unchanged.
-fn module_uses_floats(env: &EnumEnv, module: &Module) -> bool {
+fn module_uses_floats(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
     let hit = |e: &Expr| match e {
         Expr::Lit { kind: LitKind::Float(_), .. } => true,
-        Expr::Call { callee, .. } => matches!(&**callee, Expr::Var { path, .. }
-            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")),
-        _ => false,
+        Expr::Call { callee, .. } if matches!(&**callee, Expr::Var { path, .. }
+            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")) => true,
+        // Any expression the checker typed `Float`: one made by a method (`r.float()`) wrote none of the above, and its
+        // `str` was refused DL1201 (2026-10-27).
+        e => matches!(node_types.get(&e.id()), Some(delulu_check::Type::Float)),
     };
     let signed = |f: &FnDecl| f.params.iter().any(|p| mentions_float(&p.ty)) || f.ret.as_ref().is_some_and(mentions_float);
     module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && signed(f)))
@@ -1487,7 +1489,7 @@ fn compile_module_typed(
     }
     // A module that makes or takes a `Float` carries `delulu:float`: `str` of one (unless the foreign interface already
     // brought `float_to_str`), and `%`.
-    let needs_floats = module_uses_floats(&env, module);
+    let needs_floats = module_uses_floats(&env, module, node_types);
     let needs_float_str = needs_floats && !needs_foreign;
     if needs_float_str {
         imp.float_to_str = n_imports;

@@ -9625,3 +9625,59 @@ unordered, is D-V2-192.
 - The test and the mutants M861–M865 are listed in D-V2-192.
 - The program's sorted output hashed alike on 1, 4 and 8 workers under `--seed 7`.
 - `clippy.sh` is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: a write refused after a `val` lift names the call that lifted it (A1)
+
+**Why.** The agent test campaign's A1 is a `let` list passed once to an ordinary function and pushed to later. The
+refusal is right. C64 (ruling D62) lifts a fresh, unannotated literal to `val` at a `val` argument, and the binding
+gives up its write access so the callee may keep the value. But the DL1604 stood at the write alone, and nothing pointed
+at the call. `GETTING_STARTED.md` §10 still said the call is DL1603, which is true only of a binding whose `ref` the
+author wrote, and `delulu explain DL1604` spoke only of `box` and `tag`. Reproduced at `3c8bf56`: one span, at
+`xs.push(4)`.
+
+**What changed.**
+- `delulu-check` `rcap_check.rs`: a binding remembers the call that lifted it (`Lift`: the argument, the callee and its
+  parameter). All five write checks follow the receiver to the binding at its root, through fields and indexes: a field
+  or element assignment, the builtin `push`, the list mutators and the map mutators. A refusal through a lifted binding:
+  - names the callee and its parameter;
+  - labels the argument (*"`xs` became `val` here"*);
+  - says what to write instead.
+- What to write instead was checked on the binary: with `fn len_of(xs: box List[Int])`, A1's program runs and prints
+  `2 3`; with the push before the call, it prints `3 3`. A `box` or `ref` parameter also takes an author-annotated
+  `ref` list (both run).
+- `delulu explain DL1604` and `GETTING_STARTED.md` §10 (a corrected DL1603 row and a new DL1604 row).
+
+**Evidence.**
+- `a_write_refused_after_a_lift_names_the_call_that_lifted_it` covers four shapes: a list's `push`, a record field, a
+  nested field, and a method on a field. Each must carry a secondary label at the argument, name the callee and offer
+  `box`. Red before (*"no label at the lifting call"*).
+- Mutants, each red with the control green:
+  - M866: the lift is never recorded.
+  - M867: an assignment's target is not followed to its root.
+  - M868: a method's receiver is not followed to its root.
+
+  M867 survived the first version of the test, which wrote `p.x` (a target whose base is the variable itself). The two
+  nested shapes were added for it.
+- `clippy.sh` is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: a microVM test raced its neighbours' sweeps
+
+**Found by** `master`'s push run `40544536339` at `ac2920e` (#77 landed), whose `microvm` job failed on
+`a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left`: *"the killed host's directory"*, left 0,
+right 1. The same job passed on #77's own run, and #77 does not touch the microVM path.
+
+**Why.** The test kills a host mid-run and then asserts its VM directory is still there, before the next launch sweeps
+it. But `microvm.rs` calls `sweep_orphans` at the start of every launch, and it removes the directory of any host that
+is gone. CI runs this binary with `--test-threads=2`, so another test's launch could sweep the killed host's directory
+inside the window the test counts it in. This was read from the code. It was not reproduced, because this laptop has
+no KVM.
+
+**The fix**, in the test alone:
+- Every VM-booting test in `microvm_cli.rs` (11, each found by its `delulu_kvm` gate) takes a shared lock.
+- The host-death test takes the lock alone, for its whole body, so its window and its own sweeping launch run with no
+  other VM starting. Its last assertion, *the next launch sweeps it*, is now about its own launch.
+- The other tests still run beside each other.
+- The product is unchanged.
+
+**Evidence.** `clippy.sh` is clean, and the file compiles on Windows, where its 10 gated tests are ignored. The pull
+request's `microvm` job is the run that boots them.
