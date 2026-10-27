@@ -211,6 +211,82 @@ fn a_let_bound_closure_crosses_to_an_actor_carrying_only_what_it_reads() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Two actors spawned by `main`, each spawning a child, each drawing twice per turn (`a` for two turns); and one
+/// reading the clock.
+const DRAWS: &str = "module app\n\
+actor Roller {\n\
+  let out: Cap[Console]\n\
+  let r: Cap[Rand]\n\
+  let name: Str\n\
+  new(out: Cap[Console], r: Cap[Rand], name: Str) {\n\
+    self.out = out\n\
+    self.r = r\n\
+    self.name = name\n\
+  }\n\
+  be roll(child: Bool) ! {Write, Rand, Async} {\n\
+    self.out.println(self.name + \" \" + str(self.r.int(0, 1000000000)) + \" \" + str(self.r.int(0, 1000000000)))\n\
+    if child {\n\
+      let c = spawn Roller(self.out, self.r, self.name + \".child\")\n\
+      c.roll(false)\n\
+    }\n\
+  }\n\
+}\n\
+actor Watch {\n\
+  let out: Cap[Console]\n\
+  let c: Cap[Clock]\n\
+  new(out: Cap[Console], c: Cap[Clock]) {\n\
+    self.out = out\n\
+    self.c = c\n\
+  }\n\
+  be tell() ! {Write, Clock} { self.out.println(\"clock \" + str(self.c.now_ms())) }\n\
+}\n\
+fn main(root: Root) ! {Write, Rand, Clock, Async} {\n\
+  let out = root.console()\n\
+  let r = root.rand()\n\
+  let a = spawn Roller(out, r, \"a\")\n\
+  let b = spawn Roller(out, r, \"b\")\n\
+  a.roll(true)\n\
+  b.roll(true)\n\
+  a.roll(false)\n\
+  let w = spawn Watch(out, root.clock())\n\
+  w.tell()\n\
+}\n";
+
+/// ACTOR-DETERMINISM-1 (2026-10-27, D-V2-192): `--seed` and `--clock fixed:` were set on the main thread only, and an
+/// actor runs on a worker thread, so an actor's draws and clock reads took the worker's wall-seeded generator and the
+/// wall clock: every run differed, even on one worker. Each actor now draws from a stream of its own, keyed by who
+/// spawned it and when, so its draws do not depend on which worker runs it; every worker reads the fixed clock. The
+/// lines are compared sorted: the order in which actors print is not promised (per-sender FIFO only, Stage 7).
+#[test]
+fn seed_and_fixed_clock_reach_every_actor_on_any_number_of_workers() {
+    let dir = scratch("determinism");
+    let file = dir.join("app.delulu");
+    std::fs::write(&file, DRAWS).unwrap();
+    let f = file.to_str().unwrap();
+    let run = |seed: &str, threads: &str| {
+        let grants = ["--grant", "console", "--grant", "rand", "--grant", "clock"];
+        let mut args = vec!["run", f];
+        args.extend(grants);
+        args.extend(["--seed", seed, "--clock", "fixed:1000", "--actors-threads", threads]);
+        let o = delulu_in(&dir, &args);
+        assert!(o.status.success(), "{}", combined(&o));
+        let mut lines: Vec<String> = String::from_utf8_lossy(&o.stdout).lines().map(str::to_string).collect();
+        lines.sort();
+        lines
+    };
+    let first = run("7", "1");
+    assert_eq!(first.len(), 6, "{first:?}");
+    assert!(first.contains(&"clock 1000".to_string()), "an actor reads the fixed clock: {first:?}");
+    let a_turns: Vec<&String> = first.iter().filter(|l| l.starts_with("a ")).collect();
+    assert!(a_turns.len() == 2 && a_turns[0] != a_turns[1], "an actor's second turn draws on from its first: {first:?}");
+    assert_eq!(run("7", "1"), first, "the same seed again, on one worker");
+    assert_eq!(run("7", "4"), first, "the same seed on four workers: each actor draws its own stream");
+    let other = run("8", "4");
+    assert_ne!(other, first, "another seed draws otherwise");
+    assert!(other.contains(&"clock 1000".to_string()), "{other:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_non_actor_program_run_is_untouched_by_stage7_flags_absence() {
     // House rule: a module with no actors takes the identical v0.6 path — smoke it.

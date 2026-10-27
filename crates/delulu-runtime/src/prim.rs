@@ -1297,6 +1297,9 @@ fn scope_bug(span: Span) -> Fault {
 use std::cell::Cell;
 thread_local! {
     static RNG: Cell<u64> = Cell::new(seed());
+    /// The key the next actor spawned from this thread derives its generator from, and how many it has derived so far
+    /// ([`next_spawn_key`]; ACTOR-DETERMINISM-1, D-V2-192).
+    static SPAWN: Cell<(u64, u64)> = Cell::new((wall_nanos(), 0));
     static FIXED_CLOCK: Cell<Option<i64>> = const { Cell::new(None) };
     /// When `Some`, `Cap[Console]` output is captured into this buffer instead of stdout — used by
     /// tests and by the WASM backend's two-engine parity harness (§9). Off by default.
@@ -1335,8 +1338,11 @@ fn emit_console(s: &str, newline: bool) {
         }
     }
 }
+fn wall_nanos() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)
+}
 fn seed() -> u64 {
-    rng_state_from_seed(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0))
+    rng_state_from_seed(wall_nanos())
 }
 fn next_rand() -> u64 {
     RNG.with(|r| {
@@ -1355,6 +1361,47 @@ fn next_rand() -> u64 {
 /// own ([`rng_state_from_seed`], which `seed()` applies to the non-deterministic default too).
 pub fn set_rand_seed(seed: u64) {
     RNG.with(|r| r.set(rng_state_from_seed(seed)));
+    SPAWN.with(|s| s.set((seed, 0)));
+}
+
+/// An actor's own `Cap[Rand]` stream (ACTOR-DETERMINISM-1, D-V2-192). The generator is a thread-local and an actor runs
+/// on a worker thread, which `--seed` never reached, so an actor's draws differed on every run. Each actor now carries
+/// its stream between turns, installed for a turn by [`swap_rand_stream`]; its turns run one at a time, so its draws
+/// depend on its key and its own messages, not on which worker runs it.
+#[derive(Clone, Copy, Debug)]
+pub struct RandStream {
+    state: u64,
+    key: u64,
+    spawned: u64,
+}
+
+impl RandStream {
+    /// The stream of an actor spawned with `key` ([`next_spawn_key`]).
+    pub fn from_key(key: u64) -> RandStream {
+        RandStream { state: rng_state_from_seed(key), key, spawned: 0 }
+    }
+}
+
+/// The key for the next actor spawned from this thread's current stream: the stream's own key and how many actors it
+/// has spawned, mixed. `main`'s key is the run's seed; an actor's is the one its spawner gave it.
+pub fn next_spawn_key() -> u64 {
+    SPAWN.with(|s| {
+        let (key, n) = s.get();
+        s.set((key, n + 1));
+        rng_state_from_seed(key ^ rng_state_from_seed(n))
+    })
+}
+
+/// Make `stream` this thread's generator for one actor turn; returns the one it replaces, to be put back after the turn.
+pub fn swap_rand_stream(stream: RandStream) -> RandStream {
+    let state = RNG.with(|r| r.replace(stream.state));
+    let (key, spawned) = SPAWN.with(|s| s.replace((stream.key, stream.spawned)));
+    RandStream { state, key, spawned }
+}
+
+/// The fixed clock this thread reads, if any — for an actor worker to adopt the run's (ACTOR-DETERMINISM-1).
+pub fn fixed_clock_ms() -> Option<i64> {
+    FIXED_CLOCK.with(|c| c.get())
 }
 
 /// The generator's starting state for a seed, the same on both engines: the seed mixed by splitmix64, a bijection on

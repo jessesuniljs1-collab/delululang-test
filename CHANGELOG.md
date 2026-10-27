@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `--seed` and `--clock fixed:` reach every actor, 2026-10-27
+
+- **Fixed: an actor's `Cap[Rand]` and `Cap[Clock]` ignored `--seed` and `--clock fixed:`** (ACTOR-DETERMINISM-1,
+  D-V2-192). Both settings were held per thread, and an actor runs on a worker thread that never saw them. So under
+  `--seed 7`, `main` drew the same numbers on every run but an actor did not, even with `--actors-threads 1`. Under
+  `--clock fixed:1000`, an actor read the wall clock.
+  - Now every actor reads the fixed clock.
+  - Each actor draws from a stream of its own, keyed by who spawned it and when. Its draws are the same on one worker
+    or many, and spawning draws nothing from the program's own sequence.
+- **Documented:** what `--seed` does not fix is the order in which different actors' turns interleave. Messages are
+  ordered per sender only (Stage 7), so the lines several actors print may come in another order on another run (A11).
+
 ## Unreleased — every `--seed` draws its own sequence; seeded sequences change, 2026-10-27
 
 - **Changed: a seed is mixed (splitmix64) before it starts the random generator, so every seed draws a sequence of its

@@ -9600,3 +9600,28 @@ Changing it changes every seeded sequence, so it is a decision. D-V2-191 takes i
 - After the change, the same program under seeds 0–5, `2654435768` and `2654435769` printed eight different lines. The
   first floats ran from 0.104 to 0.951.
 - Clippy is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: `--seed` and `--clock fixed:` reach every actor (ACTOR-DETERMINISM-1, A11; D-V2-192)
+
+**Why.** Looking at A11 (an actor program's lines in different orders under `--seed 7`), a program that gave an actor
+a `Cap[Rand]` and a `Cap[Clock]` showed that `--seed` and `--clock fixed:` never reached an actor at all:
+- under `--seed 7`, the actor's draw changed on every run, even on one worker;
+- under `--clock fixed:1000`, the actor read the wall clock.
+
+Both settings are thread-locals that `run` sets on the main thread. The decision, and why the interleaving itself stays
+unordered, is D-V2-192.
+
+**What changed.**
+- `delulu-runtime` `prim.rs`: `RandStream`, `next_spawn_key`, `swap_rand_stream` and `fixed_clock_ms`.
+  `set_rand_seed` also sets the key the main thread's spawns derive from.
+- `actors.rs`:
+  - a spawn draws its child's key on the spawner's thread and sends it with the create job;
+  - each cell carries its actor's stream, installed for the actor's constructor and every behaviour, and saved after;
+  - every worker adopts the fixed clock read when the actor system starts.
+- Docs: `docs/for-agents.md` (*Determinism*, **Actors**), `docs/design/STAGE7_ACTORS_GUIDE.md` (the ordering line),
+  and HANDOFF §11.5 (*A thread-local setting reaches only the thread that sets it*).
+
+**Evidence.**
+- The test and the mutants M861–M865 are listed in D-V2-192.
+- The program's sorted output hashed alike on 1, 4 and 8 workers under `--seed 7`.
+- `clippy.sh` is clean. The suites are in the commit message.

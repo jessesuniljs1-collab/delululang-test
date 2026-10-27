@@ -142,6 +142,9 @@ delulu run app.delulu --grant console [--actors-threads N] [--on-quiesce report]
 - WASM-engine concurrency is cooperative single-threaded in v0.7 — semantics identical,
   parallelism absent, labeled in output.
 - Message *ordering* is per-sender-pair FIFO only; no global order, no delivery-time bounds.
+  So `--seed` fixes every actor's draws (each actor has a stream of its own, keyed by its spawner) and
+  `--clock fixed:` every actor's clock, but not the order in which actors' turns interleave
+  (D-V2-192, 2026-10-27).
 
 ## 6. What v0.7 deliberately does not do
 
