@@ -9659,3 +9659,25 @@ author wrote, and `delulu explain DL1604` spoke only of `box` and `tag`. Reprodu
   M867 survived the first version of the test, which wrote `p.x` (a target whose base is the variable itself). The two
   nested shapes were added for it.
 - `clippy.sh` is clean. The suites are in the commit message.
+
+## 2026-10-27 — the laptop: a microVM test raced its neighbours' sweeps
+
+**Found by** `master`'s push run `40544536339` at `ac2920e` (#77 landed), whose `microvm` job failed on
+`a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left`: *"the killed host's directory"*, left 0,
+right 1. The same job passed on #77's own run, and #77 does not touch the microVM path.
+
+**Why.** The test kills a host mid-run and then asserts its VM directory is still there, before the next launch sweeps
+it. But `microvm.rs` calls `sweep_orphans` at the start of every launch, and it removes the directory of any host that
+is gone. CI runs this binary with `--test-threads=2`, so another test's launch could sweep the killed host's directory
+inside the window the test counts it in. This was read from the code. It was not reproduced, because this laptop has
+no KVM.
+
+**The fix**, in the test alone:
+- Every VM-booting test in `microvm_cli.rs` (11, each found by its `delulu_kvm` gate) takes a shared lock.
+- The host-death test takes the lock alone, for its whole body, so its window and its own sweeping launch run with no
+  other VM starting. Its last assertion, *the next launch sweeps it*, is now about its own launch.
+- The other tests still run beside each other.
+- The product is unchanged.
+
+**Evidence.** `clippy.sh` is clean, and the file compiles on Windows, where its 10 gated tests are ignored. The pull
+request's `microvm` job is the run that boots them.

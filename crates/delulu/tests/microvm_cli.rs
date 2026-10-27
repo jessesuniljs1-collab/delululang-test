@@ -28,6 +28,20 @@ fn isolated_state() -> PathBuf {
     .clone()
 }
 
+/// Every launch sweeps the VM directories of hosts that are gone (`microvm.rs`, `sweep_orphans`), so a test booting a VM
+/// beside `a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left` could sweep the killed host's
+/// directory in the moment that test counts it: `master`'s push run 40544536339 (2026-10-27) failed there, *"the
+/// killed host's directory"*, left 0, right 1. So the VM-booting tests share this lock and that one takes it alone.
+static VM_TESTS: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+fn vm_test() -> std::sync::RwLockReadGuard<'static, ()> {
+    VM_TESTS.read().unwrap_or_else(|e| e.into_inner())
+}
+
+fn vm_test_alone() -> std::sync::RwLockWriteGuard<'static, ()> {
+    VM_TESTS.write().unwrap_or_else(|e| e.into_inner())
+}
+
 fn tmp(name: &str) -> PathBuf {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -99,6 +113,7 @@ fn vmms_of(pid: u32) -> Vec<u32> {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn a_program_runs_in_the_microvm_and_the_report_says_level_2() {
+    let _vm = vm_test();
     let dir = tmp("hello");
     write(&dir, "hello.delulu", HELLO);
     let o = delulu(&dir, &["run", "hello.delulu", "--isolation", "microvm", "--grant", "console", "--report-out", "rep.json"]);
@@ -149,6 +164,7 @@ fn a_program_runs_in_the_microvm_and_the_report_says_level_2() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn a_finished_run_leaves_no_vmm_and_no_directory() {
+    let _vm = vm_test();
     let dir = tmp("clean");
     write(&dir, "hello.delulu", HELLO);
     let host = command(&dir, &["run", "hello.delulu", "--isolation", "microvm", "--grant", "console"])
@@ -168,6 +184,7 @@ fn a_finished_run_leaves_no_vmm_and_no_directory() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn a_flipped_byte_in_the_image_is_refused_before_boot() {
+    let _vm = vm_test();
     let (image, _) = provisioned();
     for file in ["initramfs.cpio", "vmlinux"] {
         let dir = tmp("flipped");
@@ -197,6 +214,7 @@ fn a_flipped_byte_in_the_image_is_refused_before_boot() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn the_processor_time_ceiling_ends_a_spinning_guest() {
+    let _vm = vm_test();
     let dir = tmp("spin");
     write(&dir, "spin.delulu", "module m\n\nfn main(root: Root) {\n  var i = 0\n  while i >= 0 {\n    i = i + 1\n  }\n}\n");
     let started = Instant::now();
@@ -214,6 +232,7 @@ fn the_processor_time_ceiling_ends_a_spinning_guest() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn a_guest_that_exhausts_its_memory_ends_its_vm_not_the_host() {
+    let _vm = vm_test();
     let dir = tmp("oom");
     write(
         &dir,
@@ -238,6 +257,7 @@ fn a_guest_that_exhausts_its_memory_ends_its_vm_not_the_host() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left() {
+    let _vm = vm_test_alone();
     let dir = tmp("host-death");
     write(&dir, "spin.delulu", "module m\n\nfn main(root: Root) {\n  var i = 0\n  while i >= 0 {\n    i = i + 1\n  }\n}\n");
     let mut host = command(&dir, &["run", "spin.delulu", "--isolation", "microvm"])
@@ -278,6 +298,7 @@ fn a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left() 
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn two_vms_at_once_do_not_share() {
+    let _vm = vm_test();
     let dir = tmp("two");
     for n in ["one", "two"] {
         write(
@@ -308,6 +329,7 @@ fn two_vms_at_once_do_not_share() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn the_probe_boots_a_vm_to_report_l2() {
+    let _vm = vm_test();
     let dir = tmp("probe");
     let o = delulu(&dir, &["sandbox", "probe", "--json"]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
@@ -394,6 +416,7 @@ fn jailed_vmms() -> Vec<(u32, String)> {
 #[cfg(unix)]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs as root; see GATE")]
 fn as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host() {
+    let _vm = vm_test();
     let (_, vmm) = provisioned();
     assert!(vmm.with_file_name("jailer").is_file(), "the jailer must sit beside {}", vmm.display());
     let exe = PathBuf::from(env!("CARGO_BIN_EXE_delulu"));
@@ -524,6 +547,7 @@ fn as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn an_uncarried_surface_is_refused_before_boot() {
+    let _vm = vm_test();
     let dir = tmp("actors");
     write(
         &dir,
@@ -543,6 +567,7 @@ fn an_uncarried_surface_is_refused_before_boot() {
 #[test]
 #[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
 fn a_control_program_runs_in_the_microvm_and_its_boot_is_not_charged_to_its_heartbeat() {
+    let _vm = vm_test();
     let dir = tmp("devices");
     write(
         &dir,

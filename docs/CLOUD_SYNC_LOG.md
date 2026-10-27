@@ -5985,3 +5985,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. A14, and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
   5. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — a microVM test raced its neighbours' sweeps (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/microvm-sweep-race` (on `laptop/a1-lift-names-its-call`, #80)   Pull request: opened with this push
+- **What:** `master`'s push run `40544536339` failed `microvm` on a race between one test's window and its neighbours'
+  orphan sweeps. The VM-booting tests now share a lock, which the host-death test takes alone. See V2_LOG's entry of the
+  same name.
+- Files and folders: M `crates/delulu/tests/microvm_cli.rs`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (7.24), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #78, #79, #80 and this, each on green CI.
+  2. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 (`dcfd43c`'s `40240072174` and `40240074649`, and the `zstd` advisories under 4).
+  3. A14, and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
