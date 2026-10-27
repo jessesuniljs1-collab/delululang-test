@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 332 |
-| Rust lines | 192181 |
-| Rust files outside `src/` (test/bench targets) | 162 |
+| Rust files | 333 |
+| Rust lines | 192243 |
+| Rust files outside `src/` (test/bench targets) | 163 |
 | Markdown documents | 272 |
-| Markdown lines | 87599 |
+| Markdown lines | 87770 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1563 / 16945 |
+| Nodes / edges in this map | 1564 / 16972 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests

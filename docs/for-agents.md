@@ -424,6 +424,11 @@ sends — an effect only; there is no futures runtime and no `await`), and `Actu
 physical device). A module may declare more with `effect Name`; those are user effects and are
 reported by name.
 
+`Async` asks for no grant, so **no lease or grant can refuse an actor program**: a lease bounds what a run
+can reach, and spawning an actor reaches nothing outside the run. What bounds how much it computes, actors
+included, is the run's budget, `--limits mem=N,cpu=S,wall=S` (D-V2-189). `delulu authority` lists `Async`
+among a program's effects, so an operator can see an actor program before running it.
+
 The list is closed — `delulu_check::ty::Effect::core_from_name` accepts exactly these ten and
 nothing else, and a `type` or `effect` declaration that shadows one is refused rather than silently
 ignored. If you are enumerating effects in a harness, enumerate all ten: a report carrying `Load`,

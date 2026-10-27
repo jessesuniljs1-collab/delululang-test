@@ -37,8 +37,18 @@ wasm-encoder = "0.221"
 # wasmtime), so making it a DIRECT dep adds no new build — recorded as build-order deviation 6.
 anyhow = "1"
 # Default features (incl. signals-based traps) so host-function errors unwind cleanly rather than
-# aborting the process — correctness over build size.
-wasmtime = "48"
+# aborting the process — correctness over build size. All of them except `cache`: wasmtime's
+# compilation cache, which keeps compiled native code in a directory on disk and loads it back. No
+# code here turns it on, and leaving it compiled in carried `zstd` 0.13 and its four advisories of
+# 2026-10-27 (RUSTSEC-2026-0391, -0398, -0403, -0410), which the 48 line cannot update past.
+# `tests/wasmtime_features.rs` asks the resolved graph that it stays off. The list is wasmtime
+# 48.0.7's `default` minus `cache`; on a wasmtime upgrade, compare it with the new `default`.
+wasmtime = { version = "48", default-features = false, features = [
+    "anyhow", "async", "backtrace", "gc", "gc-copying", "gc-drc", "gc-null", "wat", "profiling",
+    "parallel-compilation", "cranelift", "pooling-allocator", "demangle", "addr2line", "coredump",
+    "debug-builtins", "runtime", "component-model", "component-model-async", "threads",
+    "stack-switching", "std", "debug", "compile-time-builtins", "wit-parser",
+] }
 # The `.dwx` artifact embeds its authority manifest (serde_json) and binds it to the code with a
 # content hash (blake3) so the manifest and the bytes it describes can't drift apart undetected.
 serde_json = { workspace = true }

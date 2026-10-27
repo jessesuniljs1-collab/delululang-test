@@ -5839,3 +5839,68 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   5. A17, a decision: `Async` is not authority, and the run's budget bounds an actor program.
   6. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — A17 decided: `Async` is not authority, and the budget bounds actors (D-V2-189) (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/a17-async-decision` (on `laptop/a21-rand-float`, #73)   Pull request: opened with this commit
+- **What:** D-V2-189. Documents and a decision only; nothing in the code changes.
+- Files and folders: M `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` (6.24),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #73, then this PR, each on green CI, and delete the branches.
+  2. Merge `master` into `launch/2.0.0` (#71–#74), dispatch `everything` and the release dry run, and re-cite
+     CHECKLIST-2.0 criteria 1, 3 and 4.
+  3. A15, a decision on a code for a bad argument (DL0908), with documentation of the half-open range.
+  4. A decision on mixing the generator's seed.
+  5. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-26 — the laptop's handoff: #71 to #74 landed; `launch/2.0.0` at `dcfd43c` (made on the laptop)
+- Session: `https://claude.ai/code/session_01RW1tuYNximmubP8G4RAmxJ`   Model: Claude Opus 5.5 (the laptop; no fallback notice).
+- Branch: `laptop/handoff-2026-10-26` (on `master` `5a1b75c`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. On `launch/2.0.0`, outside this pull request: `dcfd43c` (the merge, the
+  CHANGELOG move, the CHECKLIST-2.0 re-citation).
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `launch/2.0.0`'s `everything` run `40240072174` and its release dry run `40240074649`, both at `dcfd43c`. Cite
+     them in CHECKLIST-2.0 when green, and fix what is red.
+  2. The first nightly with #69 (around 08:00 UTC on 2026-10-26): the broker's Miri time inside its 240-minute cap.
+  3. A15, a decision. `r.int(lo, hi)` with `hi <= lo` faults as DL0904, "capability scope violation", and a bad argument
+     is not that. The honest code is a new one (DL0908), which touches the registry, the reference and the entrenched
+     conformance witnesses (an `ENTRENCHED_CHANGE_RECORD.md` entry). Also document that the range is half-open.
+  4. A decision on mixing the generator's seed (splitmix64): a small seed's first draws are near 0, and seeds `2k` and
+     `2k+1` draw alike. It changes every seeded sequence.
+  5. The campaign's remaining items: A14 (the interpreter's speed), A11 (actor output order under `--seed`), and the
+     papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16). The ledger is on `origin/autosave/dogfood`.
+  6. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — `zstd` leaves the build: wasmtime without its compilation cache (RUSTSEC-2026-0391, -0398, -0403, -0410) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/zstd-advisories` (on `master` `b18ddf3`)   Pull request: opened with this push
+- **Read first:**
+  - `launch/2.0.0` `dcfd43c`'s `everything` `40240072174`: **18 of 18 jobs success**. The broker's Miri took 3 h 00 min,
+    the checker's 1 h 09 min.
+  - Its release dry run `40240074649`: the four packages success, release skipped.
+  - The first nightly with #69, `40292304609` (2026-10-26, at `b18ddf3`): **18 of 18 success**. The broker's Miri took
+    3 h 07 min, inside its 240-minute cap.
+  - The next nightly, `40474545633` (2026-10-27, same tree): `supply-chain` red, the 17 others success (the broker's
+    Miri 3 h 01 min).
+- **What:** the four advisories are against `zstd`, which only wasmtime's unused `cache` feature brought in. The
+  feature is now off, and a new test holds it off in the resolved graph. See V2_LOG's entry of the same name.
+- **Also:** the laptop's autosave task (`DeluluLang-autosave`) was checked at the owner's request: Ready, every
+  10 minutes, last result 0, the installed copy equal to `scripts/autosave.ps1`, and every branch equal to `origin`. It
+  was renewed for 7 days (`-Install -Hours 168`, to 2026-11-03).
+- Files and folders: A `crates/delulu-wasm/tests/wasmtime_features.rs`. M `crates/delulu-wasm/Cargo.toml`, `Cargo.lock`,
+  `CHANGELOG.md`, `.github/workflows/ci.yml` (a comment), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this on green, then merge `master` into `launch/2.0.0`. Its `supply-chain` is red the same way until then.
+     Dispatch `everything` and the release dry run there, and cite `40240072174`, `40240074649` and the new runs in
+     CHECKLIST-2.0 (criterion 4 gains these advisories).
+  2. A15, a decision on a code for a bad argument (DL0908), with documentation of the half-open range.
+  3. A decision on mixing the generator's seed (splitmix64).
+  4. A14, A11, and the papercuts (A1, A4–A8, A13, B4–B8, B11, C6–C16).
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
