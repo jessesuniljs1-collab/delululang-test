@@ -5045,3 +5045,47 @@ generator itself (xorshift64), and the mapping of a draw to `r.int` and `r.float
 - Mutants, each red with the control green:
   - M859, no zero-state guard: the zero-state test fails.
   - M860, the WASM host keeps `| 1`: the two engines part under seed 0.
+
+## D-V2-192 — `--seed` and `--clock fixed:` reach every actor: each actor draws from a stream of its own, keyed by its spawner; the interleaving of actors stays unordered (ACTOR-DETERMINISM-1, A11) — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (the laptop, 2026-10-27, while looking at A11).** The generator and the fixed clock are thread-locals in
+`prim.rs`, and `run` sets them on the main thread, where `main` runs. An actor's turns run on a worker thread, which
+never saw either setting. Witnessed with `--seed 7`:
+- `main` drew 220748 on every run, but an actor holding the same `Cap[Rand]` drew 395444, 186614 and 634774 on three
+  runs with `--actors-threads 1`, and other values with 4.
+- Under `--clock fixed:1000`, `main` read 1000 and an actor read the wall clock (`1793119167378`).
+
+Spec §6.2 says *"`--seed <u64>` fixes `Cap[Rand]`; `--clock fixed:<ms>` fixes `Cap[Clock]`"*, with no exception for
+actors, and `docs/for-agents.md` says `--seed N --clock fixed:MS` *"fixes randomness and time"*. A11 of the agent test
+campaign (three runs of an 8-worker prime counter under `--seed 7` printed their lines in three orders) had looked like
+an ordering question. Its programs drew nothing at random, so this defect stayed out of sight.
+
+**Decision.**
+- **The clock.** The actor system reads the run's fixed clock when it starts, and every worker adopts it.
+- **The generator.** Each actor has a `Cap[Rand]` stream of its own (`prim::RandStream`), carried in its cell and
+  installed on the worker for each of its turns (`swap_rand_stream`). A stream starts from a key that its spawner
+  derives when spawning (`next_spawn_key`): the spawner's own key and how many actors it has spawned, mixed by
+  splitmix64. `main`'s key is the run's seed (`set_rand_seed`), or the wall clock when there is none. An actor's turns
+  run one at a time, so its draws depend only on its key and its own messages, not on which worker runs it or how many
+  workers there are.
+- Drawing a spawn key draws nothing from anyone's `Cap[Rand]`, so a program's own sequence of draws is unchanged by
+  spawning.
+- **What stays unordered.** The interleaving of different actors' turns. Stage 7 promises ordering per sender only
+  (*"no global order"*), and that is kept. Even one worker does not promise a single order, because `main` keeps
+  sending while the worker runs. `docs/for-agents.md` and the actors guide now say so, which closes A11.
+
+**Evidence.**
+- `actors_cli` `seed_and_fixed_clock_reach_every_actor_on_any_number_of_workers` drives the binary. Two actors each
+  spawn a child, one of them takes two turns, and a third reads the clock. It checks:
+  - the sorted lines are identical across two runs on one worker and one on four, and differ under another seed;
+  - an actor reads `clock 1000`;
+  - the actor's second turn draws on from its first.
+
+  It was red before the change (*"an actor reads the fixed clock: … clock 1793119228350"*), passed 15 of 15 runs after
+  it, and the program's sorted output hashed alike on 1, 4 and 8 workers.
+- Mutants, each red with the control green:
+  - M861: a worker never adopts the fixed clock.
+  - M862: a behaviour's turn runs on the worker's own generator.
+  - M863: a spawn key ignores its spawner's key.
+  - M864: `--seed` never sets `main`'s key.
+  - M865: a turn's stream is not saved for the next.
