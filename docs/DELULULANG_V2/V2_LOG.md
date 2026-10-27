@@ -9543,3 +9543,60 @@ back to the new list, red naming `["cache"]`. It passed again once restored.
 - the `delulu-wasm` suite, and the CLI's `governance`, `wasm_cli`, `egress_cli` and `broker_cli`: in the commit message.
 
 The pull request's CI is the rest.
+
+## 2026-10-27 — the laptop: an empty `rand.int` range is DL0908 (A15, D-V2-190)
+
+**Why.** The agent test campaign's A15: `r.int(5, 5)` faulted DL0904, which `delulu explain` calls a capability scope
+violation, a path or host outside a grant. Nothing said the range is half-open. Checked at `d2752cf`, both engines
+faulted alike, with the same `int.refused` trace record. The one test of an empty range, `refusal_trace_parity`, pinned
+DL0904 as the code both traces must share. The decision, and why the fault is not DL0904, an existing code, or a drawn
+value, is D-V2-190.
+
+**What changed.**
+- `delulu-diag`: DL0908 registered, *"an argument outside what the operation accepts"*, with its `explain` text.
+- `delulu-runtime` `prim.rs`: the empty range faults DL0908. Its words come from `rand_int_range_fault`, which the WASM
+  host calls too, so the two texts cannot drift apart.
+- `delulu-wasm` `host.rs`: the same code and words. `refusal_trace_parity` expects DL0908 for the empty range.
+- `delulu-conform` `rules.rs` and `tests/conformance/witnesses.toml` (entrenched; `ENTRENCHED_CHANGE_RECORD.md`): the
+  rule `ref.rule.runtime.faults-are-diagnostics` names DL0908, which gains a rejecting and an accepting witness. The
+  generated reference shows 358 of 358 anchors and 155 diagnostics.
+- Documented: the half-open range in `docs/for-agents.md` (*Determinism*, which now lists both `Cap[Rand]` methods) and
+  in the book's determinism paragraph.
+- Counts: the slang catalog's coverage is now *8 of 155* diagnostic codes in `docs/lang/delulu-slang.md`,
+  `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` and REMAINING_WORK 1.8 and 6.2. The Survey flagged them, and DL0908 has no
+  slang message yet. An older entry of this log gives the count of its day; it was true when written and is left as it
+  is.
+
+**Evidence.**
+- `fault_parity`: `an_empty_rand_range_is_dl0908_on_both_engines` covers four empty ranges, `Int::MAX` to `Int::MIN`
+  among them. It was red before (`WASM trap: DL0904: rand.int requires lo < hi`) and is green now.
+  `a_one_wide_rand_range_draws_its_one_value_on_both_engines` is green.
+- The CLI, at `--seed 7 --trace-effects`, on the interpreter and on `--engine wasm`: the same three trace records,
+  ending in `int.refused` with DL0908's text; `error[DL0908]`, exit 1.
+- Mutants M855–M858 (D-V2-190), each red with the control green.
+- `delulu-conform --coverage`: 100%.
+- `clippy.sh` clean; the tests in the commit message.
+
+## 2026-10-27 — the laptop: every `--seed` draws its own sequence (D-V2-191)
+
+**Why.** A21's entry recorded it, *seen on the way, not changed*: the generator started at `seed | 1`. Witnessed again at
+`ac2920e` with `delulu run --seed N` on a program drawing two floats and two ints:
+- seeds 2 and 3 printed the same line, and so did 4 and 5;
+- seeds 0, `2654435768` and `2654435769` printed one line between them;
+- seed 1's first float was `5.866996130457838e-11`.
+
+Changing it changes every seeded sequence, so it is a decision. D-V2-191 takes it now, before 2.0.0, a major release.
+
+**What changed.**
+- `delulu-runtime` `prim.rs`: `rng_state_from_seed`, splitmix64 with a guard for the one seed that mixes to zero.
+  `set_rand_seed` and the unseeded default both start through it. `delulu test`'s per-test seeds and the sandboxed
+  guest's go through `set_rand_seed`.
+- `delulu-wasm` `host.rs`: `seed_rng` calls the same function, for a given seed and for the wall-clock default.
+- The change was made in two steps. First the function was introduced with the old `| 1` mapping, and the new tests
+  were witnessed red against it. Then splitmix64 replaced the mapping.
+
+**Evidence.**
+- The witnesses and mutants are in D-V2-191.
+- After the change, the same program under seeds 0–5, `2654435768` and `2654435769` printed eight different lines. The
+  first floats ran from 0.104 to 0.951.
+- Clippy is clean. The suites are in the commit message.

@@ -1336,7 +1336,7 @@ fn emit_console(s: &str, newline: bool) {
     }
 }
 fn seed() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E3779B9) | 1
+    rng_state_from_seed(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0))
 }
 fn next_rand() -> u64 {
     RNG.with(|r| {
@@ -1351,12 +1351,27 @@ fn next_rand() -> u64 {
 
 /// Deterministic replay (spec §6.2): reseed `Cap[Rand]`'s thread-local xorshift generator. Two
 /// runs on the same thread that call `set_rand_seed` with the same value produce identical
-/// `rand.int`/`rand.float` sequences; different seeds (almost always) diverge. The xorshift
-/// generator gets stuck at zero, so a zero seed is mapped to a fixed nonzero value, matching the
-/// `| 1` bias `seed()` already applies for the non-deterministic default.
+/// `rand.int`/`rand.float` sequences; different seeds diverge, every seed but one pair starting from a state of its
+/// own ([`rng_state_from_seed`], which `seed()` applies to the non-deterministic default too).
 pub fn set_rand_seed(seed: u64) {
-    let s = if seed == 0 { 0x9E3779B9 } else { seed } | 1;
-    RNG.with(|r| r.set(s));
+    RNG.with(|r| r.set(rng_state_from_seed(seed)));
+}
+
+/// The generator's starting state for a seed, the same on both engines: the seed mixed by splitmix64, a bijection on
+/// `u64`, so every seed starts somewhere of its own (D-V2-191). It was `seed | 1`: every even seed drew its odd
+/// neighbour's sequence, and a small seed started xorshift so near zero that its first draws were tiny (seed 1's first
+/// `r.float()` was 5.9e-11). xorshift stays at zero forever, so the one seed that mixes to zero
+/// (`2^64 - 0x9E37_79B9_7F4A_7C15`) starts at that constant instead, where `0xCD36_DA00_563C_5EF6` also starts: 2^64
+/// seeds into 2^64 - 1 nonzero states share at least one, and this is the only pair.
+pub fn rng_state_from_seed(seed: u64) -> u64 {
+    const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut z = seed.wrapping_add(GAMMA);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    match z ^ (z >> 31) {
+        0 => GAMMA,
+        state => state,
+    }
 }
 
 /// Deterministic replay (spec §6.2): fix `Cap[Clock].now_ms()` to always return `ms` on this
@@ -1385,6 +1400,46 @@ mod determinism_tests {
         set_rand_seed(2);
         let b: Vec<u64> = (0..8).map(|_| next_rand()).collect();
         assert_ne!(a, b, "different seeds should (overwhelmingly likely) diverge");
+    }
+
+    /// Every seed its own sequence (D-V2-191). The state was `seed | 1`, so `--seed 2` and `--seed 3` drew one sequence,
+    /// as did every even seed and the odd one after it, and seed 0 shared its sequence with `0x9E3779B8` and `0x9E3779B9`.
+    #[test]
+    fn neighbouring_seeds_draw_different_sequences() {
+        let mut seen = std::collections::HashMap::new();
+        for seed in (0..64u64).chain([0x9E37_79B8, 0x9E37_79B9, u64::MAX - 1, u64::MAX]) {
+            set_rand_seed(seed);
+            let draws: Vec<u64> = (0..4).map(|_| next_rand()).collect();
+            if let Some(other) = seen.insert(draws, seed) {
+                panic!("seeds {other} and {seed} draw the same sequence");
+            }
+        }
+    }
+
+    /// A small seed was a nearly empty xorshift state, so its first draws were tiny: seed 1's first `r.float()` was
+    /// 5.9e-11, and every seed from 1 to 64 drew a first float below 0.01. Mixed, they spread over the range.
+    #[test]
+    fn a_small_seeds_first_draw_is_spread_over_the_range() {
+        let firsts: Vec<f64> = (1..=64u64)
+            .map(|s| {
+                set_rand_seed(s);
+                next_rand() as f64 / u64::MAX as f64
+            })
+            .collect();
+        let mean = firsts.iter().sum::<f64>() / firsts.len() as f64;
+        assert!((0.3..0.7).contains(&mean), "the first draws of seeds 1..=64 average {mean}: {firsts:?}");
+        let tiny = firsts.iter().filter(|f| **f < 0.01).count();
+        assert!(tiny <= 4, "{tiny} of 64 small seeds draw a first float below 0.01: {firsts:?}");
+    }
+
+    /// The one seed that splitmix64 mixes to zero, where xorshift would draw zeros forever, starts where
+    /// `0xCD36_DA00_563C_5EF6` does. Both seeds come from inverting splitmix64: `0x61C8_8646_80B5_83EB` is
+    /// `2^64 - 0x9E37_79B9_7F4A_7C15`, and the other mixes to `0x9E37_79B9_7F4A_7C15`.
+    #[test]
+    fn the_seed_that_mixes_to_zero_still_draws() {
+        assert_eq!(rng_state_from_seed(0x61C8_8646_80B5_83EB), rng_state_from_seed(0xCD36_DA00_563C_5EF6));
+        set_rand_seed(0x61C8_8646_80B5_83EB);
+        assert!((0..4).map(|_| next_rand()).all(|x| x != 0), "a zero state draws zeros forever");
     }
 
     #[test]

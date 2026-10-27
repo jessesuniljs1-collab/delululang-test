@@ -546,16 +546,13 @@ fn xorshift64(mut x: u64) -> u64 {
     x
 }
 
-/// The initial PRNG state, matching the interpreter: `set_rand_seed`'s `(s==0 ? GOLDEN : s) | 1` for a
-/// fixed seed, or a nanosecond wall seed (`| 1`) when no seed is given.
+/// The initial PRNG state, the interpreter's own (`rng_state_from_seed`, D-V2-191): the seed mixed, or a nanosecond
+/// wall seed mixed when no seed is given.
 fn seed_rng(seed: Option<u64>) -> u64 {
-    match seed {
-        Some(s) => (if s == 0 { 0x9E37_79B9 } else { s }) | 1,
-        None => {
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E37_79B9)
-                | 1
-        }
-    }
+    let s = seed.unwrap_or_else(|| {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)
+    });
+    delulu_runtime::prim::rng_state_from_seed(s)
 }
 
 // ----- guest-memory helpers (the host reads/writes the guest's linear memory) ----------------
