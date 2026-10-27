@@ -5964,3 +5964,24 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
   4. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-27 — A1: a write refused after a `val` lift names the call that lifted it (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9NRj2TWEAsqy9HDD4`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/a1-lift-names-its-call` (on `laptop/actor-determinism`, #79)   Pull request: opened with this push
+- **What:** the DL1604 after C64's lift names the call, the callee and its parameter, and says what to write instead.
+  See V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/src/lib.rs`,
+  `crates/delulu-diag/src/codes.rs` (DL1604's explanation), `docs/GETTING_STARTED.md` (§10),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.28), `CHANGELOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #78, #79 and this, each on green CI.
+  2. `master`'s push run `40544536339` at `ac2920e`: `microvm` red on
+     `a_killed_host_takes_its_vm_with_it_and_the_next_launch_sweeps_what_is_left` (left 0, right 1). The other tests in
+     the binary launch VMs in parallel, and every launch sweeps a dead host's directory, inside the window the test
+     counts it in. The fix is the next pull request.
+  3. Merge `master` into `launch/2.0.0`, dispatch `everything` and the release dry run, and re-cite CHECKLIST-2.0
+     criteria 1, 3, 4 and 8.
+  4. A14, and the papercuts (A4–A8, A13, B4–B8, B11, C6–C16); `str()` of a `Float` is DL1201 on `--engine wasm`.
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

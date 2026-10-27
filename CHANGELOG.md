@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a write refused after a call names that call, 2026-10-27
+
+- **Improved: DL1604 names the call that made a variable `val`** (A1). Take `let xs = [1, 2]`, then `len_of(xs)`,
+  where the parameter has no capability keyword and so is `val`, then `xs.push(4)`. The call is accepted, and `xs`
+  becomes `val` from then on, because the callee may keep it. The write was refused at the write alone, with nothing
+  pointing at the call. Now the error:
+  - names the callee and its parameter, and labels the argument at the call, *"`xs` became `val` here"*;
+  - says what to write instead: declare the parameter `box` if the function only reads (it then reads a `ref` without
+    keeping it), or write before the call.
+
+  The rule itself is unchanged. `GETTING_STARTED.md` §10 described the older behaviour (a DL1603 at the call) and is
+  corrected, and `delulu explain DL1604` describes the case.
+
 ## Unreleased — `--seed` and `--clock fixed:` reach every actor, 2026-10-27
 
 - **Fixed: an actor's `Cap[Rand]` and `Cap[Clock]` ignored `--seed` and `--clock fixed:`** (ACTOR-DETERMINISM-1,
