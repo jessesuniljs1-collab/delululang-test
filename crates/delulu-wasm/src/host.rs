@@ -1374,7 +1374,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     return 0;
                 }
                 if hi <= lo {
-                    caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
+                    // DL0908, the interpreter's code and words (A15, D-V2-190).
+                    caller.data_mut().refused = Some(format!("DL0908: {}", delulu_runtime::prim::rand_int_range_fault(lo, hi)));
                     caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
                     return lo;
                 }

@@ -499,6 +499,12 @@ test = "couldnt_tell_an_unevaluable_export_is_an_honest_error_never_a_panic_or_s
 kind = "negative"
 
 [[witness]]
+anchor = "ref.diag.DL0908"
+file = "crates/delulu-wasm/tests/fault_parity.rs"
+test = "an_empty_rand_range_is_dl0908_on_both_engines"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.diag.DL1306"
 file = "crates/delulu-runtime/tests/foreign_ffi.rs"
 test = "invalid_utf8_return_is_a_dl1306_fault_not_a_crash"
@@ -948,6 +954,12 @@ kind = "positive"
 anchor = "ref.diag.DL0907"
 file = "crates/delulu/tests/cli.rs"
 test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0908"
+file = "crates/delulu-wasm/tests/fault_parity.rs"
+test = "a_one_wide_rand_range_draws_its_one_value_on_both_engines"
 kind = "positive"
 
 [[witness]]

@@ -249,6 +249,7 @@ registry! {
     // never fire. Freezing a code for a feature that does not exist strands agents keying off
     // it. The number is never reused; if a panic construct ever lands by RFC, it gets a new code.
     "DL0907" => "an internal invariant the checker should have guaranteed was violated (compiler-bug class)",
+    "DL0908" => "an argument outside what the operation accepts",
 }
 
 pub fn is_registered(code: &str) -> bool {
@@ -1074,6 +1075,14 @@ pub fn code_explain(code: &str) -> Option<String> {
              iteratively — the bound exists so that a runaway program fails in a way you can act \
              on.",
         "DL0907" => "The runtime reached a state the checker was supposed to have made impossible. This is a COMPILER BUG, not your code's fault — please report it with the program that produced it. The canonical case is a `match` that reached no arm: exhaustiveness is proved statically (DL0407), so a fallthrough at run time means the checker let something through. But this code covers the whole CLASS of checker-should-have-caught-it conditions, and it is raised for several others: an unbound name or an assignment to one, a field assignment on a non-record, an index assignment on a non-list, `?` applied to a non-Result, a call to an unknown function, an unknown test name, an actor turn with no actor address, and a foreign value reaching an actor boundary. Each is likewise a broken static guarantee rather than a program error. The message text always names the specific condition; this code names the class. (Campaign finding C14: this entry used to describe only the `match` case, so a reader who hit it for an unbound name was told something false about their own program.)",
+        "DL0908" => "An operation was given an argument it does not accept, so it could not run. Today \
+             one operation can fault this way: `r.int(lo, hi)` draws from `lo` up to but not \
+             including `hi`, so it needs `lo < hi`, and `r.int(5, 5)` or `r.int(6, 5)` names no \
+             value to draw. Write the bounds so the range holds at least one value: `r.int(1, 7)` \
+             rolls a die. This is a fault in the program's values, not an authority event: nothing \
+             outside the run was asked for, and every grant still holds. (Found 2026-10-24 by the \
+             agent test campaign, A15: it was reported as DL0904, a capability scope violation, \
+             which sent the reader looking for a path or host outside a grant. D-V2-190.)",
 
         // ===== DL10xx — packages and provenance ============================
         "DL1001" => "A dependency's authority exceeds what the lockfile pinned for it. This is the \

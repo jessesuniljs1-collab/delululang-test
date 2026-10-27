@@ -471,8 +471,9 @@ pub const RULES: &[Rule] = &[
         anchor: "ref.rule.runtime.faults-are-diagnostics",
         chapter: "5.15",
         statement: "A runtime fault — overflow, division by zero, index out of bounds, recursion \
-                    depth — is a diagnostic with a code, never a host crash or silent wrap.",
-        enforced_by: &["DL0901", "DL0902", "DL0903", "DL0905"],
+                    depth, an argument outside what an operation accepts — is a diagnostic with a \
+                    code, never a host crash or silent wrap.",
+        enforced_by: &["DL0901", "DL0902", "DL0903", "DL0905", "DL0908"],
         note: "",
     },
     Rule {
