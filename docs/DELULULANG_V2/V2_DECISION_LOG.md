@@ -4952,3 +4952,55 @@ is redefining Authority rather than hardening it.
   *effects: Async, Write*), so an operator who wants no actors sees it before running the program.
 - `docs/for-agents.md` (*The effect kinds*) now says all of this.
 - Nothing in the runtime changes.
+
+## D-V2-190 — An empty `rand.int` range is DL0908, an argument outside what the operation accepts, not DL0904 (A15) — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (A15, the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, low).** `r.int(lo, hi)` draws from `lo` up
+to but not including `hi`, and nothing said so: 6,000 draws of `r.int(1, 6)` never produced 6. `r.int(5, 5)` aborted the
+run as `error[DL0904]: rand.int requires lo < hi`. `delulu explain DL0904` says *"An operation reached outside its
+capability's SCOPE — a path outside the granted prefix, a host not on the granted list"*. A bad argument is not that.
+Checked again on 2026-10-27 at `d2752cf`: both engines faulted DL0904 with that text. Both also recorded
+`int.refused` with it in the effect trace. One test drew from an empty range: `refusal_trace_parity` (RW 4.64), which
+pinned DL0904 as the code the two engines' traces must agree on. It checked that the engines agree, not that the code
+was right.
+
+**Decision: a new code, DL0908, "an argument outside what the operation accepts".** It is a runtime fault, beside
+DL0901–DL0905.
+- **Why not keep DL0904.** It is the capability-scope code, the one an operator, a monitor or an agent reads as an
+  authority event. `STABILITY.md` §1 makes a code's identity add-only. Filing a bad argument under it was a misfiling
+  that blurs that identity, not part of it. 2.0.0 is a major release, and moving a fault to its proper code is
+  allowed there in any case.
+- **Why not an existing code.** DL0901–DL0903 name overflow, division and indexing. DL0907 is the compiler-bug class,
+  and an empty range is the program's own value, not a broken static guarantee.
+- **Why not draw something anyway.** An empty range names no value. Returning `lo`, or swapping the bounds, would turn
+  a bug into data that flows onward, which is what DL0901 refuses for arithmetic.
+
+**The fault itself.** Both engines report the same text, from one function (`delulu_runtime::prim::rand_int_range_fault`):
+*"rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = 5, hi = 5"*. The
+effect trace keeps its `int.refused` record, now naming DL0908. By RW 4.62 that record means *"it did not happen, and
+why"*, whether the custody, the broker or the effect itself stopped the operation, and its detail carries the code.
+
+**Documented:**
+- the half-open range in `delulu explain DL0908`, `docs/for-agents.md` *Determinism*, and the book's determinism
+  paragraph;
+- `ref.rule.runtime.faults-are-diagnostics` (`crates/delulu-conform/src/rules.rs`) gains DL0908 in its statement and its
+  `enforced_by`.
+
+**Entrenched files:** `crates/delulu-conform/src/rules.rs` and `tests/conformance/witnesses.toml` (two rows, for the
+anchor `ref.diag.DL0908`). Both are recorded in `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Evidence:**
+- `refusal_trace_parity`'s `an_operation_its_effect_refuses_is_traced_the_same_by_both_engines` now expects DL0908. It
+  went red on the change (*left: "DL0908", right: "DL0904"*), and it still asserts the two traces are byte-identical and
+  end in `int.refused`.
+- `fault_parity`'s `an_empty_rand_range_is_dl0908_on_both_engines` covers `(5, 5)`, `(6, 5)`, `(0, Int::MIN)` and
+  `(Int::MAX, Int::MIN)`. It was red before the change (`WASM trap: DL0904: rand.int requires lo < hi`) and green after.
+- `a_one_wide_rand_range_draws_its_one_value_on_both_engines`: `r.int(5, 6)` is 5 under three seeds, the engines alike.
+- Mutants, each red with the control green:
+  - M855: the interpreter keeps DL0904.
+  - M856: the WASM host keeps DL0904.
+  - M857: the interpreter's guard is `hi < lo`.
+  - M858: the WASM host's guard is `hi < lo`.
+
+  M857 and M858 panic the host with *"attempt to calculate the remainder with a divisor of zero"*, so the guard is
+  load-bearing.

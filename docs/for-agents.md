@@ -615,6 +615,11 @@ install anything.
 construction. Byte-identical output across runs is a tested property for `--json`, the atlas, and
 plugin inspection — if you see nondeterminism there, it is a bug.
 
+A `Cap[Rand]` has two methods. `r.int(lo, hi)` draws an `Int` from `lo` up to but **not including** `hi`, so
+`r.int(1, 7)` rolls a die and `r.int(5, 6)` is always 5. A range holding no value, `hi <= lo`, faults with `DL0908`, an
+argument the operation does not accept (D-V2-190). `r.float()` draws a `Float` between 0 and 1. Under `--seed N` both
+draw the same sequence on the interpreter and the WASM engine.
+
 ## [agents.env] Environment variables
 
 | Variable | Effect |

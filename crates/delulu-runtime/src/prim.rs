@@ -892,7 +892,9 @@ pub fn call_cap_method_pinned(
             let lo = int_arg(args, 0, span)?;
             let hi = int_arg(args, 1, span)?;
             if hi <= lo {
-                return Err(Fault::at("DL0904", "rand.int requires lo < hi", span));
+                // An argument outside what the operation accepts, not a scope violation (A15, D-V2-190). The WASM host
+                // says the same words (`rand_int_range_fault`).
+                return Err(Fault::at("DL0908", rand_int_range_fault(lo, hi), span));
             }
             // The span `hi - lo` is up to 2^64 - 1, past `Int`'s range: computed modulo 2^64 it is exact as a `u64`,
             // and the drawn offset added modulo 2^64 lands exactly in `lo..hi`. Plain `-` and `+` panicked a debug
@@ -1241,6 +1243,11 @@ pub(crate) fn str_arg(args: &[Value], i: usize, span: Span) -> Result<String, Fa
         _ => Err(Fault::at("DL0907", format!("expected a Str argument at position {i}"), span)),
     }
 }
+/// The text of `rand.int`'s DL0908, the one both engines report for a range with no value in it (A15, D-V2-190).
+pub fn rand_int_range_fault(lo: i64, hi: i64) -> String {
+    format!("rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = {lo}, hi = {hi}")
+}
+
 fn int_arg(args: &[Value], i: usize, span: Span) -> Result<i64, Fault> {
     match args.get(i) {
         Some(Value::Int(n)) => Ok(*n),

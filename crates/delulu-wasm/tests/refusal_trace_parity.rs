@@ -31,7 +31,7 @@ impl delulu_runtime::Custody for DenyAll {
 }
 
 fn code_of(msg: &str) -> String {
-    for code in ["DL1403", "DL0904"] {
+    for code in ["DL1403", "DL0904", "DL0908"] {
         if msg.contains(code) {
             return code.to_string();
         }
@@ -128,7 +128,8 @@ fn an_operation_its_effect_refuses_is_traced_the_same_by_both_engines() {
         false,
         None,
         "int",
-        "DL0904",
+        // An argument outside what the operation accepts, not a scope violation (A15, D-V2-190).
+        "DL0908",
     );
     // The working directory, granted as `.`: nothing is created or read — the spelling is refused first.
     assert_refusal_parity(

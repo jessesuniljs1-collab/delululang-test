@@ -210,6 +210,50 @@ fn main(root: Root) ! {Write, Rand} {
     }
 }
 
+/// `main` drawing once from `r.int(lo, hi)`, the bounds written as given.
+fn one_draw(lo: &str, hi: &str) -> String {
+    format!(
+        "module m\n\nfn main(root: Root) ! {{Write, Rand}} {{\n  let out = root.console()\n  let r = root.rand()\n  out.println(str(r.int({lo}, {hi})))\n}}\n"
+    )
+}
+
+fn rand_granted(seed: u64) -> (HostConfig, Grants) {
+    (
+        HostConfig { console: true, rand: true, rand_seed: Some(seed), ..HostConfig::default() },
+        Grants { console: true, rand: true, ..Default::default() },
+    )
+}
+
+/// A15 (the agent test campaign, 2026-10-24): `r.int(lo, hi)` draws from `lo` up to but not including `hi`, so a range
+/// with `hi <= lo` holds no value. Both engines faulted as DL0904, "capability scope violation" — the code an operator
+/// reads as a path or host outside a grant — though nothing reached outside one. It is DL0908, an argument outside what
+/// the operation accepts, with the same text on both engines (D-V2-190).
+#[test]
+fn an_empty_rand_range_is_dl0908_on_both_engines() {
+    let min = "0 - 9223372036854775807 - 1";
+    for (lo, hi) in [("5", "5"), ("6", "5"), ("0", min), ("9223372036854775807", min)] {
+        let (cfg, g) = rand_granted(7);
+        let (w, i) = run_both(&one_draw(lo, hi), cfg, g, Some(7));
+        let (w, i) = (w.expect_err("the WASM engine faults"), i.expect_err("the interpreter faults"));
+        for (engine, text) in [("WASM", &w), ("interpreter", &i)] {
+            assert!(text.contains("DL0908"), "{engine}: r.int({lo}, {hi}) is DL0908: {text}");
+            assert!(!text.contains("DL0904"), "{engine}: and not a scope violation: {text}");
+            assert!(text.contains("up to but not including"), "{engine}: the text says the range is half-open: {text}");
+        }
+    }
+}
+
+/// The other side of A15: the narrowest range, `r.int(5, 6)`, holds exactly one value and draws it on both engines.
+#[test]
+fn a_one_wide_rand_range_draws_its_one_value_on_both_engines() {
+    for seed in [1u64, 7, 0xDEAD_BEEF] {
+        let (cfg, g) = rand_granted(seed);
+        let (w, i) = run_both(&one_draw("5", "6"), cfg, g, Some(seed));
+        assert_eq!(w, i, "two-engine parity under seed {seed}");
+        assert_eq!(w.as_deref().map(str::trim), Ok("5"), "under seed {seed}");
+    }
+}
+
 /// A refused host call returns a placeholder and the guest runs on; matching on the refused read's result then
 /// trapped as an access out of bounds, and that trap was reported instead of the refusal.
 #[test]

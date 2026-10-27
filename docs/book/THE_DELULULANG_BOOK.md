@@ -926,7 +926,8 @@ the one page to pin: JSON schemas, exit codes, repair semantics, env conventions
 anchors.
 
 **Determinism.** `--seed` and `--clock fixed:` make `Cap[Rand]` and `Cap[Clock]` reproducible, so your
-test runs are stable and your failures are re-triable.
+test runs are stable and your failures are re-triable. `r.int(lo, hi)` draws from `lo` up to but not including
+`hi` (`r.int(1, 7)` rolls a die), and a range with no value in it, `hi <= lo`, faults with `DL0908`.
 
 **The machine surface (V2).** Everything above is also reachable without a shell. `delulu mcp` is a
 Model Context Protocol server on stdio whose tools are all read-only — check, authority, why, explain,

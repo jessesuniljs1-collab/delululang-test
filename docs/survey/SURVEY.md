@@ -24,16 +24,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 333 |
-| Rust lines | 192243 |
+| Rust lines | 192306 |
 | Rust files outside `src/` (test/bench targets) | 163 |
 | Markdown documents | 272 |
-| Markdown lines | 87770 |
+| Markdown lines | 87937 |
 | DeluluLang programs | 254 |
-| Registered diagnostic codes | 154 |
+| Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1564 / 16972 |
-| Open discrepancies | 52 |
+| Nodes / edges in this map | 1564 / 17078 |
+| Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -221,14 +221,14 @@ The DeluluLang conformance coverage law (invariant 42): delulu-conform --coverag
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 5 files, 2170 lines
+- **Modules:** 5 files, 2171 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/lib.rs` | 677 | The conformance coverage law (Stage 9, invariant 42), mechanized. |
 | `src/main.rs` | 109 | `delulu-conform` — the conformance coverage tool (Stage 9, invariant 42). |
 | `src/reference.rs` | 355 | The generated half of the language reference (Stage 9b, spec §2.1). |
-| `src/rules.rs` | 573 | The normative rule index (Stage 9b, spec §2.1) — one entry per normative statement of |
+| `src/rules.rs` | 574 | The normative rule index (Stage 9b, spec §2.1) — one entry per normative statement of |
 | `src/tests.rs` | 456 | Tests for the coverage tool itself (Stage 9a, house rule 3 — every check has its skip-branch |
 
 ### `delulu-diag`
@@ -237,12 +237,12 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3978 lines
+- **Modules:** 9 files, 3987 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 445 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 2117 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 2126 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 192 |  |
 | `src/json.rs` | 173 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 23753 lines
+- **Modules:** 24 files, 23760 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -325,7 +325,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2222 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 484 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
-| `src/prim.rs` | 1972 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
+| `src/prim.rs` | 1979 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 328 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
 | `src/sim.rs` | 399 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 104 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
@@ -383,7 +383,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 13405 lines
+- **Modules:** 9 files, 13406 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -392,7 +392,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 | `src/codegen.rs` | 6235 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 3116 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/host.rs` | 3117 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 1155 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 | `src/reify.rs` | 449 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |
