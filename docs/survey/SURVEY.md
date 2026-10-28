@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 333 |
-| Rust lines | 192685 |
-| Rust files outside `src/` (test/bench targets) | 163 |
+| Rust files | 334 |
+| Rust lines | 193147 |
+| Rust files outside `src/` (test/bench targets) | 164 |
 | Markdown documents | 272 |
-| Markdown lines | 88372 |
+| Markdown lines | 88507 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1564 / 17171 |
+| Nodes / edges in this map | 1565 / 17191 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 23891 lines
+- **Modules:** 24 files, 24122 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -320,7 +320,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/egress.rs` | 1405 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 1351 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 456 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2855 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/interp.rs` | 2899 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 458 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2222 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
@@ -330,7 +330,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/sim.rs` | 399 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 104 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 576 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
-| `src/value.rs` | 1229 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/value.rs` | 1416 | Runtime values, environments, and capability values (spec §7.1). |
 | `src/verified_adapter.rs` | 633 | P8-02: a device driver whose **logic is a Verified-class plugin** (`V2_P8_DESIGN.md`). |
 
 ### `delulu-survey`
@@ -408,7 +408,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | `DL00xx` | 1 | `delulu` |
 | `DL01xx` | 8 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-syntax` |
 | `DL02xx` | 13 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-syntax` |
-| `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
+| `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL04xx` | 12 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |
 | `DL06xx` | 5 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm` |

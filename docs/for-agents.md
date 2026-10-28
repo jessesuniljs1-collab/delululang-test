@@ -796,7 +796,14 @@ overstate it downstream:
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
   DeluluLang is **not competitive with C** on the measured workloads (8.9×–489.5× slower on the
   interpreter, 9.8×–15.7× on the WASM engine, which runs all six — Study C, 2026-10-19), and the report says
-  so in those words. Do not let a harness's marketing copy imply otherwise.
+  so in those words. Do not let a harness's marketing copy imply otherwise. Study C's interpreter figures predate
+  2026-10-29, when A14 took 1.5× to 2.1× off loops and calls (`loop_sum_1m` 694 → 327 ms, old binary against new on one
+  Windows laptop); its next run re-measures the ratios.
+- **Choose the engine by the work.** For computation (sorting, loops over numbers, recursion), use `--engine wasm` or
+  `build --target wasm`. It is about 100× faster: a merge sort of 100,000 `Int`s takes 5.0 s on the interpreter and
+  56 ms on WASM (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
+  list or a record field holding a function. A program WASM cannot compile is refused with `DL1201`, naming its line,
+  and never runs half-compiled.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
   (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
   this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a

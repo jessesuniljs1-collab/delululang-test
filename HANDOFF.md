@@ -1905,6 +1905,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   campaign's actor programs drew nothing at random, so it surfaced only when a program put a `Cap[Rand]` in an actor.
   When a setting is a `thread_local!`, list every thread that runs program code, the actor workers among them, and
   test the setting from each.
+- **Count a cost that can be counted; time only what cannot** (the laptop, 2026-10-29, A14, RW 3.24). The interpreter's
+  speed-up is held by a test that counts the allocations one loop step makes. It installs a counting allocator in the test
+  binary and differences runs of 1,000 and 2,000 steps. That count is exact on any machine, so no busy runner can turn it
+  red, and a mutant that brings back one allocation per step fails it. The first run found a cost no profile had shown: every `==` of
+  two `Int`s allocated the vector of its deep-equality walk. A timing test could not have told that from noise.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
