@@ -9740,3 +9740,40 @@ A Float from `r.float()` was none of these. A21's own test passed only because i
 - `delulu-wasm` lib: 100 passed.
 - On the command line, the program prints the same line on both engines.
 - The suites are in the commit message.
+
+## 2026-10-27 — the laptop: #76 to #82 landed; `launch/2.0.0` at `0cea85d`
+
+**Read first.**
+- `launch/2.0.0` `dcfd43c`'s `everything` `40240072174`: 18 of 18 jobs success; the broker's Miri took 3 h 00 min.
+- Its release dry run `40240074649`: success.
+- The nightlies:
+  - `40292304609` (2026-10-26), the first with #69: 18 of 18 success. The broker's Miri took 3 h 07 min, under its
+    240-minute cap.
+  - `40474545633` (2026-10-27): red on `supply-chain` alone, from four new `zstd` advisories (#76).
+
+**Landed**, each read green on every job of its own pull-request run (14 passed; `heavy-gates` and `miri-slow` skipped,
+as on every pull request), then fast-forwarded onto `master`, its branch deleted:
+
+| PR | What | Run | At |
+|---|---|---|---|
+| #76 | `zstd` leaves the build | `40537718492` | `d2752cf` |
+| #77 | DL0908, D-V2-190 | `40540676118` | `ac2920e` |
+| #78 | the seed is mixed, D-V2-191 | `40542718351` | `fb0538f` |
+| #79 | `--seed` and `--clock fixed:` reach actors, D-V2-192 | `40544496773` | `3c8bf56` |
+| #80 | A1 | `40546150616` | `d6ca588` |
+| #81 | the microVM sweep race | `40546656893` | `9b4f75a` |
+| #82 | `str()` of a `Float` on WASM | `40548018906` | `9be923a` |
+
+- `master`'s push runs: `40540722474` at `d2752cf` success. `40544536339` at `ac2920e` was red on `microvm` alone, the race
+  #81 removes, with the 13 other jobs success.
+- #82's local CLI tests were stopped for low memory on the laptop. Its pull-request run passed them on all three
+  systems.
+
+**`launch/2.0.0`** was merged with `master` at `0cea85d`:
+- the CHANGELOG's six new sections were moved into `## [2.0.0]`, and its *Breaking* paragraph names DL0908, the new
+  seeded sequences, and actors following `--seed`;
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `dcfd43c`'s runs, criterion 4 records the `zstd` advisories, and criterion
+  2 was re-measured: 358/358, the reference in sync, the samples formatted.
+- On the merged tree: `clippy.sh` clean; `cargo metadata --locked` consistent with no `zstd`; `wasmtime_features`
+  passed; the Survey 1565 nodes with 0 errors; `doctor` 29 checks.
+- Its `everything` `40551800164` and release dry run `40551806058` were dispatched and are unread at this entry.
