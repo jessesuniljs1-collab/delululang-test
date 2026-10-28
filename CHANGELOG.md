@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the interpreter runs loops and calls faster, 2026-10-29
+
+- **Improved: the interpreter takes 1.5× to 2.1× less time on loops, calls and `match`** (A14, RW 3.24). A merge sort of
+  100,000 `Int`s took 8.2 s and now takes 5.0 s; Study C's `loop_sum_1m` took 694 ms and now takes 327 ms. Both were
+  measured on the same Windows laptop, old binary against new, and the programs print the same output as before. The changes:
+  - A variable is found by comparing names, not by hashing its name in every scope it passes through.
+  - Assigning to a variable no longer allocates its name.
+  - A block without `let`, and a `match` arm that binds nothing, no longer get a scope of their own.
+  - A call to one of the module's functions evaluates its arguments straight into the callee's scope.
+  - `Some`, `None`, `Ok` and `Err` share their names.
+  - `==` of two `Int`s, `Float`s, `Bool`s or `Str`s no longer allocates.
+
+  No program's behaviour changes. For heavy computation, `--engine wasm` is still about 100 times faster: the merge
+  sort takes 56 ms there.
+
 ## Unreleased — `str()` of a `Float` from `r.float()` runs on WASM, 2026-10-27
 
 - **Fixed: `str(r.float())` was refused on `--engine wasm`** with DL1201 *"str() of this type … compile so far"*. The

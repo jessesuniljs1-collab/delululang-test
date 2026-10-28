@@ -1210,6 +1210,72 @@ impl Scope {
 }
 
 #[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    fn int(v: Option<Value>) -> Option<i64> {
+        match v {
+            Some(Value::Int(i)) => Some(i),
+            _ => None,
+        }
+    }
+
+    /// A14: a scope finds every name it holds, and rebinds one in place, at every size — below the width it scans, at
+    /// it, and past it, where its index takes over.
+    #[test]
+    fn a_scope_finds_and_rebinds_every_name_at_every_size() {
+        let s = Scope::root();
+        for n in 0..3 * SCAN_BINDINGS {
+            s.define(&format!("v{n}"), Value::Int(n as i64));
+            let held = n + 1;
+            for k in 0..held {
+                assert_eq!(int(s.get(&format!("v{k}"))), Some(k as i64), "v{k} among {held} names");
+            }
+            assert!(s.get("absent").is_none(), "a name never bound, among {held}");
+            let mid = format!("v{}", n / 2);
+            s.define(&mid, Value::Int(-1));
+            assert_eq!(int(s.get(&mid)), Some(-1), "{mid} rebound among {held} names");
+            assert!(s.assign(&mid, Value::Int((n / 2) as i64)));
+            assert_eq!(s.vars.borrow().slots.len(), held, "a rebinding added a name");
+        }
+    }
+
+    /// A name as long as an inline one, one byte longer, and a short one they both begin with, are three names — the
+    /// longer bound first, so a scan that matched a prefix would find it.
+    #[test]
+    fn names_either_side_of_the_inline_length_are_distinct() {
+        let s = Scope::root();
+        let at = "x".repeat(SHORT_NAME);
+        let past = "x".repeat(SHORT_NAME + 1);
+        for (i, name) in [past.as_str(), at.as_str(), "x"].into_iter().enumerate() {
+            s.define(name, Value::Int(i as i64));
+        }
+        assert_eq!(int(s.get(&past)), Some(0));
+        assert_eq!(int(s.get(&at)), Some(1));
+        assert_eq!(int(s.get("x")), Some(2));
+        assert!(s.get("xx").is_none(), "a name only the longer ones begin with");
+        let names: Vec<String> = s.vars_snapshot().into_iter().map(|(k, _)| k).collect();
+        assert_eq!(names, [past, at, "x".to_string()]);
+    }
+
+    /// A child finds its parent's names and assigns through to them; its own `let` shadows only itself.
+    #[test]
+    fn a_child_reads_and_writes_through_and_shadows_only_itself() {
+        let parent = Scope::root();
+        parent.define("a", Value::Int(1));
+        parent.define("b", Value::Int(2));
+        let child = Scope::child(&parent);
+        child.define("a", Value::Int(10));
+        assert_eq!(int(child.get("a")), Some(10));
+        assert_eq!(int(parent.get("a")), Some(1));
+        assert!(child.assign("b", Value::Int(20)));
+        assert_eq!(int(parent.get("b")), Some(20));
+        assert!(child.get_here("b").is_none(), "an assignment through made a binding here");
+        assert!(!child.assign("absent", Value::Unit));
+    }
+}
+
+#[cfg(test)]
 mod teardown_tests {
     use super::*;
 

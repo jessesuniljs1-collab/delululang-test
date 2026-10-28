@@ -6037,3 +6037,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      (`2026-10-24/A-builder/REPORT.txt`, `_head-chef/VERIFIED.md`).
   4. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — A14: the interpreter's loops and calls (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/a14-interp-steps` (on `master` `470ac4f`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. Outside this pull request, on `launch/2.0.0`: `e998373`. It merges
+  `master`'s #83 records and cites `0cea85d`'s `everything` `40551800164` (18/18) and its release dry run
+  `40551806058` (success) in CHECKLIST-2.0.
+- Files and folders: M `crates/delulu-runtime/src/value.rs`, `crates/delulu-runtime/src/interp.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 3.24), `docs/for-agents.md`, `HANDOFF.md` (§11.5), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A `crates/delulu-runtime/tests/step_allocations.rs`. Deleted, renamed:
+  nothing.
+- **Open / next, in order:**
+  1. Read this pull request's run; land on green. Merge `master` into `launch/2.0.0` and dispatch its `everything` run
+     and its release dry run.
+  2. Study C's next run, in WSL as published, re-measures the interpreter's ratios.
+  3. The papercuts: A4–A8, A13, B4–B8, B11, C6–C16. The ledger is on `origin/autosave/dogfood`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

@@ -9746,3 +9746,92 @@ as on every pull request), then fast-forwarded onto `master`, its branch deleted
 - On the merged tree: `clippy.sh` clean; `cargo metadata --locked` consistent with no `zstd`; `wasmtime_features`
   passed; the Survey 1565 nodes with 0 errors; `doctor` 29 checks.
 - Its `everything` `40551800164` and release dry run `40551806058` were dispatched and are unread at this entry.
+
+## 2026-10-29 — the laptop: A14, the interpreter's loops and calls (RW 3.24)
+
+**Read first.**
+- `launch/2.0.0` `0cea85d`'s `everything` `40551800164`: 18 of 18 jobs success. The broker's Miri took 3 h 01 min.
+- Its release dry run `40551806058`: success, with the four `package` jobs success.
+- Both are cited in CHECKLIST-2.0 at `e998373`, which also merges `master`'s #83 records.
+- `master` `470ac4f`'s push run `40555891390`: success. The nightly `40662703997` (2026-10-28): 18 of 18 success,
+  the broker's Miri 2 h 17 min.
+
+**What A14 was.** The builder's merge sort of 100,000 `Int`s took 28 s on the interpreter and 56 ms on WASM. On this
+laptop the same program's merge sort took 8.2–8.4 s. Timing single operations (200,000 steps each) showed where the
+time went:
+- an empty loop step cost 450 ns, a call 1 µs, and `xs.get(i)` with its `match` 1.25 µs;
+- every variable read hashed its name (SipHash) in each scope it passed through;
+- every assignment allocated the name again, in `HashMap::insert(name.to_string(), …)`;
+- every block and every `match` arm made a scope, `let` or not;
+- a call made a vector of its arguments, a scope for the parameters and another for the body.
+
+A one-off measurement in a scratch program put an allocation and its free on this machine at 55 ns, about a quarter of
+each step of the merge.
+
+**The change**, in `delulu-runtime` only:
+- `value.rs`: a scope holds its bindings in a vector, in order, and finds a name by comparing. Past 16 names it keeps an
+  index beside them.
+- A name of up to 22 bytes is held inline.
+- An assignment overwrites in place, and a replaced value is dropped after the scope's borrow ends.
+- `Some`, `None`, `Ok` and `Err` share one name per thread.
+- `Value::eq` answers two scalars without its walk.
+- `interp.rs`: a block without `let` runs in its parent's scope, and a `match` arm whose pattern binds nothing in the
+  arm's.
+- A call by name to a module function evaluates its arguments straight into the callee's scope. That path is taken
+  exactly where the old order reached the module function: no local closure has the name, and the name is not one of
+  `PRELUDE_BUILTINS`, which DL0302 keeps apart from module functions.
+
+**Witness and gates.**
+- `crates/delulu-runtime/tests/step_allocations.rs` installs a counting allocator and differences runs of 1,000 and
+  2,000 steps:
+  - a counting loop with `==`, a `let`-less `if` and a non-binding `match` allocates nothing per step. It was red on
+    the first run, at 1 a step: `==` allocated;
+  - a two-parameter call allocates 2;
+  - `at0(xs, i)` allocates 7;
+  - the bindings test covers shadowing, assignment through an elided scope, closures made in an elided block of a loop,
+    and a 46-name scope.
+- `value::scope_tests` (3): every name found and rebound at every size from 1 to 48, names either side of the inline
+  length, a child's reads and writes.
+- Mutants M870–M880, all killed:
+
+| Mutant | What it brings back | Killed by |
+|---|---|---|
+| M870 | every block makes a scope | 3 tests |
+| M871 | every arm makes a scope | the counting loop, 1.67 a step |
+| M872 | names allocated | the call and the read |
+| M873 | no call fast path | the call, 3 a step |
+| M874 | prelude names allocated | the read, 8 a step |
+| M875 | `Int ==` walks | the counting loop, 2 a step |
+| M876 | an assignment allocates | 3 tests |
+| M877 | the index points one slot early | the bindings and size tests |
+| M878 | the index read at 16 names, before it is built | the size test (it survived the first version) |
+| M879 | a block with `let` runs in its parent | the bindings test |
+| M880 | a short name matches its prefix | the names test, after it bound the longer names first |
+
+- `cargo test -p delulu-runtime`: every target passed.
+
+**Measured** on the laptop (Windows 11, release builds of `master`'s code and of this change, run one after the other,
+2026-10-29):
+- `algo.delulu`, the builder's program, twice on each binary:
+  - generating 100,000 `Int`s: 265/278 → 145/164 ms;
+  - the merge sort: 8219/8413 → 5023/5324 ms;
+  - quicksort: 3783/3912 → 2471/2552 ms;
+  - the 20,000-node tree: 1099/1132 → 708/763 ms.
+- Its output was the same on both binaries, and the same as the builder's Python reference.
+- Study C's six benchmarks, interpreter lane, each the minimum of five runs:
+
+| Benchmark | Before (ms) | After (ms) |
+|---|---|---|
+| `fib_recursive_24` | 160 | 101 |
+| `loop_sum_1m` | 694 | 327 |
+| `string_build_20k` | 38.9 | 30.4 |
+| `wordcount_macro` | 24.7 | 22.5 |
+| `list_map_macro` | 30.1 | 26.4 |
+| `nested_calls_macro` | 527 | 287 |
+
+  The last three changed little because process start-up dominates them. These runs went to the scratchpad. The
+  published Study C (WSL, 2026-10-19) is unchanged, and `docs/for-agents.md` says that its interpreter figures predate
+  this change.
+
+**Not done.** The interpreter still finds every variable by name, and is about 100× slower than WASM on computation. RW
+3.24 stays open, narrowed, with what closing it takes. `docs/for-agents.md` now says which engine to choose.

@@ -2231,7 +2231,7 @@ impl Interp {
         for arm in arms {
             // A14: an arm whose pattern names nothing binds nothing, so it needs no scope of its own (as a block
             // without `let` needs none).
-            let arm_env = if true { Scope::child(env) } else { env.clone() };
+            let arm_env = if binds(&arm.pattern) { Scope::child(env) } else { env.clone() };
             if self.match_pattern(&arm.pattern, &value, &arm_env) {
                 return self.eval_expr(&arm.body, &arm_env);
             }
