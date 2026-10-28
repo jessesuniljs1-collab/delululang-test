@@ -9915,3 +9915,22 @@ reported.
 **Gates.** The test reads and writes the name on both engines and expects `invalid filename` twice. Mutants M894–M896
 put `e.to_string()` back at each of the three sites, and each is killed. The pull request's run checks it on Linux and
 macOS, where the name is `ENAMETOOLONG`, which Rust also calls `invalid filename`.
+
+## 2026-10-29 — the laptop: a refused network mint names the host it asked for (B4, RW 6.33)
+
+**What it said.** `root.http(["evil.example"])` for a host granted nothing was refused DL0703 *"`network host` was not
+granted to this program — pass `--grant net=HOST`"*. Under `--lease` it was *"does not carry `net=HOST`"*. The A20 fix
+(RW 6.17) had named the entry when its host was granted with fewer methods or a narrower path, and had deliberately kept
+these words for a host granted nothing. B4 is the case those words left behind: the reader cannot tell which entry, or
+which dimension, was too wide.
+
+**The change.** `prim::call_root_method`'s `http` arm says *"network access to `ENTRY` was not granted to this program"*,
+with the remedy for `net=ENTRY`, or `net.special=ENTRY` for a special-use host. The WASM engine mints through the same
+function, and so does `authority --within`'s counterexample, so all three say it alike.
+
+**Gates.** The three tests that pinned the placeholder now pin the entry:
+- `fault_parity::an_ungranted_mint_names_the_same_remedy_on_both_engines`, with and without a lease;
+- `within_cli::a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds`, `--within` and `run`;
+- `wasm_cli::http_on_the_wasm_engine_matches_the_interpreter`.
+
+Mutant M897 restores the placeholder, and all three turn red.

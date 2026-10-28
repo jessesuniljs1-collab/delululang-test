@@ -547,7 +547,17 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 let same: Vec<String> =
                     root.net.iter().filter(|g| delulu_broker::netscope::host_of(g) == host).map(|g| format!("`{g}`")).collect();
                 if same.is_empty() {
-                    Err(refused("network host", &format!("{key}=HOST")))
+                    // B4 (the agent test campaign): this said "`network host` was not granted" and `net=HOST`, a
+                    // placeholder where the request belongs, so a lease run's refusal could not say which host was asked
+                    // for. It names the entry, and the grant that covers it.
+                    Err(Fault::at(
+                        "DL0703",
+                        format!(
+                            "network access to `{entry}` was not granted to this program — {}",
+                            remedy(&format!("{key}={entry}"))
+                        ),
+                        span,
+                    ))
                 } else {
                     Err(Fault::at(
                         "DL0703",

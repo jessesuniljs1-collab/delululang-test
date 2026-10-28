@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refused network mint names the host it asked for, 2026-10-29
+
+- **Improved: `root.http([...])` for a host granted nothing names that host** (the agent test campaign's B4, RW 6.33).
+  The refusal read "`network host` was not granted to this program — pass `--grant net=HOST`": a placeholder where
+  the request belongs. Under `--lease` it read "does not carry `net=HOST`", so it could not say which host was asked for. It
+  now reads "network access to `evil.example` was not granted to this program — pass `--grant net=evil.example`".
+  Under a lease it names `net=evil.example`, and `net.special=` for a special-use host. This is the same on both engines and under
+  `authority --within`. The code (DL0703) is unchanged.
+
 ## Unreleased — `IoErr::Other` says the kind of failure, the same on every OS, 2026-10-29
 
 - **Changed: `IoErr::Other(m)` carries the kind of failure, never the operating system's own message** (D-V2-193, the

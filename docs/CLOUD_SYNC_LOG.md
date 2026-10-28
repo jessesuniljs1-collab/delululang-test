@@ -6104,3 +6104,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. The papercuts left in RW 6.30 and 6.31.
   3. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a refused network mint names the host it asked for: B4 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/net-refusal-names` (on `laptop/io-other-words` `9fd34cb`, #87)   Pull request: opened with this
+  commit, after #87
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row
+  6.33; 6.31's list of what is still open), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86, #87 and this pull request in order, each on green. Then merge `master` into `launch/2.0.0` and dispatch
+     its `everything` run and its release dry run.
+  2. The papercuts left in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

@@ -359,7 +359,8 @@ fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
             ("root.rand()", "rand"),
             ("root.fs_read(\"./nowhere\")", "fs.read=./nowhere"),
             ("root.fs_write(\"./nowhere\")", "fs.write=./nowhere"),
-            ("root.http([\"example.com\"])", "net=HOST"),
+            // B4: the entry asked for, never the placeholder `net=HOST`.
+            ("root.http([\"example.com\"])", "net=example.com"),
         ] {
             let src = format!("module m\nfn main(root: Root) {{\n  let c = {mint}\n}}\n");
             let checked = check_source(0, &src);
