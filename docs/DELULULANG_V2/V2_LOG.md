@@ -9867,3 +9867,35 @@ skipped, as on every pull request. It was fast-forwarded onto `master` at `982c4
 - A8 (`authority` shows no requested scope in its human report): the Stage-3 byte-identical report test pins that
   output, so it is a decision, not a papercut.
 - The rest stay open as listed in RW 6.30.
+
+## 2026-10-29 — the laptop: a refused path or URL quoted as written; the scheme refusal's sentence (B6, B7; RW 6.31)
+
+**What the agent found** (B6 and B7, the least-authority agent, Sonnet 5.5, 2026-10-24), read again in the code:
+- **B6.** Three sites in `prim.rs` (`resolve_in_anchor`, `fs_read`, `fs_write`), the two matching WASM host sites, and
+  `run_cmd::print_egress_notes` quoted the program's path or URL through `str::escape_debug`. That doubles every
+  backslash, so a Windows path in a refusal read `\\\\?\\C:\\…`.
+- **B7.** `Reason::Scheme`'s sentence, "only `https://` is fetched; there is no plain-HTTP path", was given for every
+  URL that does not start with `https://`, plain HTTP or not.
+
+**The change:**
+- `prim::shown_path` is `delulu_diag::terminal_line`. It shows a path as written, with each control, line-break and
+  line-reordering character escaped, which is TERMINAL-TEXT-1's rule for everything else a terminal is shown. The
+  interpreter, the WASM host and the operator's egress note all use it.
+- `escape_debug` had done the terminal part for these sites. `terminal_line` does it too, and also escapes the bidi
+  characters `escape_debug` let through.
+- The scheme sentence now says what the URL lacks. Its code (`scheme`), the refusal and the program's `Refused` are
+  unchanged.
+
+**Gates**, all red on the old code through mutants M889–M893, all killed:
+- `prim::hostile_path_tests::a_refused_path_is_quoted_as_written_with_its_controls_escaped` covers `a\b` plus a NUL,
+  which is refused on every OS, and controls escaped.
+- `fault_parity::a_refused_path_is_quoted_as_written_on_the_wasm_engine`.
+- `egress::tests::a_scheme_refusal_says_what_the_url_lacks` covers the seven URLs the agent tried.
+- `egress_cli::a_refused_url_is_quoted_as_written_in_the_operators_note`.
+- M890, which drops the escaping altogether, is killed too: a refusal must never put a raw control character on a
+  terminal.
+
+**Not done:**
+- B11, the OS's own error text in `Other(…)`, changes what a program receives on each OS, and gets a milestone of its
+  own.
+- B4, B5 and B8 are open in RW 6.31.

@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refused path or URL is quoted as written; a scheme refusal says what the URL lacks, 2026-10-29
+
+- **Fixed: a refused path or URL was quoted with every backslash doubled** (the agent test campaign's B6, RW 6.31).
+  A path refused as `DL0904` (on both engines), and the operator's `note: the request to … was not delivered`, quoted
+  it through Rust's debug escaping, so `\\?\C:\x` read `\\\\?\\C:\\x`. Both now quote it as written. Each
+  control character, line break and character that reorders a line is still shown escaped (`\u{1b}`), as everywhere
+  else a terminal is written.
+- **Fixed: a URL refused for its scheme was told "there is no plain-HTTP path"** (B7) whatever it was: `HTTPS://`, `https:host`,
+  `//host`, a bare host, `file:`, `ftp:` or the empty URL. The note now says the URL does not begin with `https://` (lower case,
+  two slashes, then the host). The refusal itself, and what the program is told (`Refused`), are unchanged.
+
 ## Unreleased — five refusals name the mistake that was made, 2026-10-29
 
 - **Improved: five refusals now name the mistake that was made** (the agent test campaign's A6, C7, C8, C10 and C16,

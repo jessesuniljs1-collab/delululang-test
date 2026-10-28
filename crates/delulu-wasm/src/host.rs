@@ -1429,7 +1429,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             };
             if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                caller.data_mut().refused =
+                    Some(format!("DL0904: path `{}` is refused: {why}", delulu_runtime::prim::shown_path(&path)));
                 return -1;
             }
             // Mint a scope exactly as the interpreter does: normalize(cwd/path), granted iff within a
@@ -2001,7 +2002,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             };
             if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                caller.data_mut().refused =
+                    Some(format!("DL0904: path `{}` is refused: {why}", delulu_runtime::prim::shown_path(&path)));
                 return -1;
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));

@@ -263,6 +263,13 @@ pub fn unc_server(p: &str) -> Option<&str> {
 /// embedded NUL is refused (the OS would truncate the name at it).
 ///
 /// `allow_unc`: an operator's `--grant` may name a `\\server\share`; a program's path may not.
+/// A refused path as a refusal quotes it: as written, with each control or line-reordering character shown escaped
+/// (`delulu_diag::terminal_line`). B6 (the agent test campaign): it was `escape_debug`, which also doubled every
+/// backslash, so `\\?\C:\x` was quoted as `\\\\?\\C:\\x`. Shared by both engines.
+pub fn shown_path(p: &str) -> String {
+    delulu_diag::terminal_line(p).into_owned()
+}
+
 pub fn hostile_path(p: &str, allow_unc: bool) -> Option<String> {
     if p.contains('\0') {
         return Some("it contains an embedded NUL, at which the operating system would cut the name".into());
@@ -338,7 +345,7 @@ pub fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, F
 /// the custody) and where it resolves (a narrowed capability's own anchor).
 pub fn resolve_in_anchor(root: &Path, anchor: &Path, rel: &str, span: Span) -> Result<(PathBuf, PathBuf), Fault> {
     if let Some(why) = hostile_path(rel, false) {
-        return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", rel.escape_debug()), span));
+        return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", shown_path(rel)), span));
     }
     let joined = normalize(&root.join(rel));
     let resolved = canonical_existing(&joined).filter(|c| joined.starts_with(root) && c.starts_with(anchor));
@@ -476,7 +483,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "fs_read" => {
             let p = str_arg(args, 0, span)?;
             if let Some(why) = hostile_path(&p, false) {
-                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
+                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", shown_path(&p)), span));
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // Both gates, for the same reason as `resolve_in_scope`: minting the capability
@@ -501,7 +508,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "fs_write" => {
             let p = str_arg(args, 0, span)?;
             if let Some(why) = hostile_path(&p, false) {
-                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
+                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", shown_path(&p)), span));
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // On disk only, as `fs_read` above.
@@ -1943,6 +1950,17 @@ mod containment_tests {
 #[cfg(test)]
 mod hostile_path_tests {
     use super::*;
+
+    /// B6 (the agent test campaign): a refused path is quoted as written — a backslash once, as it was typed — and only a
+    /// control character is shown escaped. It was `escape_debug`, which doubled every backslash.
+    #[test]
+    fn a_refused_path_is_quoted_as_written_with_its_controls_escaped() {
+        let span = Span::new(0, 0, 0);
+        let f = resolve_in_scope(Path::new("."), "a\\b\0c", span).expect_err("an embedded NUL is refused everywhere");
+        assert_eq!(f.code, "DL0904");
+        assert!(f.message.starts_with("path `a\\b\\u{0}c` is refused: "), "{}", f.message);
+        assert_eq!(shown_path("C:\\x\u{1b}]0;t\u{7}\n"), "C:\\x\\u{1b}]0;t\\u{7}\\u{a}");
+    }
 
     /// RW 4.17: the machine a UNC grant reaches, by either slash; none for a local path or a prefix `hostile_path` refuses.
     #[test]
