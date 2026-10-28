@@ -50,12 +50,18 @@ fn a_function_in_a_record_field_called_as_a_method_says_how_it_is_called() {
     assert!(d.iter().any(|(c, m)| *c == "DL0405" && m == "type `Handler` has no method `n`"), "{d:?}");
 }
 
+/// Each of the three kinds of reserved word `token::RESERVED` keeps gives its own reason.
 #[test]
-fn a_reference_capability_is_refused_as_one_and_a_future_word_as_one() {
+fn a_reserved_word_is_refused_for_its_own_reason() {
     let d = diags("module m\ntype Logger {\n    tag: Str,\n}\nfn main() { }\n");
     assert!(d.iter().any(|(c, m)| *c == "DL0106" && m.starts_with("`tag` is a reference capability")), "{d:?}");
     let d = diags("module m\nfn secret() { }\nfn main() { }\n");
-    assert!(d.iter().any(|(c, m)| *c == "DL0106" && m.starts_with("`secret` is reserved for a future stage")), "{d:?}");
+    assert!(
+        d.iter().any(|(c, m)| *c == "DL0106" && m.contains("`secret` is reserved so that no declared name can pose as an")),
+        "{d:?}"
+    );
+    let d = diags("module m\nfn trait() { }\nfn main() { }\n");
+    assert!(d.iter().any(|(c, m)| *c == "DL0106" && m.starts_with("`trait` is reserved for a future stage")), "{d:?}");
 }
 
 #[test]

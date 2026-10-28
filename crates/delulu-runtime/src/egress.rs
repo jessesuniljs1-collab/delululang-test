@@ -227,7 +227,11 @@ impl Reason {
     /// A sentence for the operator. Host-side only — the program is told [`Reason::answer`].
     pub fn explain(&self) -> String {
         match self {
-            Reason::Scheme => "only `https://` is fetched; there is no plain-HTTP path".into(),
+            // B7 (the agent test campaign): this said "there is no plain-HTTP path" for `HTTPS://`, `https:host`, `//host`,
+            // `ftp://`, a bare host and the empty URL as well, none of them plain HTTP.
+            Reason::Scheme => "the URL does not begin with `https://` (lower case, two slashes, then the host); only such a \
+                               URL is fetched, and there is no plain-HTTP path"
+                .into(),
             Reason::Userinfo => "the URL carries userinfo (`user@host`), which is refused rather than parsed".into(),
             Reason::Malformed(why) => format!("the URL is refused rather than normalized: {why}"),
             Reason::NotAllowlisted => "the host — or, under a path scope, the path — is not in the capability's allowlist".into(),

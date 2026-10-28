@@ -103,6 +103,31 @@ fn only_https_is_fetched() {
     }
 }
 
+/// B7 (the agent test campaign): every URL refused for its scheme was told "there is no plain-HTTP path" — an upper-case
+/// `HTTPS://`, a missing `//`, a bare host, `file:`, `ftp:` and the empty URL too. The sentence now says what each of
+/// them lacks, and still says that plain HTTP has no path.
+#[test]
+fn a_scheme_refusal_says_what_the_url_lacks() {
+    for url in [
+        "HTTPS://127.0.0.1/api/x",
+        "https:127.0.0.1/api/x",
+        "//127.0.0.1/api/x",
+        "127.0.0.1/api/x",
+        "file:///C:/x",
+        "ftp://127.0.0.1/",
+        "",
+    ] {
+        let reason = parse_target(url).expect_err(url);
+        assert_eq!(reason, Reason::Scheme, "`{url}`");
+        assert!(
+            reason.explain().starts_with("the URL does not begin with `https://` (lower case"),
+            "`{url}`: {}",
+            reason.explain()
+        );
+    }
+    assert!(Reason::Scheme.explain().ends_with("there is no plain-HTTP path"));
+}
+
 /// C86's shape, refused before it can be parsed wrongly: everything before the last `@` is userinfo.
 #[test]
 fn userinfo_is_refused_rather_than_parsed() {

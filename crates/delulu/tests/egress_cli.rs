@@ -178,6 +178,19 @@ fn a_refused_request_says_why_to_the_operator_and_nothing_to_the_program() {
     }
 }
 
+/// B6 (the agent test campaign): the operator's note quotes a refused URL as the program wrote it, a backslash once. It was
+/// `escape_debug`, which doubled every backslash.
+#[test]
+fn a_refused_url_is_quoted_as_written_in_the_operators_note() {
+    let dir = tmp("note-backslash");
+    fetcher(&dir, "example.com", "https://example.com/a\\\\x");
+    let o = delulu(&dir, &["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com"]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(stderr.contains("note: the request to `https://example.com/a\\x` was not delivered"), "{}", out(&o));
+    assert!(stderr.contains("[egress: malformed]"), "{}", out(&o));
+}
+
 /// P9-05 (a), D-V2-138: end to end on loopback, at L0 and from a guest — under `net.special=127.0.0.1/allowed/**` a request
 /// under `/allowed` leaves as TLS (its query is not its path); one for another path, or for a path spelled two ways, is
 /// refused DL0904 at the call and nothing connects.

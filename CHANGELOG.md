@@ -11,6 +11,33 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refused path or URL is quoted as written; a scheme refusal says what the URL lacks, 2026-10-29
+
+- **Fixed: a refused path or URL was quoted with every backslash doubled** (the agent test campaign's B6, RW 6.31).
+  A path refused as `DL0904` (on both engines), and the operator's `note: the request to … was not delivered`, quoted
+  it through Rust's debug escaping, so `\\?\C:\x` read `\\\\?\\C:\\x`. Both now quote it as written. Each
+  control character, line break and character that reorders a line is still shown escaped (`\u{1b}`), as everywhere
+  else a terminal is written.
+- **Fixed: a URL refused for its scheme was told "there is no plain-HTTP path"** (B7) whatever it was: `HTTPS://`, `https:host`,
+  `//host`, a bare host, `file:`, `ftp:` or the empty URL. The note now says the URL does not begin with `https://` (lower case,
+  two slashes, then the host). The refusal itself, and what the program is told (`Refused`), are unchanged.
+
+## Unreleased — five refusals name the mistake that was made, 2026-10-29
+
+- **Improved: five refusals now name the mistake that was made** (the agent test campaign's A6, C7, C8, C10 and C16,
+  RW 6.30). Each keeps its code.
+  - `"a" < "b"` is one DL0401: *a `Str` has no order*. It was refused twice, as "arithmetic expects Int or Float", once
+    per side. Any other comparison of the wrong type now says *comparison expects Int or Float*, so `1 < 2 < 3` reads that way too.
+  - `load("x.dpx")` is DL0403 alone, naming `load(host, path, grant)`. The path was also judged as the host and called a
+    forged capability (DL0601).
+  - A function kept in a record field and called as a method (`h.run(1)`) is still DL0405, and now says how a field's function is
+    called: `(h.run)(…)`.
+  - A reserved word is refused for its own reason (DL0106). `tag` and the other five reference capabilities are
+    refused as reference capabilities. `plugin`, `secret` and `cap` are refused so that no declared name can pose as an
+    authority-bearing type. Only `async`, `await`, `trait`, `impl`, `where` and `pure` are still "reserved for a future
+    stage", which every word used to be called. `delulu explain DL0106` lists the three groups.
+  - `const N: Int = 3` is DL0208 saying a module constant is written with `let`. It was a bare "expected an item".
+
 ## Unreleased — the interpreter runs loops and calls faster, 2026-10-29
 
 - **Improved: the interpreter takes 1.5× to 2.1× less time on loops, calls and `match`** (A14, RW 3.24). A merge sort of

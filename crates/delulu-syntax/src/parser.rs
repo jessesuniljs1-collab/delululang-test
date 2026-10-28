@@ -312,17 +312,23 @@ impl Parser {
                 self.bump();
                 self.panicking = false;
                 if is_reserved(&name) {
-                    // C10 (the agent test campaign): the six reference capabilities have been in use since Stage 7, so
-                    // "a future stage" was no reason for refusing `tag`.
-                    let why = if Rcap::from_name(&name).is_some() {
-                        "is a reference capability (`iso`, `trn`, `ref`, `val`, `box`, `tag`)"
+                    // C10 (the agent test campaign): every reserved word was refused as "reserved for a future stage",
+                    // `tag` too, though the six reference capabilities have been in use since Stage 7. The reason
+                    // given is now the word's own (the three groups `token::RESERVED` documents).
+                    let message = if Rcap::from_name(&name).is_some() {
+                        format!(
+                            "`{name}` is a reference capability (`iso`, `trn`, `ref`, `val`, `box`, `tag`) and cannot be a \
+                             declared name"
+                        )
+                    } else if matches!(name.as_str(), "plugin" | "secret" | "cap") {
+                        format!(
+                            "`{name}` is reserved so that no declared name can pose as an authority-bearing type (`Plugin`, \
+                             `Secret`, `Cap`)"
+                        )
                     } else {
-                        "is reserved for a future stage"
+                        format!("`{name}` is reserved for a future stage and cannot be a declared name")
                     };
-                    self.diags.push(
-                        Diagnostic::error("DL0106", format!("`{name}` {why} and cannot be a declared name"))
-                            .with_span(span, "reserved word"),
-                    );
+                    self.diags.push(Diagnostic::error("DL0106", message).with_span(span, "reserved word"));
                 }
                 Ident { name, span }
             }

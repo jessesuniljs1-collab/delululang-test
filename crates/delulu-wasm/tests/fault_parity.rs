@@ -302,6 +302,19 @@ fn main(root: Root) ! {{Write, Read}} {{
     assert!(w.contains("DL0703"), "the WASM engine names the ungranted read: {w}");
 }
 
+/// B6 (the agent test campaign): the WASM engine quotes a refused path as the interpreter does — as written, a
+/// backslash once, a control character escaped. Both quoted it through `escape_debug`, which doubled every backslash.
+#[test]
+fn a_refused_path_is_quoted_as_written_on_the_wasm_engine() {
+    let src = "module m\nfn main(root: Root) ! {Write, Read} {\n  let fs = root.fs_read(\"a\\\\b\\u{0}c\")\n  \
+               root.console().println(\"not reached\")\n}\n";
+    let (cfg, g) = console();
+    let (w, i) = run_both(src, cfg, g, None);
+    let (w, i) = (w.expect_err("refused on WASM"), i.expect_err("refused on the interpreter"));
+    assert!(i.contains("DL0904"), "the interpreter: {i}");
+    assert!(w.contains("DL0904: path `a\\b\\u{0}c` is refused: "), "the WASM engine: {w}");
+}
+
 /// RW 6.15: an ungranted mint is refused in the same words on both engines, its remedy included — the `--grant` that
 /// covers it on an ordinary run, the delegation under `--lease` (a lease run refuses a local `--grant`, and both engines
 /// named one). The WASM engine's console, clock and rand refusals named no remedy at all before.

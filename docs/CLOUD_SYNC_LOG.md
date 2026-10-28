@@ -6055,3 +6055,35 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. The papercuts: A4–A8, A13, B4–B8, B11, C6–C16. The ledger is on `origin/autosave/dogfood`.
   4. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — five refusals name the mistake: A6, C7, C8, C10, C16 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/campaign-wording` (on `master` `982c4e0`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #84 (A14) landed first, at `982c4e0`; its run was `40781581403`.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-syntax/src/parser.rs`,
+  `crates/delulu-diag/src/codes.rs` (DL0106's explanation), `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.30), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A
+  `crates/delulu-check/tests/campaign_wording.rs`. Deleted, renamed: nothing. (The generated reference does not carry
+  DL0106's explanation: `--check-reference` in sync.)
+- **Open / next, in order:**
+  1. Read this pull request's run; land on green. Merge `master` into `launch/2.0.0`, then dispatch its `everything` run
+     and its release dry run.
+  2. The papercuts left in RW 6.30.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a refused path or URL quoted as written; the scheme refusal's sentence: B6, B7 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/campaign-refusal-text` (on `laptop/campaign-wording` `083661e`, #85)   Pull request: opened with this
+  commit, after #85
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/egress.rs`,
+  `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/egress_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.31),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #85, then this pull request, each on green. Then merge `master` into `launch/2.0.0` and dispatch its
+     `everything` run and its release dry run.
+  2. B11, then the other papercuts in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
