@@ -312,12 +312,16 @@ impl Parser {
                 self.bump();
                 self.panicking = false;
                 if is_reserved(&name) {
+                    // C10 (the agent test campaign): the six reference capabilities have been in use since Stage 7, so
+                    // "a future stage" was no reason for refusing `tag`.
+                    let why = if Rcap::from_name(&name).is_some() {
+                        "is a reference capability (`iso`, `trn`, `ref`, `val`, `box`, `tag`)"
+                    } else {
+                        "is reserved for a future stage"
+                    };
                     self.diags.push(
-                        Diagnostic::error(
-                            "DL0106",
-                            format!("`{name}` is reserved for a future stage and cannot be a declared name"),
-                        )
-                        .with_span(span, "reserved word"),
+                        Diagnostic::error("DL0106", format!("`{name}` {why} and cannot be a declared name"))
+                            .with_span(span, "reserved word"),
                     );
                 }
                 Ident { name, span }
@@ -468,6 +472,15 @@ impl Parser {
                         "`import` must appear before the first item, directly under the `module` header",
                         p.span(),
                         "move this import up to the import section",
+                    );
+                } else if p.at_kw_ident("const") {
+                    // C16 (the agent test campaign): the grammar index calls a module constant `const`, after the
+                    // specification's `const_decl`; the word that writes one is `let`.
+                    p.error(
+                        "DL0208",
+                        "a module constant is written with `let`, not `const`: `let N: Int = 3`",
+                        p.span(),
+                        "write `let` here",
                     );
                 } else if !p.at_eof() {
                     p.error(

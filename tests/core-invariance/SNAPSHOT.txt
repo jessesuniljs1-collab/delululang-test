@@ -4356,7 +4356,7 @@ exit 1
     {
       "code": "DL0401",
       "explanation_id": "E-DL0401",
-      "message": "arithmetic expects Int or Float: expected `Int`, found `Bool`",
+      "message": "comparison expects Int or Float: expected `Int`, found `Bool`",
       "repairs": [],
       "severity": "error",
       "spans": [
@@ -4396,7 +4396,7 @@ error[DL0206]: comparison operators are non-associative
    |         ^ add parentheses
   explain: delulu explain E-DL0206
 
-error[DL0401]: arithmetic expects Int or Float: expected `Int`, found `Bool`
+error[DL0401]: comparison expects Int or Float: expected `Int`, found `Bool`
   --> tests/conformance/reject/DL0206_chained_cmp.delulu:5:3
    |
  5 |   1 < 2 < 3
