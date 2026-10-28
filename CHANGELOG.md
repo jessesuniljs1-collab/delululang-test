@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a name in another script, and a missing expression, are each refused once, 2026-10-29
+
+- **Improved: a name written in another script is refused once, as a name** (the agent test campaign's C12, RW 6.34).
+  `fn 计算(x: Int)` drew DL0101 *"unexpected character"* for each of its letters at each place it was written, then
+  DL0201 *"expected a name"*. It now draws one DL0101 per word: *"`计算` is not a name: identifiers are ASCII letters,
+  digits and `_`"*. Identifiers are still ASCII only. A program with such a name is refused as before.
+- **Improved: where the parser could not read an expression, no second refusal follows at the same place** (C13).
+  The placeholder the parser put there was typed `Int`. So `if { 1 } else { 2 }` and a 200-deep `if` were also refused
+  *"`if` condition must be Bool"*, at the place DL0202 or DL0210 had already named. The placeholder now has an unknown
+  type.
+
 ## Unreleased — a refused network mint names the host it asked for, 2026-10-29
 
 - **Improved: `root.http([...])` for a host granted nothing names that host** (the agent test campaign's B4, RW 6.33).

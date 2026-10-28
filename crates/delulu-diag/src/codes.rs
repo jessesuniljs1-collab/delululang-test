@@ -790,7 +790,10 @@ pub fn code_explain(code: &str) -> Option<String> {
         // ===== DL01xx — lexing =============================================
         "DL0101" => "The lexer met a character that cannot begin any token. Usually a stray \
              non-ASCII character pasted from a document, a smart quote where a straight one was \
-             meant, or a control character. Delete it, or replace it with the ASCII it stands for.",
+             meant, or a control character. Delete it, or replace it with the ASCII it stands for. \
+             A word written in another script (`café`, `计算`) is refused once, as a whole: an \
+             identifier is ASCII letters, digits and `_`, so that every name reads one way to every \
+             reviewer. Spell it in ASCII.",
         "DL0102" => "A string literal opened and the file ended before it closed. Add the closing \
              quote. If the string was meant to span lines, note that a string literal does not: \
              break it into pieces or use an escape.",

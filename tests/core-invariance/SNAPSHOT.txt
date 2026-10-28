@@ -4032,34 +4032,11 @@ exit 1
           }
         }
       ]
-    },
-    {
-      "code": "DL0408",
-      "explanation_id": "E-DL0408",
-      "message": "`if` condition must be Bool: expected `Bool`, found `Int`",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 62,
-            "col": 7,
-            "line": 5
-          },
-          "file": "tests/conformance/reject/DL0202_if_without_condition.delulu",
-          "label": "type mismatch here",
-          "start": {
-            "byte": 61,
-            "col": 6,
-            "line": 5
-          }
-        }
-      ]
     }
   ],
   "schema": 1,
   "summary": {
-    "errors": 2,
+    "errors": 1,
     "warnings": 0
   }
 }
@@ -4076,14 +4053,7 @@ error[DL0202]: expected an expression, found `{`
    |      ^ expected an expression
   explain: delulu explain E-DL0202
 
-error[DL0408]: `if` condition must be Bool: expected `Bool`, found `Int`
-  --> tests/conformance/reject/DL0202_if_without_condition.delulu:5:6
-   |
- 5 |   if { 1 } else { 2 }
-   |      ^ type mismatch here
-  explain: delulu explain E-DL0408
-
-2 error(s)
+1 error(s)
 
 ===== tests/conformance/reject/DL0202_unclosed_group.delulu :: check --json =====
 exit 1

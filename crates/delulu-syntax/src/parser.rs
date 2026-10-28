@@ -151,6 +151,8 @@ struct Parser {
     /// expression yields one `DL0210`, and a second, independent over-deep expression later in the
     /// file yields its own: *a site*, not *a level* and not *a file*.
     depth_reported: [bool; 4],
+    /// The placeholders made by [`Parser::placeholder`] ([`Module::recovered`]).
+    recovered: Vec<NodeId>,
 }
 
 /// Indices into [`Parser::depth_reported`], one per recursive-descent class.
@@ -173,7 +175,16 @@ impl Parser {
             pat_depth: 0,
             block_depth: 0,
             depth_reported: [false; 4],
+            recovered: Vec::new(),
         }
+    }
+
+    /// An expression standing where none could be read, after the refusal that says why; recorded so the checker types it
+    /// as unknown (C13: a `0` here made `if` refuse an `Int` condition at the very place the parse error was).
+    fn placeholder(&mut self, span: Span) -> Expr {
+        let id = self.node_id();
+        self.recovered.push(id);
+        Expr::Lit { kind: LitKind::Int(0), id, span }
     }
 
     /// Refuse an over-deep construct **once per site**: emit only if this class has not already
@@ -500,7 +511,7 @@ impl Parser {
             }
         });
 
-        Module { name, imports, items, attrs }
+        Module { name, imports, items, attrs, recovered: std::mem::take(&mut self.recovered) }
     }
 
     // ----- attributes (Stage 10, spec §2.2 — a reserved 1.0 activation) ---------------------
@@ -1628,7 +1639,7 @@ impl Parser {
                 "simplify or split this expression",
             );
             self.skip_over_deep_operand();
-            return Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start };
+            return self.placeholder(start);
         }
         self.depth += 1;
         let e = self.parse_unary_inner(allow_struct);
@@ -1978,7 +1989,7 @@ impl Parser {
                     "expected an expression",
                 );
                 // Produce a placeholder so callers keep making progress.
-                Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start }
+                self.placeholder(start)
             }
         }
     }
