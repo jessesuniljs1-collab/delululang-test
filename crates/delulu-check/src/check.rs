@@ -1811,31 +1811,38 @@ impl<'a> Checker<'a> {
             // row must declare, and reading the artifact is a Read.
             "load" => {
                 let ts = check_args(self, ctx, &mut acc);
-                self.expect_named_arg(&ts, 0, &Type::Cap(ResourceKind::PluginHost), span, "load");
-                self.expect_named_arg(&ts, 1, &Type::Str, span, "load");
-                // Never index: a prelude type missing from THIS path's table is a checker defect,
-                // and a defect must be a diagnostic rather than a panic — `main.rs` states that a
-                // runtime fault is a diagnostic, and a compile-time one has no excuse to be worse.
-                // This line WAS an index, and it panicked on the dependency-graph path, whose prelude
-                // index named two of the seven types (fixed in `program::prelude_index`).
-                let Some(grant_id) = self.table.type_ix.get("Grant").copied() else {
-                    self.diags.push(
-                        Diagnostic::error(
-                            "DL0907",
-                            "the prelude type `Grant` is missing from this program's type table \
-                             (a checker defect, not a mistake in this program)",
-                        )
-                        .with_span(span, "`load` needs the prelude's `Grant` type here"),
-                    );
-                    return Some((Type::Unit, acc));
-                };
-                let grant_ty = Type::Record(grant_id, vec![]);
-                self.expect_named_arg(&ts, 2, &grant_ty, span, "load");
+                // C7 (the agent test campaign): with the wrong number of arguments, none can be matched to its
+                // parameter by place — `load("x.dpx")` had its path judged as the host and was called a forged
+                // capability. The count is the mistake, and it is said alone.
                 if ts.len() != 3 {
                     self.diags.push(
-                        Diagnostic::error("DL0403", format!("`load` expects 3 argument(s), found {}", ts.len()))
-                            .with_span(span, "wrong number of arguments"),
+                        Diagnostic::error(
+                            "DL0403",
+                            format!("`load` expects 3 argument(s), found {}: `load(host, path, grant)`", ts.len()),
+                        )
+                        .with_span(span, "wrong number of arguments"),
                     );
+                } else {
+                    self.expect_named_arg(&ts, 0, &Type::Cap(ResourceKind::PluginHost), span, "load");
+                    self.expect_named_arg(&ts, 1, &Type::Str, span, "load");
+                    // Never index: a prelude type missing from THIS path's table is a checker defect,
+                    // and a defect must be a diagnostic rather than a panic — `main.rs` states that a
+                    // runtime fault is a diagnostic, and a compile-time one has no excuse to be worse.
+                    // This line WAS an index, and it panicked on the dependency-graph path, whose prelude
+                    // index named two of the seven types (fixed in `program::prelude_index`).
+                    let Some(grant_id) = self.table.type_ix.get("Grant").copied() else {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0907",
+                                "the prelude type `Grant` is missing from this program's type table \
+                                 (a checker defect, not a mistake in this program)",
+                            )
+                            .with_span(span, "`load` needs the prelude's `Grant` type here"),
+                        );
+                        return Some((Type::Unit, acc));
+                    };
+                    let grant_ty = Type::Record(grant_id, vec![]);
+                    self.expect_named_arg(&ts, 2, &grant_ty, span, "load");
                 }
                 acc.add_effect(Effect::Load);
                 acc.add_effect(Effect::Read);
@@ -1947,6 +1954,19 @@ impl<'a> Checker<'a> {
             }
             _ => None,
         }
+    }
+
+    /// Whether `rt` is a record with a field `name` written as a function type.
+    fn field_holds_a_function(&self, rt: &Type, name: &str) -> bool {
+        let Type::Record(id, _) = rt else { return false };
+        let TypeDefKind::Record(fields) = &self.table.type_def(*id).kind else { return false };
+        fields.iter().any(|(n, ty)| {
+            let mut ty = ty;
+            while let TypeExpr::Rcap { inner, .. } = ty {
+                ty = inner;
+            }
+            n == name && matches!(ty, TypeExpr::Fn { .. })
+        })
     }
 
     fn check_method(
@@ -2173,6 +2193,20 @@ impl<'a> Checker<'a> {
             format!(
                 "the type of this value is not known at this call, so its method `{}` cannot be found — write the type where \
                  the value is made (`let m: Map[Str, List[Str]] = Map()`, `let xs: List[Int] = []`) or give its parameter one",
+                name.name
+            )
+        } else if self.field_holds_a_function(&rt, &name.name) {
+            // C8 (the agent test campaign): a function kept in a record field, called as a method, was refused as an
+            // unknown method, with nothing saying how a field's function is called.
+            let holder = match recv {
+                Expr::Var { path, .. } if path.segs.len() == 1 => path.segs[0].name.clone(),
+                _ => "…".to_string(),
+            };
+            format!(
+                "type `{}` has no method `{}`: `{}` is a field holding a function, called as `({holder}.{})(…)`",
+                self.ty(&rt),
+                name.name,
+                name.name,
                 name.name
             )
         } else {
@@ -3066,7 +3100,16 @@ impl<'a> Checker<'a> {
             }
             Sub | Mul | Div | Rem => self.numeric_binop(&lt, &rt, lhs.span(), rhs.span(), span),
             Lt | Le | Gt | Ge => {
-                self.numeric_binop(&lt, &rt, lhs.span(), rhs.span(), span);
+                // A6 (the agent test campaign): a comparison was refused as "arithmetic", and `"a" < "b"` once per
+                // side. Two `Str`s are one mistake, said once.
+                if self.cx.apply_type(&lt) == Type::Str && self.cx.apply_type(&rt) == Type::Str {
+                    self.diags.push(
+                        Diagnostic::error("DL0401", "a `Str` has no order: `<`, `<=`, `>` and `>=` compare `Int` or `Float`")
+                            .with_span(span, "both sides are `Str` (`List[Str].sort()` orders strings by code point)"),
+                    );
+                } else {
+                    self.numeric_operands(&lt, &rt, lhs.span(), rhs.span(), span, "comparison expects Int or Float");
+                }
                 Type::Bool
             }
             Eq | Ne => {
@@ -3088,6 +3131,11 @@ impl<'a> Checker<'a> {
     }
 
     fn numeric_binop(&mut self, lt: &Type, rt: &Type, ls: Span, rs: Span, span: Span) -> Type {
+        self.numeric_operands(lt, rt, ls, rs, span, "arithmetic expects Int or Float")
+    }
+
+    /// Two operands that must be one numeric type; `what` names the operator's kind in a refusal.
+    fn numeric_operands(&mut self, lt: &Type, rt: &Type, ls: Span, rs: Span, span: Span, what: &str) -> Type {
         let lt = self.cx.apply_type(lt);
         let rt = self.cx.apply_type(rt);
         match (&lt, &rt) {
@@ -3107,8 +3155,8 @@ impl<'a> Checker<'a> {
                 Type::Int
             }
             _ => {
-                self.expect_type(&Type::Int, &lt, ls, "arithmetic expects Int or Float");
-                self.expect_type(&Type::Int, &rt, rs, "arithmetic expects Int or Float");
+                self.expect_type(&Type::Int, &lt, ls, what);
+                self.expect_type(&Type::Int, &rt, rs, what);
                 Type::Int
             }
         }

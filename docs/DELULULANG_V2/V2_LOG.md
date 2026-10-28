@@ -9835,3 +9835,35 @@ each step of the merge.
 
 **Not done.** The interpreter still finds every variable by name, and is about 100× slower than WASM on computation. RW
 3.24 stays open, narrowed, with what closing it takes. `docs/for-agents.md` now says which engine to choose.
+
+## 2026-10-29 — the laptop: five refusals name the mistake (A6, C7, C8, C10, C16; RW 6.30)
+
+**Landed first.** #84 (A14) read green on its own run, `40781581403`: 14 jobs success, `heavy-gates` and `miri-slow`
+skipped, as on every pull request. It was fast-forwarded onto `master` at `982c4e0` and its branch deleted.
+
+**What each refusal said, and says now** (all reproduced on the current binary from the campaign's own programs first):
+
+| Finding | Before | Now |
+|---|---|---|
+| A6 | `"a" < "b"`: two DL0401 *arithmetic expects Int or Float*, one per side | one DL0401: *a `Str` has no order: `<`, `<=`, `>` and `>=` compare `Int` or `Float`*, its label naming `List[Str].sort()`. Any other comparison: *comparison expects Int or Float* |
+| C7 | `load("x.dpx")`: DL0601 *a capability cannot be constructed or forged: `Cap[PluginHost]` is not `Str`* beside DL0403 | DL0403 alone, naming `load(host, path, grant)`. With three arguments each is held to its parameter as before |
+| C8 | `h.run(1)`, `run` a record field holding a function: DL0405 *type `Handler` has no method `run`* | the same code, adding *`run` is a field holding a function, called as `(h.run)(…)`*; a field holding no function gets no hint |
+| C10 | a field named `tag`: DL0106 *reserved for a future stage*, the reason given for every reserved word | DL0106 gives each word's own reason. `tag`: *a reference capability (`iso`, `trn`, `ref`, `val`, `box`, `tag`)*. `secret`, `plugin`, `cap`: *reserved so that no declared name can pose as an authority-bearing type*. Only the six unbuilt words keep *a future stage*. `explain DL0106` lists the three groups |
+| C16 | `const N: Int = 3`: DL0208 *expected an item* | DL0208 *a module constant is written with `let`, not `const`* |
+
+**Gates.**
+- `crates/delulu-check/tests/campaign_wording.rs`, 5 tests.
+- Mutants M881–M888, each restoring one old wording or behaviour, all killed. They also serve as the "red before"
+  witness: the tests fail on each piece of the old code.
+- `cargo test -p delulu-check -p delulu-syntax -p delulu-conform`: every target passed. Conformance coverage
+  358/358; `--check-reference` in sync.
+- The core snapshot was blessed. It changed in two places, both intended:
+  - `DL0206_chained_cmp`: `1 < 2 < 3` now reads *comparison* where it read *arithmetic*;
+  - `DL0106_reserved_name`: `secret` now gives its real reason.
+
+**Not done**, and why:
+- C14 (the repair label *(safe) [requires human decision]*): its rendering is shared by every repair the core
+  snapshot pins, so it waits for a change of its own.
+- A8 (`authority` shows no requested scope in its human report): the Stage-3 byte-identical report test pins that
+  output, so it is a decision, not a papercut.
+- The rest stay open as listed in RW 6.30.

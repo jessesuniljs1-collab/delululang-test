@@ -809,10 +809,13 @@ pub fn code_explain(code: &str) -> Option<String> {
              comments NEST, so an inner `/*` needs its own close — count them from the top of the \
              comment. Nesting is deliberate: it lets you comment out a region that already contains \
              comments, which is the one time you actually need to.",
-        "DL0106" => "This name is RESERVED for a future stage and cannot be declared. The word is \
+        "DL0106" => "This name is RESERVED and cannot be declared. Six reserved words are the reference \
+             capabilities a type can carry (`iso`, `trn`, `ref`, `val`, `box`, `tag`). Three keep a \
+             declaration from posing as an authority-bearing type (`plugin`, `secret`, `cap`). The rest \
+             are kept for a future stage (`async`, `await`, `trait`, `impl`, `where`, `pure`). The word is \
              still legal as a member name after `.`, which is how `root.secret(…)` coexists with \
-             `secret` being reserved. Reserving a word early is a promise that adding it later will \
-             not break your code — the alternative is a breaking change dressed as a feature.",
+             `secret` being reserved. Reserving a word early is a promise that adding it later will not \
+             break your code — the alternative is a breaking change dressed as a feature.",
         "DL0107" => "A Unicode bidirectional control character was found in the raw source. These \
              characters reorder how text RENDERS without changing how it LEXES, so a reviewer can \
              be shown one program while the compiler reads another — the 'Trojan Source' attack \

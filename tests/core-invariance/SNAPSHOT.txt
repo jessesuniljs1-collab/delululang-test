@@ -3329,7 +3329,7 @@ exit 1
     {
       "code": "DL0106",
       "explanation_id": "E-DL0106",
-      "message": "`secret` is reserved for a future stage and cannot be a declared name",
+      "message": "`secret` is reserved so that no declared name can pose as an authority-bearing type (`Plugin`, `Secret`, `Cap`)",
       "repairs": [],
       "severity": "error",
       "spans": [
@@ -3362,7 +3362,7 @@ exit 1
 exit 1
 --- stdout ---
 --- stderr ---
-error[DL0106]: `secret` is reserved for a future stage and cannot be a declared name
+error[DL0106]: `secret` is reserved so that no declared name can pose as an authority-bearing type (`Plugin`, `Secret`, `Cap`)
   --> tests/conformance/reject/DL0106_reserved_name.delulu:5:4
    |
  5 | fn secret() -> Int {
@@ -4356,7 +4356,7 @@ exit 1
     {
       "code": "DL0401",
       "explanation_id": "E-DL0401",
-      "message": "arithmetic expects Int or Float: expected `Int`, found `Bool`",
+      "message": "comparison expects Int or Float: expected `Int`, found `Bool`",
       "repairs": [],
       "severity": "error",
       "spans": [
@@ -4396,7 +4396,7 @@ error[DL0206]: comparison operators are non-associative
    |         ^ add parentheses
   explain: delulu explain E-DL0206
 
-error[DL0401]: arithmetic expects Int or Float: expected `Int`, found `Bool`
+error[DL0401]: comparison expects Int or Float: expected `Int`, found `Bool`
   --> tests/conformance/reject/DL0206_chained_cmp.delulu:5:3
    |
  5 |   1 < 2 < 3
