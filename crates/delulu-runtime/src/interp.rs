@@ -849,12 +849,20 @@ impl Interp {
     // ----- statements and blocks ------------------------------------------
 
     fn exec_block_value(&self, block: &Block, parent: &Env) -> R<Value> {
-        let env = Scope::child(parent);
+        // A14: a block binds names in its own scope only by `let`. Without one its scope would stay empty, and every
+        // read, write and capture passes through an empty scope to its parent — so the block runs in the parent's.
+        let own;
+        let env = if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) {
+            own = Scope::child(parent);
+            &own
+        } else {
+            parent
+        };
         let mut value = Value::Unit;
         let n = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = i + 1 == n;
-            value = self.exec_stmt(stmt, &env, is_last)?;
+            value = self.exec_stmt(stmt, env, is_last)?;
         }
         Ok(value)
     }
@@ -1139,6 +1147,32 @@ impl Interp {
     }
 
     fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
+        // A14: a call by name to one of the module's functions — what the order below reaches when no local closure has
+        // the name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
+        // callee's scope. Whether a local closure has the name cannot change while the arguments run: an argument
+        // binds nothing in this scope, and a binding keeps its type.
+        if let Expr::Var { path, .. } = callee {
+            if let [seg] = path.segs.as_slice() {
+                let name = seg.name.as_str();
+                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && !matches!(env.get(name), Some(Value::Closure(_)))
+                {
+                    let home = self.home();
+                    if let Some(f) = home.funcs.get(name) {
+                        let callee_env = Scope::child(&home.globals);
+                        for (i, a) in args.iter().enumerate() {
+                            let v = self.eval_expr(a, env)?;
+                            if let Some(p) = f.params.get(i) {
+                                callee_env.define(&p.name.name, v);
+                            }
+                        }
+                        self.enter()?;
+                        let result = self.exec_block_value(&f.body, &callee_env);
+                        self.leave();
+                        return self.finish_call(result);
+                    }
+                }
+            }
+        }
         // Evaluate arguments left to right.
         let mut argvals = Vec::with_capacity(args.len());
         for a in args {
@@ -2196,7 +2230,9 @@ impl Interp {
     fn eval_match(&self, scrutinee: &Expr, arms: &[Arm], span: delulu_diag::Span, env: &Env) -> R<Value> {
         let value = self.eval_expr(scrutinee, env)?;
         for arm in arms {
-            let arm_env = Scope::child(env);
+            // A14: an arm whose pattern names nothing binds nothing, so it needs no scope of its own (as a block
+            // without `let` needs none).
+            let arm_env = if binds(&arm.pattern) { Scope::child(env) } else { env.clone() };
             if self.match_pattern(&arm.pattern, &value, &arm_env) {
                 return self.eval_expr(&arm.body, &arm_env);
             }
@@ -2372,6 +2408,15 @@ impl Interp {
             _ => unreachable!(),
         };
         Ok(Value::Bool(b))
+    }
+}
+
+/// Whether matching `pat` can bind a name ([`Interp::match_pattern`] defines one only at a `Bind`).
+fn binds(pat: &Pattern) -> bool {
+    match pat {
+        Pattern::Bind(_) => true,
+        Pattern::Variant { fields, .. } => fields.iter().any(binds),
+        Pattern::Wildcard(_) | Pattern::Lit(..) => false,
     }
 }
 

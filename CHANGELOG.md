@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `str()` of a `Float` from `r.float()` runs on WASM, 2026-10-27
+
+- **Fixed: `str(r.float())` was refused on `--engine wasm`** with DL1201 *"str() of this type … compile so far"*. The
+  WASM engine prints a `Float` through the interpreter's own formatting. It brought that in only when the program had
+  a float literal, a `float(…)` or `parse_float(…)` call, or a `Float` in a function's signature, so a program whose
+  floats all came from `r.float()` had none. It now asks the checker for any `Float` value. Both engines print
+  alike, and the refusal's text no longer says a `Float` needs the foreign interface.
+
 ## Unreleased — a write refused after a call names that call, 2026-10-27
 
 - **Improved: DL1604 names the call that made a variable `val`** (A1). Take `let xs = [1, 2]`, then `len_of(xs)`,

@@ -1133,8 +1133,12 @@ fn module_calls_builtin(env: &EnumEnv, module: &Module, name: &str) -> bool {
 fn module_uses_floats(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
     let hit = |e: &Expr| match e {
         Expr::Lit { kind: LitKind::Float(_), .. } => true,
-        Expr::Call { callee, .. } if matches!(&**callee, Expr::Var { path, .. }
-            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")) => true,
+        Expr::Call { callee, .. }
+            if matches!(&**callee, Expr::Var { path, .. }
+            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")) =>
+        {
+            true
+        }
         // Any expression the checker typed `Float`: one made by a method (`r.float()`) wrote none of the above, and its
         // `str` was refused DL1201 (2026-10-27).
         e => matches!(node_types.get(&e.id()), Some(delulu_check::Type::Float)),
@@ -4348,7 +4352,8 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         Ok(Ty::Str)
                     }
                     _ => Err(CompileError::Unsupported(
-                        "str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)".into(),
+                        "str() of this type (Int, Str, Float, Bool, lists, maps, options, results, sums and records compile)"
+                            .into(),
                     )),
                 };
             }
