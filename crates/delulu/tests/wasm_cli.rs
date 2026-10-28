@@ -709,7 +709,7 @@ fn http_on_the_wasm_engine_matches_the_interpreter() {
     // A host the grant does not cover is refused at the mint, in the interpreter's words.
     let (i, _, _) = run("mint.delulu", "interp", "net=example.com");
     let (w, _, _) = run("mint.delulu", "wasm", "net=example.com");
-    let words = "`network host` was not granted to this program — pass `--grant net=HOST`";
+    let words = "network access to `evil.example` was not granted to this program — pass `--grant net=evil.example`";
     for e in [err(&i), err(&w)] {
         assert!(e.contains("DL0703") && e.contains(words), "{e}");
     }

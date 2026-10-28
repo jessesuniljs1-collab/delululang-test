@@ -327,15 +327,24 @@ fn an_os_refusal_reaches_the_program_in_the_same_words_everywhere() {
     let long = "a".repeat(300);
     let src = format!(
         "module m\nfn main(root: Root) ! {{Write, Read}} {{\n  let out = root.console()\n  let fs = root.fs_read(\"{root}\")\n  \
+         let w = root.fs_write(\"{root}\")\n  \
          match fs.read_text(\"{long}\") {{\n    Ok(s) => out.println(\"read\"),\n    Err(e) => match e {{\n      \
+         NotFound => out.println(\"NotFound\"),\n      Denied => out.println(\"Denied\"),\n      Other(m) => out.println(m),\n    }},\n  }}\n  \
+         match w.write_text(\"{long}\", \"x\") {{\n    Ok(u) => out.println(\"wrote\"),\n    Err(e) => match e {{\n      \
          NotFound => out.println(\"NotFound\"),\n      Denied => out.println(\"Denied\"),\n      Other(m) => out.println(m),\n    }},\n  }}\n}}\n"
     );
-    let cfg = HostConfig { console: true, fs_read_roots: vec![dir.clone()], ..HostConfig::default() };
-    let g = Grants { console: true, fs_read: vec![root.clone()], ..Default::default() };
+    let cfg = HostConfig {
+        console: true,
+        fs_read_roots: vec![dir.clone()],
+        fs_write_roots: vec![dir.clone()],
+        ..HostConfig::default()
+    };
+    let g = Grants { console: true, fs_read: vec![root.clone()], fs_write: vec![root.clone()], ..Default::default() };
     let (w, i) = run_both(&src, cfg, g, None);
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(i, Ok("invalid filename\n".to_string()), "the interpreter");
-    assert_eq!(w, Ok("invalid filename\n".to_string()), "the WASM engine");
+    let both = Ok("invalid filename\ninvalid filename\n".to_string());
+    assert_eq!(i, both, "the interpreter, reading and writing");
+    assert_eq!(w, both, "the WASM engine, reading and writing");
 }
 
 /// RW 6.15: an ungranted mint is refused in the same words on both engines, its remedy included — the `--grant` that
@@ -350,7 +359,8 @@ fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
             ("root.rand()", "rand"),
             ("root.fs_read(\"./nowhere\")", "fs.read=./nowhere"),
             ("root.fs_write(\"./nowhere\")", "fs.write=./nowhere"),
-            ("root.http([\"example.com\"])", "net=HOST"),
+            // B4: the entry asked for, never the placeholder `net=HOST`.
+            ("root.http([\"example.com\"])", "net=example.com"),
         ] {
             let src = format!("module m\nfn main(root: Root) {{\n  let c = {mint}\n}}\n");
             let checked = check_source(0, &src);

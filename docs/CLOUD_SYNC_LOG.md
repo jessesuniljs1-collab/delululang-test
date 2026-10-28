@@ -6087,3 +6087,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. B11, then the other papercuts in RW 6.30 and 6.31.
   3. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — `IoErr::Other` says the kind of failure: B11, D-V2-193 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/io-other-words` (on `laptop/campaign-refusal-text` `422f163`, #86)   Pull request: opened with this
+  commit, after #86
+- **What:** see V2_LOG's entry of the same name and D-V2-193. #85 landed at `083661e` (run `40784851893`, 14 jobs
+  success).
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu-wasm/tests/fault_parity.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.32),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-193), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86, then this pull request, each on green. Then merge `master` into `launch/2.0.0` and dispatch its
+     `everything` run and its release dry run.
+  2. The papercuts left in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

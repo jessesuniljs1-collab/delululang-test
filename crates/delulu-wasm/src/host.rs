@@ -1515,7 +1515,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         match e.kind() {
                             NotFound => build_err_ioerr(&mut caller, 0, None),
                             PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
                         }
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {
@@ -2079,7 +2079,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         match e.kind() {
                             NotFound => build_err_ioerr(&mut caller, 0, None),
                             PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
                         }
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {
