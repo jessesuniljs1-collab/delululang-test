@@ -240,7 +240,8 @@ fn variant_name(name: &str) -> Rc<str> {
         "Err" => 3,
         _ => return Rc::from(name),
     };
-    PRELUDE.with(|p| Rc::clone(&p[at]))
+    // A value made while the thread is being torn down gets a name of its own.
+    PRELUDE.try_with(|p| Rc::clone(&p[at])).unwrap_or_else(|_| Rc::from(name))
 }
 
 impl Value {
@@ -373,6 +374,15 @@ impl Value {
     /// every reachable pair is compared once and any one that differs makes the whole differ.
     #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &Value) -> bool {
+        // A14: two scalars are compared without the walk below, whose vector was an allocation for every `i % 2 == 0`.
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => return a == b,
+            (Value::Float(a), Value::Float(b)) => return a == b,
+            (Value::Bool(a), Value::Bool(b)) => return a == b,
+            (Value::Str(a), Value::Str(b)) => return a == b,
+            (Value::Unit, Value::Unit) => return true,
+            _ => {}
+        }
         let mut assumed: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut work: Vec<(Value, Value)> = vec![(self.clone(), other.clone())];
         while let Some((a, b)) = work.pop() {
