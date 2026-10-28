@@ -315,6 +315,29 @@ fn a_refused_path_is_quoted_as_written_on_the_wasm_engine() {
     assert!(w.contains("DL0904: path `a\\b\\u{0}c` is refused: "), "the WASM engine: {w}");
 }
 
+/// B11 (the agent test campaign): a file operation the operating system refuses for a reason with no variant of its own
+/// is `Other(m)`, and `m` was the OS's own message — on Windows *"The filename, directory name, or volume label syntax is
+/// incorrect. (os error 123)"*, in the machine's language, and other words on Linux and macOS. `m` is now the kind of
+/// failure, in the same words on every OS and both engines; nothing of the machine's own text reaches the program.
+#[test]
+fn an_os_refusal_reaches_the_program_in_the_same_words_everywhere() {
+    let dir = std::env::temp_dir().join(format!("delulu-b11-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let root = dir.to_string_lossy().replace('\\', "/");
+    let long = "a".repeat(300);
+    let src = format!(
+        "module m\nfn main(root: Root) ! {{Write, Read}} {{\n  let out = root.console()\n  let fs = root.fs_read(\"{root}\")\n  \
+         match fs.read_text(\"{long}\") {{\n    Ok(s) => out.println(\"read\"),\n    Err(e) => match e {{\n      \
+         NotFound => out.println(\"NotFound\"),\n      Denied => out.println(\"Denied\"),\n      Other(m) => out.println(m),\n    }},\n  }}\n}}\n"
+    );
+    let cfg = HostConfig { console: true, fs_read_roots: vec![dir.clone()], ..HostConfig::default() };
+    let g = Grants { console: true, fs_read: vec![root.clone()], ..Default::default() };
+    let (w, i) = run_both(&src, cfg, g, None);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(i, Ok("invalid filename\n".to_string()), "the interpreter");
+    assert_eq!(w, Ok("invalid filename\n".to_string()), "the WASM engine");
+}
+
 /// RW 6.15: an ungranted mint is refused in the same words on both engines, its remedy included — the `--grant` that
 /// covers it on an ordinary run, the delegation under `--lease` (a lease run refuses a local `--grant`, and both engines
 /// named one). The WASM engine's console, clock and rand refusals named no remedy at all before.
