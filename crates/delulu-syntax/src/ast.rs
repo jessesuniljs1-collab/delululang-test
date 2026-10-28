@@ -41,6 +41,11 @@ pub struct Module {
     /// Serde default + skip keeps every attribute-free artifact byte-identical to 1.0.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attrs: Vec<Attribute>,
+    /// The placeholder expressions the parser put where it could not read one, each after its own refusal (DL0202,
+    /// DL0210). The checker gives each an unknown type, so a parse error is not reported again as the placeholder's type
+    /// (C13). Empty in every module that parsed, so no artifact changes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recovered: Vec<NodeId>,
 }
 
 /// `attribute = "@" IDENT [ "(" STRING ")" ]` (Stage 10, spec §2.2 — a reserved 1.0 activation).

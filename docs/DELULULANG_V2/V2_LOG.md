@@ -9915,3 +9915,66 @@ reported.
 **Gates.** The test reads and writes the name on both engines and expects `invalid filename` twice. Mutants M894–M896
 put `e.to_string()` back at each of the three sites, and each is killed. The pull request's run checks it on Linux and
 macOS, where the name is `ENAMETOOLONG`, which Rust also calls `invalid filename`.
+
+## 2026-10-29 — the laptop: a refused network mint names the host it asked for (B4, RW 6.33)
+
+**What it said.** `root.http(["evil.example"])` for a host granted nothing was refused DL0703 *"`network host` was not
+granted to this program — pass `--grant net=HOST`"*. Under `--lease` it was *"does not carry `net=HOST`"*. The A20 fix
+(RW 6.17) had named the entry when its host was granted with fewer methods or a narrower path, and had deliberately kept
+these words for a host granted nothing. B4 is the case those words left behind: the reader cannot tell which entry, or
+which dimension, was too wide.
+
+**The change.** `prim::call_root_method`'s `http` arm says *"network access to `ENTRY` was not granted to this program"*,
+with the remedy for `net=ENTRY`, or `net.special=ENTRY` for a special-use host. The WASM engine mints through the same
+function, and so does `authority --within`'s counterexample, so all three say it alike.
+
+**Gates.** The three tests that pinned the placeholder now pin the entry:
+- `fault_parity::an_ungranted_mint_names_the_same_remedy_on_both_engines`, with and without a lease;
+- `within_cli::a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds`, `--within` and `run`;
+- `wasm_cli::http_on_the_wasm_engine_matches_the_interpreter`.
+
+Mutant M897 restores the placeholder, and all three turn red.
+
+## 2026-10-29 — the laptop: #86's run was red on two tests that read the scheme sentence
+
+#86's pull-request run `40787091697` failed on Ubuntu, macOS and arm64 with the same two tests:
+- `monitor_cli::a_plain_http_fetch_is_the_same_refusal_under_the_daemon` asserts the note contains *"only `https://` is
+  fetched"*;
+- `within_cli::a_request_is_decided_by_its_path_against_the_boundary` asserts that `--within`'s reason contains the
+  same phrase.
+
+B7's new sentence had dropped that phrase. The laptop had run the runtime's tests and `egress_cli`, not those two CLI
+targets.
+
+**The fix**, on top of the stack (#88's branch, so no pushed branch is rewritten): the sentence keeps the phrase. It
+reads *"the URL does not begin with `https://` (lower case, two slashes, then the host): only `https://` is fetched, and
+there is no plain-HTTP path"*. It still says what the URL lacks (B7's test), and both CLI tests pass on the laptop.
+
+#86, #87 and #88 land together at #88's head, on that run's green. #86's and #87's own runs are read and recorded as
+they came out.
+
+## 2026-10-29 — the laptop: a name in another script, and a missing expression, are each refused once (C12, C13; RW 6.34)
+
+**C12.** The lexer's dispatch read an identifier only from an ASCII letter. A letter of another script fell to
+*"unexpected character"*, one for each letter at each place it was written, and the parser then missed the name and
+said DL0201. The lexer now reads a word in any script (`char::is_alphanumeric`, and `_`) as one identifier and refuses
+it once: DL0101 *"`计算` is not a name: identifiers are ASCII letters, digits and `_`"*. The word still becomes a name
+token, so the parse goes on as written, and the refusal keeps any program holding it from being accepted. Identifiers
+stay ASCII, which DL0107's Trojan-source argument relies on. A bidirectional control is not alphanumeric, so it never
+joins a word. `explain DL0101` says so.
+
+**C13.** At DL0210 (too deep) and DL0202 (no expression), the parser put an `Int` literal `0` in the tree, and the
+checker typed it `Int`. `if` then refused its condition at the place the parse error had already named.
+- The parser records each placeholder's node in `Module::recovered`, with `#[serde(default, skip_serializing_if =
+  "Vec::is_empty")]`, so a module that parsed serializes as before.
+- `check_expr` gives a recorded placeholder a fresh type.
+- One recovery cascades still: `if + { 1 }` reads the placeholder as the left side of `+ { 1 }`, an `Int`. That is
+  another recovery's shape, and is not changed here.
+
+**Gates.**
+- `campaign_wording`'s two new tests. The 200-deep check runs on a 512 MiB thread, as the CLI gives it; a debug test
+  thread's 2 MiB overflows there.
+- Mutants M898–M901, all killed.
+- The core snapshot was blessed: the conformance witness `DL0202_if_without_condition` (`if { 1 } else { 2 }`) lost its
+  DL0408 and keeps its DL0202.
+- Conformance coverage stays 358/358; DL0408 has its own witness.

@@ -6104,3 +6104,43 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. The papercuts left in RW 6.30 and 6.31.
   3. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a refused network mint names the host it asked for: B4 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/net-refusal-names` (on `laptop/io-other-words` `9fd34cb`, #87)   Pull request: opened with this
+  commit, after #87
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row
+  6.33; 6.31's list of what is still open), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86, #87 and this pull request in order, each on green. Then merge `master` into `launch/2.0.0` and dispatch
+     its `everything` run and its release dry run.
+  2. The papercuts left in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — #86's red run, and the scheme sentence keeps its phrase (made on the laptop)
+- Branch: `laptop/net-refusal-names` (#88), a commit on top of `0f86b91`.
+- **What:** see V2_LOG's entry of the same name. `crates/delulu-runtime/src/egress.rs` (`Reason::Scheme`'s sentence),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** land #86 to #88 at #88's head on its green run; then merge `master` into `launch/2.0.0` and dispatch
+  its `everything` run and its release dry run.
+
+### 2026-10-29 — a name in another script, and a missing expression, are each refused once: C12, C13 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/parse-errors-once` (on `laptop/net-refusal-names` `3523b2c`, #88)   Pull request: opened with this
+  commit, after #88
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-syntax/src/lexer.rs`, `crates/delulu-syntax/src/parser.rs`,
+  `crates/delulu-syntax/src/ast.rs` (`Module::recovered`), `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/tests/campaign_wording.rs`, `crates/delulu-diag/src/codes.rs` (DL0101's explanation),
+  `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.34),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86 to #88 at #88's head on its green run, then this pull request on its own. Then merge `master` into
+     `launch/2.0.0` and dispatch its `everything` run and its release dry run.
+  2. The papercuts left: A4, A5, A7, A8, A13; B5, B8; C9, C11, C14, C15.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

@@ -5,6 +5,11 @@
 //! - C8: a function kept in a record field, called as a method, was an unknown method, with no word of how it is called;
 //! - C10: `tag` was "reserved for a future stage", though the six reference capabilities have been in use since Stage 7;
 //! - C16: `const N: Int = 3`, the name the grammar index gives a module constant, was "expected an item".
+//!
+//! And two that said one mistake more than once (C12, C13):
+//! - C12: a name in another script (`fn 计算`) was refused a character at a time, then again by the parser as a missing name;
+//! - C13: where the parser could not read an expression, the `0` it put there was typed `Int`, so a condition 200 `if`s deep
+//!   was also refused "`if` condition must be Bool" at the place DL0210 had already named.
 
 use delulu_check::check_source;
 
@@ -70,4 +75,28 @@ fn const_at_the_top_of_a_module_says_a_constant_is_written_with_let() {
     assert!(d.iter().any(|(c, m)| *c == "DL0208" && m.contains("written with `let`, not `const`")), "{d:?}");
     // What `let` writes checks clean.
     assert!(diags("module m\nlet N: Int = 3\nfn main() { }\n").is_empty());
+}
+
+#[test]
+fn a_name_in_another_script_is_refused_once_as_a_name() {
+    let d = diags("module m\nfn 计算(x: Int) -> Int {\n    x + 1\n}\nfn main() {\n    let café = 计算(1)\n}\n");
+    let words: Vec<&String> = d.iter().filter(|(c, _)| *c == "DL0101").map(|(_, m)| m).collect();
+    assert_eq!(words.len(), 3, "one refusal per word written, each where it is: {d:?}");
+    assert!(words.iter().all(|m| m.contains("is not a name: identifiers are ASCII")), "{d:?}");
+    assert!(words.iter().any(|m| m.starts_with("`计算`")) && words.iter().any(|m| m.starts_with("`café`")), "{d:?}");
+    assert!(!d.iter().any(|(c, _)| *c == "DL0201"), "no name is missing after it: {d:?}");
+}
+
+#[test]
+fn where_an_expression_could_not_be_read_its_placeholder_draws_no_refusal() {
+    // 200 `if`s deep: DL0210 and DL0213 say it, and nothing says the condition is an `Int`. Checked on a stack as large as
+    // the CLI's `delulu-main` gives it: a debug build's test thread (2 MiB) is not where this depth is meant to be read.
+    let deep = format!("module m\nfn main() {{\n{}1{}\n}}\n", "if true {\n".repeat(200), "\n}".repeat(200));
+    let d = std::thread::Builder::new().stack_size(512 << 20).spawn(move || diags(&deep)).unwrap().join().unwrap();
+    assert!(d.iter().any(|(c, _)| *c == "DL0210"), "{d:?}");
+    assert!(!d.iter().any(|(c, _)| *c == "DL0408"), "the placeholder is no `Int`: {d:?}");
+    // An expression missing where a condition goes.
+    let d = diags("module m\nfn f() -> Int {\n  if ) {\n    1\n  } else {\n    2\n  }\n}\nfn main() { }\n");
+    assert!(d.iter().any(|(c, _)| *c == "DL0202"), "{d:?}");
+    assert!(!d.iter().any(|(c, _)| *c == "DL0408"), "{d:?}");
 }

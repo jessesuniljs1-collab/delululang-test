@@ -202,6 +202,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         too_large_at: None,
         var_names: VarNames::default(),
         const_types: HashMap::new(),
+        recovered: module.recovered.iter().copied().collect(),
     };
     // BEFORE anything lowers a type: validate the alias declarations themselves. Cycles must be
     // known first (`lower_type` expands an alias by recursing, so a cycle is a stack overflow, not a
@@ -421,6 +422,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         too_large_at: None,
         var_names: VarNames::default(),
         const_types: HashMap::new(),
+        recovered: std::collections::HashSet::new(),
     };
     let ty = checker.lower_type(t, &Genv::default(), &mut FnFacts::default());
     if let Some(d) = checker.diags.iter().find(|d| d.is_error()) {
@@ -470,6 +472,8 @@ struct Checker<'a> {
     /// Each top-level constant's type, as its value was checked (CONST-UNCHECKED-1): an unannotated constant has one
     /// type at every use, not a fresh one per use.
     const_types: HashMap<String, Type>,
+    /// The parser's placeholders (`Module::recovered`, C13): each is typed unknown, its parse error already said.
+    recovered: std::collections::HashSet<NodeId>,
 }
 
 /// Rigid generics' declared names, by variable number (GENERIC-RIGID-1).
@@ -1520,6 +1524,7 @@ impl<'a> Checker<'a> {
 
     fn check_expr_inner(&mut self, e: &Expr, ctx: &mut FnCtx) -> (Type, RowAcc) {
         match e {
+            Expr::Lit { id, .. } if self.recovered.contains(id) => (self.cx.fresh_type(), RowAcc::default()),
             Expr::Lit { kind, .. } => (self.lit_type(kind), RowAcc::default()),
             Expr::Var { path, span, .. } => (self.check_var(path, *span, ctx), RowAcc::default()),
             Expr::List { items, span, .. } => self.check_list(items, *span, ctx),
