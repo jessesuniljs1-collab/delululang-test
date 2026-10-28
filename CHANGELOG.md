@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `IoErr::Other` says the kind of failure, the same on every OS, 2026-10-29
+
+- **Changed: `IoErr::Other(m)` carries the kind of failure, never the operating system's own message** (D-V2-193, the
+  agent test campaign's B11, RW 6.32). Reading or writing a 300-character file name gave a program *"The filename,
+  directory name, or volume label syntax is incorrect. (os error 123)"* on Windows, in the machine's language, and other
+  words on Linux and macOS. `m` is now the kind of failure, such as `invalid filename` or `is a directory`, on every OS
+  and both engines. The variants are unchanged, and so is when each is chosen.
+
 ## Unreleased — a refused path or URL is quoted as written; a scheme refusal says what the URL lacks, 2026-10-29
 
 - **Fixed: a refused path or URL was quoted with every backslash doubled** (the agent test campaign's B6, RW 6.31).

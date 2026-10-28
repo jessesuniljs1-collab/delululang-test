@@ -5089,3 +5089,36 @@ an ordering question. Its programs drew nothing at random, so this defect stayed
   - M863: a spawn key ignores its spawner's key.
   - M864: `--seed` never sets `main`'s key.
   - M865: a turn's stream is not saved for the next.
+
+## D-V2-193 — `IoErr::Other(m)` carries the kind of failure in the same words on every OS, never the operating system's own message (B11) — TAKEN (head chef, 2026-10-29, under the owner's delegation)
+
+**Question.** A file operation the OS refuses for a reason that has no variant of its own (`NotFound`, `Denied`) is
+`Other(m)`. What is `m`?
+
+**What it was.** Both engines put the OS's own message in `m`. The agent test campaign's least-authority agent (B11,
+2026-10-24) read a 300-character name on Windows and its program received *"The filename, directory name, or volume
+label syntax is incorrect. (os error 123)"*. The same program receives other words on Linux and macOS, and on Windows
+the words are in the machine's language. So:
+- a program that prints or branches on `m` behaves differently by machine;
+- the text tells the program which OS and which language its host runs, which nothing granted it;
+- it was the one refusal text a program received raw. Every other refusal is opaque (`Refused`) or a named variant.
+  For the host's own messages the project already refuses to show raw OS text (C27, D33: `unreadable_paths`,
+  `sandbox_run_cli`).
+
+**Decision.**
+- `m` is the error's kind in Rust's words: `std::io::ErrorKind`'s `Display`, such as `invalid filename`,
+  `is a directory` or `uncategorized error`.
+- `prim::io_other_text` is the one place it is made, and the interpreter and both WASM host sites (read, write) call
+  it.
+- The variants, and when each is chosen, are unchanged. `m` was never specified, by the Stage 1 specification or by
+  the reference, so no promise changes.
+- A kind is less than the OS said: the error number and its sentence are gone. The program never had a use for them that did
+  not tie it to one machine.
+
+**Evidence.**
+- `fault_parity::an_os_refusal_reaches_the_program_in_the_same_words_everywhere` reads and writes a 300-character name
+  under a granted directory, on both engines. It was red before the change, receiving the OS's sentence, and expects
+  `invalid filename` twice.
+- Mutants M894 (the interpreter), M895 (the WASM read) and M896 (the WASM write) bring back `e.to_string()`, and each
+  is killed.
+- The pull request's run checks the same words on Linux and macOS, where a name past 255 bytes is `ENAMETOOLONG`.

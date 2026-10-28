@@ -9899,3 +9899,19 @@ skipped, as on every pull request. It was fast-forwarded onto `master` at `982c4
 - B11, the OS's own error text in `Other(…)`, changes what a program receives on each OS, and gets a milestone of its
   own.
 - B4, B5 and B8 are open in RW 6.31.
+
+## 2026-10-29 — the laptop: `IoErr::Other` says the kind of failure (B11, D-V2-193, RW 6.32)
+
+**Witnessed red first.** `fault_parity::an_os_refusal_reaches_the_program_in_the_same_words_everywhere` reads a
+300-character name under a granted directory. On the code before this change the interpreter's program printed *"The
+filename, directory name, or volume label syntax is incorrect. (os error 123)"*, the OS's sentence, which B11 had
+reported.
+
+**The change** (D-V2-193):
+- `prim::io_other_text` gives an `Other` the error's kind in Rust's words (`invalid filename`).
+- The interpreter's `io_err_for` and both WASM host sites (`read_text`, `write_text`) use it.
+- The variants are unchanged, and so is when each is chosen.
+
+**Gates.** The test reads and writes the name on both engines and expects `invalid filename` twice. Mutants M894–M896
+put `e.to_string()` back at each of the three sites, and each is killed. The pull request's run checks it on Linux and
+macOS, where the name is `ENAMETOOLONG`, which Rust also calls `invalid filename`.

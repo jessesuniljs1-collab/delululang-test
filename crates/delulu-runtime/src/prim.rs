@@ -1285,8 +1285,15 @@ fn io_err_for(e: &std::io::Error) -> Value {
     match e.kind() {
         NotFound => io_err("NotFound"),
         PermissionDenied => io_err("Denied"),
-        _ => Value::variant("Other", vec![Value::str(e.to_string())]),
+        _ => Value::variant("Other", vec![Value::str(io_other_text(e))]),
     }
+}
+
+/// What an `IoErr::Other` says: the kind of failure, in Rust's words (`invalid filename`, `is a directory`), the same on
+/// every OS and both engines. B11 (the agent test campaign): it was the OS's own message, in the machine's language,
+/// with its error number — text a program could branch on and that differed by machine.
+pub fn io_other_text(e: &std::io::Error) -> String {
+    e.kind().to_string()
 }
 /// DL0904 for a path that passed the scope check and then was not inside the grant when it was
 /// opened (FS-RACE-1) — the same code as every other escape, with the reason in the text.
