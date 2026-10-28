@@ -6120,3 +6120,10 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. The papercuts left in RW 6.30 and 6.31.
   3. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — #86's red run, and the scheme sentence keeps its phrase (made on the laptop)
+- Branch: `laptop/net-refusal-names` (#88), a commit on top of `0f86b91`.
+- **What:** see V2_LOG's entry of the same name. `crates/delulu-runtime/src/egress.rs` (`Reason::Scheme`'s sentence),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** land #86 to #88 at #88's head on its green run; then merge `master` into `launch/2.0.0` and dispatch
+  its `everything` run and its release dry run.

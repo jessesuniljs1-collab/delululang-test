@@ -9934,3 +9934,21 @@ function, and so does `authority --within`'s counterexample, so all three say it
 - `wasm_cli::http_on_the_wasm_engine_matches_the_interpreter`.
 
 Mutant M897 restores the placeholder, and all three turn red.
+
+## 2026-10-29 — the laptop: #86's run was red on two tests that read the scheme sentence
+
+#86's pull-request run `40787091697` failed on Ubuntu, macOS and arm64 with the same two tests:
+- `monitor_cli::a_plain_http_fetch_is_the_same_refusal_under_the_daemon` asserts the note contains *"only `https://` is
+  fetched"*;
+- `within_cli::a_request_is_decided_by_its_path_against_the_boundary` asserts that `--within`'s reason contains the
+  same phrase.
+
+B7's new sentence had dropped that phrase. The laptop had run the runtime's tests and `egress_cli`, not those two CLI
+targets.
+
+**The fix**, on top of the stack (#88's branch, so no pushed branch is rewritten): the sentence keeps the phrase. It
+reads *"the URL does not begin with `https://` (lower case, two slashes, then the host): only `https://` is fetched, and
+there is no plain-HTTP path"*. It still says what the URL lacks (B7's test), and both CLI tests pass on the laptop.
+
+#86, #87 and #88 land together at #88's head, on that run's green. #86's and #87's own runs are read and recorded as
+they came out.
