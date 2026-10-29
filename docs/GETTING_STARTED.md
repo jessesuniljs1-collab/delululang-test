@@ -112,6 +112,11 @@ fn at_or(xs: List[Int], i: Int, fallback: Int) -> Int {
 `push` **mutates in place and yields `Unit`** — it is a statement, not an expression. Note the
 binding is `let`: what changes is the list cell, not which list the name refers to.
 
+**A written type with no capability keyword means `val`, read-only, in a `let` as in a parameter.**
+`let out = []` can be pushed to; `let out: List[Int] = []` cannot (DL1604, which points at the type).
+To write the type and keep the write access, say so: `let out: ref List[Int] = []`. The same holds for
+a `Map`: `let m: ref Map[Str, Int] = Map()`.
+
 ```delulu
 fn evens_up_to(n: Int) -> List[Int] {
     let out = []

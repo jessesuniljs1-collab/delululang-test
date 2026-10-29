@@ -6156,3 +6156,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** land #89, then this pull request; merge `master` into `launch/2.0.0` and dispatch its
   `everything` run and its release dry run; the papercuts left (A5, A7, A8, A13; B5, B8; C9, C11).
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a `Map` lookup on the WASM engine copies nothing: A5 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-map-keys` (on `laptop/depth-bound-docs` `c5feb63`, #90)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #89 landed at `31d26bc` (run `40791344842`).
+- Files and folders: M `crates/delulu-wasm/src/host.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.36),
+  `docs/for-agents.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A
+  `crates/delulu-wasm/tests/map_steps.rs`. Deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #90, then this pull request, each on green. Merge `master` into `launch/2.0.0`, then dispatch its `everything`
+     run and its release dry run.
+  2. C6: an annotated `let` makes a list or a map read-only (DL1604); reproduced again while measuring this.
+  3. The papercuts left: A7, A8, A13; B5, B8; C9, C11.
+- Survey and doctor (after the last edit): in the commit message.
