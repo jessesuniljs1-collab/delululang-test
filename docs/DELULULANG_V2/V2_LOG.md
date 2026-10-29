@@ -9986,3 +9986,19 @@ checker typed it `Int`. `if` then refused its condition at the place the parse e
 - C14 is kept. NE-07 made `remove_effect_from_row` carry `safe` (it narrows authority, never widens it) and
   `requires_human` (whether to narrow a published row is the author's call) as two answers to two questions. The human
   line shows both, and `check --json` carries both as fields.
+
+## 2026-10-29 — the laptop: the WASM engine's call depth, measured and documented (A4, RW 6.35)
+
+A4 had both engines' exit codes for `rec(n)`: the interpreter refused at 10,000 frames, a bound documented and not
+configurable, and the WASM engine refused somewhere between 12,000 and 30,000, a bound stated nowhere.
+
+Measured on the laptop with the release binary, by bisection, using the builder's one-parameter `rec`:
+- `--engine wasm` ran 16,351 calls deep and was refused by 16,448, DL0905 *"recursion depth exceeded (guest stack
+  exhausted)"*: wasmtime's default guest stack;
+- the interpreter refused `rec(10000)`.
+
+The WASM bound is a stack, so it moves with each frame's size. `GETTING_STARTED.md`'s DL0905 row and
+`docs/for-agents.md` now give both bounds, and advise writing a recursion that may go thousands deep as a loop.
+
+One bound for both engines would mean a depth counter in every compiled call, which costs every call. It is not taken,
+and RW 6.35 says so.

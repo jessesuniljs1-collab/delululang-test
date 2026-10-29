@@ -475,7 +475,7 @@ enforced, and easy to meet once you know it.
 | `DL0307` "not a capability resource kind" | You wrote an effect name in `Cap[…]`. See §6. |
 | `DL0501` "performs effect Async" in a `be` | A behavior that sends to another actor must declare `! {Async}`. |
 | `DL0208` on a perfectly good `import` | Imports go before the first item. |
-| `DL0905` at runtime | Recursion passed the interpreter's bound of **10,000** frames. It is not configurable. |
+| `DL0905` at runtime | Recursion passed the interpreter's bound of **10,000** frames. It is not configurable. On `--engine wasm` the bound is the guest's stack, so it depends on each frame's size: a one-parameter recursion reached 16,351 calls and was refused by 16,448 (*"guest stack exhausted"*, 2026-10-29). Write a recursion that may go that deep as a loop. |
 | `DL0703` at runtime | You did not grant the capability. The message now tells you the exact flag. |
 | `DL0107` "bidirectional control character" | Your source (often pasted or AI-generated) contains an invisible text-reordering character that can make code render differently than it runs. It is refused, not warned. If a *string* truly needs the code point, write it as `\u{202e}`. |
 | Integer result is wrong | It is not — overflow is `DL0901` and aborts. Arithmetic is checked, not wrapping. |

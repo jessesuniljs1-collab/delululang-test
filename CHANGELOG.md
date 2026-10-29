@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the WASM engine's call depth is documented, 2026-10-29
+
+- **Docs: how deep a recursion runs on each engine** (the agent test campaign's A4, RW 6.35). The interpreter's
+  bound, 10,000 frames, was documented; the WASM engine's was not. Its bound is the guest's stack, so it depends on each
+  frame's size: a one-parameter recursion ran 16,351 calls deep and was refused by 16,448. `GETTING_STARTED.md` and
+  `docs/for-agents.md` now say so, with the advice to write such a recursion as a loop.
+
 ## Unreleased — a name in another script, and a missing expression, are each refused once, 2026-10-29
 
 - **Improved: a name written in another script is refused once, as a name** (the agent test campaign's C12, RW 6.34).
