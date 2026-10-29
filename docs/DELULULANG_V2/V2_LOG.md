@@ -10076,3 +10076,79 @@ and the six reference capabilities read the same in a `let` as in a parameter.
 - `unknown_receiver` checks the hint's `let m: ref Map[`.
 - `cargo test -p delulu-check` (10 targets) and `-p delulu-diag` passed; `core_invariance` passed with the snapshot
   unchanged.
+
+## 2026-10-29 — on-demand routine run 7: a stopped daemon is not its monitor's silence (DEADMAN-DEAF-1, D-V2-194; RW 4.87, 7.25)
+
+**Read first.** Opus 5.5 at xhigh: `CLAUDE_EFFORT=xhigh`, and every reply in the transcript `"effort":"xhigh"`. One branch was
+ahead of `master`: `laptop/val-by-type` (#92, C6), green on its run `40921845188` (14 jobs success, 2 skipped). Its two
+autosave snapshots were checked against it: `1667859` landed whole in `579f60d`, and `59df027` is an earlier draft of the
+same paths. #92 was fast-forwarded onto `master` at `579f60d`, and its push run `40954259791` read green (14 jobs, 2
+skipped). The Survey and `doctor` were healthy at the start. The session's harness refused to delete `laptop/val-by-type`
+from `origin`, so the branch is left for the laptop.
+
+**The red.** `master`'s push run `40793268946` on `31d26bc` failed `test (macos-latest)` (job `123183433447`) in
+`monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`. Six periods into the watch, the monitor (over 101,251
+records, one whole read 1.45 s) and the run under it were revoked at seq 101258, the record right after the delegation
+the test made at four periods. The message named the nodes' states and nothing else, so it could not tell three causes
+apart:
+- (a) the monitor not scheduled for a period, which is what a dead-man is for;
+- (b) the monitor stopped on an error, since every error ends the watch and leaves its dead-man armed (by design), and
+  it fires one period later;
+- (c) the daemon.
+
+It was not reproduced in the VM: 3 of 3 green on a quiet VM, and 6 of 6 beside four copies of the whole `monitor_cli`
+target (load average 7 on 4 CPUs).
+
+**The class, asked of each party in turn.** A monitor stopped for longer than its period is revoked
+(`a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes`), by design. Nobody had stopped the DAEMON. Stopped with
+`SIGSTOP` for three periods while the monitor beat, it revoked the monitor (73 beats counted) and its run, and told the
+monitor *"this monitor sent no beat within 500 ms"*, which was false. Red 3 of 3 on the old `brokerd.rs`. The mechanism:
+DEADMAN-BUSY-1 (D-V2-127) stamps each request's arrival on a reader thread of its own, so a held handler no longer counts
+against a holder. But that thread is the daemon's. A daemon that is not running stamps the beats waiting in its socket
+only when it runs again, after their deadline, and the serve loop, woken by its own timeout, can judge before the reader
+threads have run at all.
+
+**The fix (D-V2-194, `brokerd.rs`).**
+- A hearing clock: monotonic time that stands still while the daemon could not hear.
+- While a dead-man is armed, a thread of its own looks at the time every 10 ms. A gap past 50 ms is deaf time, and the
+  clock leaves it out. Until the thread looks again, the time since its last look past the slack is left out too, so a
+  judgment made the moment the daemon resumes already leaves the pause out.
+- Every instant a dead-man is judged by reads this clock: the arming (listening before the dead-man exists), its first
+  period, a beat's and a disarm's arrival, the loop's wait, and its as-of.
+- `broker.log` names each gap of 100 ms or more. The wall clock stays for `broker.log`'s late-answer lines.
+- With nothing armed the thread sleeps, so an idle daemon still never wakes.
+- A holder that is itself stopped is still dead: its dead-man fires one period of hearing after its last beat.
+
+**Whether (c) was the macOS red** is not known, and cannot be now: the run kept no evidence. A macOS runner (3 cores,
+7 GB) running `monitor_cli`'s tests three at a time beside a 33 MB chain is a host on which a process can go
+unscheduled, and (a) is as possible as (c). What changed is that the next red says which. Both witnesses print the
+monitor's exit status and standard error (its `ended` line) and `broker.log`: a dead-man's firing with the beats it
+counted, a late answer, and now the daemon's own deaf interval.
+
+**Gates.**
+- `monitor_cli` `a_stopped_daemon_is_not_its_monitors_silence` (unix): the daemon stopped for three periods, and the
+  monitor and its run stay live. The daemon's `broker.log` names its stop, so the witness looked. Then the monitor is
+  killed and its dead-man still fires, read about 500 ms later (514, 540, 502 ms), so a clock left standing still cannot
+  pass. Red 3 of 3 on the old `brokerd.rs`.
+- `brokerd` `hearing_tests` (4): a gap is deaf time; a stale look already leaves the stop out; a clock that is not
+  listening counts nothing; and over 200 generated histories (80,000 reads, over a thousand stops) the clock is monotone
+  and never faster than the wall. Plus `an_arming_is_answered_with_the_hearing_clock_listening`.
+- Mutants M908–M915, each red, control green:
+  - M908, no stale look: two `hearing_tests`;
+  - M909, no deaf time added: the witness;
+  - M910, listening counts its sleep: two `hearing_tests`;
+  - M911, the loop's as-of by the wall: the witness;
+  - M912, a beat's arrival by the wall: the witness;
+  - M913, never listening: the witness;
+  - M914, the arming's own listen removed: it survived `monitor_cli`, since a window of microseconds before the loop's
+    next turn is one no process-level witness can hold, and is killed by the handler test written for it;
+  - M915, a hearing thread that never looks: the witness, whose killed monitor then never fires.
+- `scripts/clippy.sh -j 4` clean; `scripts/check-other-os.sh x86_64-pc-windows-msvc aarch64-apple-darwin` clean.
+- `witness.yml` with every `delulu` test target at `1f5206c` on the branch:
+  - macOS `40958776212`: success, 1,088 passed, 0 failed (101 binaries; the witness and the clock's tests named);
+  - Windows `40958779882`: success, 1,055 passed, 0 failed (the clock's tests and the long-chain witness named; the stop
+    witness is unix-only).
+- The full suite in the VM: 2,600 passed, 0 failed, 16 ignored, 189 binaries (`scripts/suite.sh`, `EXIT=0`, the tree
+  unmoved).
+- `master`'s push run on `1f5206c`: `40960549621`, green, 14 jobs success and 2 skipped. `actors_pingpong` NOT MEASURED
+  on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads, 1.58x observed).

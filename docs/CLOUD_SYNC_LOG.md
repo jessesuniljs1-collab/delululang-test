@@ -6186,3 +6186,61 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. Merge `master` into `launch/2.0.0`, then dispatch its `everything` run and its release dry run.
   3. The papercuts left: A7, A8, A13; B5, B8; C9, C11.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — on-demand routine run 7: a stopped daemon is not its monitor's silence (DEADMAN-DEAF-1, D-V2-194); #92 landed
+- Session: `https://claude.ai/code/session_01Deh6W7wLbUEtPrWETiDqD4`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with
+  step 0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); the code slice went to
+  `claude/peaceful-carson-zmpprn` first, for its runner reads, and `master` was fast-forwarded to it. Pull request: none.
+- Base: `15c977d` (`master` at the start); `579f60d` once #92 landed.
+- **The milestone, named before building:** `master`'s macOS red in `monitor_cli`
+  `a_long_chain_does_not_kill_a_healthy_monitor` (push run `40793268946`, job `123183433447`), root-caused with evidence,
+  its class's defect witnessed red, fixed, read on the three runners, the suite green, recorded. **Delivered:** the red's
+  message held no evidence, and the run kept none, so its own cause stays unknown (RW 7.25). Asking its class of each party
+  in turn found a real defect, **DEADMAN-DEAF-1** (RW 4.87): a daemon stopped for three periods revoked a healthy monitor
+  that had beaten 73 times, red 3 of 3. Every dead-man instant is now read from a hearing clock that stands still while
+  the daemon was not running (D-V2-194). The witnesses now print the evidence, so the next red says which party it was.
+- **Housekeeping:** `laptop/val-by-type` (#92, C6) was the one branch ahead of `master`, green on `40921845188` (14
+  jobs); its autosave snapshots checked (`1667859` landed whole, `59df027` an earlier draft). Fast-forwarded onto
+  `master` at `579f60d`; push run `40954259791` read green (14 jobs, 2 skipped). The Survey and `doctor` were healthy at
+  the start (1567 nodes, 17419 edges; all checks passed). `gh` is installed with an invalid `GH_TOKEN` (as run 10 found);
+  CI was read with the REST API and the GitHub MCP tools.
+- Commits: `1f5206c` (the fix, its witnesses and the evidence helper), this entry's commit (these records).
+- Files and folders: M `crates/delulu/src/brokerd.rs` (the hearing clock, `handle`'s clock, the serve loop;
+  `hearing_tests`, `an_arming_is_answered_with_the_hearing_clock_listening`), `crates/delulu/tests/monitor_cli.rs`
+  (`a_stopped_daemon_is_not_its_monitors_silence`, `revoked_monitor_evidence`, the long-chain witness's message),
+  `CHANGELOG.md`, `docs/DEPLOYMENT.md` (the monitor's dead-man counts what the broker could hear),
+  `docs/REMAINING_WORK.md` (rows 4.87, 7.25), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-194),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 15), `HANDOFF.md` (§11.4, §11.5),
+  `docs/assistant-memory/delulu-ipc-deadman-findings.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_ROUTINE.md`
+  (step 5: stop each party of a watchdog in turn), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - #92's `40921845188` (green) and `master`'s `40954259791` on `579f60d` (green).
+  - `witness.yml` with every `delulu` target at `1f5206c`: macOS `40958776212` success, 1,088 passed, 0 failed (101
+    binaries; the witness and the clock's tests named); Windows `40958779882` success, 1,055 passed, 0 failed (the
+    clock's tests and the long-chain witness named; the stop witness is unix-only).
+  - The full suite in the VM: 2,600 passed, 0 failed, 16 ignored, 189 binaries (`scripts/suite.sh`, `EXIT=0`, the tree
+    unmoved).
+  - `master`'s push run on `1f5206c`: `40960549621`, green, 14 jobs success and 2 skipped. `actors_pingpong` NOT
+    MEASURED on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads, 1.58x observed). On this entry's
+    commit: Open / next 1.
+- **Loop engineering:** `docs/CLOUD_ROUTINE.md` step 5 gains *a watchdog's once-seen red: stop each party in turn*.
+  `kill -STOP` holds a window open where load only makes it likelier, and the witness prints each party's words first.
+- **Redo on the laptop:** delete `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` from `origin`. Both are in
+  `master`'s history, and this session's harness refused its `git push --delete`.
+- For the laptop's memory: `HANDOFF.md` §11.4 (DEADMAN-DEAF-1, never softened back to wall-time arrival) and §11.5
+  (a once-seen red that names only its verdict: print the evidence, then stop each party); the dead-man topic in
+  `docs/assistant-memory/`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's commit (records only; the code's run `40960549621` is green).
+  2. Merge `master` into `launch/2.0.0` (`docs/CLOUD_ROUTINE.md` step 4.3), then dispatch its `everything` run and its
+     release dry run. It is at `e998373`, and `master` holds 12 commits it lacks.
+  3. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, its message now says whether the monitor
+     stopped on an error, beat late, or the daemon did not run (`broker.log`'s *"did not run for"*). Read it before
+     sampling anything.
+  4. The papercuts left: A7, A8, A13; B5, B8; C9, C11 (RW 6.30–6.34; the ledger on `origin/autosave/dogfood`).
+  5. *[laptop]* the launch, only on the owner's word.

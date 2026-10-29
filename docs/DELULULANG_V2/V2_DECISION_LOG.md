@@ -5122,3 +5122,52 @@ the words are in the machine's language. So:
 - Mutants M894 (the interpreter), M895 (the WASM read) and M896 (the WASM write) bring back `e.to_string()`, and each
   is killed.
 - The pull request's run checks the same words on Linux and macOS, where a name past 255 bytes is `ENAMETOOLONG`.
+
+## D-V2-194 — DEADMAN-DEAF-1: a dead-man counts its holder's silence only while the daemon could hear it — every dead-man instant is read from a hearing clock that stands still while the daemon was not running — TAKEN (head chef, 2026-10-29, under the owner's delegation)
+
+**Question.** D-V2-127 decided that a dead-man counts its holder's silence, never the daemon's, and stamped each
+request's arrival on a reader thread of its own. What does a dead-man count while the whole daemon is not running?
+
+**What it was.** The silence, in wall time. The reader threads are the daemon's, so a daemon that was stopped (`SIGSTOP`,
+a debugger), swapped out, or not scheduled on a busy host stamped the beats that had waited in its socket when it ran
+again, after their deadline. The serve loop, woken by its own timeout, could also judge before any reader thread had run.
+A stop of three periods revoked a healthy monitor that had beaten 73 times, and the run under it, and told the monitor it
+"sent no beat" (`monitor_cli` `a_stopped_daemon_is_not_its_monitors_silence`, red 3 of 3). It was found while
+root-causing a once-seen macOS red (RW 7.25) whose message held no evidence.
+
+**Decision.**
+- The daemon keeps a hearing clock: monotonic time that stands still while the daemon could not hear. Every instant a
+  dead-man is judged by reads it: the arming, the first period's start, a beat's and a disarm's arrival, the serve loop's
+  wait for its next request, and the as-of its firing is judged by.
+- While a dead-man is armed a thread of the daemon looks at the time every 10 ms (`HEARING_TICK`). A gap between two
+  looks past 50 ms (`HEARING_SLACK`) is deaf time, and the clock leaves it out. Until the thread looks again, the time
+  since its last look past the slack is left out too, so a judgment made the moment the daemon resumes (before the
+  thread has run) already leaves the pause out. The clock is continuous and never runs faster than the wall.
+- The clock listens from just before an arming is decided, and sleeps once no dead-man is armed, so an idle daemon still
+  never wakes. Starting to listen counts nothing before it as deaf.
+- `broker.log` names every gap of 100 ms (`deadman::MIN_PERIOD`) or more: *"this daemon did not run for N ms"*. That
+  line is the evidence that tells a daemon's stop from a holder's silence in a red run.
+
+**Not changed.**
+- D-V2-106's rules: a beat that arrived after its deadline rescues nothing, and a stream of requests cannot hold an
+  unbeaten dead-man off. Both now hold in hearing time.
+- D-V2-127's rules: a beat and a disarm are judged by their arrival, and a beat's next period starts when it is answered.
+- A holder that is itself stopped or dead is revoked one period of hearing after its last beat
+  (`a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes`, unchanged, and the new witness's killed monitor).
+- `broker.log`'s late-answer lines keep the wall clock, since they measure what a client waited.
+
+**What it gives up, bounded.**
+- While the daemon cannot hear, no dead-man fires. Nothing under its custody proceeds either, because every use under
+  the daemon's custody asks the daemon.
+- A truly dead holder's firing is delayed by the time the daemon was stopped past the slack, never more.
+- On a host that starves the whole daemon, the clock runs slow by what the hearing thread waited past its slack.
+- Not covered: one reader thread starved while the rest of the daemon runs. That is D-V2-127's window of microseconds
+  between a request read whole and its stamp, unchanged.
+
+**Evidence.**
+- The witness above: green with the fix, its daemon's log naming the stop, and its killed monitor still revoked about
+  500 ms later.
+- `brokerd` `hearing_tests` (4 tests, one over 200 generated histories) and
+  `an_arming_is_answered_with_the_hearing_clock_listening`.
+- Mutants M908 to M915 are each red, M914 by the handler test written for it. The runners: macOS `40958776212`, Windows
+  `40958779882`, with every `delulu` test target.

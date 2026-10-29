@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a stopped broker daemon no longer revokes a healthy monitor, 2026-10-29
+
+- **Fixed: a broker daemon that was stopped or not scheduled revoked every monitor whose dead-man it held, and every run
+  under them** (DEADMAN-DEAF-1, D-V2-194). A dead-man judged each beat by when the daemon read it. So beats a healthy
+  monitor sent while the daemon was not running (stopped, swapped out, or not scheduled on a busy host) counted as late,
+  and the monitor was told it "sent no beat". A dead-man now counts only the time the daemon could hear, and a stop is
+  left out of every period. A monitor that is itself stopped or killed is still revoked one period after its last beat.
+- **Added: `broker.log` names each time the daemon did not run for 100 ms or more** while a dead-man is armed.
+
 ## Unreleased — a write refused through a written type says the type made it `val`, 2026-10-29
 
 - **Improved: a write refused because a `let`'s written type made it `val` says so, at the type** (the agent test
