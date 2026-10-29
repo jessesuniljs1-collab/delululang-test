@@ -10,6 +10,8 @@
 //! - C12: a name in another script (`fn 计算`) was refused a character at a time, then again by the parser as a missing name;
 //! - C13: where the parser could not read an expression, the `0` it put there was typed `Int`, so a condition 200 `if`s deep
 //!   was also refused "`if` condition must be Bool" at the place DL0210 had already named.
+//!
+//! And C6: a write refused through a binding that is `val` by its written type now says that the type made it so.
 
 use delulu_check::check_source;
 
@@ -99,4 +101,31 @@ fn where_an_expression_could_not_be_read_its_placeholder_draws_no_refusal() {
     let d = diags("module m\nfn f() -> Int {\n  if ) {\n    1\n  } else {\n    2\n  }\n}\nfn main() { }\n");
     assert!(d.iter().any(|(c, _)| *c == "DL0202"), "{d:?}");
     assert!(!d.iter().any(|(c, _)| *c == "DL0408"), "{d:?}");
+}
+
+/// C6 (the zero-authority agent): `let b: List[Int] = []` then `b.push(2)` was refused "cannot mutate through a `val`
+/// reference", though nothing in the program said `val` — the written type did, by naming no reference capability.
+#[test]
+fn a_write_refused_through_a_written_type_names_the_type() {
+    let src = "module m\nfn main() {\n    let b: List[Int] = []\n    b.push(2)\n}\n";
+    let d = check_source(0, src).diagnostics.into_iter().find(|d| d.code == "DL1604").expect("DL1604 at the write");
+    assert!(d.message.contains("`b`'s written type names no reference capability"), "{}", d.message);
+    assert!(d.message.contains("let b: ref"), "the remedy: {}", d.message);
+    let at = d.spans.iter().find(|s| s.secondary).expect("a second span, at the type");
+    assert_eq!(&src[at.span.start as usize..at.span.end as usize], "List[Int]", "{:?}", d.spans);
+    assert_eq!(at.label.as_deref(), Some("`b` is `val` by this type"));
+    // `ref` keeps the write; leaving the type out does too.
+    for ok in ["let b: ref List[Int] = []", "let b = []"] {
+        let d = diags(&format!("module m\nfn main() {{\n    {ok}\n    b.push(2)\n}}\n"));
+        assert!(d.is_empty(), "{ok}: {d:?}");
+    }
+    // A `val` written in words needs no reason given.
+    let d = diags("module m\nfn main() {\n    let b: val List[Int] = []\n    b.push(2)\n}\n");
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").expect("DL1604");
+    assert!(!m.contains("written type"), "{m}");
+    // A binding `val` by its type and then passed to a `val` parameter was `val` before the call: the type is the reason.
+    let d =
+        diags("module m\nfn keep(xs: List[Int]) { }\nfn main() {\n    let b: List[Int] = []\n    keep(b)\n    b.push(2)\n}\n");
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").expect("DL1604");
+    assert!(m.contains("written type") && !m.contains("became `val`"), "{m}");
 }

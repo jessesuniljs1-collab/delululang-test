@@ -72,16 +72,17 @@ struct Binding {
     /// and silently demoting it would override an annotation — which is the class of behaviour this
     /// language exists to refuse. Such a binding keeps its annotation and its DL1603.
     rcap_written: bool,
-    /// The call that lifted this binding to `val` (C64), if one did: a later refused write names it (A1).
-    lifted: Option<Lift>,
+    /// Why this binding is `val` when nothing wrote `val`, if that is so: a later refused write names it.
+    why_val: Option<WhyVal>,
 }
 
-/// Where a binding was lifted to `val` at a call (C64): the argument, the callee, and its parameter.
+/// Why a binding is `val` though no `val` was written for it.
 #[derive(Clone)]
-struct Lift {
-    at: Span,
-    callee: String,
-    param: String,
+enum WhyVal {
+    /// A call lifted it to `val` (C64) — the argument, the callee and its parameter (A1).
+    Lift { at: Span, callee: String, param: String },
+    /// Its written type names no reference capability, which reads as `val` (C6) — the type as written.
+    Written { at: Span },
 }
 
 pub fn check_rcaps(
@@ -287,7 +288,7 @@ impl<'a> Pass<'a> {
         for (i, p) in f.params.iter().enumerate() {
             let ty = sig_params.get(i).cloned();
             let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false, lifted: None });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false, why_val: None });
         }
         let ret_dest = f.ret.as_ref().and_then(|r| r.written_rcap()).or_else(|| match self.fn_types.get(&f.name.name) {
             Some(Type::Fn { ret, .. }) => self.default_of(ret),
@@ -306,7 +307,7 @@ impl<'a> Pass<'a> {
         let rcap = self.default_of(&root);
         self.bind(
             "test_root",
-            Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+            Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None, rcap_written: false, why_val: None },
         );
         let ret_dest = self.default_of(&Type::Unit);
         self.walk_block_with_tail(&t.body, ret_dest, false);
@@ -397,7 +398,7 @@ impl<'a> Pass<'a> {
                 fresh_lift: None,
                 consumed: None,
                 rcap_written: false,
-                lifted: None,
+                why_val: None,
             },
         );
         let key = format!("{actor}.{member}");
@@ -408,7 +409,7 @@ impl<'a> Pass<'a> {
         for (i, p) in params.iter().enumerate() {
             let ty = sig_params.get(i).cloned();
             let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false, lifted: None });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false, why_val: None });
         }
         let ret_dest = has_ret
             .then(|| match self.fn_types.get(&key) {
@@ -534,9 +535,15 @@ impl<'a> Pass<'a> {
                         self.mark_escaped(&path.segs[0].name);
                     }
                 }
+                // C6 (the agent test campaign): `let b: List[Int] = []` is `val` by its written type, where `let b = []` is
+                // `ref`; a refused write through it says so, at the type.
+                let why_val = match (written, annotated_default, ty) {
+                    (None, Some(Rcap::Val), Some(t)) => Some(WhyVal::Written { at: t.span() }),
+                    _ => None,
+                };
                 self.bind(
                     &name.name,
-                    Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some(), lifted: None },
+                    Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some(), why_val },
                 );
             }
             Stmt::Assign { target, value, span } => {
@@ -588,7 +595,7 @@ impl<'a> Pass<'a> {
                 self.push_scope();
                 self.bind(
                     &var.name,
-                    Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+                    Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false, why_val: None },
                 );
                 self.walk_block_with_tail(body, None, false);
                 self.pop_scope();
@@ -682,9 +689,12 @@ impl<'a> Pass<'a> {
         let natural = self.lookup(&name).and_then(|b| b.rcap).unwrap_or(Rcap::Ref);
         // The caller gives up write access here. This is the load-bearing half.
         if let Some(b) = self.lookup_mut(&name) {
+            // A binding already `val` by its written type keeps that reason: the call took nothing from it.
+            if b.rcap != Some(Rcap::Val) {
+                b.why_val = Some(WhyVal::Lift { at: arg.span(), callee: callee.to_string(), param: param.to_string() });
+            }
             b.rcap = Some(Rcap::Val);
             b.fresh_lift = None;
-            b.lifted = Some(Lift { at: arg.span(), callee: callee.to_string(), param: param.to_string() });
         }
         K::Fresh { natural, lift_val, lift_iso, blame: None }
     }
@@ -778,11 +788,11 @@ impl<'a> Pass<'a> {
     }
 
     /// The binding at the root of a receiver (`xs`, `p.q`, `p.items`), and the call that lifted it to `val`, if one did.
-    fn lift_of_expr(&self, e: &Expr) -> Option<(String, Lift)> {
+    fn lift_of_expr(&self, e: &Expr) -> Option<(String, WhyVal)> {
         match e {
             Expr::Var { path, .. } if path.segs.len() == 1 => {
                 let name = &path.segs[0].name;
-                self.lookup(name).and_then(|b| b.lifted.clone()).map(|l| (name.clone(), l))
+                self.lookup(name).and_then(|b| b.why_val.clone()).map(|w| (name.clone(), w))
             }
             Expr::Field { recv, .. } | Expr::Index { recv, .. } => self.lift_of_expr(recv),
             _ => None,
@@ -790,16 +800,16 @@ impl<'a> Pass<'a> {
     }
 
     /// [`Self::lift_of_expr`] for an assignment's target.
-    fn lift_of_lvalue(&self, lv: &LValue) -> Option<(String, Lift)> {
+    fn lift_of_lvalue(&self, lv: &LValue) -> Option<(String, WhyVal)> {
         match lv {
-            LValue::Var(id) => self.lookup(&id.name).and_then(|b| b.lifted.clone()).map(|l| (id.name.clone(), l)),
+            LValue::Var(id) => self.lookup(&id.name).and_then(|b| b.why_val.clone()).map(|w| (id.name.clone(), w)),
             LValue::Field(base, _) | LValue::Index(base, _) => self.lift_of_lvalue(base),
         }
     }
 
     /// `lift`: the receiver's binding and the call that lifted it to `val` (C64), which the refusal names (A1). Without
     /// it the write was refused at the write alone, and nothing pointed at the call that took the write access away.
-    fn require_writable_receiver(&mut self, k: K, span: Span, what: &str, lift: Option<(String, Lift)>) {
+    fn require_writable_receiver(&mut self, k: K, span: Span, what: &str, lift: Option<(String, WhyVal)>) {
         let refusal = match k {
             K::Known(kk) | K::Unaliased(kk) => {
                 if can_write(kk) {
@@ -824,16 +834,24 @@ impl<'a> Pass<'a> {
         };
         if let Some(msg) = refusal {
             let d = match lift {
-                Some((name, l)) => {
+                Some((name, WhyVal::Lift { at, callee, param })) => {
                     let msg = format!(
-                        "{msg}: `{name}` became `val` where it was passed to `{}`'s parameter `{}`, which is `val` and may \
-                         keep it. If `{}` only reads it, declare that parameter `box`, which reads a `ref` without keeping \
-                         it; otherwise write before the call",
-                        l.callee, l.param, l.callee
+                        "{msg}: `{name}` became `val` where it was passed to `{callee}`'s parameter `{param}`, which is `val` \
+                         and may keep it. If `{callee}` only reads it, declare that parameter `box`, which reads a `ref` \
+                         without keeping it; otherwise write before the call"
                     );
                     Diagnostic::error("DL1604", msg)
                         .with_span(span, "write refused")
-                        .with_secondary_span(l.at, format!("`{name}` became `val` here"))
+                        .with_secondary_span(at, format!("`{name}` became `val` here"))
+                }
+                Some((name, WhyVal::Written { at })) => {
+                    let msg = format!(
+                        "{msg}: `{name}`'s written type names no reference capability, which reads as `val`. Write `ref` \
+                         before it to write through `{name}` (`let {name}: ref …`), or leave the type out"
+                    );
+                    Diagnostic::error("DL1604", msg)
+                        .with_span(span, "write refused")
+                        .with_secondary_span(at, format!("`{name}` is `val` by this type"))
                 }
                 None => Diagnostic::error("DL1604", msg).with_span(span, "write refused"),
             };
@@ -1368,7 +1386,7 @@ impl<'a> Pass<'a> {
                     let rcap = p.ty.written_rcap();
                     self.bind(
                         &p.name.name,
-                        Binding { rcap, ty: None, fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+                        Binding { rcap, ty: None, fresh_lift: None, consumed: None, rcap_written: false, why_val: None },
                     );
                 }
                 self.walk_block_with_tail(body, None, false);
@@ -1443,7 +1461,7 @@ impl<'a> Pass<'a> {
             Pattern::Bind(id) => {
                 self.bind(
                     &id.name,
-                    Binding { rcap: None, ty: None, fresh_lift: None, consumed: None, rcap_written: false, lifted: None },
+                    Binding { rcap: None, ty: None, fresh_lift: None, consumed: None, rcap_written: false, why_val: None },
                 );
             }
             Pattern::Variant { fields, .. } => {

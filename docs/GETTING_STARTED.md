@@ -112,6 +112,11 @@ fn at_or(xs: List[Int], i: Int, fallback: Int) -> Int {
 `push` **mutates in place and yields `Unit`** — it is a statement, not an expression. Note the
 binding is `let`: what changes is the list cell, not which list the name refers to.
 
+**A written type with no capability keyword means `val`, read-only, in a `let` as in a parameter.**
+`let out = []` can be pushed to; `let out: List[Int] = []` cannot (DL1604, which points at the type).
+To write the type and keep the write access, say so: `let out: ref List[Int] = []`. The same holds for
+a `Map`: `let m: ref Map[Str, Int] = Map()`.
+
 ```delulu
 fn evens_up_to(n: Int) -> List[Int] {
     let out = []
@@ -468,6 +473,7 @@ enforced, and easy to meet once you know it.
 | `DL0401` expected `List[Int]`, found `Unit` | `push` mutates and returns `Unit`; it is a statement. |
 | `DL1603` `ref` where `val` is required | A list you annotated `let xs: ref List[Int]` was passed to a parameter, and parameters default to `val`. Take `box List[Int]` if the function only reads it, or `ref List[Int]` if it writes. |
 | `DL1604` on a `push` or a field write, after a call | A `let`-bound literal you did not annotate becomes `val` when you pass it to a `val` parameter, because the callee may keep it, so a later write is refused. The error names that call. Take `box List[Int]` in a function that only reads, or write before the call. |
+| `DL1604` on a `push`, "is `val` by this type" | A written type with no capability keyword means `val`: `let xs: List[Int] = []` cannot be pushed to. Write `let xs: ref List[Int] = []`, or leave the type out. |
 | `DL0202` expected an expression, found `)` | There is no `()` literal. Drop the `else` instead. |
 | `DL0201` "a match arm's body is an expression" | Wrap an assignment in a block: `Some(d) => { acc = d }`. |
 | `DL0302` "is a prelude builtin" | You named a function `str`, `len`, `int`, `float`, `parse_int`, `range`, `push`, `load`, `assert`, `assert_eq`, `Ok`, `Err`, `Some`, or `None`. Rename it. |

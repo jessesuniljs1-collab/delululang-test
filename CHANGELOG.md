@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a write refused through a written type says the type made it `val`, 2026-10-29
+
+- **Improved: a write refused because a `let`'s written type made it `val` says so, at the type** (the agent test
+  campaign's C6, RW 6.37). `let b: List[Int] = []` then `b.push(2)` was refused *"cannot write a list element (push)
+  through a `val` receiver"*, though the program wrote no `val`: a written type with no capability keyword means `val`,
+  where `let b = []` is `ref`. The same DL1604 now says that `b`'s written type names no reference capability, points at
+  `List[Int]`, and says to write `let b: ref …` or to leave the type out. What is refused is unchanged.
+- **Changed: the hint for a method on a value whose type is not known writes `ref`** (A12's DL0405). It suggested
+  `let m: Map[Str, List[Str]] = Map()`, which makes the map read-only, so following it led to this DL1604. It now
+  suggests `let m: ref Map[Str, List[Str]] = Map()`.
+- **Docs:** `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` says it.
+
 ## Unreleased — a `Map` lookup on the WASM engine copies nothing, 2026-10-29
 
 - **Improved: `Map` lookups and updates on `--engine wasm` take a quarter of the time** (the agent test campaign's A5, RW

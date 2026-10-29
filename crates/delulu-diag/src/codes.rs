@@ -1239,7 +1239,9 @@ pub fn code_explain(code: &str) -> Option<String> {
              with no capability keyword is one), because the callee may keep it; a later write \
              through it is this error, and it names that call. If the callee only reads, declare its \
              parameter `box`, which reads a `ref` without keeping it; otherwise write before the \
-             call. (A1, the agent test campaign of 2026-10-24.)",
+             call. (A1, the agent test campaign of 2026-10-24.) A `let` whose written type names no \
+             capability keyword is `val` too (`let b: List[Int] = []`), and the error points at that \
+             type: write `let b: ref List[Int] = []` to keep the write, or leave the type out. (C6.)",
         "DL1605" => "A `recover` block cannot reference a non-sendable binding from outside it. \
              `recover` produces a value with a stronger capability than its parts; that is only \
              sound if nothing outside can still reach into it.",

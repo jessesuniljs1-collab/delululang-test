@@ -10035,3 +10035,44 @@ into a `Vec`. That came to 14.31 allocations for each `get` and `insert` against
 
 **Measured** with the release binary: the counting loop takes 285–295 ms on WASM, one run 414 ms. A4's depth
 documentation and this change are stacked on #90.
+
+## 2026-10-29 — the laptop: a write refused through a written type names the type (C6, RW 6.37)
+
+**Read first.** #91 read green on its run `40793604231` (14 jobs success, 2 skipped) and was fast-forwarded onto
+`master` at `15c977d`. #90's push run `40793498011` on `c5feb63` was green. **One red:** `master`'s push run
+`40793268946` on `31d26bc` failed `test (macos-latest)` (job `123183433447`) in `monitor_cli`
+`a_long_chain_does_not_kill_a_healthy_monitor`: six periods into the watch, the monitor over a 101,251-record chain (one
+whole read 1.45 s) had been revoked by its own 500 ms dead-man, with the run and the node minted after the watch began.
+The same test passed on that commit's pull-request run and on `c5feb63`'s push run. It is RW 7.23's class, a wall-clock
+test once red on a runner; it is examined next, on its own.
+
+**What the agent found** (C6, the zero-authority agent, Haiku 5.5, 2026-10-24), and what the laptop met again while
+measuring A5: `let b: List[Int] = []` then `b.push(2)` is refused DL1604 *"cannot write a list element (push) through a
+`val` receiver"*. Nothing in the program says `val`. A written type with no capability keyword takes its type's default,
+`val` for a list or a map, where an unannotated literal is `ref`. A12's hint (RW 6.19) made it likelier: it suggested
+`let m: Map[Str, List[Str]] = Map()`, which a program then could not insert into.
+
+**Kept.** The default is the language's rule, not a papercut: a `val` binding is what makes C64's lift at a call sound,
+and the six reference capabilities read the same in a `let` as in a parameter.
+
+**The change** (`rcap_check.rs`, `check.rs`).
+- A binding records why it is `val` when nothing wrote `val`: `WhyVal::Lift`, A1's call, or `WhyVal::Written`, a `let`
+  whose written type names no capability keyword and whose type's default is `val`.
+- A refused write through a `Written` binding says that `b`'s written type names no reference capability, which reads
+  as `val`, and to write `let b: ref …` or to leave the type out. A second span labels the type: *"`b` is `val` by this
+  type"*.
+- A binding already `val` by its type keeps that reason when it is later passed to a `val` parameter. The call took
+  nothing from it, so the lift message would have named the wrong cause.
+- A12's DL0405 hint writes `let m: ref Map[Str, List[Str]] = Map()` and `let xs: ref List[Int] = []`.
+- `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` adds it.
+
+**Gates.**
+- `campaign_wording` `a_write_refused_through_a_written_type_names_the_type`: the message, the remedy, the second span's
+  text (`List[Int]`) and label; `ref List[Int]` and no type are accepted; an explicit `val` gets no such reason; a
+  binding `val` by its type and then passed to `keep(xs: List[Int])` keeps the type as its reason. Red on the old
+  `rcap_check.rs`.
+- Mutants, each killed at its own assertion: M905 (no `Written` reason recorded), M906 (a later call replaces the
+  type's reason), M907 (an explicit `val` given the type's reason).
+- `unknown_receiver` checks the hint's `let m: ref Map[`.
+- `cargo test -p delulu-check` (10 targets) and `-p delulu-diag` passed; `core_invariance` passed with the snapshot
+  unchanged.

@@ -6170,3 +6170,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. C6: an annotated `let` makes a list or a map read-only (DL1604); reproduced again while measuring this.
   3. The papercuts left: A7, A8, A13; B5, B8; C9, C11.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a write refused through a written type names the type: C6 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WB8MxLPoBJ2FVDdPkp`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/val-by-type` (on `master` `15c977d`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #91 landed at `15c977d` (run `40793604231`). `master`'s push run
+  `40793268946` on `31d26bc` was red on macOS in `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`; recorded
+  there, examined next.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/tests/campaign_wording.rs`, `crates/delulu-check/tests/unknown_receiver.rs`,
+  `crates/delulu-diag/src/codes.rs`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.37),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this pull request on green. The macOS red above: root cause, or the starved-runner reproduction (D-V2-47's way).
+  2. Merge `master` into `launch/2.0.0`, then dispatch its `everything` run and its release dry run.
+  3. The papercuts left: A7, A8, A13; B5, B8; C9, C11.
+- Survey and doctor (after the last edit): in the commit message.

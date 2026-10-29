@@ -2197,7 +2197,8 @@ impl<'a> Checker<'a> {
         let message = if matches!(rt, Type::Var(_)) {
             format!(
                 "the type of this value is not known at this call, so its method `{}` cannot be found — write the type where \
-                 the value is made (`let m: Map[Str, List[Str]] = Map()`, `let xs: List[Int] = []`) or give its parameter one",
+                 the value is made (`let m: ref Map[Str, List[Str]] = Map()`, `let xs: ref List[Int] = []`; `ref` keeps it \
+                 writable) or give its parameter one",
                 name.name
             )
         } else if self.field_holds_a_function(&rt, &name.name) {
