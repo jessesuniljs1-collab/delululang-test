@@ -822,7 +822,10 @@ overstate it downstream:
   millions deep — `type Chain = Nil | Link(Chain)` in an accumulator loop — used to abort the host
   during teardown *after* the program had finished, with no diagnostic. Value teardown is iterative
   as of 2026-08-10, so depth costs heap rather than native stack. Call depth remains bounded by
-  `DL0905`.
+  `DL0905`: on the interpreter at 10,000 frames; on `--engine wasm` by the guest's stack, so the depth
+  depends on each frame's size (a one-parameter recursion: 16,351 calls ran, 16,448 were refused,
+  2026-10-29). A program that runs on one engine near the other's bound is refused there, so write a
+  recursion that may go thousands deep as a loop.
 
   Stated with its history because it is recent: before 2026-08-04 there was no limit, and a valid
   module nested 100,000 deep did not produce a diagnostic — it overflowed the stack and killed the

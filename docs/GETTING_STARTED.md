@@ -286,7 +286,9 @@ scope decides *which* file or host and is checked when it runs.** Nothing claims
 guarantee about a specific path or hostname — the language cannot prove one without dependent
 types, and it refuses to imply otherwise.
 
-Minting a capability is **pure**. Deriving the handle performs no effect; *using* it does.
+Minting a capability is **pure**. Deriving the handle performs no effect and puts none in the row; *using* it
+does. It is still checked when it runs: a mint the run was not granted is refused at that call (DL0703), on an
+ordinary run and under `--lease` alike, so `root.fs_read("./a")` fails where it is written, before any read.
 
 **`Cap[Http]` fetches over verified HTTPS, and only from the hosts you grant.** `client.get(url)`
 type-checks, is counted in the authority report, is checked against the granted hosts, and then the
@@ -473,7 +475,7 @@ enforced, and easy to meet once you know it.
 | `DL0307` "not a capability resource kind" | You wrote an effect name in `Cap[…]`. See §6. |
 | `DL0501` "performs effect Async" in a `be` | A behavior that sends to another actor must declare `! {Async}`. |
 | `DL0208` on a perfectly good `import` | Imports go before the first item. |
-| `DL0905` at runtime | Recursion passed the interpreter's bound of **10,000** frames. It is not configurable. |
+| `DL0905` at runtime | Recursion passed the interpreter's bound of **10,000** frames. It is not configurable. On `--engine wasm` the bound is the guest's stack, so it depends on each frame's size: a one-parameter recursion reached 16,351 calls and was refused by 16,448 (*"guest stack exhausted"*, 2026-10-29). Write a recursion that may go that deep as a loop. |
 | `DL0703` at runtime | You did not grant the capability. The message now tells you the exact flag. |
 | `DL0107` "bidirectional control character" | Your source (often pasted or AI-generated) contains an invisible text-reordering character that can make code render differently than it runs. It is refused, not warned. If a *string* truly needs the code point, write it as `\u{202e}`. |
 | Integer result is wrong | It is not — overflow is `DL0901` and aborts. Arithmetic is checked, not wrapping. |
