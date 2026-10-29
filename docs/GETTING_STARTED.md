@@ -286,7 +286,9 @@ scope decides *which* file or host and is checked when it runs.** Nothing claims
 guarantee about a specific path or hostname — the language cannot prove one without dependent
 types, and it refuses to imply otherwise.
 
-Minting a capability is **pure**. Deriving the handle performs no effect; *using* it does.
+Minting a capability is **pure**. Deriving the handle performs no effect and puts none in the row; *using* it
+does. It is still checked when it runs: a mint the run was not granted is refused at that call (DL0703), on an
+ordinary run and under `--lease` alike, so `root.fs_read("./a")` fails where it is written, before any read.
 
 **`Cap[Http]` fetches over verified HTTPS, and only from the hosts you grant.** `client.get(url)`
 type-checks, is counted in the authority report, is checked against the granted hosts, and then the

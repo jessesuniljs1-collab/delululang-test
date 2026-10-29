@@ -21,6 +21,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   The placeholder the parser put there was typed `Int`. So `if { 1 } else { 2 }` and a 200-deep `if` were also refused
   *"`if` condition must be Bool"*, at the place DL0202 or DL0210 had already named. The placeholder now has an unknown
   type.
+- **Docs: a mint is pure, and checked at its call** (C15). `GETTING_STARTED.md` said minting is pure, and a reader took that
+  to mean a mint is never refused. It now says that a mint the run was not granted is refused where it is written
+  (DL0703), on an ordinary run and under `--lease` alike.
 
 ## Unreleased — a refused network mint names the host it asked for, 2026-10-29
 

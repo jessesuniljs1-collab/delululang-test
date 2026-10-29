@@ -9978,3 +9978,11 @@ checker typed it `Int`. `if` then refused its condition at the place the parse e
 - The core snapshot was blessed: the conformance witness `DL0202_if_without_condition` (`if { 1 } else { 2 }`) lost its
   DL0408 and keeps its DL0202.
 - Conformance coverage stays 358/358; DL0408 has its own witness.
+
+**C15 and C14, the same day.**
+- C15 is a reading of `GETTING_STARTED.md`'s *"Minting a capability is pure"*: the agent took it to mean a mint is never
+  refused, and a lease run refused `root.fs_read("./a")` at the call. Both are true. A mint puts no effect in the row
+  and performs none, and it is still checked against the run's grants. The paragraph now says both.
+- C14 is kept. NE-07 made `remove_effect_from_row` carry `safe` (it narrows authority, never widens it) and
+  `requires_human` (whether to narrow a published row is the author's call) as two answers to two questions. The human
+  line shows both, and `check --json` carries both as fields.
