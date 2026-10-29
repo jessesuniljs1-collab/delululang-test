@@ -10002,3 +10002,36 @@ The WASM bound is a stack, so it moves with each frame's size. `GETTING_STARTED.
 
 One bound for both engines would mean a depth counter in every compiled call, which costs every call. It is not taken,
 and RW 6.35 says so.
+
+## 2026-10-29 — the laptop: a `Map` lookup on the WASM engine copies nothing (A5, RW 6.36)
+
+**Read first.** #89 read green on its run `40791344842` (14 jobs success) and was fast-forwarded onto `master` at
+`31d26bc`. #86 to #88 had landed together at `3523b2c` on #88's run `40789442622` (14 jobs success).
+
+**Reproduced.** The builder's data was not kept, so the laptop generated a comparable input: 2 MB, 372,300 words, 38
+distinct (`gen.py` in the scratchpad), counted into a `Map[Str, Int]`. The counting loop took 1,283–1,317 ms on
+`--engine wasm` and 632–802 ms on the interpreter. Normalizing and splitting took about the same on both.
+
+**Why.** A `Map` lives in the guest's memory as pairs in key order (`GuestMap`), and the host finds a key by binary
+search. Each probe called `GuestMap::key`, which read the pair's 8-byte slot into a `Vec` and, for a `Str`, the key's
+text into a new `String`. `map_key_of` read the wanted key the same way, and `GuestMap::read` copied the 12-byte header
+into a `Vec`. That came to 14.31 allocations for each `get` and `insert` against eight words.
+
+**The change.**
+- `GuestMap::search` takes the guest's raw key and compares in one borrow of the memory, with no allocation: an `Int`
+  by value, a `Bool` as nonzero, a `Str` by its bytes.
+- Two strings compare by their bytes when both are UTF-8, which is `str`'s order. Otherwise they compare as their lossy
+  readings, the case only a hand-written `.dwx` makes, so every answer equals the one the copies gave.
+- `GuestMap::read` reads the header in place.
+- `GuestMap::key` and `map_key_of` are gone.
+
+**Gates.**
+- `crates/delulu-wasm/tests/map_steps.rs` counts this thread's allocations while the module runs, and differences
+  1,000 and 2,000 steps. It reported 14.31 allocations a step on the old host and 0 now.
+- Mutants:
+  - M902 (a probe reads its key out again: 10.31 a step) and M903 (the header copied: 1.81) turn it red;
+  - M904 (texts compared in the wrong order) turns `map_parity` red.
+- `cargo test -p delulu-wasm`: every target passed.
+
+**Measured** with the release binary: the counting loop takes 285–295 ms on WASM, one run 414 ms. A4's depth
+documentation and this change are stacked on #90.

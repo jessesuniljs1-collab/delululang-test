@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a `Map` lookup on the WASM engine copies nothing, 2026-10-29
+
+- **Improved: `Map` lookups and updates on `--engine wasm` take a quarter of the time** (the agent test campaign's A5, RW
+  6.36). A word count over 2 MB, 372,300 words into a `Map[Str, Int]`, took 1.28–1.32 s in its counting loop on WASM,
+  against 0.63–0.80 s on the interpreter. It now takes 0.29 s. The engine finds a key by binary search over the map's
+  pairs in the guest's memory. Each probe copied its pair's key out into a new string, and each call copied the map's
+  header, about 14 allocations for a `get` and an `insert`. The keys are now compared where they lie, and the
+  answers are unchanged.
+
 ## Unreleased — the WASM engine's call depth is documented, 2026-10-29
 
 - **Docs: how deep a recursion runs on each engine** (the agent test campaign's A4, RW 6.35). The interpreter's

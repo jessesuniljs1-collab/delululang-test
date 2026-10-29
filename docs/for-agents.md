@@ -801,7 +801,8 @@ overstate it downstream:
   Windows laptop); its next run re-measures the ratios.
 - **Choose the engine by the work.** For computation (sorting, loops over numbers, recursion), use `--engine wasm` or
   `build --target wasm`. It is about 100× faster: a merge sort of 100,000 `Int`s takes 5.0 s on the interpreter and
-  56 ms on WASM (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
+  56 ms on WASM (2026-10-29). Counting 372,300 words into a `Map[Str, Int]` is faster on WASM too: 0.29 s, against
+  0.63–0.80 s interpreted (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
   list or a record field holding a function. A program WASM cannot compile is refused with `DL1201`, naming its line,
   and never runs half-compiled.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
