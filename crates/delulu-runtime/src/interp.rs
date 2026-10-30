@@ -1022,7 +1022,9 @@ impl Interp {
                 self.note_alloc(&v); // 10d
                 Ok(v)
             }
-            Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env).map_err(|e| depth_at_call(e, *span)),
+            Expr::Call { callee, args, span, .. } => {
+                self.eval_call(callee, args, *span, env).map_err(|e| depth_at_call(e, *span))
+            }
             Expr::Method { recv, name, args, span, id } => self.eval_method(recv, name, args, *span, *id, env),
             Expr::Field { recv, name, .. } => {
                 let r = self.eval_expr(recv, env)?;

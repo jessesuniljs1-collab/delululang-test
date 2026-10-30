@@ -846,7 +846,7 @@ fn actor_died(shared: &Shared, actor: &str, member: &str, fault: &Fault) {
     // (RW 6.40: this line printed them raw, so a behaviour's assertion wrote control sequences onto the terminal).
     eprintln!(
         "actor {actor} died in `{member}`: {} [{}] (its later messages will be dropped and counted)",
-        fault.message,
+        delulu_diag::terminal_line(&fault.message),
         fault.code
     );
     if shared.abort_on_death {

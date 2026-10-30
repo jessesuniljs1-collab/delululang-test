@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an actor's death and a recursion too deep read alike on both engines, 2026-10-31
+
+- **Fixed: the line for an actor that died printed its fault's words raw** (RW 6.40, TERMINAL-TEXT-1). A behaviour's failed
+  assertion quotes its values, so a program could write control sequences onto the operator's terminal through it, and
+  with a carriage return overwrite the line with words of its choosing. They are escaped now, as a run's fault is.
+- **Improved: an actor that dies on the WASM engine is named, as on the interpreter**: *"actor Div died in `go`: division
+  by zero [DL0902] (its later messages will be dropped and counted)"*. It was only counted.
+- **Improved: a recursion too deep (`DL0905`) on the interpreter is placed at the call that went one deeper**, as the WASM
+  engine places it. It named no place.
+
 ## Unreleased — a write through an index names a list element, 2026-10-31
 
 - **Fixed: DL1604 for `xs[i] = v` on a `val` list said "cannot write a element"** (RW 6.41). It says *"cannot write a list
