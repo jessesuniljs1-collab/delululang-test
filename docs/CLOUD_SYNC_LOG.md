@@ -6248,39 +6248,45 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 ### 2026-10-30 — on-demand routine run 8: `launch/2.0.0` brought current with `master` at `dcfbb18` (release procedure step 1)
 - Session: `https://claude.ai/code/session_01Deh6WBdqVcGo6dxRyFgHmH`   Model: Claude Opus 5.5 (the routine; no fallback
   notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
-  0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
-  already installed at the first command.
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 216 at its close). The setup script had run: the 1.96.1
+  toolchain was already installed at the first command.
 - Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree.
   Pull request: none.
 - Base: `dcfbb18` (`master` at the start, and its push run `40963487003` green: 14 jobs success, 2 skipped).
 - **The milestone, named before building:** Open / next 2 of run 7 — `launch/2.0.0` brought current with `master` (13
   commits: #84–#92 and DEADMAN-DEAF-1), its CHANGELOG folded, CHECKLIST-2.0 criterion 2 re-measured, the gates and the
   document gates green on the merged tree, its `everything` run and release dry run dispatched and READ, and cited.
-  **Delivered so far:** the merge `2667105` on `launch/2.0.0` (pushed), every gate green there (V2_LOG's entry of this
-  date); `everything` `41011808360` and the release dry run `41011811502` dispatched. Their reading is this entry's next
-  update.
+  **Delivered:** the merge `2667105` on `launch/2.0.0` (pushed), every gate green there (V2_LOG's entry of this date);
+  its `everything` `41011808360` read 18 of 18 success and its release dry run `41011811502` success; CHECKLIST-2.0
+  criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`, pushed after it
+  (`git log -1 origin/launch/2.0.0`).
 - **Housekeeping:** no branch was ahead of `master`; the newest autosave snapshot (`1667859`) landed whole; run 7's
   witnesses re-run green in the VM; the nightly `40848219274` 18 of 18 success (the broker's Miri 3 h 27 min). The Survey
   and `doctor` healthy at the start (1567 nodes; 26 checks). `gh` is installed (its token not tried; CI read with the
   REST API and the GitHub MCP tools). `cargo-deny` installed in the VM.
-- Commits: on `launch/2.0.0`, `2667105` (the merge). On `master`, this entry's commit (the script and these records).
+- Commits: on `launch/2.0.0`, `2667105` (the merge), then the merge of this entry's closing commit (the citations). On
+  `master`, `7a36c46` (the script and these records) and this entry's closing commit (the runs read).
 - Files and folders (`master`): A `scripts/launch-changelog.py`. M `docs/CLOUD_ROUTINE.md` (step 4.3),
   `docs/REPOSITORY_STRUCTURE.md` (the script's line), `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
   On `launch/2.0.0` (`2667105`): `master`'s 13 commits, `CHANGELOG.md` (ten sections folded; the *Breaking* paragraph
-  names D-V2-193), its release checklist, CHECKLIST-2.0 (criterion 2), `docs/survey/*`.
+  names D-V2-193), its release checklist (CHECKLIST-2.0, criterion 2), `docs/survey/*`.
 - Survey and doctor (after the last edit): in the commit message.
-- CI read: `40963487003` (green), the nightly `40848219274` (green). Dispatched, unread at this commit: `41011808360`,
-  `41011811502`.
+- CI read: `40963487003` (green), the nightly `40848219274` (green, 18 of 18; the broker's Miri 3 h 27 min).
+  `launch/2.0.0` `2667105`: `everything` `41011808360` 18 of 18 success (1 h 51 min in all; the broker's Miri 1 h 51 min, the
+  checker's 1 h 37 min; `actors_pingpong` MEASURED on arm64, 2.89x against a bar of 1.48x, NOT MEASURED on the other three);
+  the release dry run `41011811502` success (four `package` jobs; `release` skipped, no tag). `master` `7a36c46`'s push
+  run `41012192633`: 14 jobs success, 2 skipped. On this entry's closing commit: Open / next 1.
 - **Loop engineering:** `scripts/launch-changelog.py`; step 4.3 names the document gates, criterion 2's commands, the
   run's length, and the launch worktree's own `target/` (the hook's Survey binary).
 - **Redo on the laptop:** delete `laptop/val-by-type`, `claude/peaceful-carson-zmpprn` and `claude/peaceful-carson-8vcj5y`
   from `origin` (all in `master`'s history; this session's harness refused `git push --delete`, as run 7's did).
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `launch/2.0.0` `2667105`'s `everything` `41011808360` and release dry run `41011811502`, and cite them in
-     CHECKLIST-2.0 criteria 1, 3, 4 and 8 with a merge of `master`'s records (this run's next step).
-  2. The broker's Miri: 3 h 27 min on the 2026-10-29 nightly against a 240-minute cap. If a nightly or an `everything`
-     run passes 3 h 45 min, shorten what that job runs before the cap turns it red.
+  1. Read `master`'s push run on this entry's closing commit (records only; `7a36c46`'s `41012192633` is green), and
+     record the hash of `launch/2.0.0`'s records merge that follows it.
+  2. The broker's Miri: 3 h 27 min on the 2026-10-29 nightly against a 240-minute cap, 1 h 51 min on this run's
+     `everything`, with `delulu-broker`'s own source the same on both trees. If a nightly or an `everything` run passes
+     3 h 45 min, shorten what that job runs before the cap turns it red.
   3. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first.
   4. The papercuts left: A7, A8, A13; B5, B8; C9, C11 (RW 6.30–6.34; the ledger on `origin/autosave/dogfood`).
   5. *[laptop]* the launch, only on the owner's word.

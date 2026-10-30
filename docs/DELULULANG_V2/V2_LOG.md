@@ -10194,8 +10194,17 @@ check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; 
 `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance` 11,
 `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite 94 passed.
 
-**Dispatched at `2667105`:** `ci.yml` `jobs=everything` `41011808360` and `release.yml`'s dry run `41011811502`.
-Their reading follows below when it is done.
+**Read at `2667105`:**
+- `everything` `41011808360`: **18 of 18 jobs success** (1 h 51 min in all), the Linux, Windows, macOS and arm64 test
+  jobs, `heavy-gates`, `fuzz`, `formal`, `supply-chain`, `microvm`, `microvm-reproducible` and every Miri job among them.
+  The broker's Miri took 1 h 51 min and the checker's 1 h 37 min (the 2026-10-29 nightly's broker Miri took 3 h 27 min,
+  with `delulu-broker`'s own source the same). `actors_pingpong` MEASURED on arm64 (2.89x where the machine gave 3.94x,
+  against a bar of 1.48x: passed); NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads,
+  2.39x observed).
+- The release dry run `41011811502`: success in 4 min 8 s, its four `package` jobs success (x86-64 and arm64 Linux, macOS
+  arm64, Windows), its `release` job skipped (no tag).
+- `master` `7a36c46`'s push run `41012192633` (this entry's first records): 14 jobs success, 2 skipped.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both, in the merge of this entry's closing commit into `launch/2.0.0`.
 
 **Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 names the script, the document gates by name, criterion 2's
 three commands and the everything run's length, and says the launch worktree keeps its default `target/`: the pre-commit
