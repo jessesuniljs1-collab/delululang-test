@@ -173,3 +173,29 @@ fn a_write_through_an_index_names_a_list_element() {
         assert!(!m.contains(" a e") && !m.contains(" a a") && !m.contains(" a i"), "{what}: an article before a vowel: {m}");
     }
 }
+
+/// A13 (the agent test campaign): a list filled through a `ref` helper and then handed to a parameter with no capability
+/// keyword was DL1603 *"cannot store `ref` (aliases as `ref`) where `val` is required (argument `xs`)"*, and nothing said
+/// how to hand it over; the agent rewrote the program as recursion. Both ways out are named now: declare the parameter
+/// `box` if the function only reads it, or pass a copy. Each is then accepted. A parameter that writes `val` gets no such
+/// advice: the author chose it.
+#[test]
+fn a_ref_list_refused_at_a_val_parameter_names_both_ways_to_pass_it() {
+    let program = |param: &str, arg: &str| {
+        format!(
+            "module m\nfn fill(acc: ref List[Int]) {{\n    acc.push(1)\n}}\nfn total({param}) -> Int {{\n    var t = 0\n    \
+             for x in xs {{ t = t + x }}\n    t\n}}\nfn main() {{\n    let acc = []\n    fill(acc)\n    let n = total({arg})\n}}\n"
+        )
+    };
+    let d = diags(&program("xs: List[Int]", "acc"));
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1603").expect("DL1603 at the argument");
+    assert!(m.starts_with("cannot store `ref` (aliases as `ref`) where `val` is required (argument `xs`)"), "{m}");
+    assert!(m.contains("declare the parameter `box`") && m.contains(".concat([])"), "both ways out: {m}");
+    for (param, arg) in [("xs: box List[Int]", "acc"), ("xs: List[Int]", "acc.concat([])")] {
+        let d = diags(&program(param, arg));
+        assert!(!d.iter().any(|(c, _)| *c == "DL1603"), "{param} / {arg} is accepted: {d:?}");
+    }
+    let d = diags(&program("xs: val List[Int]", "acc"));
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1603").expect("DL1603");
+    assert!(!m.contains("box"), "a `val` the author wrote gets no advice to change it: {m}");
+}

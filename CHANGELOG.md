@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a `ref` list refused at a `val` parameter names both ways to pass it, 2026-10-31
+
+- **Improved: DL1603 at an argument names the two ways out** (the agent test campaign's A13, RW 6.45). A list filled
+  through a `ref` helper and handed to `fn total(xs: List[Int])` was *"cannot store `ref` (aliases as `ref`) where `val` is
+  required (argument `xs`)"*, and nothing said what to do; the agent rewrote its program as recursion. The refusal now says
+  the parameter's type names no reference capability, which reads as `val`, and names both remedies: declare the parameter
+  `box` if the function only reads it, or pass a copy (a list's `.concat([])`). A parameter that writes `val` gets no
+  such advice. `delulu explain DL1603` has the case. What is refused is unchanged.
+
 ## Unreleased — `delulu authority` names the scopes a program requests, 2026-10-31
 
 - **Changed: the human authority report names a capability's requested scope** (the agent test campaign's A8, RW 6.44).

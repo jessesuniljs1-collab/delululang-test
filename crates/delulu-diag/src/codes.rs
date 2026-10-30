@@ -1232,7 +1232,12 @@ pub fn code_explain(code: &str) -> Option<String> {
              because `Int` is immutable data. It is containers of containers — and records or sums \
              holding a mutable field — where the rule bites. Removing the keyword alone usually does \
              NOT help: an annotated `List[List[Int]]` still defaults to `val` under the spec §2 rule, \
-             so the repair removes the whole annotation.",
+             so the repair removes the whole annotation.\n\n\
+             THE SECOND CASE: a `ref` list, filled by a helper, handed to a parameter whose type names no \
+             capability keyword. That parameter is `val`, and the callee may keep what it is given. If \
+             the function only reads it, declare the parameter `box`, which reads a `ref` as well as a \
+             `val` and keeps nothing; or hand over a copy, `xs.concat([])`. The error names both. (A13, \
+             the agent test campaign of 2026-10-24.)",
         "DL1604" => "The access is denied by the receiver's capability: no write through `box` or \
              `val`, no field read through `tag`, no synchronous call on `tag`. A `tag` is an identity \
              you may send messages to, not a window into another actor's state. A `let`-bound literal \
