@@ -1022,7 +1022,7 @@ impl Interp {
                 self.note_alloc(&v); // 10d
                 Ok(v)
             }
-            Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env),
+            Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env).map_err(|e| depth_at_call(e, *span)),
             Expr::Method { recv, name, args, span, id } => self.eval_method(recv, name, args, *span, *id, env),
             Expr::Field { recv, name, .. } => {
                 let r = self.eval_expr(recv, env)?;
@@ -2660,6 +2660,17 @@ fn fs_scope_arg(scope: &CapScope, argvals: &[Value]) -> Option<String> {
 /// places. Design rule 1: one function referenced by both sides.
 fn host_of(url: &str) -> String {
     prim::host_of(url).to_string()
+}
+
+/// A call too deep (DL0905) is placed at the call that went one deeper (RW 6.40): `enter` knows no span, and the first
+/// call expression the fault leaves through is that call. The WASM engine places it there too, by the guest's frames.
+fn depth_at_call(mut e: Escape, span: delulu_diag::Span) -> Escape {
+    if let Escape::Fault(f) = &mut e {
+        if f.code == "DL0905" && f.span.is_none() {
+            f.span = Some(span);
+        }
+    }
+    e
 }
 
 fn unwrap_fault(e: Escape) -> Fault {

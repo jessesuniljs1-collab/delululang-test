@@ -6313,3 +6313,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      shorten what that job runs before the 4 h cap turns it red.
   5. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a write through an index names a list element: RW 6.41 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/dl1604-article` (stacked on `laptop/wasm-fault-place`, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/tests/campaign_wording.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.41), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93, then this, by fast-forward on green; then RW 6.40 and RW 6.39; the papercuts A7,
+  A8, A13, B8, C9, C11; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

@@ -10265,3 +10265,14 @@ engine's error carried a detail string and nothing else.
 **Found on the way, recorded open.** RW 6.39: a sandboxed guest's fault names no place on the terminal (the guest is
 not sent the program's name; the report places the host's refusal). RW 6.40: an actor that dies on the WASM engine is
 counted but not named, and the interpreter's `DL0905` names no place. RW 6.41: DL1604 says "cannot write a element".
+
+## 2026-10-31 — the laptop: a write through an index names a list element (RW 6.41)
+
+Seen while closing B5: `xs[0] = 3` on a `val` list was DL1604 *"cannot write a element through a `val` receiver"*.
+`rcap_check.rs` gives the sentence a noun, and the index write's noun was "element", where a `push` or a `pop` says "list
+element (push)". An index assigns into a list alone, so the noun is "list element" now. Nothing quoted the old words
+(`crates/*/tests`, the core snapshot and the documents searched).
+
+**Gates.** `campaign_wording` `a_write_through_an_index_names_a_list_element`: red before with the old sentence; it also
+asks an index, a push and an insert for an article before a vowel. `cargo test -p delulu-check` (every target) and
+`core_invariance` passed, the snapshot unchanged.

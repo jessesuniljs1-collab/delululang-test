@@ -2855,10 +2855,10 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
         match job {
             ActorJob::Create { slot, actor_idx, args } => {
                 let export = store.data().actor_rt.table.actors[actor_idx as usize].ctor_export.clone();
-                let ok = call_actor_export(store, instance, &export, slot, &args)?;
+                let fault = call_actor_export(store, instance, &export, slot, &args)?;
                 store.data_mut().actor_rt.total_turns += 1;
-                if !ok {
-                    poison(store, slot);
+                if let Some(fault) = fault {
+                    poison(store, slot, "new", &fault);
                 }
             }
             ActorJob::Send { slot, behavior_idx, args } => {
@@ -2870,10 +2870,10 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
                     store.data_mut().actor_rt.dropped_sends += 1;
                     continue;
                 }
-                let export = {
+                let (export, member) = {
                     let info = &store.data().actor_rt.table.actors[actor_idx as usize];
                     match info.behaviors.get(behavior_idx as usize) {
-                        Some(b) => b.export.clone(),
+                        Some(b) => (b.export.clone(), b.name.clone()),
                         // An unknown behaviour index cannot come from our codegen; drop+count.
                         None => {
                             store.data_mut().actor_rt.dropped_sends += 1;
@@ -2881,10 +2881,10 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
                         }
                     }
                 };
-                let ok = call_actor_export(store, instance, &export, slot, &args)?;
+                let fault = call_actor_export(store, instance, &export, slot, &args)?;
                 store.data_mut().actor_rt.total_turns += 1;
-                if !ok {
-                    poison(store, slot);
+                if let Some(fault) = fault {
+                    poison(store, slot, &member, &fault);
                 }
             }
         }
@@ -2892,16 +2892,16 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
     Ok(())
 }
 
-/// Call one actor member export `(self_slot, args…)`. Returns `Ok(true)` on success, `Ok(false)`
-/// when the turn traps (a fault → poison, spec §6.6). Only a missing export (a codegen bug) is a
-/// hard `Err`.
+/// Call one actor member export `(self_slot, args…)`. Returns `Ok(None)` on success, `Ok(Some(fault))`
+/// when the turn traps — its words, `CODE: message`, as a run's fault is told (a fault → poison, spec §6.6).
+/// Only a missing export (a codegen bug) is a hard `Err`.
 fn call_actor_export(
     store: &mut Store<HostState>,
     instance: &Instance,
     name: &str,
     slot: u64,
     args: &[i64],
-) -> Result<bool, WasmError> {
+) -> Result<Option<String>, WasmError> {
     let func = instance.get_func(&mut *store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
     let mut params = Vec::with_capacity(1 + args.len());
     params.push(Val::I64(slot as i64));
@@ -2910,13 +2910,18 @@ fn call_actor_export(
     }
     let mut results: [Val; 0] = [];
     match func.call(&mut *store, &params, &mut results) {
-        Ok(()) => Ok(true),
-        Err(_trap) => Ok(false), // a behaviour fault poisons its actor; the system stays live
+        Ok(()) => Ok(None),
+        // A behaviour fault poisons its actor; the system stays live.
+        Err(trap) => Ok(Some(match trap_or_refusal(store, &trap) {
+            WasmError::Trap(why, _) => why,
+            other => other.message(),
+        })),
     }
 }
 
-/// Poison an actor after a faulting turn: mark it dead (once) and count it. Later sends to it drop.
-fn poison(store: &mut Store<HostState>, slot: u64) {
+/// Poison an actor after a faulting turn: mark it dead (once), count it, and say so in the interpreter's words (RW 6.40:
+/// the WASM engine counted a death and named nothing). Later sends to it drop.
+fn poison(store: &mut Store<HostState>, slot: u64, member: &str, fault: &str) {
     let rt = &mut store.data_mut().actor_rt;
     let newly_dead = match rt.slots.get_mut(slot as usize) {
         Some(s) if !s.dead => {
@@ -2927,6 +2932,17 @@ fn poison(store: &mut Store<HostState>, slot: u64) {
     };
     if newly_dead {
         rt.dead_actors += 1;
+        let actor = rt.slots.get(slot as usize).and_then(|s| rt.table.actors.get(s.actor_idx as usize)).map(|a| a.name.as_str());
+        // `CODE: message` from the engine; the interpreter's line puts the code last.
+        let (code, words) = match fault.split_once(": ") {
+            Some((code, words)) if delulu_diag::static_code(code).is_some() => (code, words),
+            _ => ("DL0904", fault),
+        };
+        eprintln!(
+            "actor {} died in `{member}`: {} [{code}] (its later messages will be dropped and counted)",
+            actor.unwrap_or("?"),
+            delulu_diag::terminal_line(words)
+        );
     }
 }
 

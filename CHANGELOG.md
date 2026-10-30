@@ -11,6 +11,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a write through an index names a list element, 2026-10-31
+
+- **Fixed: DL1604 for `xs[i] = v` on a `val` list said "cannot write a element"** (RW 6.41). It says *"cannot write a list
+  element through a `val` receiver"* now, as a `push` or a `pop` does. What is refused is unchanged.
+
 ## Unreleased — a fault on the WASM engine reads as the interpreter's, at the same place, 2026-10-31
 
 - **Improved: a run's fault on `--engine wasm` names the line and column of the expression that faulted** (the agent test
