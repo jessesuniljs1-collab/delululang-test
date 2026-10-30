@@ -10209,3 +10209,59 @@ check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; 
 **Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 names the script, the document gates by name, criterion 2's
 three commands and the everything run's length, and says the launch worktree keeps its default `target/`: the pre-commit
 hook looks for the Survey's binary there, so a `CARGO_TARGET_DIR` exported elsewhere fails it.
+
+## 2026-10-31 — the laptop: a fault on the WASM engine reads as the interpreter's, at its place (B5, RW 6.38)
+
+**Read first.** On-demand routine runs 7 and 8 had pushed while this session was away. Run 7 closed the macOS red of
+2026-10-29 as DEADMAN-DEAF-1 (D-V2-194, `1f5206c`, `dcfbb18`) and landed #92. Run 8 brought `launch/2.0.0` current at
+`2667105`: its `everything` run `41011808360` was 18 of 18 success and its release dry run `41011811502` success. The
+records merge that followed is `5009a89`. `master` `54ab0c1`'s push run `41023213852`: 14 jobs success, 2 skipped. The
+nightly `41033994313` on it: 18 of 18 success, the broker's Miri 3 h 11 min (09:31:00 to 12:41:50 UTC), under its 4 h
+cap. The laptop's redo from both runs is done: `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` are deleted from
+`origin` (each in `master`'s history; `claude/peaceful-carson-8vcj5y` was already gone).
+
+**What the agent found** (B5, the least-authority agent, Sonnet 5.5, 2026-10-24), reproduced with the agent's own
+program on the binary at `54ab0c1`: a refused read on `--engine wasm` printed *"error[DL0904]: WASM engine: WASM trap:
+DL0904: path `../forbidden/secret.txt` escapes the granted scope"*, with no `-->` line. The interpreter printed the
+same refusal once, at `fsr.delulu:14:10`, under the call. Every runtime fault on the WASM engine was unplaced: the
+engine's error carried a detail string and nothing else.
+
+**The change.**
+- `codegen.rs`: the compiler keeps a `SiteMap` beside the module. Entering a statement or an expression marks the next
+  instruction as its; leaving it marks the next as the enclosing one's again. When a body is serialized, each mark
+  becomes a byte offset in the body, counted as wasmtime counts a frame's offset. `compile_checked_sited` returns it;
+  `compile_checked` drops it. Nothing is added to the module.
+- `host.rs`: `WasmError::Trap` carries the guest's frames, innermost first (each function's index and its offset). A
+  refused host call records them when it refuses: the 99 places that set `refused` go through `Refuse::refuse` (or
+  `refuse_first`, where the first refusal stands), and the custody and declared-effect checks are asked through the
+  caller, which records them when a check says no. A trap carries its own backtrace. The engine that runs `main` states
+  wasmtime's defaults it now relies on (20 frames, the address map).
+- The CLI (`run_cmd.rs`, `cli.rs`): `delulu run --engine wasm` reads the innermost frame the map knows and places the
+  fault there, `runtime fault here`, as the interpreter does. The words are the interpreter's: no `WASM engine: WASM
+  trap:`, the code once. A `.dwx` has no source: its fault names the file, in the same words.
+- `interp.rs`: an index out of bounds is placed at the whole `xs[i]`, as a unary or a binary fault is. It was `recv.span()`,
+  `xs` alone, since Stage 1. Comparing the engines found it: the WASM engine's first place for it was `xs[5]`.
+
+**Gates.**
+- `fault_parity` `a_wasm_fault_is_placed_where_the_interpreter_places_it`: eight shapes, each held to the interpreter's
+  own span (a division in the guest, the checked add and remainder in helpers the compiler wrote, a division in a called
+  function, an index out of bounds directly and in an inlined generic, an ungranted console, a refused path in a called
+  function). `a_recursion_too_deep_is_placed_at_the_call_that_went_deeper` (a call with no argument, whose place only
+  the mark made on entering it names). `a_refusal_a_check_records_is_placed_at_the_call_it_refused` (an effect a
+  manifest does not declare, through the custody check).
+- `wasm_cli` `a_wasm_fault_reads_as_the_interpreters_at_the_same_place`: a host refusal and a guest trap read byte for
+  byte as the interpreter's from `error[` on, and a `.dwx` says the same words. Red on the old source, with B5's exact
+  text.
+- `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now also asks that each refusal names its
+  call, embedded and under the daemon, on the interpreter and the WASM engine: the agent's own shape, a broker's refusal.
+- Mutants, each killed: M916 (entering records no mark: survived the eight shapes, since an operation follows its
+  operands, and is killed by the recursion test), M917 (leaving does not restore), M918 (a refusal records no frames),
+  M919 (a check's refusal is not placed; also killed against the daemon test), M920 (the outermost frame read first),
+  M921 (a trap's backtrace ignored), M922 (the index back at `xs`), M923 (the old words), M924 (no place attached).
+- `cargo test -p delulu-wasm -p delulu-runtime` passed (every target); `core_invariance` passed, the snapshot unchanged;
+  `wasm_cli` 21 passed. 11 `.dwx` builds (the examples, the book's samples, B5's programs) were byte-identical with the
+  old binary and the new.
+
+**Found on the way, recorded open.** RW 6.39: a sandboxed guest's fault names no place on the terminal (the guest is
+not sent the program's name; the report places the host's refusal). RW 6.40: an actor that dies on the WASM engine is
+counted but not named, and the interpreter's `DL0905` names no place. RW 6.41: DL1604 says "cannot write a element".

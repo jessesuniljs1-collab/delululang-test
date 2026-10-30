@@ -6290,3 +6290,26 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first.
   4. The papercuts left: A7, A8, A13; B5, B8; C9, C11 (RW 6.30–6.34; the ledger on `origin/autosave/dogfood`).
   5. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — a fault on the WASM engine reads as the interpreter's, at its place: B5 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-fault-place` (on `master` `54ab0c1`)   Pull request: opened with this commit
+- **Read first:** runs 7 and 8 (DEADMAN-DEAF-1; `launch/2.0.0` at `2667105`, its records merge `5009a89`); `54ab0c1`'s
+  push run `41023213852` (14 success, 2 skipped) and the nightly `41033994313` (18 of 18; the broker's Miri 3 h 11 min).
+  **Redo on the laptop, done:** `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` deleted from `origin` (both in
+  `master`'s history); `claude/peaceful-carson-8vcj5y` was already gone.
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu-wasm/src/lib.rs`, `crates/delulu-wasm/tests/fault_parity.rs`, `crates/delulu-wasm/tests/hostile_guest.rs`,
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu/tests/wasm_cli.rs`, `crates/delulu/tests/broker_cli.rs`, `docs/for-agents.md`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (rows 6.38–6.41), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this pull request on green (the full suite runs on CI).
+  2. RW 6.41 (DL1604's "a element"), then RW 6.40 and RW 6.39.
+  3. The papercuts left: A7, A8, A13; B8; C9, C11.
+  4. The broker's Miri: 3 h 11 min on the 2026-10-30 nightly; if a nightly or an `everything` run passes 3 h 45 min,
+     shorten what that job runs before the 4 h cap turns it red.
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

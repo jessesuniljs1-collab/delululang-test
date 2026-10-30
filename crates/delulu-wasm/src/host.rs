@@ -1278,7 +1278,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     let header_end = match p.checked_add(4) {
                         Some(e) if e <= data.len() => e,
                         _ => {
-                            caller.refuse(format!("DL0903: string header at {p} is out of bounds (memory is {} bytes)", data.len()));
+                            caller.refuse(format!(
+                                "DL0903: string header at {p} is out of bounds (memory is {} bytes)",
+                                data.len()
+                            ));
                             return;
                         }
                     };

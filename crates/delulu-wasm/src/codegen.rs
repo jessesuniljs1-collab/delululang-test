@@ -1274,10 +1274,7 @@ pub fn compile_checked(module: &Module, checked: &delulu_check::CheckResult) -> 
 
 /// [`compile_checked`], and where in the module each statement's and expression's code lies: what names the place of a
 /// fault the run reports (B5). What `delulu run --engine wasm` compiles with.
-pub fn compile_checked_sited(
-    module: &Module,
-    checked: &delulu_check::CheckResult,
-) -> Result<(Vec<u8>, SiteMap), CompileError> {
+pub fn compile_checked_sited(module: &Module, checked: &delulu_check::CheckResult) -> Result<(Vec<u8>, SiteMap), CompileError> {
     compile_module_typed(module, &checked.foreign_binds, &checked.node_types, &checked.type_names)
 }
 
@@ -2348,7 +2345,7 @@ struct Cx<'a> {
     instrs: Vec<Instruction<'static>>,
     /// Where each run of `instrs` came from (B5, [`SiteMap`]): from each index on, the innermost statement or expression
     /// being compiled, until the next mark.
-    sites: Vec<(u32, Option<delulu_diag::Span>)>,
+    sites: Sites,
     /// The statements and expressions being compiled, the innermost last.
     site_stack: Vec<delulu_diag::Span>,
 }
@@ -2414,9 +2411,12 @@ impl<'a> Cx<'a> {
 /// statement or expression being compiled changes, each with that span (`None` where there was none). Read against a
 /// fault's frames by [`SiteMap::locate`], it names the place the interpreter names. It is not part of the module: a `.dwx`
 /// carries none, and its code hash is unchanged.
+/// One body's sites: from each byte offset on (ascending), the span its code came from ([`SiteMap`]).
+type Sites = Vec<(u32, Option<delulu_diag::Span>)>;
+
 #[derive(Clone, Debug, Default)]
 pub struct SiteMap {
-    funcs: HashMap<u32, Vec<(u32, Option<delulu_diag::Span>)>>,
+    funcs: HashMap<u32, Sites>,
 }
 
 impl SiteMap {
@@ -2433,9 +2433,9 @@ impl SiteMap {
 }
 
 /// A compiled body's function, and where in it each site begins ([`SiteMap`]).
-fn finish_body(cx: Cx) -> (Function, Vec<(u32, Option<delulu_diag::Span>)>) {
+fn finish_body(cx: Cx) -> (Function, Sites) {
     let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
-    let mut sites: Vec<(u32, Option<delulu_diag::Span>)> = Vec::new();
+    let mut sites: Sites = Vec::new();
     let mut marks = cx.sites.iter().peekable();
     for (i, ins) in cx.instrs.iter().enumerate() {
         while let Some(&&(at, span)) = marks.peek() {
@@ -2468,7 +2468,7 @@ fn compile_fn<'a>(
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
     descs: &'a RefCell<Descs>,
-) -> Result<(Function, Vec<(u32, Option<delulu_diag::Span>)>), CompileError> {
+) -> Result<(Function, Sites), CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -2535,7 +2535,7 @@ fn compile_actor_member<'a>(
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
     descs: &'a RefCell<Descs>,
-) -> Result<(Function, Vec<(u32, Option<delulu_diag::Span>)>), CompileError> {
+) -> Result<(Function, Sites), CompileError> {
     // Field layout: name → (slot index, lowered type). Only `Int`/actor-ref fields are in-subset.
     let mut fields: HashMap<String, (u32, Ty)> = HashMap::new();
     for (i, fld) in decl.fields.iter().enumerate() {
