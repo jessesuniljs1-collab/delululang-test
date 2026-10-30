@@ -10276,3 +10276,25 @@ element (push)". An index assigns into a list alone, so the noun is "list elemen
 **Gates.** `campaign_wording` `a_write_through_an_index_names_a_list_element`: red before with the old sentence; it also
 asks an index, a push and an insert for an article before a vowel. `cargo test -p delulu-check` (every target) and
 `core_invariance` passed, the snapshot unchanged.
+
+## 2026-10-31 — the laptop: an actor's death and a recursion too deep read alike on both engines (RW 6.40)
+
+Two gaps seen while closing B5, and a third found while closing the first.
+- **An actor that died on the WASM engine was counted, not named.** `call_actor_export` dropped the trap
+  (`Err(_trap) => Ok(false)`). It now keeps the turn's words (the refusal, or the cleaned trap) and `poison` prints the
+  interpreter's line: *"actor Div died in `go`: division by zero [DL0902] (its later messages will be dropped and
+  counted)"*. The cooperative scheduler prints it when the actor dies, so the line keeps its place among the output.
+- **The interpreter's `DL0905` named no place.** `enter` raises it with no span; a `DL0905` that leaves a call expression
+  unplaced now takes that call's span, so the innermost call, the one that went one deeper, names it. That is where the
+  WASM engine places it (by the guest's frames, B5). One branch on a call's error path; none on its success.
+- **TERMINAL-TEXT-1 in one more place.** The interpreter's actor-death line printed the fault's message raw. A failed
+  assertion in a behaviour quotes its values, so a program could write ESC, BEL and a carriage return onto the operator's
+  terminal, and with the return overwrite the line with words of its choosing (`sandbox: forged` in the test). The line
+  escapes them now (`delulu_diag::terminal_line`), as a run's fault does; the WASM line does too.
+
+**Gates.** `wasm_cli` `an_actors_death_and_a_recursion_too_deep_read_alike_on_both_engines`: the same death line and count
+on both engines, and the same `DL0905` place; red on the old source (the WASM engine named nothing). `terminal_text_cli`
+`an_actors_death_quotes_its_fault_escaped`: red before (ESC, BEL, ESC, CR reached the terminal). Mutants M925 (the WASM
+line not printed), M926 (`depth_at_call` does nothing), M927 (the raw message again), each killed. `cargo test -p
+delulu-wasm -p delulu-runtime` (every target), `actors_cli`, `cli_contract` and `core_invariance` passed, the snapshot
+unchanged.

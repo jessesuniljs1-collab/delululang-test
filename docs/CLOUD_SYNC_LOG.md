@@ -6324,3 +6324,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** land #93, then this, by fast-forward on green; then RW 6.40 and RW 6.39; the papercuts A7,
   A8, A13, B8, C9, C11; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — an actor's death and a recursion too deep read alike on both engines: RW 6.40 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/fault-parity-gaps` (stacked on `laptop/dl1604-article`, #94, on #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name; a TERMINAL-TEXT-1 hole closed on the way (the actor-death line).
+- Files and folders: M `crates/delulu-runtime/src/actors.rs`, `crates/delulu-runtime/src/interp.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu/tests/wasm_cli.rs`, `crates/delulu/tests/terminal_text_cli.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.40), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93, #94 and this by fast-forward on green; RW 6.39 (a sandboxed guest's fault
+  unplaced); the papercuts A7, A8, A13, B8, C9, C11; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

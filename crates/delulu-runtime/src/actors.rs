@@ -842,9 +842,12 @@ fn maybe_collect_cycles(interp: &crate::interp::Interp, cells: &HashMap<u64, Cel
 fn actor_died(shared: &Shared, actor: &str, member: &str, fault: &Fault) {
     shared.live_actors.fetch_sub(1, Ordering::SeqCst);
     shared.dead_actors.fetch_add(1, Ordering::SeqCst);
+    // TERMINAL-TEXT-1: a fault can quote the program's own strings (an assertion's values); escaped, as a run's fault is
+    // (RW 6.40: this line printed them raw, so a behaviour's assertion wrote control sequences onto the terminal).
     eprintln!(
         "actor {actor} died in `{member}`: {} [{}] (its later messages will be dropped and counted)",
-        fault.message, fault.code
+        delulu_diag::terminal_line(&fault.message),
+        fault.code
     );
     if shared.abort_on_death {
         shared.died.store(true, Ordering::SeqCst);

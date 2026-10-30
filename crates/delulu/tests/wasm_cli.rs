@@ -310,6 +310,50 @@ fn a_wasm_fault_reads_as_the_interpreters_at_the_same_place() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// RW 6.40: an actor that dies is named alike on both engines, and a recursion too deep is placed at the same call. The
+/// WASM engine counted a death (*"actors: 1 died"*) and named nothing; the interpreter's `DL0905` named no place, where
+/// the WASM engine's names the call that went one deeper (B5).
+#[test]
+fn an_actors_death_and_a_recursion_too_deep_read_alike_on_both_engines() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-death-depth-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let actor = dir.join("act.delulu");
+    std::fs::write(
+        &actor,
+        "module act\n\nactor Div {\n    var n: Int\n    new() { self.n = 0 }\n    be go(k: Int) { self.n = 10 / k }\n}\n\n\
+         fn main(root: Root) ! {Write, Async} {\n    let out = root.console()\n    let d = spawn Div()\n    d.go(0)\n    \
+         d.go(1)\n    out.println(\"sent\")\n}\n",
+    )
+    .unwrap();
+    let deep = dir.join("deep.delulu");
+    std::fs::write(
+        &deep,
+        "module deep\n\nfn down(n: Int) -> Int {\n    if n <= 0 { 0 } else { 1 + down(n - 1) }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    root.console().println(str(down(1000000)))\n}\n",
+    )
+    .unwrap();
+    let both = |file: &PathBuf| {
+        let f = file.to_string_lossy().to_string();
+        let interp = delulu(&["run", &f, "--grant", "console"]);
+        let wasm = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+        (String::from_utf8_lossy(&interp.stderr).to_string(), String::from_utf8_lossy(&wasm.stderr).to_string())
+    };
+    let (i, w) = both(&actor);
+    let died = "actor Div died in `go`: division by zero [DL0902] (its later messages will be dropped and counted)";
+    let dropped = "actors: 1 died; 1 message(s) to dead actors dropped";
+    for (engine, err) in [("interpreter", &i), ("WASM engine", &w)] {
+        assert!(err.lines().any(|l| l == died), "the {engine} names the actor, its behaviour and its fault:\n{err}");
+        assert!(err.lines().any(|l| l == dropped), "the {engine} counts it:\n{err}");
+    }
+    let (i, w) = both(&deep);
+    for (engine, err) in [("interpreter", &i), ("WASM engine", &w)] {
+        assert!(err.starts_with("error[DL0905]: recursion depth exceeded"), "the {engine}:\n{err}");
+        assert!(err.contains("deep.delulu:4:32"), "the {engine} places it at the call that went deeper:\n{err}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn run_engine_wasm_ungranted_console_is_refused() {
     // No console grant → root.console() is refused host-side; the run fails.
