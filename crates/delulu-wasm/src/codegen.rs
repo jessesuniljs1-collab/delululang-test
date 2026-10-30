@@ -1262,13 +1262,22 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 /// grammar has no method type-argument syntax, so — exactly as the interpreter does — codegen recovers
 /// which lib each bind site resolves to from `foreign_binds` (keyed by the call's `NodeId`).
 pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, String>) -> Result<Vec<u8>, CompileError> {
-    compile_module_typed(module, foreign_binds, &HashMap::new(), &[])
+    compile_module_typed(module, foreign_binds, &HashMap::new(), &[]).map(|(wasm, _)| wasm)
 }
 
 /// Compile with everything the checker knows that the syntax does not say: the foreign bind sites, and the type it
 /// inferred for each node — so an empty list whose element type no `let` writes (`let out = []`, filled by
 /// `out.push(i)` later) has the type the checker gave it (RW 3.4). What the command line compiles with.
 pub fn compile_checked(module: &Module, checked: &delulu_check::CheckResult) -> Result<Vec<u8>, CompileError> {
+    compile_checked_sited(module, checked).map(|(wasm, _)| wasm)
+}
+
+/// [`compile_checked`], and where in the module each statement's and expression's code lies: what names the place of a
+/// fault the run reports (B5). What `delulu run --engine wasm` compiles with.
+pub fn compile_checked_sited(
+    module: &Module,
+    checked: &delulu_check::CheckResult,
+) -> Result<(Vec<u8>, SiteMap), CompileError> {
     compile_module_typed(module, &checked.foreign_binds, &checked.node_types, &checked.type_names)
 }
 
@@ -1277,7 +1286,7 @@ fn compile_module_typed(
     foreign_binds: &HashMap<NodeId, String>,
     node_types: &HashMap<NodeId, delulu_check::Type>,
     type_names: &[String],
-) -> Result<Vec<u8>, CompileError> {
+) -> Result<(Vec<u8>, SiteMap), CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
     let mut env = build_enum_env(module);
     env.checked_names = type_names.to_vec();
@@ -2024,8 +2033,9 @@ fn compile_module_typed(
     code.function(&int_to_str_fn(alloc));
     code.function(&alloc_fn(HEAP_GLOBAL));
     code.function(&str_len_fn());
-    for f in &fns {
-        code.function(&compile_fn(
+    let mut sites = SiteMap::default();
+    for (i, f) in fns.iter().enumerate() {
+        let (body, at) = compile_fn(
             f,
             &env,
             &generics,
@@ -2039,10 +2049,12 @@ fn compile_module_typed(
             foreign_binds,
             node_types,
             &descs,
-        )?);
+        )?;
+        code.function(&body);
+        sites.funcs.insert(user_base + i as u32, at);
     }
-    for (actor_idx, decl, params, body, _) in &member_plans {
-        code.function(&compile_actor_member(
+    for (j, (actor_idx, decl, params, body, _)) in member_plans.iter().enumerate() {
+        let (body, at) = compile_actor_member(
             *actor_idx,
             decl,
             params,
@@ -2059,7 +2071,9 @@ fn compile_module_typed(
             foreign_binds,
             node_types,
             &descs,
-        )?);
+        )?;
+        code.function(&body);
+        sites.funcs.insert(actor_base + j as u32, at);
     }
     if needs_lists {
         code.function(&list_new_fn(alloc));
@@ -2108,7 +2122,7 @@ fn compile_module_typed(
     m.section(&exports);
     m.section(&code);
     m.section(&datas);
-    Ok(m.finish())
+    Ok((m.finish(), sites))
 }
 
 fn result_valtypes(ret: Ty) -> Vec<ValType> {
@@ -2332,6 +2346,11 @@ struct Cx<'a> {
     /// The function's declared return type — the expected type for `return`/`?` (Phase 3o).
     ret: Ty,
     instrs: Vec<Instruction<'static>>,
+    /// Where each run of `instrs` came from (B5, [`SiteMap`]): from each index on, the innermost statement or expression
+    /// being compiled, until the next mark.
+    sites: Vec<(u32, Option<delulu_diag::Span>)>,
+    /// The statements and expressions being compiled, the innermost last.
+    site_stack: Vec<delulu_diag::Span>,
 }
 
 impl<'a> Cx<'a> {
@@ -2371,6 +2390,67 @@ impl<'a> Cx<'a> {
         }
         self.instrs.push(i);
     }
+    /// The code emitted from here on is `span`'s, until [`Cx::leave_site`].
+    fn enter_site(&mut self, span: delulu_diag::Span) {
+        self.site_stack.push(span);
+        self.mark_site(Some(span));
+    }
+    /// The code emitted from here on is the enclosing statement's or expression's again.
+    fn leave_site(&mut self) {
+        self.site_stack.pop();
+        self.mark_site(self.site_stack.last().copied());
+    }
+    fn mark_site(&mut self, span: Option<delulu_diag::Span>) {
+        let at = self.instrs.len() as u32;
+        match self.sites.last_mut() {
+            Some(last) if last.0 == at => last.1 = span,
+            _ => self.sites.push((at, span)),
+        }
+    }
+}
+
+/// Where each stretch of a module's code came from (B5 of the agent test campaign): for each function compiled from
+/// source, the byte offsets in its body — counted as wasmtime counts them, from the body's start — at which the innermost
+/// statement or expression being compiled changes, each with that span (`None` where there was none). Read against a
+/// fault's frames by [`SiteMap::locate`], it names the place the interpreter names. It is not part of the module: a `.dwx`
+/// carries none, and its code hash is unchanged.
+#[derive(Clone, Debug, Default)]
+pub struct SiteMap {
+    funcs: HashMap<u32, Vec<(u32, Option<delulu_diag::Span>)>>,
+}
+
+impl SiteMap {
+    /// The span of the innermost frame that has one. `frames` are innermost first, each a function's index in the module
+    /// and the offset in its body of the instruction it was at — the trapping one, or the call it made. A helper the
+    /// compiler wrote (`__alloc`, a checked add) has no sites, so its caller's frame answers.
+    pub fn locate(&self, frames: &[(u32, u32)]) -> Option<delulu_diag::Span> {
+        frames.iter().find_map(|&(func, at)| {
+            let sites = self.funcs.get(&func)?;
+            let i = sites.partition_point(|&(off, _)| off <= at).checked_sub(1)?;
+            sites[i].1
+        })
+    }
+}
+
+/// A compiled body's function, and where in it each site begins ([`SiteMap`]).
+fn finish_body(cx: Cx) -> (Function, Vec<(u32, Option<delulu_diag::Span>)>) {
+    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
+    let mut sites: Vec<(u32, Option<delulu_diag::Span>)> = Vec::new();
+    let mut marks = cx.sites.iter().peekable();
+    for (i, ins) in cx.instrs.iter().enumerate() {
+        while let Some(&&(at, span)) = marks.peek() {
+            if at as usize > i {
+                break;
+            }
+            if sites.last().map(|s| s.1) != Some(span) {
+                sites.push((func.byte_len() as u32, span));
+            }
+            marks.next();
+        }
+        func.instruction(ins);
+    }
+    func.instruction(&Instruction::End);
+    (func, sites)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2388,7 +2468,7 @@ fn compile_fn<'a>(
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
     descs: &'a RefCell<Descs>,
-) -> Result<Function, CompileError> {
+) -> Result<(Function, Vec<(u32, Option<delulu_diag::Span>)>), CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -2423,16 +2503,13 @@ fn compile_fn<'a>(
         actor: None,
         ret,
         instrs: Vec::new(),
+        sites: Vec::new(),
+        site_stack: Vec::new(),
     };
     // Compile the body expecting the declared return type (expected-type-directed, so variant
     // constructions in tail position know their full `Result`/`Option` type — Phase 3o).
     compile_block_as(&f.body, &mut cx, ret)?;
-    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
-    for ins in &cx.instrs {
-        func.instruction(ins);
-    }
-    func.instruction(&Instruction::End);
-    Ok(func)
+    Ok(finish_body(cx))
 }
 
 /// Compile one actor member (the ctor or a behaviour) to a wasm function (Stage 7 phase 7h).
@@ -2458,7 +2535,7 @@ fn compile_actor_member<'a>(
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
     descs: &'a RefCell<Descs>,
-) -> Result<Function, CompileError> {
+) -> Result<(Function, Vec<(u32, Option<delulu_diag::Span>)>), CompileError> {
     // Field layout: name → (slot index, lowered type). Only `Int`/actor-ref fields are in-subset.
     let mut fields: HashMap<String, (u32, Ty)> = HashMap::new();
     for (i, fld) in decl.fields.iter().enumerate() {
@@ -2513,16 +2590,13 @@ fn compile_actor_member<'a>(
         actor: Some(ActorCtx { self_slot: 0, actor_idx, fields }),
         ret: Ty::Unit,
         instrs: Vec::new(),
+        sites: Vec::new(),
+        site_stack: Vec::new(),
     };
     // A behaviour/ctor body yields Unit (invariant 34 — a behaviour returns nothing at the send
     // site; the ctor returns nothing).
     compile_block_as(body, &mut cx, Ty::Unit)?;
-    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
-    for ins in &cx.instrs {
-        func.instruction(ins);
-    }
-    func.instruction(&Instruction::End);
-    Ok(func)
+    Ok(finish_body(cx))
 }
 
 /// The lowered type of an actor field / behaviour-ctor parameter, restricted to the phase-7h
@@ -2583,7 +2657,10 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
         | Stmt::Return { span, .. } => *span,
         Stmt::Expr(e) => e.span(),
     };
-    compile_stmt_unplaced(stmt, cx, is_last, expected).map_err(|e| e.at(span))
+    cx.enter_site(span);
+    let r = compile_stmt_unplaced(stmt, cx, is_last, expected).map_err(|e| e.at(span));
+    cx.leave_site();
+    r
 }
 
 fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
@@ -3156,6 +3233,13 @@ fn ctor_shape(e: &Expr) -> Option<(&str, &[Expr])> {
 /// forms that need the expected type (variant construction, and the control-flow that carries it to
 /// a tail) are special-cased; everything else synthesises and is checked against `expected`.
 fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
+    cx.enter_site(e.span());
+    let r = compile_expr_as_here(e, cx, expected);
+    cx.leave_site();
+    r
+}
+
+fn compile_expr_as_here(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
     // A constructor of the expected variant type (`Ok`/`Some`/`None` or a user enum's ctor).
     if let Some((name, args)) = ctor_shape(e) {
         if let Some(ctors) = cx.env.ctors_of(expected) {
@@ -3709,7 +3793,10 @@ fn inline_body(
 /// Compile one expression; a refusal no node inside it placed is placed here, so the innermost refused expression is the
 /// one a DL1201 names (A10).
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
-    compile_expr_unplaced(e, cx).map_err(|err| err.at(e.span()))
+    cx.enter_site(e.span());
+    let r = compile_expr_unplaced(e, cx).map_err(|err| err.at(e.span()));
+    cx.leave_site();
+    r
 }
 
 fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {

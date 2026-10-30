@@ -460,6 +460,233 @@ fn unrecorded_in_force(what: &str, state: &str) -> Response {
     }
 }
 
+/// How often the hearing clock's thread looks at the time while a dead-man is armed (DEADMAN-DEAF-1).
+const HEARING_TICK: std::time::Duration = std::time::Duration::from_millis(10);
+/// A gap between two looks longer than this is time the daemon could not hear; up to it is ordinary scheduling.
+const HEARING_SLACK: std::time::Duration = std::time::Duration::from_millis(50);
+/// A gap at least this long is named in `broker.log` — the shortest dead-man period (`deadman::MIN_PERIOD`).
+const HEARING_LOGGED: std::time::Duration = delulu_broker::deadman::MIN_PERIOD;
+
+/// **DEADMAN-DEAF-1: the daemon's hearing clock** — monotonic time that stands still while the daemon could not hear.
+///
+/// A dead-man judges its holder's silence, and a daemon that was not running — stopped (`SIGSTOP`, a debugger), swapped
+/// out, or not scheduled on a busy host — heard nothing in that time, whatever its holder sent: the beats waited in its
+/// socket and were stamped when it ran again, after their deadline. So a stopped daemon revoked a healthy monitor that had
+/// beaten throughout, and told it "this monitor sent no beat" (witnessed: `monitor_cli`
+/// `a_stopped_daemon_is_not_its_monitors_silence`). DEADMAN-BUSY-1 (D-V2-127) made the handler's unavailability never
+/// count as a holder's silence; this is the same rule for the whole process. Every instant a dead-man is judged by — an
+/// arming, a beat's arrival, a deadline, the loop's wait — is read from this clock.
+///
+/// While a dead-man is armed, a thread of its own looks at the time every [`HEARING_TICK`]; a gap between two looks past
+/// [`HEARING_SLACK`] is deaf time, which the clock leaves out. Until that thread looks again, the time since its last look
+/// past the slack is left out too, so a judgment made the moment the daemon resumes — before the thread has run — already
+/// leaves the pause out. The clock is never fooled the other way: a holder that is itself stopped sends nothing, and its
+/// dead-man fires one period of HEARING after its last beat. What it gives up: while the daemon cannot hear, no dead-man
+/// fires — and no request is answered either, the uses a dead-man would end among them.
+#[derive(Clone)]
+struct HearingClock(std::sync::Arc<HearingInner>);
+
+struct HearingInner {
+    start: std::time::Instant,
+    state: std::sync::Mutex<Hearing>,
+    woken: std::sync::Condvar,
+}
+
+/// Times since the clock's start: the deaf time so far, and the hearing thread's last look.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Hearing {
+    deaf: std::time::Duration,
+    last_look: std::time::Duration,
+    /// A dead-man is armed: the thread looks, and a stale look counts. Otherwise nothing is judged, and the thread sleeps.
+    listening: bool,
+}
+
+impl Hearing {
+    /// The clock's reading at `t` (since its start): `t` less the deaf time — and, while listening, less the time since
+    /// the last look past the slack, which the next look will find deaf.
+    fn heard_at(&self, t: std::time::Duration) -> std::time::Duration {
+        let stale =
+            if self.listening { t.saturating_sub(self.last_look).saturating_sub(HEARING_SLACK) } else { Default::default() };
+        t.saturating_sub(self.deaf).saturating_sub(stale)
+    }
+
+    /// The hearing thread's look at `t`: a gap past the slack since the last look is deaf. Returns the gap when it was.
+    fn look_at(&mut self, t: std::time::Duration) -> Option<std::time::Duration> {
+        if !self.listening {
+            return None;
+        }
+        let gap = t.saturating_sub(self.last_look);
+        self.last_look = t;
+        let deaf = gap.saturating_sub(HEARING_SLACK);
+        self.deaf += deaf;
+        (!deaf.is_zero()).then_some(gap)
+    }
+
+    /// Start or stop listening at `t`. Starting counts nothing before `t` as deaf: the thread was asleep, not the daemon.
+    /// Stopping settles the time since the last look first, as a look would, so the clock never jumps.
+    fn listen_at(&mut self, on: bool, t: std::time::Duration) {
+        match (self.listening, on) {
+            (false, true) => self.last_look = t,
+            (true, false) => drop(self.look_at(t)),
+            _ => {}
+        }
+        self.listening = on;
+    }
+}
+
+impl HearingClock {
+    /// A clock, and its hearing thread — which ends once every copy of the clock is dropped.
+    fn start() -> HearingClock {
+        let clock = HearingClock(std::sync::Arc::new(HearingInner {
+            start: std::time::Instant::now(),
+            state: std::sync::Mutex::new(Hearing::default()),
+            woken: std::sync::Condvar::new(),
+        }));
+        let weak = std::sync::Arc::downgrade(&clock.0);
+        std::thread::spawn(move || loop {
+            let Some(inner) = weak.upgrade() else { return };
+            let state = inner.state.lock().unwrap_or_else(|p| p.into_inner());
+            if !state.listening {
+                // Woken by `listen`; the timeout only lets the thread see that the clock is gone.
+                drop(inner.woken.wait_timeout_while(state, std::time::Duration::from_secs(1), |h| !h.listening));
+                continue;
+            }
+            drop(state);
+            drop(inner);
+            std::thread::sleep(HEARING_TICK);
+            let Some(inner) = weak.upgrade() else { return };
+            let mut state = inner.state.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(gap) = state.look_at(inner.start.elapsed()) {
+                if gap >= HEARING_LOGGED {
+                    eprintln!(
+                        "delulu broker: this daemon did not run for {} ms (stopped, or not scheduled) — its dead-men do not \
+                         count that time as their holders' silence (DEADMAN-DEAF-1)",
+                        gap.as_millis()
+                    );
+                }
+            }
+        });
+        clock
+    }
+
+    /// Now, on the hearing clock.
+    fn now(&self) -> std::time::Instant {
+        let state = self.0.state.lock().unwrap_or_else(|p| p.into_inner());
+        // Read under the lock, so no look can fall between the time and the state it is judged by.
+        let t = self.0.start.elapsed();
+        self.0.start + state.heard_at(t)
+    }
+
+    /// Listen while a dead-man is armed, and sleep otherwise.
+    fn listen(&self, on: bool) {
+        let mut state = self.0.state.lock().unwrap_or_else(|p| p.into_inner());
+        let t = self.0.start.elapsed();
+        state.listen_at(on, t);
+        self.0.woken.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod hearing_tests {
+    use super::{Hearing, HEARING_SLACK, HEARING_TICK};
+    use std::time::Duration;
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    fn listening_at(t: Duration) -> Hearing {
+        let mut h = Hearing::default();
+        h.listen_at(true, t);
+        h
+    }
+
+    /// A stop between two looks is left out once the thread has looked — and the look names the gap.
+    #[test]
+    fn a_gap_past_the_slack_is_deaf_time_the_clock_leaves_out() {
+        let mut h = listening_at(ms(0));
+        assert_eq!(h.look_at(ms(10)), None, "an ordinary tick is no gap");
+        assert_eq!(h.look_at(ms(1510)), Some(ms(1500)), "a 1.5 s stop is named whole");
+        assert_eq!(h.heard_at(ms(1510)), ms(10) + HEARING_SLACK, "and left out past the slack");
+        assert_eq!(h.heard_at(ms(1520)), ms(20) + HEARING_SLACK, "then the clock runs again");
+    }
+
+    /// The moment the daemon resumes, before its hearing thread has looked, the stop is already left out: a judgment made
+    /// then — the loop's timeout firing first — reads the time the stop began (plus the slack), not the time it ended.
+    #[test]
+    fn before_the_thread_looks_the_stop_is_already_left_out() {
+        let mut h = listening_at(ms(0));
+        h.look_at(ms(10));
+        let resumed = h.heard_at(ms(1510));
+        assert_eq!(resumed, ms(10) + HEARING_SLACK, "the clock stood still from the last look past the slack");
+        h.look_at(ms(1510));
+        assert_eq!(h.heard_at(ms(1510)), resumed, "and the look that finds the gap moves it neither way");
+    }
+
+    /// Asleep (no dead-man armed), the thread looks at nothing and nothing is deaf; starting to listen counts nothing before
+    /// it — the thread was asleep, not the daemon.
+    #[test]
+    fn a_clock_that_was_not_listening_counts_nothing_as_deaf() {
+        let mut h = Hearing::default();
+        assert_eq!(h.look_at(ms(5000)), None);
+        assert_eq!(h.heard_at(ms(5000)), ms(5000), "not listening, the clock is the wall clock");
+        h.listen_at(true, ms(9000));
+        assert_eq!(h.heard_at(ms(9010)), ms(9010), "nothing before listening began is deaf");
+        assert_eq!(h.look_at(ms(9010)), None);
+        h.listen_at(false, ms(9020));
+        assert_eq!(h.heard_at(ms(20_000)), ms(20_000), "and nothing after it stopped");
+    }
+
+    /// Over generated histories — looks at ticks and after stops of every size, reads between them, listening switched on
+    /// and off — the clock never runs backward, never faster than the wall clock, and stands still for exactly the deaf
+    /// time it reports once every gap has been looked at.
+    #[test]
+    fn over_generated_histories_the_clock_is_monotone_and_never_faster_than_the_wall() {
+        let mut seed: u64 = 0x5EED_DEAF;
+        let mut next = move || {
+            seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = seed;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        };
+        let (mut stops, mut reads) = (0usize, 0usize);
+        for _ in 0..200 {
+            let mut h = Hearing::default();
+            let (mut t, mut last_read) = (Duration::ZERO, Duration::ZERO);
+            let mut last_heard = Duration::ZERO;
+            for _ in 0..400 {
+                t += match next() % 10 {
+                    0 => {
+                        stops += 1;
+                        ms(60 + next() % 3000) // a stop
+                    }
+                    1..=3 => Duration::from_micros(next() % 2000), // a read soon after
+                    _ => HEARING_TICK + Duration::from_micros(next() % 30_000), // a tick, late by up to 30 ms
+                };
+                match next() % 7 {
+                    0 => h.listen_at(next() % 4 != 0, t),
+                    1..=3 => drop(h.look_at(t)),
+                    _ => {}
+                }
+                let heard = h.heard_at(t);
+                reads += 1;
+                assert!(heard >= last_heard, "the clock ran backward: {last_heard:?} -> {heard:?} at {t:?}, {h:?}");
+                assert!(
+                    heard - last_heard <= t - last_read,
+                    "the clock ran faster than the wall: {:?} in {:?}, {h:?}",
+                    heard - last_heard,
+                    t - last_read
+                );
+                (last_heard, last_read) = (heard, t);
+            }
+            h.look_at(t);
+            assert_eq!(h.heard_at(t), t.saturating_sub(h.deaf), "looked at, the clock is the wall less the deaf time: {h:?}");
+        }
+        assert!(stops > 1000 && reads == 80_000, "the histories held stops ({stops}) and reads ({reads})");
+    }
+}
+
 /// P8-04 step 5: fire every dead-man past its deadline — each revokes its node as itself, the cause in the
 /// record — then free the chain, as a request does (RW 4.48), and say so in `broker.log`.
 fn fire_deadmen(
@@ -563,7 +790,9 @@ fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo 
 
 // ----- the request handler -----------------------------------------------------------------------
 
-/// Handle one request against the broker. Returns the response and whether the daemon should stop.
+/// Handle one request against the broker. Returns the response and whether the daemon should stop. `arrived` is when the
+/// request arrived whole, on the hearing `clock` — the clock every dead-man is judged by (DEADMAN-DEAF-1).
+#[allow(clippy::too_many_arguments)]
 fn handle(
     broker: &mut Broker,
     secrets: &SecretStore,
@@ -572,6 +801,7 @@ fn handle(
     state_dir: &Path,
     req: Request,
     arrived: std::time::Instant,
+    clock: &HearingClock,
 ) -> (Response, bool) {
     // Version gate (spec §8, DL1406). Any mismatch is answered, never acted on.
     if req.version != WIRE_VERSION {
@@ -781,7 +1011,9 @@ fn handle(
             let node = GrantId::from_trusted(node);
             let period = std::time::Duration::from_millis(period_ms);
             failed.set(false);
-            match broker.arm_deadman(&node, period, std::time::Instant::now()) {
+            // DEADMAN-DEAF-1: listening before the dead-man exists, so no moment of its first period goes unheard.
+            clock.listen(true);
+            match broker.arm_deadman(&node, period, clock.now()) {
                 // RW 4.61's rest (D-V2-115, the red team's F5b): `armed at seq N` named no record. Withdrawn and refused: the
                 // monitor stops before its watch begins, and nothing that was in force is lost.
                 Ok(_) if failed.get() => {
@@ -790,7 +1022,7 @@ fn handle(
                 }
                 // DEADMAN-BUSY-1 (D-V2-127): its first period from now — the record written, the answer about to go.
                 Ok((seq, key)) => {
-                    broker.start_deadman_period(&node, std::time::Instant::now());
+                    broker.start_deadman_period(&node, clock.now());
                     (Response::DeadmanArmed { seq, period_ms, key }, false)
                 }
                 Err(r) => (deadman_refused(&node, &r), false),
@@ -798,8 +1030,9 @@ fn handle(
         }
         ReqBody::Beat { node, key } => {
             let node = GrantId::from_trusted(node);
-            // DEADMAN-BUSY-1 (D-V2-127): judged by when it arrived, not when this loop got to it.
-            match broker.beat_deadman_arrived(&node, &key, arrived, std::time::Instant::now()) {
+            // DEADMAN-BUSY-1 (D-V2-127): judged by when it arrived, not when this loop got to it — on the hearing clock
+            // (DEADMAN-DEAF-1), so a beat that waited in the socket while the daemon was stopped arrived in time.
+            match broker.beat_deadman_arrived(&node, &key, arrived, clock.now()) {
                 Ok(_) => (Response::Ok, false),
                 Err(r) => {
                     if matches!(r, delulu_broker::DeadmanRefusal::Fired(_)) {
@@ -1526,12 +1759,16 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // dropped at once, so a flood costs threads it cannot grow without bound.
     const MAX_READERS: usize = 64;
     // DEADMAN-BUSY-1 (D-V2-127): each whole request carries the instant it arrived — read on its own thread, which the
-    // handler being held on one request does not delay.
-    let (whole, requests) = std::sync::mpsc::sync_channel::<(Connection, Request, std::time::Instant)>(MAX_READERS);
+    // handler being held on one request does not delay — by the wall clock, for `broker.log`, and by the hearing clock,
+    // which every dead-man is judged by: it stands still while the whole daemon was not running (DEADMAN-DEAF-1).
+    let clock = HearingClock::start();
+    let (whole, requests) =
+        std::sync::mpsc::sync_channel::<(Connection, Request, std::time::Instant, std::time::Instant)>(MAX_READERS);
     let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
         let stopping = stopping.clone();
         let reading = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let clock = clock.clone();
         std::thread::spawn(move || loop {
             let mut conn = match listener.accept() {
                 Ok(c) => c,
@@ -1552,7 +1789,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                 eprintln!("delulu broker: {MAX_READERS} connections already reading (dropping this one)");
                 continue;
             }
-            let (whole, reading) = (whole.clone(), reading.clone());
+            let (whole, reading, clock) = (whole.clone(), reading.clone(), clock.clone());
             std::thread::spawn(move || {
                 let read = (|| {
                     // If a bound cannot be set, drop the connection rather than risk an unbounded read.
@@ -1565,7 +1802,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                 })();
                 match read {
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
-                    Ok(req) => drop(whole.send((conn, req, std::time::Instant::now()))),
+                    Ok(req) => drop(whole.send((conn, req, std::time::Instant::now(), clock.now()))),
                     Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
                 }
                 // Counted until its request is handed over, not only while it reads: a reader waiting on a busy
@@ -1580,13 +1817,16 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     loop {
         // P8-04 step 5 (D-V2-106): wait for the next whole request — or, while a dead-man is armed, no longer
         // than its deadline. Dead-men are fired BEFORE the next request is handled, whichever woke the loop, so
-        // a stream of requests cannot hold one off and a beat that arrives after its deadline rescues nothing.
-        let next = match broker.next_deadman_deadline() {
+        // a stream of requests cannot hold one off and a beat that arrives after its deadline rescues nothing. The deadline
+        // is on the hearing clock, which listens only while one is armed (DEADMAN-DEAF-1).
+        let deadline = broker.next_deadman_deadline();
+        clock.listen(deadline.is_some());
+        let next = match deadline {
             None => match requests.recv() {
                 Ok(r) => Some(Some(r)),
                 Err(_) => None,
             },
-            Some(at) => match requests.recv_timeout(at.saturating_duration_since(std::time::Instant::now())) {
+            Some(at) => match requests.recv_timeout(at.saturating_duration_since(clock.now())) {
                 Ok(r) => Some(Some(r)),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Some(None),
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
@@ -1596,12 +1836,13 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         let taken = std::time::Instant::now();
         // DEADMAN-BUSY-1 (D-V2-127): as of the request's ARRIVAL — a beat queued behind a request the daemon was held on
         // arrived in time, and is handled after this; on a wake with nothing waiting, as of now. An unbeaten dead-man still
-        // fires at the first request that arrived after its deadline, so a stream of requests cannot hold one off.
-        let as_of = next.as_ref().map_or_else(std::time::Instant::now, |(_, _, arrived)| *arrived);
+        // fires at the first request that arrived after its deadline, so a stream of requests cannot hold one off. Both on
+        // the hearing clock: a daemon woken from a stop judges nothing by the time it was stopped (DEADMAN-DEAF-1).
+        let as_of = next.as_ref().map_or_else(|| clock.now(), |(_, _, _, heard)| *heard);
         fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of);
-        let Some((mut conn, req, arrived)) = next else { continue };
+        let Some((mut conn, req, arrived, heard)) = next else { continue };
         let kind = req.body.kind();
-        let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, arrived);
+        let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, heard, &clock);
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
@@ -2425,6 +2666,28 @@ mod tests {
             }
             other => panic!("arm: {other:?}"),
         }
+    }
+
+    /// **DEADMAN-DEAF-1: an arming is answered with the hearing clock already listening** — so no moment of the first
+    /// period goes unheard, a stop between the arming and the serve loop's next turn included. The loop's own `listen` would
+    /// start the clock only after the answer is written, counting nothing before it as deaf; no process-level witness can
+    /// hold that window (mutant M914 survived `monitor_cli`), so the handler is asked directly.
+    #[test]
+    fn an_arming_is_answered_with_the_hearing_clock_listening() {
+        let state = temp_state("armlisten");
+        let mut broker = Broker::new();
+        let root = broker
+            .issue_root(delulu_broker::Holder::new("process", "t", "pid:1"), spec_to_authority(&spec(&["Write"])), None)
+            .expect("a root");
+        let (secrets, failed, clock) =
+            (SecretStore::load(secrets_path(&state)), Rc::new(Cell::new(false)), HearingClock::start());
+        let listening = |clock: &HearingClock| clock.0.state.lock().unwrap().listening;
+        assert!(!listening(&clock), "the baseline — a clock with no dead-man to judge sleeps");
+        let arm = Request::new(ReqBody::ArmDeadman { node: root.as_str().to_string(), period_ms: 500 });
+        let (resp, _) = handle(&mut broker, &secrets, &failed, 1, &state, arm, clock.now(), &clock);
+        assert!(matches!(resp, Response::DeadmanArmed { .. }), "{resp:?}");
+        assert!(listening(&clock), "the arming was answered with the hearing clock asleep");
+        let _ = std::fs::remove_dir_all(&state);
     }
 
     /// **P8-04 step 5: an idle daemon fires a dead-man on its own.** Nothing is sent to it after the arming

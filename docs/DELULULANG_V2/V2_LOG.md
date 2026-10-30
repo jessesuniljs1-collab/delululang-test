@@ -10035,3 +10035,177 @@ into a `Vec`. That came to 14.31 allocations for each `get` and `insert` against
 
 **Measured** with the release binary: the counting loop takes 285–295 ms on WASM, one run 414 ms. A4's depth
 documentation and this change are stacked on #90.
+
+## 2026-10-29 — the laptop: a write refused through a written type names the type (C6, RW 6.37)
+
+**Read first.** #91 read green on its run `40793604231` (14 jobs success, 2 skipped) and was fast-forwarded onto
+`master` at `15c977d`. #90's push run `40793498011` on `c5feb63` was green. **One red:** `master`'s push run
+`40793268946` on `31d26bc` failed `test (macos-latest)` (job `123183433447`) in `monitor_cli`
+`a_long_chain_does_not_kill_a_healthy_monitor`: six periods into the watch, the monitor over a 101,251-record chain (one
+whole read 1.45 s) had been revoked by its own 500 ms dead-man, with the run and the node minted after the watch began.
+The same test passed on that commit's pull-request run and on `c5feb63`'s push run. It is RW 7.23's class, a wall-clock
+test once red on a runner; it is examined next, on its own.
+
+**What the agent found** (C6, the zero-authority agent, Haiku 5.5, 2026-10-24), and what the laptop met again while
+measuring A5: `let b: List[Int] = []` then `b.push(2)` is refused DL1604 *"cannot write a list element (push) through a
+`val` receiver"*. Nothing in the program says `val`. A written type with no capability keyword takes its type's default,
+`val` for a list or a map, where an unannotated literal is `ref`. A12's hint (RW 6.19) made it likelier: it suggested
+`let m: Map[Str, List[Str]] = Map()`, which a program then could not insert into.
+
+**Kept.** The default is the language's rule, not a papercut: a `val` binding is what makes C64's lift at a call sound,
+and the six reference capabilities read the same in a `let` as in a parameter.
+
+**The change** (`rcap_check.rs`, `check.rs`).
+- A binding records why it is `val` when nothing wrote `val`: `WhyVal::Lift`, A1's call, or `WhyVal::Written`, a `let`
+  whose written type names no capability keyword and whose type's default is `val`.
+- A refused write through a `Written` binding says that `b`'s written type names no reference capability, which reads
+  as `val`, and to write `let b: ref …` or to leave the type out. A second span labels the type: *"`b` is `val` by this
+  type"*.
+- A binding already `val` by its type keeps that reason when it is later passed to a `val` parameter. The call took
+  nothing from it, so the lift message would have named the wrong cause.
+- A12's DL0405 hint writes `let m: ref Map[Str, List[Str]] = Map()` and `let xs: ref List[Int] = []`.
+- `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` adds it.
+
+**Gates.**
+- `campaign_wording` `a_write_refused_through_a_written_type_names_the_type`: the message, the remedy, the second span's
+  text (`List[Int]`) and label; `ref List[Int]` and no type are accepted; an explicit `val` gets no such reason; a
+  binding `val` by its type and then passed to `keep(xs: List[Int])` keeps the type as its reason. Red on the old
+  `rcap_check.rs`.
+- Mutants, each killed at its own assertion: M905 (no `Written` reason recorded), M906 (a later call replaces the
+  type's reason), M907 (an explicit `val` given the type's reason).
+- `unknown_receiver` checks the hint's `let m: ref Map[`.
+- `cargo test -p delulu-check` (10 targets) and `-p delulu-diag` passed; `core_invariance` passed with the snapshot
+  unchanged.
+
+## 2026-10-29 — on-demand routine run 7: a stopped daemon is not its monitor's silence (DEADMAN-DEAF-1, D-V2-194; RW 4.87, 7.25)
+
+**Read first.** Opus 5.5 at xhigh: `CLAUDE_EFFORT=xhigh`, and every reply in the transcript `"effort":"xhigh"`. One branch was
+ahead of `master`: `laptop/val-by-type` (#92, C6), green on its run `40921845188` (14 jobs success, 2 skipped). Its two
+autosave snapshots were checked against it: `1667859` landed whole in `579f60d`, and `59df027` is an earlier draft of the
+same paths. #92 was fast-forwarded onto `master` at `579f60d`, and its push run `40954259791` read green (14 jobs, 2
+skipped). The Survey and `doctor` were healthy at the start. The session's harness refused to delete `laptop/val-by-type`
+from `origin`, so the branch is left for the laptop.
+
+**The red.** `master`'s push run `40793268946` on `31d26bc` failed `test (macos-latest)` (job `123183433447`) in
+`monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`. Six periods into the watch, the monitor (over 101,251
+records, one whole read 1.45 s) and the run under it were revoked at seq 101258, the record right after the delegation
+the test made at four periods. The message named the nodes' states and nothing else, so it could not tell three causes
+apart:
+- (a) the monitor not scheduled for a period, which is what a dead-man is for;
+- (b) the monitor stopped on an error, since every error ends the watch and leaves its dead-man armed (by design), and
+  it fires one period later;
+- (c) the daemon.
+
+It was not reproduced in the VM: 3 of 3 green on a quiet VM, and 6 of 6 beside four copies of the whole `monitor_cli`
+target (load average 7 on 4 CPUs).
+
+**The class, asked of each party in turn.** A monitor stopped for longer than its period is revoked
+(`a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes`), by design. Nobody had stopped the DAEMON. Stopped with
+`SIGSTOP` for three periods while the monitor beat, it revoked the monitor (73 beats counted) and its run, and told the
+monitor *"this monitor sent no beat within 500 ms"*, which was false. Red 3 of 3 on the old `brokerd.rs`. The mechanism:
+DEADMAN-BUSY-1 (D-V2-127) stamps each request's arrival on a reader thread of its own, so a held handler no longer counts
+against a holder. But that thread is the daemon's. A daemon that is not running stamps the beats waiting in its socket
+only when it runs again, after their deadline, and the serve loop, woken by its own timeout, can judge before the reader
+threads have run at all.
+
+**The fix (D-V2-194, `brokerd.rs`).**
+- A hearing clock: monotonic time that stands still while the daemon could not hear.
+- While a dead-man is armed, a thread of its own looks at the time every 10 ms. A gap past 50 ms is deaf time, and the
+  clock leaves it out. Until the thread looks again, the time since its last look past the slack is left out too, so a
+  judgment made the moment the daemon resumes already leaves the pause out.
+- Every instant a dead-man is judged by reads this clock: the arming (listening before the dead-man exists), its first
+  period, a beat's and a disarm's arrival, the loop's wait, and its as-of.
+- `broker.log` names each gap of 100 ms or more. The wall clock stays for `broker.log`'s late-answer lines.
+- With nothing armed the thread sleeps, so an idle daemon still never wakes.
+- A holder that is itself stopped is still dead: its dead-man fires one period of hearing after its last beat.
+
+**Whether (c) was the macOS red** is not known, and cannot be now: the run kept no evidence. A macOS runner (3 cores,
+7 GB) running `monitor_cli`'s tests three at a time beside a 33 MB chain is a host on which a process can go
+unscheduled, and (a) is as possible as (c). What changed is that the next red says which. Both witnesses print the
+monitor's exit status and standard error (its `ended` line) and `broker.log`: a dead-man's firing with the beats it
+counted, a late answer, and now the daemon's own deaf interval.
+
+**Gates.**
+- `monitor_cli` `a_stopped_daemon_is_not_its_monitors_silence` (unix): the daemon stopped for three periods, and the
+  monitor and its run stay live. The daemon's `broker.log` names its stop, so the witness looked. Then the monitor is
+  killed and its dead-man still fires, read about 500 ms later (514, 540, 502 ms), so a clock left standing still cannot
+  pass. Red 3 of 3 on the old `brokerd.rs`.
+- `brokerd` `hearing_tests` (4): a gap is deaf time; a stale look already leaves the stop out; a clock that is not
+  listening counts nothing; and over 200 generated histories (80,000 reads, over a thousand stops) the clock is monotone
+  and never faster than the wall. Plus `an_arming_is_answered_with_the_hearing_clock_listening`.
+- Mutants M908–M915, each red, control green:
+  - M908, no stale look: two `hearing_tests`;
+  - M909, no deaf time added: the witness;
+  - M910, listening counts its sleep: two `hearing_tests`;
+  - M911, the loop's as-of by the wall: the witness;
+  - M912, a beat's arrival by the wall: the witness;
+  - M913, never listening: the witness;
+  - M914, the arming's own listen removed: it survived `monitor_cli`, since a window of microseconds before the loop's
+    next turn is one no process-level witness can hold, and is killed by the handler test written for it;
+  - M915, a hearing thread that never looks: the witness, whose killed monitor then never fires.
+- `scripts/clippy.sh -j 4` clean; `scripts/check-other-os.sh x86_64-pc-windows-msvc aarch64-apple-darwin` clean.
+- `witness.yml` with every `delulu` test target at `1f5206c` on the branch:
+  - macOS `40958776212`: success, 1,088 passed, 0 failed (101 binaries; the witness and the clock's tests named);
+  - Windows `40958779882`: success, 1,055 passed, 0 failed (the clock's tests and the long-chain witness named; the stop
+    witness is unix-only).
+- The full suite in the VM: 2,600 passed, 0 failed, 16 ignored, 189 binaries (`scripts/suite.sh`, `EXIT=0`, the tree
+  unmoved).
+- `master`'s push run on `1f5206c`: `40960549621`, green, 14 jobs success and 2 skipped. `actors_pingpong` NOT MEASURED
+  on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads, 1.58x observed).
+
+## 2026-10-30 — on-demand routine run 8: `launch/2.0.0` brought current with `master` at `dcfbb18` (release procedure step 1)
+
+**Read first.**
+- `master` `dcfbb18`'s push run `40963487003` (on-demand routine run 7's records): 14 jobs success, 2 skipped (`heavy-gates`,
+  `miri-slow`). `actors_pingpong` NOT MEASURED on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads,
+  2.43x observed). The sandbox properties as recorded before (macOS `filesystem_confinement absent`, its reads not confined).
+- The nightly `40848219274` (2026-10-29, on `c5feb63`): 18 of 18 success. The broker's Miri took **3 h 27 min**, the longest
+  yet against its 240-minute cap (3 h 00, 3 h 01, 3 h 07 and 2 h 17 min before it).
+- On-demand routine run 7's claims, re-run in the VM: `cargo test -p delulu --bin delulu hearing` 5 passed;
+  `monitor_cli` 26 passed, `a_stopped_daemon_is_not_its_monitors_silence` among them.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1567 nodes, 17476 edges)`; `ok: 26 check(s)
+  passed`.
+- `origin/autosave/laptop`'s newest snapshot, `1667859` (on `15c977d`, 17:25 UTC), landed whole in `579f60d` (`git diff`
+  over its three paths empty); `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` are in `master`'s history, and the
+  harness refused their deletion again.
+
+**The milestone.** `master` held 13 commits `launch/2.0.0` lacked (#84 to #92, A14 through C6, and run 7's DEADMAN-DEAF-1).
+Release procedure step 1 was done in a worktree, `git merge --no-ff origin/master`, as `2667105`:
+- `CHANGELOG.md` was the one conflict outside the map. `master` writes each change as a `## Unreleased` section, and
+  `launch/2.0.0` keeps them under `## [2.0.0]` as `###`, so every merge conflicts there and each was resolved by a script
+  written again for it. `scripts/launch-changelog.py` is that script, committed: it keeps the launch side, folds each of
+  `master`'s sections not yet folded, and refuses an order it cannot fold. On this merge it folded ten, and its output
+  equals the hand fold (checked in a scratch worktree at `e998373`; run twice it writes the same file; with the launch
+  branch as its source it folds nothing).
+- The *Breaking* paragraph was judged by hand against the ten. One is added, D-V2-193: a program that reads
+  `IoErr::Other`'s text receives the kind of failure (`invalid filename`), not the operating system's message. D-V2-193
+  says the text was never promised, but a program that branched on it behaves differently. The other nine change a
+  refusal's wording, the interpreter's or the WASM engine's speed, a document, or a monitor's false revocation; none can
+  stop a 1.x program.
+- The merged tree's Rust sources equal `master`'s at `dcfbb18`. Only the 2.0.0 version in `Cargo.toml` and `Cargo.lock`
+  differs, so `master`'s push runs on three systems already cover its code.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree: `delulu-conform --coverage` 358/358 (diag 155, prim 86,
+  grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check examples
+  docs/book/samples` 0 would change, 26 clean. Criteria 1, 3, 4 and 8 keep citing `0cea85d`'s runs until this tree's
+  own are read.
+
+**Gates on the merged tree** (the VM): `scripts/clippy.sh -j 4` clean and stamped; the Survey 1568 nodes, 17513 edges,
+check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; the document gates `book` 9,
+`core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance` 11,
+`release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite 94 passed.
+
+**Read at `2667105`:**
+- `everything` `41011808360`: **18 of 18 jobs success** (1 h 51 min in all), the Linux, Windows, macOS and arm64 test
+  jobs, `heavy-gates`, `fuzz`, `formal`, `supply-chain`, `microvm`, `microvm-reproducible` and every Miri job among them.
+  The broker's Miri took 1 h 51 min and the checker's 1 h 37 min (the 2026-10-29 nightly's broker Miri took 3 h 27 min,
+  with `delulu-broker`'s own source the same). `actors_pingpong` MEASURED on arm64 (2.89x where the machine gave 3.94x,
+  against a bar of 1.48x: passed); NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads,
+  2.39x observed).
+- The release dry run `41011811502`: success in 4 min 8 s, its four `package` jobs success (x86-64 and arm64 Linux, macOS
+  arm64, Windows), its `release` job skipped (no tag).
+- `master` `7a36c46`'s push run `41012192633` (this entry's first records): 14 jobs success, 2 skipped.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both, in the merge of this entry's closing commit into `launch/2.0.0`.
+
+**Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 names the script, the document gates by name, criterion 2's
+three commands and the everything run's length, and says the launch worktree keeps its default `target/`: the pre-commit
+hook looks for the Survey's binary there, so a `CARGO_TARGET_DIR` exported elsewhere fails it.

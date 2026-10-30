@@ -11,6 +11,27 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a stopped broker daemon no longer revokes a healthy monitor, 2026-10-29
+
+- **Fixed: a broker daemon that was stopped or not scheduled revoked every monitor whose dead-man it held, and every run
+  under them** (DEADMAN-DEAF-1, D-V2-194). A dead-man judged each beat by when the daemon read it. So beats a healthy
+  monitor sent while the daemon was not running (stopped, swapped out, or not scheduled on a busy host) counted as late,
+  and the monitor was told it "sent no beat". A dead-man now counts only the time the daemon could hear, and a stop is
+  left out of every period. A monitor that is itself stopped or killed is still revoked one period after its last beat.
+- **Added: `broker.log` names each time the daemon did not run for 100 ms or more** while a dead-man is armed.
+
+## Unreleased — a write refused through a written type says the type made it `val`, 2026-10-29
+
+- **Improved: a write refused because a `let`'s written type made it `val` says so, at the type** (the agent test
+  campaign's C6, RW 6.37). `let b: List[Int] = []` then `b.push(2)` was refused *"cannot write a list element (push)
+  through a `val` receiver"*, though the program wrote no `val`: a written type with no capability keyword means `val`,
+  where `let b = []` is `ref`. The same DL1604 now says that `b`'s written type names no reference capability, points at
+  `List[Int]`, and says to write `let b: ref …` or to leave the type out. What is refused is unchanged.
+- **Changed: the hint for a method on a value whose type is not known writes `ref`** (A12's DL0405). It suggested
+  `let m: Map[Str, List[Str]] = Map()`, which makes the map read-only, so following it led to this DL1604. It now
+  suggests `let m: ref Map[Str, List[Str]] = Map()`.
+- **Docs:** `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` says it.
+
 ## Unreleased — a `Map` lookup on the WASM engine copies nothing, 2026-10-29
 
 - **Improved: `Map` lookups and updates on `--engine wasm` take a quarter of the time** (the agent test campaign's A5, RW
