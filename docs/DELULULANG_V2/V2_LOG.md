@@ -10152,3 +10152,51 @@ counted, a late answer, and now the daemon's own deaf interval.
   unmoved).
 - `master`'s push run on `1f5206c`: `40960549621`, green, 14 jobs success and 2 skipped. `actors_pingpong` NOT MEASURED
   on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads, 1.58x observed).
+
+## 2026-10-30 — on-demand routine run 8: `launch/2.0.0` brought current with `master` at `dcfbb18` (release procedure step 1)
+
+**Read first.**
+- `master` `dcfbb18`'s push run `40963487003` (on-demand routine run 7's records): 14 jobs success, 2 skipped (`heavy-gates`,
+  `miri-slow`). `actors_pingpong` NOT MEASURED on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads,
+  2.43x observed). The sandbox properties as recorded before (macOS `filesystem_confinement absent`, its reads not confined).
+- The nightly `40848219274` (2026-10-29, on `c5feb63`): 18 of 18 success. The broker's Miri took **3 h 27 min**, the longest
+  yet against its 240-minute cap (3 h 00, 3 h 01, 3 h 07 and 2 h 17 min before it).
+- On-demand routine run 7's claims, re-run in the VM: `cargo test -p delulu --bin delulu hearing` 5 passed;
+  `monitor_cli` 26 passed, `a_stopped_daemon_is_not_its_monitors_silence` among them.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1567 nodes, 17476 edges)`; `ok: 26 check(s)
+  passed`.
+- `origin/autosave/laptop`'s newest snapshot, `1667859` (on `15c977d`, 17:25 UTC), landed whole in `579f60d` (`git diff`
+  over its three paths empty); `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` are in `master`'s history, and the
+  harness refused their deletion again.
+
+**The milestone.** `master` held 13 commits `launch/2.0.0` lacked (#84 to #92, A14 through C6, and run 7's DEADMAN-DEAF-1).
+Release procedure step 1 was done in a worktree, `git merge --no-ff origin/master`, as `2667105`:
+- `CHANGELOG.md` was the one conflict outside the map. `master` writes each change as a `## Unreleased` section, and
+  `launch/2.0.0` keeps them under `## [2.0.0]` as `###`, so every merge conflicts there and each was resolved by a script
+  written again for it. `scripts/launch-changelog.py` is that script, committed: it keeps the launch side, folds each of
+  `master`'s sections not yet folded, and refuses an order it cannot fold. On this merge it folded ten, and its output
+  equals the hand fold (checked in a scratch worktree at `e998373`; run twice it writes the same file; with the launch
+  branch as its source it folds nothing).
+- The *Breaking* paragraph was judged by hand against the ten. One is added, D-V2-193: a program that reads
+  `IoErr::Other`'s text receives the kind of failure (`invalid filename`), not the operating system's message. D-V2-193
+  says the text was never promised, but a program that branched on it behaves differently. The other nine change a
+  refusal's wording, the interpreter's or the WASM engine's speed, a document, or a monitor's false revocation; none can
+  stop a 1.x program.
+- The merged tree's Rust sources equal `master`'s at `dcfbb18`. Only the 2.0.0 version in `Cargo.toml` and `Cargo.lock`
+  differs, so `master`'s push runs on three systems already cover its code.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree: `delulu-conform --coverage` 358/358 (diag 155, prim 86,
+  grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check examples
+  docs/book/samples` 0 would change, 26 clean. Criteria 1, 3, 4 and 8 keep citing `0cea85d`'s runs until this tree's
+  own are read.
+
+**Gates on the merged tree** (the VM): `scripts/clippy.sh -j 4` clean and stamped; the Survey 1568 nodes, 17513 edges,
+check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; the document gates `book` 9,
+`core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance` 11,
+`release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite 94 passed.
+
+**Dispatched at `2667105`:** `ci.yml` `jobs=everything` `41011808360` and `release.yml`'s dry run `41011811502`.
+Their reading follows below when it is done.
+
+**Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 names the script, the document gates by name, criterion 2's
+three commands and the everything run's length, and says the launch worktree keeps its default `target/`: the pre-commit
+hook looks for the Survey's binary there, so a `CARGO_TARGET_DIR` exported elsewhere fails it.

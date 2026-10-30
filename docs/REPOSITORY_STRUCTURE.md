@@ -304,6 +304,8 @@ DeluluLang/
 │   ├── hooks/rust-inputs-hash      # one hash of every Rust input in the working tree or the index, git
 │   │                               #   only — what `clippy.sh` stamps and the hook compares
 │   ├── clippy.sh                   # the workspace clippy CI's `lints` runs, stamping what it passed
+│   ├── launch-changelog.py         # a merge of `master` into `launch/2.0.0`: `master`'s new `## Unreleased`
+│   │                               #   sections folded into `## [2.0.0]` as `###` — on-demand run 8
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught

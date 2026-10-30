@@ -289,11 +289,18 @@ another OS, and then takes about seven minutes itself (run 5).
    fresh-history push, the tag, `RELEASES=on`, publishing) — each named in *Open / next* as the laptop's. When nothing a
    VM can do is left, go on to items 4–7 below.
    **Keeping `launch/2.0.0` current is a VM's work too** (on-demand run 1, release procedure step 1): `git worktree add
-   ../launch-wt launch/2.0.0` with its own `CARGO_TARGET_DIR` (the build is 2.0.0's); `git merge --no-ff origin/master`; move
-   `master`'s `## Unreleased` CHANGELOG sections into the `## [2.0.0]` section as `###` entries; keep both sides of the
+   ../launch-wt launch/2.0.0` with its own target (the worktree's default `target/`: the pre-commit hook looks for the
+   Survey's binary there, so an exported `CARGO_TARGET_DIR` elsewhere fails it); `git merge --no-ff origin/master`; fold
+   `master`'s new `## Unreleased` CHANGELOG sections into `## [2.0.0]` as `###` entries with `python3 -I
+   scripts/launch-changelog.py` (on-demand run 8 — it refuses an order it cannot fold), then judge the 2.0.0 *Breaking*
+   paragraph against each section it lists, by hand; keep both sides of the
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
-   rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document gates there; commit, push the branch, and dispatch `ci.yml`
-   (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
+   rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document
+   gates there (`book`, `core_invariance`, `distribution`, `doctor_cli`, `editor_contract`, `evidence_claims`,
+   `governance`, `release`, `repository_structure`, and `delulu-survey`'s own suite); re-measure CHECKLIST-2.0's criterion 2
+   (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples docs/book/samples`); commit, push
+   the branch, and dispatch `ci.yml` (`jobs=everything`, about 3 h 10 min — the broker's Miri) and `release.yml` at it.
+   Never the reverse merge. Then `git worktree remove` it and delete its target
    (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free). **Under about 15 GB free,
    delete `master`'s `target/debug` before the launch build** (on-demand run 5: the launch build took 13 GB down to 3 GB
    beside `master`'s 16 GB of test binaries; `master`'s work is committed by then, and a later suite rebuilds it).
