@@ -30,13 +30,124 @@ body (DL0401, D-V2-184); a top-level constant's value is checked and must be pur
 authority pin or carries none, as `build` does (DL1001, D-V2-186); `run --sandbox` refuses a `--report-out` inside a scope
 the program may write, as the ordinary run does (D-V2-21, RW 4.84); `r.int(lo, hi)` with `hi <= lo` faults with DL0908
 instead of DL0904 (D-V2-190); every `--seed` draws a different sequence than under 1.x, since the seed is mixed first
-(D-V2-191), and an actor's draws now follow `--seed` too (D-V2-192).
+(D-V2-191), and an actor's draws now follow `--seed` too (D-V2-192); a program that reads `IoErr::Other`'s text
+receives the kind of failure, such as `invalid filename`, not the operating system's message (D-V2-193).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a stopped broker daemon no longer revokes a healthy monitor, 2026-10-29
+
+- **Fixed: a broker daemon that was stopped or not scheduled revoked every monitor whose dead-man it held, and every run
+  under them** (DEADMAN-DEAF-1, D-V2-194). A dead-man judged each beat by when the daemon read it. So beats a healthy
+  monitor sent while the daemon was not running (stopped, swapped out, or not scheduled on a busy host) counted as late,
+  and the monitor was told it "sent no beat". A dead-man now counts only the time the daemon could hear, and a stop is
+  left out of every period. A monitor that is itself stopped or killed is still revoked one period after its last beat.
+- **Added: `broker.log` names each time the daemon did not run for 100 ms or more** while a dead-man is armed.
+
+### a write refused through a written type says the type made it `val`, 2026-10-29
+
+- **Improved: a write refused because a `let`'s written type made it `val` says so, at the type** (the agent test
+  campaign's C6, RW 6.37). `let b: List[Int] = []` then `b.push(2)` was refused *"cannot write a list element (push)
+  through a `val` receiver"*, though the program wrote no `val`: a written type with no capability keyword means `val`,
+  where `let b = []` is `ref`. The same DL1604 now says that `b`'s written type names no reference capability, points at
+  `List[Int]`, and says to write `let b: ref …` or to leave the type out. What is refused is unchanged.
+- **Changed: the hint for a method on a value whose type is not known writes `ref`** (A12's DL0405). It suggested
+  `let m: Map[Str, List[Str]] = Map()`, which makes the map read-only, so following it led to this DL1604. It now
+  suggests `let m: ref Map[Str, List[Str]] = Map()`.
+- **Docs:** `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` says it.
+
+### a `Map` lookup on the WASM engine copies nothing, 2026-10-29
+
+- **Improved: `Map` lookups and updates on `--engine wasm` take a quarter of the time** (the agent test campaign's A5, RW
+  6.36). A word count over 2 MB, 372,300 words into a `Map[Str, Int]`, took 1.28–1.32 s in its counting loop on WASM,
+  against 0.63–0.80 s on the interpreter. It now takes 0.29 s. The engine finds a key by binary search over the map's
+  pairs in the guest's memory. Each probe copied its pair's key out into a new string, and each call copied the map's
+  header, about 14 allocations for a `get` and an `insert`. The keys are now compared where they lie, and the
+  answers are unchanged.
+
+### the WASM engine's call depth is documented, 2026-10-29
+
+- **Docs: how deep a recursion runs on each engine** (the agent test campaign's A4, RW 6.35). The interpreter's
+  bound, 10,000 frames, was documented; the WASM engine's was not. Its bound is the guest's stack, so it depends on each
+  frame's size: a one-parameter recursion ran 16,351 calls deep and was refused by 16,448. `GETTING_STARTED.md` and
+  `docs/for-agents.md` now say so, with the advice to write such a recursion as a loop.
+
+### a name in another script, and a missing expression, are each refused once, 2026-10-29
+
+- **Improved: a name written in another script is refused once, as a name** (the agent test campaign's C12, RW 6.34).
+  `fn 计算(x: Int)` drew DL0101 *"unexpected character"* for each of its letters at each place it was written, then
+  DL0201 *"expected a name"*. It now draws one DL0101 per word: *"`计算` is not a name: identifiers are ASCII letters,
+  digits and `_`"*. Identifiers are still ASCII only. A program with such a name is refused as before.
+- **Improved: where the parser could not read an expression, no second refusal follows at the same place** (C13).
+  The placeholder the parser put there was typed `Int`. So `if { 1 } else { 2 }` and a 200-deep `if` were also refused
+  *"`if` condition must be Bool"*, at the place DL0202 or DL0210 had already named. The placeholder now has an unknown
+  type.
+- **Docs: a mint is pure, and checked at its call** (C15). `GETTING_STARTED.md` said minting is pure, and a reader took that
+  to mean a mint is never refused. It now says that a mint the run was not granted is refused where it is written
+  (DL0703), on an ordinary run and under `--lease` alike.
+
+### a refused network mint names the host it asked for, 2026-10-29
+
+- **Improved: `root.http([...])` for a host granted nothing names that host** (the agent test campaign's B4, RW 6.33).
+  The refusal read "`network host` was not granted to this program — pass `--grant net=HOST`": a placeholder where
+  the request belongs. Under `--lease` it read "does not carry `net=HOST`", so it could not say which host was asked for. It
+  now reads "network access to `evil.example` was not granted to this program — pass `--grant net=evil.example`".
+  Under a lease it names `net=evil.example`, and `net.special=` for a special-use host. This is the same on both engines and under
+  `authority --within`. The code (DL0703) is unchanged.
+
+### `IoErr::Other` says the kind of failure, the same on every OS, 2026-10-29
+
+- **Changed: `IoErr::Other(m)` carries the kind of failure, never the operating system's own message** (D-V2-193, the
+  agent test campaign's B11, RW 6.32). Reading or writing a 300-character file name gave a program *"The filename,
+  directory name, or volume label syntax is incorrect. (os error 123)"* on Windows, in the machine's language, and other
+  words on Linux and macOS. `m` is now the kind of failure, such as `invalid filename` or `is a directory`, on every OS
+  and both engines. The variants are unchanged, and so is when each is chosen.
+
+### a refused path or URL is quoted as written; a scheme refusal says what the URL lacks, 2026-10-29
+
+- **Fixed: a refused path or URL was quoted with every backslash doubled** (the agent test campaign's B6, RW 6.31).
+  A path refused as `DL0904` (on both engines), and the operator's `note: the request to … was not delivered`, quoted
+  it through Rust's debug escaping, so `\\?\C:\x` read `\\\\?\\C:\\x`. Both now quote it as written. Each
+  control character, line break and character that reorders a line is still shown escaped (`\u{1b}`), as everywhere
+  else a terminal is written.
+- **Fixed: a URL refused for its scheme was told "there is no plain-HTTP path"** (B7) whatever it was: `HTTPS://`, `https:host`,
+  `//host`, a bare host, `file:`, `ftp:` or the empty URL. The note now says the URL does not begin with `https://` (lower case,
+  two slashes, then the host). The refusal itself, and what the program is told (`Refused`), are unchanged.
+
+### five refusals name the mistake that was made, 2026-10-29
+
+- **Improved: five refusals now name the mistake that was made** (the agent test campaign's A6, C7, C8, C10 and C16,
+  RW 6.30). Each keeps its code.
+  - `"a" < "b"` is one DL0401: *a `Str` has no order*. It was refused twice, as "arithmetic expects Int or Float", once
+    per side. Any other comparison of the wrong type now says *comparison expects Int or Float*, so `1 < 2 < 3` reads that way too.
+  - `load("x.dpx")` is DL0403 alone, naming `load(host, path, grant)`. The path was also judged as the host and called a
+    forged capability (DL0601).
+  - A function kept in a record field and called as a method (`h.run(1)`) is still DL0405, and now says how a field's function is
+    called: `(h.run)(…)`.
+  - A reserved word is refused for its own reason (DL0106). `tag` and the other five reference capabilities are
+    refused as reference capabilities. `plugin`, `secret` and `cap` are refused so that no declared name can pose as an
+    authority-bearing type. Only `async`, `await`, `trait`, `impl`, `where` and `pure` are still "reserved for a future
+    stage", which every word used to be called. `delulu explain DL0106` lists the three groups.
+  - `const N: Int = 3` is DL0208 saying a module constant is written with `let`. It was a bare "expected an item".
+
+### the interpreter runs loops and calls faster, 2026-10-29
+
+- **Improved: the interpreter takes 1.5× to 2.1× less time on loops, calls and `match`** (A14, RW 3.24). A merge sort of
+  100,000 `Int`s took 8.2 s and now takes 5.0 s; Study C's `loop_sum_1m` took 694 ms and now takes 327 ms. Both were
+  measured on the same Windows laptop, old binary against new, and the programs print the same output as before. The changes:
+  - A variable is found by comparing names, not by hashing its name in every scope it passes through.
+  - Assigning to a variable no longer allocates its name.
+  - A block without `let`, and a `match` arm that binds nothing, no longer get a scope of their own.
+  - A call to one of the module's functions evaluates its arguments straight into the callee's scope.
+  - `Some`, `None`, `Ok` and `Err` share their names.
+  - `==` of two `Int`s, `Float`s, `Bool`s or `Str`s no longer allocates.
+
+  No program's behaviour changes. For heavy computation, `--engine wasm` is still about 100 times faster: the merge
+  sort takes 56 ms there.
 
 ### `str()` of a `Float` from `r.float()` runs on WASM, 2026-10-27
 

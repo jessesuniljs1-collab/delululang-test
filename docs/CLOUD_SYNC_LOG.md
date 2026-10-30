@@ -6078,3 +6078,210 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      (`2026-10-24/A-builder/REPORT.txt`, `_head-chef/VERIFIED.md`).
   4. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — A14: the interpreter's loops and calls (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/a14-interp-steps` (on `master` `470ac4f`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. Outside this pull request, on `launch/2.0.0`: `e998373`. It merges
+  `master`'s #83 records and cites `0cea85d`'s `everything` `40551800164` (18/18) and its release dry run
+  `40551806058` (success) in CHECKLIST-2.0.
+- Files and folders: M `crates/delulu-runtime/src/value.rs`, `crates/delulu-runtime/src/interp.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 3.24), `docs/for-agents.md`, `HANDOFF.md` (§11.5), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A `crates/delulu-runtime/tests/step_allocations.rs`. Deleted, renamed:
+  nothing.
+- **Open / next, in order:**
+  1. Read this pull request's run; land on green. Merge `master` into `launch/2.0.0` and dispatch its `everything` run
+     and its release dry run.
+  2. Study C's next run, in WSL as published, re-measures the interpreter's ratios.
+  3. The papercuts: A4–A8, A13, B4–B8, B11, C6–C16. The ledger is on `origin/autosave/dogfood`.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — five refusals name the mistake: A6, C7, C8, C10, C16 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/campaign-wording` (on `master` `982c4e0`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #84 (A14) landed first, at `982c4e0`; its run was `40781581403`.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-syntax/src/parser.rs`,
+  `crates/delulu-diag/src/codes.rs` (DL0106's explanation), `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.30), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A
+  `crates/delulu-check/tests/campaign_wording.rs`. Deleted, renamed: nothing. (The generated reference does not carry
+  DL0106's explanation: `--check-reference` in sync.)
+- **Open / next, in order:**
+  1. Read this pull request's run; land on green. Merge `master` into `launch/2.0.0`, then dispatch its `everything` run
+     and its release dry run.
+  2. The papercuts left in RW 6.30.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a refused path or URL quoted as written; the scheme refusal's sentence: B6, B7 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/campaign-refusal-text` (on `laptop/campaign-wording` `083661e`, #85)   Pull request: opened with this
+  commit, after #85
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/egress.rs`,
+  `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/egress_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.31),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #85, then this pull request, each on green. Then merge `master` into `launch/2.0.0` and dispatch its
+     `everything` run and its release dry run.
+  2. B11, then the other papercuts in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — `IoErr::Other` says the kind of failure: B11, D-V2-193 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/io-other-words` (on `laptop/campaign-refusal-text` `422f163`, #86)   Pull request: opened with this
+  commit, after #86
+- **What:** see V2_LOG's entry of the same name and D-V2-193. #85 landed at `083661e` (run `40784851893`, 14 jobs
+  success).
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu-wasm/tests/fault_parity.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.32),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-193), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86, then this pull request, each on green. Then merge `master` into `launch/2.0.0` and dispatch its
+     `everything` run and its release dry run.
+  2. The papercuts left in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a refused network mint names the host it asked for: B4 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/net-refusal-names` (on `laptop/io-other-words` `9fd34cb`, #87)   Pull request: opened with this
+  commit, after #87
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu-wasm/tests/fault_parity.rs`,
+  `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row
+  6.33; 6.31's list of what is still open), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86, #87 and this pull request in order, each on green. Then merge `master` into `launch/2.0.0` and dispatch
+     its `everything` run and its release dry run.
+  2. The papercuts left in RW 6.30 and 6.31.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — #86's red run, and the scheme sentence keeps its phrase (made on the laptop)
+- Branch: `laptop/net-refusal-names` (#88), a commit on top of `0f86b91`.
+- **What:** see V2_LOG's entry of the same name. `crates/delulu-runtime/src/egress.rs` (`Reason::Scheme`'s sentence),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** land #86 to #88 at #88's head on its green run; then merge `master` into `launch/2.0.0` and dispatch
+  its `everything` run and its release dry run.
+
+### 2026-10-29 — a name in another script, and a missing expression, are each refused once: C12, C13 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/parse-errors-once` (on `laptop/net-refusal-names` `3523b2c`, #88)   Pull request: opened with this
+  commit, after #88
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-syntax/src/lexer.rs`, `crates/delulu-syntax/src/parser.rs`,
+  `crates/delulu-syntax/src/ast.rs` (`Module::recovered`), `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/tests/campaign_wording.rs`, `crates/delulu-diag/src/codes.rs` (DL0101's explanation),
+  `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.34),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #86 to #88 at #88's head on its green run, then this pull request on its own. Then merge `master` into
+     `launch/2.0.0` and dispatch its `everything` run and its release dry run.
+  2. The papercuts left: A4, A5, A7, A8, A13; B5, B8; C9, C11, C14, C15.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — the WASM engine's call depth, measured and documented: A4 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/depth-bound-docs` (on `laptop/parse-errors-once` `31d26bc`, #89)   Pull request: opened with this
+  commit, after #89
+- **What:** see V2_LOG's entry of the same name. #86, #87 and #88 landed together at `3523b2c` (run `40789442622`, 14
+  jobs success).
+- Files and folders: M `docs/GETTING_STARTED.md`, `docs/for-agents.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row
+  6.35), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #89, then this pull request; merge `master` into `launch/2.0.0` and dispatch its
+  `everything` run and its release dry run; the papercuts left (A5, A7, A8, A13; B5, B8; C9, C11).
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a `Map` lookup on the WASM engine copies nothing: A5 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W7pqAsTJxNMyYi8vBM`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-map-keys` (on `laptop/depth-bound-docs` `c5feb63`, #90)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #89 landed at `31d26bc` (run `40791344842`).
+- Files and folders: M `crates/delulu-wasm/src/host.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.36),
+  `docs/for-agents.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A
+  `crates/delulu-wasm/tests/map_steps.rs`. Deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #90, then this pull request, each on green. Merge `master` into `launch/2.0.0`, then dispatch its `everything`
+     run and its release dry run.
+  2. C6: an annotated `let` makes a list or a map read-only (DL1604); reproduced again while measuring this.
+  3. The papercuts left: A7, A8, A13; B5, B8; C9, C11.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — a write refused through a written type names the type: C6 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WB8MxLPoBJ2FVDdPkp`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/val-by-type` (on `master` `15c977d`)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #91 landed at `15c977d` (run `40793604231`). `master`'s push run
+  `40793268946` on `31d26bc` was red on macOS in `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`; recorded
+  there, examined next.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/tests/campaign_wording.rs`, `crates/delulu-check/tests/unknown_receiver.rs`,
+  `crates/delulu-diag/src/codes.rs`, `docs/GETTING_STARTED.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.37),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this pull request on green. The macOS red above: root cause, or the starved-runner reproduction (D-V2-47's way).
+  2. Merge `master` into `launch/2.0.0`, then dispatch its `everything` run and its release dry run.
+  3. The papercuts left: A7, A8, A13; B5, B8; C9, C11.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-29 — on-demand routine run 7: a stopped daemon is not its monitor's silence (DEADMAN-DEAF-1, D-V2-194); #92 landed
+- Session: `https://claude.ai/code/session_01Deh6W7wLbUEtPrWETiDqD4`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with
+  step 0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); the code slice went to
+  `claude/peaceful-carson-zmpprn` first, for its runner reads, and `master` was fast-forwarded to it. Pull request: none.
+- Base: `15c977d` (`master` at the start); `579f60d` once #92 landed.
+- **The milestone, named before building:** `master`'s macOS red in `monitor_cli`
+  `a_long_chain_does_not_kill_a_healthy_monitor` (push run `40793268946`, job `123183433447`), root-caused with evidence,
+  its class's defect witnessed red, fixed, read on the three runners, the suite green, recorded. **Delivered:** the red's
+  message held no evidence, and the run kept none, so its own cause stays unknown (RW 7.25). Asking its class of each party
+  in turn found a real defect, **DEADMAN-DEAF-1** (RW 4.87): a daemon stopped for three periods revoked a healthy monitor
+  that had beaten 73 times, red 3 of 3. Every dead-man instant is now read from a hearing clock that stands still while
+  the daemon was not running (D-V2-194). The witnesses now print the evidence, so the next red says which party it was.
+- **Housekeeping:** `laptop/val-by-type` (#92, C6) was the one branch ahead of `master`, green on `40921845188` (14
+  jobs); its autosave snapshots checked (`1667859` landed whole, `59df027` an earlier draft). Fast-forwarded onto
+  `master` at `579f60d`; push run `40954259791` read green (14 jobs, 2 skipped). The Survey and `doctor` were healthy at
+  the start (1567 nodes, 17419 edges; all checks passed). `gh` is installed with an invalid `GH_TOKEN` (as run 10 found);
+  CI was read with the REST API and the GitHub MCP tools.
+- Commits: `1f5206c` (the fix, its witnesses and the evidence helper), this entry's commit (these records).
+- Files and folders: M `crates/delulu/src/brokerd.rs` (the hearing clock, `handle`'s clock, the serve loop;
+  `hearing_tests`, `an_arming_is_answered_with_the_hearing_clock_listening`), `crates/delulu/tests/monitor_cli.rs`
+  (`a_stopped_daemon_is_not_its_monitors_silence`, `revoked_monitor_evidence`, the long-chain witness's message),
+  `CHANGELOG.md`, `docs/DEPLOYMENT.md` (the monitor's dead-man counts what the broker could hear),
+  `docs/REMAINING_WORK.md` (rows 4.87, 7.25), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-194),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 15), `HANDOFF.md` (§11.4, §11.5),
+  `docs/assistant-memory/delulu-ipc-deadman-findings.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_ROUTINE.md`
+  (step 5: stop each party of a watchdog in turn), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - #92's `40921845188` (green) and `master`'s `40954259791` on `579f60d` (green).
+  - `witness.yml` with every `delulu` target at `1f5206c`: macOS `40958776212` success, 1,088 passed, 0 failed (101
+    binaries; the witness and the clock's tests named); Windows `40958779882` success, 1,055 passed, 0 failed (the
+    clock's tests and the long-chain witness named; the stop witness is unix-only).
+  - The full suite in the VM: 2,600 passed, 0 failed, 16 ignored, 189 binaries (`scripts/suite.sh`, `EXIT=0`, the tree
+    unmoved).
+  - `master`'s push run on `1f5206c`: `40960549621`, green, 14 jobs success and 2 skipped. `actors_pingpong` NOT
+    MEASURED on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads, 1.58x observed). On this entry's
+    commit: Open / next 1.
+- **Loop engineering:** `docs/CLOUD_ROUTINE.md` step 5 gains *a watchdog's once-seen red: stop each party in turn*.
+  `kill -STOP` holds a window open where load only makes it likelier, and the witness prints each party's words first.
+- **Redo on the laptop:** delete `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` from `origin`. Both are in
+  `master`'s history, and this session's harness refused its `git push --delete`.
+- For the laptop's memory: `HANDOFF.md` §11.4 (DEADMAN-DEAF-1, never softened back to wall-time arrival) and §11.5
+  (a once-seen red that names only its verdict: print the evidence, then stop each party); the dead-man topic in
+  `docs/assistant-memory/`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's commit (records only; the code's run `40960549621` is green).
+  2. Merge `master` into `launch/2.0.0` (`docs/CLOUD_ROUTINE.md` step 4.3), then dispatch its `everything` run and its
+     release dry run. It is at `e998373`, and `master` holds 12 commits it lacks.
+  3. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, its message now says whether the monitor
+     stopped on an error, beat late, or the daemon did not run (`broker.log`'s *"did not run for"*). Read it before
+     sampling anything.
+  4. The papercuts left: A7, A8, A13; B5, B8; C9, C11 (RW 6.30–6.34; the ledger on `origin/autosave/dogfood`).
+  5. *[laptop]* the launch, only on the owner's word.

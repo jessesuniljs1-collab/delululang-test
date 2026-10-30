@@ -1986,8 +1986,8 @@ fn a_file_use_is_decided_by_its_path_against_its_capability() {
 /// A20 (the agent test campaign's builder, Sonnet 5.5): a program minting `root.http(["127.0.0.1:GET,POST,PUT"])` under
 /// `net.special=127.0.0.1:GET,POST` was told "`network host` was not granted to this program — pass `--grant net=HOST`" by
 /// `--within` and by `run` alike: the host IS granted, only `PUT` is short, and `net=` never grants a special-use host
-/// (D-NE-28). Both now name the entry, the grant it exceeds and `net.special=`; a host granted nothing keeps the old words,
-/// with the spelling that grants it.
+/// (D-NE-28). Both now name the entry, the grant it exceeds and `net.special=`. A host granted nothing is named too, with
+/// the grant that covers the entry (B4: it was "`network host`" and `net.special=HOST`).
 #[test]
 fn a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds() {
     let dir = std::env::temp_dir().join(format!("delulu-within-net-short-{}", std::process::id()));
@@ -2017,7 +2017,11 @@ fn a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds() {
         assert!(!said.contains("`network host` was not granted"), "not called ungranted: {said}");
     }
     for said in <[String; 2]>::from(says("net.special=10.0.0.9")) {
-        assert!(said.contains("`network host` was not granted") && said.contains("--grant net.special=HOST"), "{said}");
+        assert!(
+            said.contains("network access to `127.0.0.1:GET,POST,PUT` was not granted")
+                && said.contains("--grant net.special=127.0.0.1:GET,POST,PUT"),
+            "{said}"
+        );
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

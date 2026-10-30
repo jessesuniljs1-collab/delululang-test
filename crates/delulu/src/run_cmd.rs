@@ -589,7 +589,8 @@ pub(crate) fn print_egress_notes(log: &delulu_runtime::egress::EgressLog) {
             eprintln!(
                 // `get` and `get_with` alike (P9-04 (a)): the request is named by its URL.
                 "note: the request to `{}` was not delivered: {} [egress: {}]",
-                r.url.escape_debug(),
+                // B6: as written, its control characters escaped and its backslashes not doubled.
+                delulu_diag::terminal_line(&r.url),
                 reason.explain(),
                 reason.code()
             );

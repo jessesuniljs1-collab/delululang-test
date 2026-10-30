@@ -796,7 +796,15 @@ overstate it downstream:
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
   DeluluLang is **not competitive with C** on the measured workloads (8.9×–489.5× slower on the
   interpreter, 9.8×–15.7× on the WASM engine, which runs all six — Study C, 2026-10-19), and the report says
-  so in those words. Do not let a harness's marketing copy imply otherwise.
+  so in those words. Do not let a harness's marketing copy imply otherwise. Study C's interpreter figures predate
+  2026-10-29, when A14 took 1.5× to 2.1× off loops and calls (`loop_sum_1m` 694 → 327 ms, old binary against new on one
+  Windows laptop); its next run re-measures the ratios.
+- **Choose the engine by the work.** For computation (sorting, loops over numbers, recursion), use `--engine wasm` or
+  `build --target wasm`. It is about 100× faster: a merge sort of 100,000 `Int`s takes 5.0 s on the interpreter and
+  56 ms on WASM (2026-10-29). Counting 372,300 words into a `Map[Str, Int]` is faster on WASM too: 0.29 s, against
+  0.63–0.80 s interpreted (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
+  list or a record field holding a function. A program WASM cannot compile is refused with `DL1201`, naming its line,
+  and never runs half-compiled.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
   (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
   this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a
@@ -815,7 +823,10 @@ overstate it downstream:
   millions deep — `type Chain = Nil | Link(Chain)` in an accumulator loop — used to abort the host
   during teardown *after* the program had finished, with no diagnostic. Value teardown is iterative
   as of 2026-08-10, so depth costs heap rather than native stack. Call depth remains bounded by
-  `DL0905`.
+  `DL0905`: on the interpreter at 10,000 frames; on `--engine wasm` by the guest's stack, so the depth
+  depends on each frame's size (a one-parameter recursion: 16,351 calls ran, 16,448 were refused,
+  2026-10-29). A program that runs on one engine near the other's bound is refused there, so write a
+  recursion that may go thousands deep as a loop.
 
   Stated with its history because it is recent: before 2026-08-04 there was no limit, and a valid
   module nested 100,000 deep did not produce a diagnostic — it overflowed the stack and killed the

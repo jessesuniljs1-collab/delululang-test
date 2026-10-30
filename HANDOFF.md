@@ -1074,6 +1074,14 @@ spells the same thing?**
   period starts when the arming is answered (its record could wait on the chain first — `76f83a2`). A watchdog
   judged by a serial server measures the server too — ask whose time each second of the period is.
 
+- **DEADMAN-DEAF-1 — a stopped daemon read its own deafness as its holders' silence** (on-demand routine run 7, 2026-10-29,
+  D-V2-194, RW 4.87). DEADMAN-BUSY-1 stamped each beat's arrival on a reader thread of its own, and that thread is the
+  daemon's. A daemon stopped for three periods stamped the beats waiting in its socket after their deadline, revoked a
+  monitor that had beaten 73 times, and told it "this monitor sent no beat". Every dead-man instant is now read from a
+  hearing clock that stands still while the daemon was not running. Never soften it back to "judged by when it arrived" in
+  wall time: arrival is stamped by the judge, so the stamp measures the judge too. Search key: for every watchdog, stop
+  EACH party in turn (the holder, the judge, the judge's every thread) and ask whose time each second of the period was.
+
 - **2026-10-14 — MAP-HANDLE-1** (routine run 24, D-V2-132): under the broker daemon or a lease, `Secret.map` ran its function
   over the EMPTY string — a handle carries no bytes, and `reveal()` of one is `""` — so `s.map(f).expose(d)` printed `f("")`
   where embedded custody printed `f(bytes)`, then exposed that local result with no broker gate or record. Found by reading
@@ -1906,6 +1914,17 @@ Added in V2 (2026-09-17 → 2026-09-28):
   campaign's actor programs drew nothing at random, so it surfaced only when a program put a `Cap[Rand]` in an actor.
   When a setting is a `thread_local!`, list every thread that runs program code, the actor workers among them, and
   test the setting from each.
+- **Count a cost that can be counted; time only what cannot** (the laptop, 2026-10-29, A14, RW 3.24). The interpreter's
+  speed-up is held by a test that counts the allocations one loop step makes. It installs a counting allocator in the test
+  binary and differences runs of 1,000 and 2,000 steps. That count is exact on any machine, so no busy runner can turn it
+  red, and a mutant that brings back one allocation per step fails it. The first run found a cost no profile had shown: every `==` of
+  two `Int`s allocated the vector of its deep-equality walk. A timing test could not have told that from noise.
+
+- **A once-seen red whose message names only the verdict: make the witness print the evidence first, then stop each party
+  in turn** (on-demand routine run 7, RW 7.25). `a_long_chain_does_not_kill_a_healthy_monitor` printed the nodes' states
+  and nothing that could tell a starved monitor from one that stopped on an error or from a daemon that did not run. Load
+  did not reproduce it (6 of 6 green). `SIGSTOP` on the daemon, the one party nobody had stopped, was red at once and
+  every time. `kill -STOP PID` holds a process's window open deterministically, where load only makes it likelier.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

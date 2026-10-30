@@ -12,7 +12,8 @@ fn a_method_on_a_value_of_unknown_type_says_so_and_names_no_internal_variable() 
     let d = check_source(0, src).diagnostics.into_iter().find(|d| d.code == "DL0405").expect("DL0405 at the call");
     assert!(!d.message.contains('\''), "no inference variable's name: {}", d.message);
     assert!(d.message.contains("`concat`") && d.message.contains("not known"), "{}", d.message);
-    assert!(d.message.contains("let m: Map["), "where to write the type: {}", d.message);
+    // C6: the type it suggests keeps the map writable — a written type with no capability keyword would make it `val`.
+    assert!(d.message.contains("let m: ref Map["), "where to write the type: {}", d.message);
     // A known type keeps its words.
     let d = check_source(0, "module g\nfn f(x: Int) -> Int { x.concat([1]) }\nfn main() { }\n").diagnostics;
     assert!(d.iter().any(|d| d.code == "DL0405" && d.message == "type `Int` has no method `concat`"), "{d:?}");

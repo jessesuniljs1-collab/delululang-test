@@ -686,11 +686,25 @@ fn send_with_secret(
 fn read_guest_str(caller: &mut Caller<'_, HostState>, ptr: i32) -> Option<String> {
     let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
     let data = mem.data(&caller);
-    let p = ptr as u32 as usize;
+    Some(String::from_utf8_lossy(guest_str_bytes(data, ptr as u32)?).to_string())
+}
+
+/// The bytes of the guest string cell (`[len: u32][bytes]`) at `ptr` in `data`, or `None` when they lie outside it.
+fn guest_str_bytes(data: &[u8], ptr: u32) -> Option<&[u8]> {
+    let p = ptr as usize;
     let hend = p.checked_add(4).filter(|&e| e <= data.len())?;
     let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
     let bend = hend.checked_add(len).filter(|&e| e <= data.len())?;
-    Some(String::from_utf8_lossy(&data[hend..bend]).to_string())
+    Some(&data[hend..bend])
+}
+
+/// Two guest strings in the order their texts have as [`read_guest_str`] reads them: by their bytes when both are UTF-8
+/// (`str`'s order is its bytes' order), and as their lossy readings otherwise, which only a hand-written `.dwx` makes.
+fn compare_texts(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    match (std::str::from_utf8(a), std::str::from_utf8(b)) {
+        (Ok(a), Ok(b)) => a.cmp(b),
+        _ => String::from_utf8_lossy(a).cmp(&String::from_utf8_lossy(b)),
+    }
 }
 
 /// Bump-allocate `n` bytes in the guest heap (via the `__heap` global); returns the old pointer. The memory grows by the
@@ -765,7 +779,10 @@ const MAP_CORRUPT: &str = "DL0903: a map's pairs lie outside the guest's memory 
 
 impl GuestMap {
     fn read(caller: &mut Caller<'_, HostState>, at: i32) -> Option<GuestMap> {
-        let b = guest_read(caller, at as u32, 12)?;
+        // Read where it lies (A5): a lookup made no copy of the header, as it makes none of a key.
+        let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+        let a = at as u32 as usize;
+        let b = mem.data(&*caller).get(a..a.checked_add(12)?)?;
         let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
         let (len, cap, data) = (word(0), word(4), word(8));
         (len <= cap).then_some(GuestMap { at: at as u32, len, cap, data })
@@ -775,27 +792,40 @@ impl GuestMap {
         self.data.checked_add(i.checked_mul(16)?)
     }
 
-    /// The key of pair `i`, read as `codegen.rs`'s `store_scalar` wrote it, by its kind (`map_key_tag`).
-    fn key(&self, caller: &mut Caller<'_, HostState>, kind: i32, i: u32) -> Option<delulu_runtime::value::MapKey> {
-        let slot = guest_read(caller, self.pair(i)?, 8)?;
-        let raw = i64::from_le_bytes(slot.try_into().ok()?);
-        map_key_of(caller, kind, if kind == 0 { raw } else { i64::from(raw as u32) })
-    }
-
-    /// Where `key` is — `Ok(i)` — or where it would go, `Err(i)`: the interpreter's `BTreeMap` order, by its own `MapKey`.
-    fn search(
-        &self,
-        caller: &mut Caller<'_, HostState>,
-        kind: i32,
-        key: &delulu_runtime::value::MapKey,
-    ) -> Option<Result<u32, u32>> {
+    /// Where the guest's key `raw` is — `Ok(i)` — or where it would go, `Err(i)`: the interpreter's `BTreeMap` order, by its
+    /// own `MapKey`'s order. A key, as a guest passes it and as `codegen.rs`'s `store_scalar` writes it in a pair's slot, is
+    /// an `Int` itself, a `Bool` as nonzero (a slot's low 32 bits), a `Str` as its cell's pointer; `kind` says which.
+    ///
+    /// A5 (the agent test campaign): each probe read its pair's key out of the guest into a new `MapKey` — a `String` and a
+    /// byte vector for every `Str` key — so a word count's lookups ran slower on WASM than on the interpreter. The keys are
+    /// now compared where they lie, in one borrow of the memory: valid UTF-8 compares by its bytes, which is `str`'s order,
+    /// and anything else as its lossy reading compares ([`compare_texts`]), so the answer is the one the keys read out gave.
+    fn search(&self, caller: &mut Caller<'_, HostState>, kind: i32, raw: i64) -> Option<Result<u32, u32>> {
+        use std::cmp::Ordering;
+        let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+        let data = mem.data(&*caller);
+        let slot = |i: u32| -> Option<i64> {
+            let at = self.pair(i)? as usize;
+            Some(i64::from_le_bytes(data.get(at..at.checked_add(8)?)?.try_into().ok()?))
+        };
+        let wanted: &[u8] = match kind {
+            0 | 1 => &[],
+            2 => guest_str_bytes(data, raw as u32)?,
+            _ => return None,
+        };
         let (mut lo, mut hi) = (0u32, self.len);
         while lo < hi {
             let mid = lo + (hi - lo) / 2;
-            match self.key(caller, kind, mid)?.cmp(key) {
-                std::cmp::Ordering::Less => lo = mid + 1,
-                std::cmp::Ordering::Greater => hi = mid,
-                std::cmp::Ordering::Equal => return Some(Ok(mid)),
+            let at = slot(mid)?;
+            let order = match kind {
+                0 => at.cmp(&raw),
+                1 => (at as u32 != 0).cmp(&(raw != 0)),
+                _ => compare_texts(guest_str_bytes(data, at as u32)?, wanted),
+            };
+            match order {
+                Ordering::Less => lo = mid + 1,
+                Ordering::Greater => hi = mid,
+                Ordering::Equal => return Some(Ok(mid)),
             }
         }
         Some(Err(lo))
@@ -828,17 +858,6 @@ impl GuestMap {
         guest_write(caller, base as i32, &bytes).ok()?;
         Some(base as i32)
     }
-}
-
-/// The key a guest passes a `delulu:map` import: an `Int` itself, a `Bool` as 0 or 1, a `Str` as its cell's pointer.
-fn map_key_of(caller: &mut Caller<'_, HostState>, kind: i32, raw: i64) -> Option<delulu_runtime::value::MapKey> {
-    use delulu_runtime::value::MapKey;
-    Some(match kind {
-        0 => MapKey::Int(raw),
-        1 => MapKey::Bool(raw != 0),
-        2 => MapKey::Str(read_guest_str(caller, raw as u32 as i32)?),
-        _ => return None,
-    })
 }
 
 /// A map import's failure: recorded in words (the first refusal stands), then a trap, so the guest never goes on past it.
@@ -994,8 +1013,7 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
             |mut caller: Caller<'_, HostState>, map: i32, kind: i32, raw: i64| -> wasmtime::Result<i32> {
                 let found = (|| {
                     let m = GuestMap::read(&mut caller, map)?;
-                    let key = map_key_of(&mut caller, kind, raw)?;
-                    m.search(&mut caller, kind, &key)
+                    m.search(&mut caller, kind, raw)
                 })();
                 match found {
                     Some(Ok(i)) => Ok(i as i32),
@@ -1014,8 +1032,7 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
             |mut caller: Caller<'_, HostState>, map: i32, kind: i32, raw: i64| -> wasmtime::Result<i32> {
                 let slot = (|| {
                     let mut m = GuestMap::read(&mut caller, map)?;
-                    let key = map_key_of(&mut caller, kind, raw)?;
-                    let at = match m.search(&mut caller, kind, &key)? {
+                    let at = match m.search(&mut caller, kind, raw)? {
                         Ok(i) => i,
                         Err(i) => {
                             if m.len == m.cap {
@@ -1429,7 +1446,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             };
             if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                caller.data_mut().refused =
+                    Some(format!("DL0904: path `{}` is refused: {why}", delulu_runtime::prim::shown_path(&path)));
                 return -1;
             }
             // Mint a scope exactly as the interpreter does: normalize(cwd/path), granted iff within a
@@ -1514,7 +1532,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         match e.kind() {
                             NotFound => build_err_ioerr(&mut caller, 0, None),
                             PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
                         }
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {
@@ -2001,7 +2019,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             };
             if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                caller.data_mut().refused =
+                    Some(format!("DL0904: path `{}` is refused: {why}", delulu_runtime::prim::shown_path(&path)));
                 return -1;
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
@@ -2077,7 +2096,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         match e.kind() {
                             NotFound => build_err_ioerr(&mut caller, 0, None),
                             PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
                         }
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {

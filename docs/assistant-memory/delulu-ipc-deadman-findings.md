@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: c99ba5c5-c39b-4a1f-b406-92fbf2c601b0
-  modified: 2026-08-08T16:31:11.889Z
+  modified: 2026-10-29T22:00:00.000Z
 ---
 
 **2026-08-08 (Opus 4.8 holding authority, 2× Haiku 4.5 attacking). Commit `0d06a4e` (fix) + `487c342`
@@ -56,3 +56,11 @@ red-team pass on FRAME-DRIP-1 ran an e-stop that printed "revoked" while the arm
 custody op and operator command — had no bound at all (40 s against a mute acceptor, the acceptor's whole hold). Both
 now owe the whole answer within a bound (1 s for the probe, 15 s for `request`). Related:
 [[delulu-root-issuance-bypass]] (DISC-1, the prior finding), [[delulu-hw-adapter]].
+
+**2026-10-29 — the daemon's own time (DEADMAN-DEAF-1, D-V2-194, on-demand routine run 7).** DEADMAN-BUSY-1
+(D-V2-127) judged a beat by when it arrived, stamped on a reader thread of its own, so a held handler no longer counted
+against a holder. That thread is the daemon's, though. A daemon stopped (`SIGSTOP`) for three periods stamped the waiting
+beats after their deadline and revoked a monitor that had beaten 73 times. Every dead-man instant is now read from a
+hearing clock that stands still while the daemon was not running (a thread looks every 10 ms; a gap past 50 ms is deaf),
+and `broker.log` names the gap. Found while root-causing a once-seen macOS red (RW 7.25) whose message held no evidence;
+the witnesses print it now. Lesson: stop each party of a watchdog in turn, the judge included.

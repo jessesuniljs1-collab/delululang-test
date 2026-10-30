@@ -227,12 +227,29 @@ impl Drop for VariantFields {
     }
 }
 
+/// A variant's name. The prelude's four are made once per thread and shared (A14: every `xs.get(i)` allocated
+/// `"Some"`).
+fn variant_name(name: &str) -> Rc<str> {
+    thread_local! {
+        static PRELUDE: [Rc<str>; 4] = ["Some", "None", "Ok", "Err"].map(Rc::from);
+    }
+    let at = match name {
+        "Some" => 0,
+        "None" => 1,
+        "Ok" => 2,
+        "Err" => 3,
+        _ => return Rc::from(name),
+    };
+    // A value made while the thread is being torn down gets a name of its own.
+    PRELUDE.try_with(|p| Rc::clone(&p[at])).unwrap_or_else(|_| Rc::from(name))
+}
+
 impl Value {
     pub fn str(s: impl Into<String>) -> Value {
         Value::Str(Rc::from(s.into().as_str()))
     }
     pub fn variant(name: &str, fields: Vec<Value>) -> Value {
-        Value::Variant { name: Rc::from(name), fields: VariantFields::new(fields) }
+        Value::Variant { name: variant_name(name), fields: VariantFields::new(fields) }
     }
     pub fn ok(v: Value) -> Value {
         Value::variant("Ok", vec![v])
@@ -357,6 +374,15 @@ impl Value {
     /// every reachable pair is compared once and any one that differs makes the whole differ.
     #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &Value) -> bool {
+        // A14: two scalars are compared without the walk below, whose vector was an allocation for every `i % 2 == 0`.
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => return a == b,
+            (Value::Float(a), Value::Float(b)) => return a == b,
+            (Value::Bool(a), Value::Bool(b)) => return a == b,
+            (Value::Str(a), Value::Str(b)) => return a == b,
+            (Value::Unit, Value::Unit) => return true,
+            _ => {}
+        }
         let mut assumed: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut work: Vec<(Value, Value)> = vec![(self.clone(), other.clone())];
         while let Some((a, b)) = work.pop() {
@@ -1029,40 +1055,130 @@ pub struct RootVal {
 pub type Env = Rc<Scope>;
 
 pub struct Scope {
-    vars: RefCell<HashMap<String, Value>>,
+    vars: RefCell<Vars>,
     parent: Option<Env>,
+}
+
+/// How many bindings a scope finds by comparing names before it keeps an index (A14).
+const SCAN_BINDINGS: usize = 16;
+
+/// One scope's own bindings, in the order they were made.
+///
+/// A14: a scope was a `HashMap<String, Value>`, so every read of a variable hashed its name once per scope it
+/// passed, and every assignment allocated the name again. Most scopes hold a handful of names, and comparing a
+/// handful of short names costs less than hashing one; a scope that grows past [`SCAN_BINDINGS`] keeps an index
+/// beside them, so a block of thousands of `let`s still finds each name in constant time.
+#[derive(Default)]
+struct Vars {
+    slots: Vec<(Name, Value)>,
+    /// Each name's place in `slots`, kept only once there are more than [`SCAN_BINDINGS`] of them.
+    index: HashMap<String, usize>,
+}
+
+impl Vars {
+    fn find(&self, name: &str) -> Option<usize> {
+        if self.slots.len() > SCAN_BINDINGS {
+            self.index.get(name).copied()
+        } else {
+            self.slots.iter().position(|(n, _)| n.is(name))
+        }
+    }
+
+    /// Bind `name`, or rebind it here. Gives back the value it replaced, to be dropped once the scope is no
+    /// longer borrowed.
+    fn put(&mut self, name: &str, value: Value) -> Option<Value> {
+        if let Some(i) = self.find(name) {
+            return Some(std::mem::replace(&mut self.slots[i].1, value));
+        }
+        self.slots.push((Name::new(name), value));
+        let n = self.slots.len();
+        if n > SCAN_BINDINGS {
+            if self.index.is_empty() {
+                self.index = self.slots.iter().enumerate().map(|(i, (k, _))| (k.to_string(), i)).collect();
+            } else {
+                self.index.insert(name.to_string(), n - 1);
+            }
+        }
+        None
+    }
+}
+
+/// How long a binding's name can be and still be held inline.
+const SHORT_NAME: usize = 22;
+
+/// A binding's name. A short one is held inline (A14: a call allocated each parameter's name, and nearly every name
+/// is short).
+#[derive(Clone)]
+enum Name {
+    Short { len: u8, bytes: [u8; SHORT_NAME] },
+    Long(Box<str>),
+}
+
+impl Name {
+    fn new(name: &str) -> Name {
+        if name.len() <= SHORT_NAME {
+            let mut bytes = [0; SHORT_NAME];
+            bytes[..name.len()].copy_from_slice(name.as_bytes());
+            Name::Short { len: name.len() as u8, bytes }
+        } else {
+            Name::Long(name.into())
+        }
+    }
+
+    fn is(&self, name: &str) -> bool {
+        match self {
+            Name::Short { len, bytes } => &bytes[..*len as usize] == name.as_bytes(),
+            Name::Long(s) => **s == *name,
+        }
+    }
+}
+
+impl fmt::Display for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // Built from a `str` and cut at its length, so always UTF-8.
+            Name::Short { len, bytes } => f.write_str(std::str::from_utf8(&bytes[..*len as usize]).map_err(|_| fmt::Error)?),
+            Name::Long(s) => f.write_str(s),
+        }
+    }
 }
 
 impl Scope {
     pub fn root() -> Env {
-        Rc::new(Scope { vars: RefCell::new(HashMap::new()), parent: None })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: None })
     }
     pub fn child(parent: &Env) -> Env {
-        Rc::new(Scope { vars: RefCell::new(HashMap::new()), parent: Some(parent.clone()) })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: Some(parent.clone()) })
     }
     pub fn define(&self, name: &str, value: Value) {
-        self.vars.borrow_mut().insert(name.to_string(), value);
+        let old = self.vars.borrow_mut().put(name, value);
+        drop(old);
     }
     /// Visit every binding's value (Stage 10 cycle collector, `cycles.rs`).
     pub fn each_value(&self, mut f: impl FnMut(&Value)) {
-        for v in self.vars.borrow().values() {
+        for (_, v) in &self.vars.borrow().slots {
             f(v);
         }
     }
     /// Empty this scope's bindings — called by the cycle collector ONLY on scopes it has
     /// proven unreachable from every root; the drop cascade collapses the rest of the cycle.
     pub fn clear_for_collector(&self) {
-        self.vars.borrow_mut().clear();
+        let old = std::mem::take(&mut *self.vars.borrow_mut());
+        drop(old);
     }
     /// This scope's own binding of `name`, not a parent's.
     pub fn get_here(&self, name: &str) -> Option<Value> {
-        self.vars.borrow().get(name).cloned()
+        let vars = self.vars.borrow();
+        vars.find(name).map(|i| vars.slots[i].1.clone())
     }
     pub fn get(&self, name: &str) -> Option<Value> {
-        if let Some(v) = self.vars.borrow().get(name) {
-            return Some(v.clone());
+        let mut scope = self;
+        loop {
+            if let Some(v) = scope.get_here(name) {
+                return Some(v);
+            }
+            scope = scope.parent.as_deref()?;
         }
-        self.parent.as_ref().and_then(|p| p.get(name))
     }
     /// The parent scope, if any (Stage 7: the actor boundary flattens capture chains).
     pub fn parent(&self) -> Option<&Env> {
@@ -1072,19 +1188,90 @@ impl Scope {
     /// A snapshot of this scope's own bindings (Stage 7: closure conversion at the actor
     /// boundary — sendable closures capture only immutable values, so a snapshot is exact).
     pub fn vars_snapshot(&self) -> Vec<(String, Value)> {
-        self.vars.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.vars.borrow().slots.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
     }
 
     /// Assign to an existing binding in the nearest enclosing scope. Returns false if unbound.
     pub fn assign(&self, name: &str, value: Value) -> bool {
-        if self.vars.borrow().contains_key(name) {
-            self.vars.borrow_mut().insert(name.to_string(), value);
-            true
-        } else if let Some(p) = &self.parent {
-            p.assign(name, value)
-        } else {
-            false
+        let mut scope = self;
+        loop {
+            let found = scope.vars.borrow().find(name);
+            if let Some(i) = found {
+                let old = std::mem::replace(&mut scope.vars.borrow_mut().slots[i].1, value);
+                drop(old);
+                return true;
+            }
+            match scope.parent.as_deref() {
+                Some(p) => scope = p,
+                None => return false,
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    fn int(v: Option<Value>) -> Option<i64> {
+        match v {
+            Some(Value::Int(i)) => Some(i),
+            _ => None,
+        }
+    }
+
+    /// A14: a scope finds every name it holds, and rebinds one in place, at every size — below the width it scans, at
+    /// it, and past it, where its index takes over.
+    #[test]
+    fn a_scope_finds_and_rebinds_every_name_at_every_size() {
+        let s = Scope::root();
+        for n in 0..3 * SCAN_BINDINGS {
+            s.define(&format!("v{n}"), Value::Int(n as i64));
+            let held = n + 1;
+            for k in 0..held {
+                assert_eq!(int(s.get(&format!("v{k}"))), Some(k as i64), "v{k} among {held} names");
+            }
+            assert!(s.get("absent").is_none(), "a name never bound, among {held}");
+            let mid = format!("v{}", n / 2);
+            s.define(&mid, Value::Int(-1));
+            assert_eq!(int(s.get(&mid)), Some(-1), "{mid} rebound among {held} names");
+            assert!(s.assign(&mid, Value::Int((n / 2) as i64)));
+            assert_eq!(s.vars.borrow().slots.len(), held, "a rebinding added a name");
+        }
+    }
+
+    /// A name as long as an inline one, one byte longer, and a short one they both begin with, are three names — the
+    /// longer bound first, so a scan that matched a prefix would find it.
+    #[test]
+    fn names_either_side_of_the_inline_length_are_distinct() {
+        let s = Scope::root();
+        let at = "x".repeat(SHORT_NAME);
+        let past = "x".repeat(SHORT_NAME + 1);
+        for (i, name) in [past.as_str(), at.as_str(), "x"].into_iter().enumerate() {
+            s.define(name, Value::Int(i as i64));
+        }
+        assert_eq!(int(s.get(&past)), Some(0));
+        assert_eq!(int(s.get(&at)), Some(1));
+        assert_eq!(int(s.get("x")), Some(2));
+        assert!(s.get("xx").is_none(), "a name only the longer ones begin with");
+        let names: Vec<String> = s.vars_snapshot().into_iter().map(|(k, _)| k).collect();
+        assert_eq!(names, [past, at, "x".to_string()]);
+    }
+
+    /// A child finds its parent's names and assigns through to them; its own `let` shadows only itself.
+    #[test]
+    fn a_child_reads_and_writes_through_and_shadows_only_itself() {
+        let parent = Scope::root();
+        parent.define("a", Value::Int(1));
+        parent.define("b", Value::Int(2));
+        let child = Scope::child(&parent);
+        child.define("a", Value::Int(10));
+        assert_eq!(int(child.get("a")), Some(10));
+        assert_eq!(int(parent.get("a")), Some(1));
+        assert!(child.assign("b", Value::Int(20)));
+        assert_eq!(int(parent.get("b")), Some(20));
+        assert!(child.get_here("b").is_none(), "an assignment through made a binding here");
+        assert!(!child.assign("absent", Value::Unit));
     }
 }
 

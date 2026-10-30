@@ -151,6 +151,8 @@ struct Parser {
     /// expression yields one `DL0210`, and a second, independent over-deep expression later in the
     /// file yields its own: *a site*, not *a level* and not *a file*.
     depth_reported: [bool; 4],
+    /// The placeholders made by [`Parser::placeholder`] ([`Module::recovered`]).
+    recovered: Vec<NodeId>,
 }
 
 /// Indices into [`Parser::depth_reported`], one per recursive-descent class.
@@ -173,7 +175,16 @@ impl Parser {
             pat_depth: 0,
             block_depth: 0,
             depth_reported: [false; 4],
+            recovered: Vec::new(),
         }
+    }
+
+    /// An expression standing where none could be read, after the refusal that says why; recorded so the checker types it
+    /// as unknown (C13: a `0` here made `if` refuse an `Int` condition at the very place the parse error was).
+    fn placeholder(&mut self, span: Span) -> Expr {
+        let id = self.node_id();
+        self.recovered.push(id);
+        Expr::Lit { kind: LitKind::Int(0), id, span }
     }
 
     /// Refuse an over-deep construct **once per site**: emit only if this class has not already
@@ -312,13 +323,23 @@ impl Parser {
                 self.bump();
                 self.panicking = false;
                 if is_reserved(&name) {
-                    self.diags.push(
-                        Diagnostic::error(
-                            "DL0106",
-                            format!("`{name}` is reserved for a future stage and cannot be a declared name"),
+                    // C10 (the agent test campaign): every reserved word was refused as "reserved for a future stage",
+                    // `tag` too, though the six reference capabilities have been in use since Stage 7. The reason
+                    // given is now the word's own (the three groups `token::RESERVED` documents).
+                    let message = if Rcap::from_name(&name).is_some() {
+                        format!(
+                            "`{name}` is a reference capability (`iso`, `trn`, `ref`, `val`, `box`, `tag`) and cannot be a \
+                             declared name"
                         )
-                        .with_span(span, "reserved word"),
-                    );
+                    } else if matches!(name.as_str(), "plugin" | "secret" | "cap") {
+                        format!(
+                            "`{name}` is reserved so that no declared name can pose as an authority-bearing type (`Plugin`, \
+                             `Secret`, `Cap`)"
+                        )
+                    } else {
+                        format!("`{name}` is reserved for a future stage and cannot be a declared name")
+                    };
+                    self.diags.push(Diagnostic::error("DL0106", message).with_span(span, "reserved word"));
                 }
                 Ident { name, span }
             }
@@ -469,6 +490,15 @@ impl Parser {
                         p.span(),
                         "move this import up to the import section",
                     );
+                } else if p.at_kw_ident("const") {
+                    // C16 (the agent test campaign): the grammar index calls a module constant `const`, after the
+                    // specification's `const_decl`; the word that writes one is `let`.
+                    p.error(
+                        "DL0208",
+                        "a module constant is written with `let`, not `const`: `let N: Int = 3`",
+                        p.span(),
+                        "write `let` here",
+                    );
                 } else if !p.at_eof() {
                     p.error(
                         "DL0208",
@@ -481,7 +511,7 @@ impl Parser {
             }
         });
 
-        Module { name, imports, items, attrs }
+        Module { name, imports, items, attrs, recovered: std::mem::take(&mut self.recovered) }
     }
 
     // ----- attributes (Stage 10, spec §2.2 — a reserved 1.0 activation) ---------------------
@@ -1609,7 +1639,7 @@ impl Parser {
                 "simplify or split this expression",
             );
             self.skip_over_deep_operand();
-            return Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start };
+            return self.placeholder(start);
         }
         self.depth += 1;
         let e = self.parse_unary_inner(allow_struct);
@@ -1959,7 +1989,7 @@ impl Parser {
                     "expected an expression",
                 );
                 // Produce a placeholder so callers keep making progress.
-                Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start }
+                self.placeholder(start)
             }
         }
     }

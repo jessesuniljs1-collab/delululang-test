@@ -461,6 +461,10 @@ summary needs only `test result` lines and the witness's names); a macOS `all` r
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
+**A watchdog's once-seen red: stop each party in turn** (on-demand run 7): `kill -STOP PID` on the holder, then on the
+judge (a daemon, a host), holds a window open deterministically, where load only makes it likelier. Run 7's macOS red did
+not reproduce under load (6 of 6), and the daemon stopped for three periods was red 3 of 3 (DEADMAN-DEAF-1). Make the
+witness print what each party said (its `ended` line, `broker.log`) before sampling anything.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
 — the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and

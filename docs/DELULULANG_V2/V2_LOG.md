@@ -9777,3 +9777,409 @@ as on every pull request), then fast-forwarded onto `master`, its branch deleted
 - On the merged tree: `clippy.sh` clean; `cargo metadata --locked` consistent with no `zstd`; `wasmtime_features`
   passed; the Survey 1565 nodes with 0 errors; `doctor` 29 checks.
 - Its `everything` `40551800164` and release dry run `40551806058` were dispatched and are unread at this entry.
+
+## 2026-10-29 — the laptop: A14, the interpreter's loops and calls (RW 3.24)
+
+**Read first.**
+- `launch/2.0.0` `0cea85d`'s `everything` `40551800164`: 18 of 18 jobs success. The broker's Miri took 3 h 01 min.
+- Its release dry run `40551806058`: success, with the four `package` jobs success.
+- Both are cited in CHECKLIST-2.0 at `e998373`, which also merges `master`'s #83 records.
+- `master` `470ac4f`'s push run `40555891390`: success. The nightly `40662703997` (2026-10-28): 18 of 18 success,
+  the broker's Miri 2 h 17 min.
+
+**What A14 was.** The builder's merge sort of 100,000 `Int`s took 28 s on the interpreter and 56 ms on WASM. On this
+laptop the same program's merge sort took 8.2–8.4 s. Timing single operations (200,000 steps each) showed where the
+time went:
+- an empty loop step cost 450 ns, a call 1 µs, and `xs.get(i)` with its `match` 1.25 µs;
+- every variable read hashed its name (SipHash) in each scope it passed through;
+- every assignment allocated the name again, in `HashMap::insert(name.to_string(), …)`;
+- every block and every `match` arm made a scope, `let` or not;
+- a call made a vector of its arguments, a scope for the parameters and another for the body.
+
+A one-off measurement in a scratch program put an allocation and its free on this machine at 55 ns, about a quarter of
+each step of the merge.
+
+**The change**, in `delulu-runtime` only:
+- `value.rs`: a scope holds its bindings in a vector, in order, and finds a name by comparing. Past 16 names it keeps an
+  index beside them.
+- A name of up to 22 bytes is held inline.
+- An assignment overwrites in place, and a replaced value is dropped after the scope's borrow ends.
+- `Some`, `None`, `Ok` and `Err` share one name per thread.
+- `Value::eq` answers two scalars without its walk.
+- `interp.rs`: a block without `let` runs in its parent's scope, and a `match` arm whose pattern binds nothing in the
+  arm's.
+- A call by name to a module function evaluates its arguments straight into the callee's scope. That path is taken
+  exactly where the old order reached the module function: no local closure has the name, and the name is not one of
+  `PRELUDE_BUILTINS`, which DL0302 keeps apart from module functions.
+
+**Witness and gates.**
+- `crates/delulu-runtime/tests/step_allocations.rs` installs a counting allocator and differences runs of 1,000 and
+  2,000 steps:
+  - a counting loop with `==`, a `let`-less `if` and a non-binding `match` allocates nothing per step. It was red on
+    the first run, at 1 a step: `==` allocated;
+  - a two-parameter call allocates 2;
+  - `at0(xs, i)` allocates 7;
+  - the bindings test covers shadowing, assignment through an elided scope, closures made in an elided block of a loop,
+    and a 46-name scope.
+- `value::scope_tests` (3): every name found and rebound at every size from 1 to 48, names either side of the inline
+  length, a child's reads and writes.
+- Mutants M870–M880, all killed:
+
+| Mutant | What it brings back | Killed by |
+|---|---|---|
+| M870 | every block makes a scope | 3 tests |
+| M871 | every arm makes a scope | the counting loop, 1.67 a step |
+| M872 | names allocated | the call and the read |
+| M873 | no call fast path | the call, 3 a step |
+| M874 | prelude names allocated | the read, 8 a step |
+| M875 | `Int ==` walks | the counting loop, 2 a step |
+| M876 | an assignment allocates | 3 tests |
+| M877 | the index points one slot early | the bindings and size tests |
+| M878 | the index read at 16 names, before it is built | the size test (it survived the first version) |
+| M879 | a block with `let` runs in its parent | the bindings test |
+| M880 | a short name matches its prefix | the names test, after it bound the longer names first |
+
+- `cargo test -p delulu-runtime`: every target passed.
+
+**Measured** on the laptop (Windows 11, release builds of `master`'s code and of this change, run one after the other,
+2026-10-29):
+- `algo.delulu`, the builder's program, twice on each binary:
+  - generating 100,000 `Int`s: 265/278 → 145/164 ms;
+  - the merge sort: 8219/8413 → 5023/5324 ms;
+  - quicksort: 3783/3912 → 2471/2552 ms;
+  - the 20,000-node tree: 1099/1132 → 708/763 ms.
+- Its output was the same on both binaries, and the same as the builder's Python reference.
+- Study C's six benchmarks, interpreter lane, each the minimum of five runs:
+
+| Benchmark | Before (ms) | After (ms) |
+|---|---|---|
+| `fib_recursive_24` | 160 | 101 |
+| `loop_sum_1m` | 694 | 327 |
+| `string_build_20k` | 38.9 | 30.4 |
+| `wordcount_macro` | 24.7 | 22.5 |
+| `list_map_macro` | 30.1 | 26.4 |
+| `nested_calls_macro` | 527 | 287 |
+
+  The last three changed little because process start-up dominates them. These runs went to the scratchpad. The
+  published Study C (WSL, 2026-10-19) is unchanged, and `docs/for-agents.md` says that its interpreter figures predate
+  this change.
+
+**Not done.** The interpreter still finds every variable by name, and is about 100× slower than WASM on computation. RW
+3.24 stays open, narrowed, with what closing it takes. `docs/for-agents.md` now says which engine to choose.
+
+## 2026-10-29 — the laptop: five refusals name the mistake (A6, C7, C8, C10, C16; RW 6.30)
+
+**Landed first.** #84 (A14) read green on its own run, `40781581403`: 14 jobs success, `heavy-gates` and `miri-slow`
+skipped, as on every pull request. It was fast-forwarded onto `master` at `982c4e0` and its branch deleted.
+
+**What each refusal said, and says now** (all reproduced on the current binary from the campaign's own programs first):
+
+| Finding | Before | Now |
+|---|---|---|
+| A6 | `"a" < "b"`: two DL0401 *arithmetic expects Int or Float*, one per side | one DL0401: *a `Str` has no order: `<`, `<=`, `>` and `>=` compare `Int` or `Float`*, its label naming `List[Str].sort()`. Any other comparison: *comparison expects Int or Float* |
+| C7 | `load("x.dpx")`: DL0601 *a capability cannot be constructed or forged: `Cap[PluginHost]` is not `Str`* beside DL0403 | DL0403 alone, naming `load(host, path, grant)`. With three arguments each is held to its parameter as before |
+| C8 | `h.run(1)`, `run` a record field holding a function: DL0405 *type `Handler` has no method `run`* | the same code, adding *`run` is a field holding a function, called as `(h.run)(…)`*; a field holding no function gets no hint |
+| C10 | a field named `tag`: DL0106 *reserved for a future stage*, the reason given for every reserved word | DL0106 gives each word's own reason. `tag`: *a reference capability (`iso`, `trn`, `ref`, `val`, `box`, `tag`)*. `secret`, `plugin`, `cap`: *reserved so that no declared name can pose as an authority-bearing type*. Only the six unbuilt words keep *a future stage*. `explain DL0106` lists the three groups |
+| C16 | `const N: Int = 3`: DL0208 *expected an item* | DL0208 *a module constant is written with `let`, not `const`* |
+
+**Gates.**
+- `crates/delulu-check/tests/campaign_wording.rs`, 5 tests.
+- Mutants M881–M888, each restoring one old wording or behaviour, all killed. They also serve as the "red before"
+  witness: the tests fail on each piece of the old code.
+- `cargo test -p delulu-check -p delulu-syntax -p delulu-conform`: every target passed. Conformance coverage
+  358/358; `--check-reference` in sync.
+- The core snapshot was blessed. It changed in two places, both intended:
+  - `DL0206_chained_cmp`: `1 < 2 < 3` now reads *comparison* where it read *arithmetic*;
+  - `DL0106_reserved_name`: `secret` now gives its real reason.
+
+**Not done**, and why:
+- C14 (the repair label *(safe) [requires human decision]*): its rendering is shared by every repair the core
+  snapshot pins, so it waits for a change of its own.
+- A8 (`authority` shows no requested scope in its human report): the Stage-3 byte-identical report test pins that
+  output, so it is a decision, not a papercut.
+- The rest stay open as listed in RW 6.30.
+
+## 2026-10-29 — the laptop: a refused path or URL quoted as written; the scheme refusal's sentence (B6, B7; RW 6.31)
+
+**What the agent found** (B6 and B7, the least-authority agent, Sonnet 5.5, 2026-10-24), read again in the code:
+- **B6.** Three sites in `prim.rs` (`resolve_in_anchor`, `fs_read`, `fs_write`), the two matching WASM host sites, and
+  `run_cmd::print_egress_notes` quoted the program's path or URL through `str::escape_debug`. That doubles every
+  backslash, so a Windows path in a refusal read `\\\\?\\C:\\…`.
+- **B7.** `Reason::Scheme`'s sentence, "only `https://` is fetched; there is no plain-HTTP path", was given for every
+  URL that does not start with `https://`, plain HTTP or not.
+
+**The change:**
+- `prim::shown_path` is `delulu_diag::terminal_line`. It shows a path as written, with each control, line-break and
+  line-reordering character escaped, which is TERMINAL-TEXT-1's rule for everything else a terminal is shown. The
+  interpreter, the WASM host and the operator's egress note all use it.
+- `escape_debug` had done the terminal part for these sites. `terminal_line` does it too, and also escapes the bidi
+  characters `escape_debug` let through.
+- The scheme sentence now says what the URL lacks. Its code (`scheme`), the refusal and the program's `Refused` are
+  unchanged.
+
+**Gates**, all red on the old code through mutants M889–M893, all killed:
+- `prim::hostile_path_tests::a_refused_path_is_quoted_as_written_with_its_controls_escaped` covers `a\b` plus a NUL,
+  which is refused on every OS, and controls escaped.
+- `fault_parity::a_refused_path_is_quoted_as_written_on_the_wasm_engine`.
+- `egress::tests::a_scheme_refusal_says_what_the_url_lacks` covers the seven URLs the agent tried.
+- `egress_cli::a_refused_url_is_quoted_as_written_in_the_operators_note`.
+- M890, which drops the escaping altogether, is killed too: a refusal must never put a raw control character on a
+  terminal.
+
+**Not done:**
+- B11, the OS's own error text in `Other(…)`, changes what a program receives on each OS, and gets a milestone of its
+  own.
+- B4, B5 and B8 are open in RW 6.31.
+
+## 2026-10-29 — the laptop: `IoErr::Other` says the kind of failure (B11, D-V2-193, RW 6.32)
+
+**Witnessed red first.** `fault_parity::an_os_refusal_reaches_the_program_in_the_same_words_everywhere` reads a
+300-character name under a granted directory. On the code before this change the interpreter's program printed *"The
+filename, directory name, or volume label syntax is incorrect. (os error 123)"*, the OS's sentence, which B11 had
+reported.
+
+**The change** (D-V2-193):
+- `prim::io_other_text` gives an `Other` the error's kind in Rust's words (`invalid filename`).
+- The interpreter's `io_err_for` and both WASM host sites (`read_text`, `write_text`) use it.
+- The variants are unchanged, and so is when each is chosen.
+
+**Gates.** The test reads and writes the name on both engines and expects `invalid filename` twice. Mutants M894–M896
+put `e.to_string()` back at each of the three sites, and each is killed. The pull request's run checks it on Linux and
+macOS, where the name is `ENAMETOOLONG`, which Rust also calls `invalid filename`.
+
+## 2026-10-29 — the laptop: a refused network mint names the host it asked for (B4, RW 6.33)
+
+**What it said.** `root.http(["evil.example"])` for a host granted nothing was refused DL0703 *"`network host` was not
+granted to this program — pass `--grant net=HOST`"*. Under `--lease` it was *"does not carry `net=HOST`"*. The A20 fix
+(RW 6.17) had named the entry when its host was granted with fewer methods or a narrower path, and had deliberately kept
+these words for a host granted nothing. B4 is the case those words left behind: the reader cannot tell which entry, or
+which dimension, was too wide.
+
+**The change.** `prim::call_root_method`'s `http` arm says *"network access to `ENTRY` was not granted to this program"*,
+with the remedy for `net=ENTRY`, or `net.special=ENTRY` for a special-use host. The WASM engine mints through the same
+function, and so does `authority --within`'s counterexample, so all three say it alike.
+
+**Gates.** The three tests that pinned the placeholder now pin the entry:
+- `fault_parity::an_ungranted_mint_names_the_same_remedy_on_both_engines`, with and without a lease;
+- `within_cli::a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds`, `--within` and `run`;
+- `wasm_cli::http_on_the_wasm_engine_matches_the_interpreter`.
+
+Mutant M897 restores the placeholder, and all three turn red.
+
+## 2026-10-29 — the laptop: #86's run was red on two tests that read the scheme sentence
+
+#86's pull-request run `40787091697` failed on Ubuntu, macOS and arm64 with the same two tests:
+- `monitor_cli::a_plain_http_fetch_is_the_same_refusal_under_the_daemon` asserts the note contains *"only `https://` is
+  fetched"*;
+- `within_cli::a_request_is_decided_by_its_path_against_the_boundary` asserts that `--within`'s reason contains the
+  same phrase.
+
+B7's new sentence had dropped that phrase. The laptop had run the runtime's tests and `egress_cli`, not those two CLI
+targets.
+
+**The fix**, on top of the stack (#88's branch, so no pushed branch is rewritten): the sentence keeps the phrase. It
+reads *"the URL does not begin with `https://` (lower case, two slashes, then the host): only `https://` is fetched, and
+there is no plain-HTTP path"*. It still says what the URL lacks (B7's test), and both CLI tests pass on the laptop.
+
+#86, #87 and #88 land together at #88's head, on that run's green. #86's and #87's own runs are read and recorded as
+they came out.
+
+## 2026-10-29 — the laptop: a name in another script, and a missing expression, are each refused once (C12, C13; RW 6.34)
+
+**C12.** The lexer's dispatch read an identifier only from an ASCII letter. A letter of another script fell to
+*"unexpected character"*, one for each letter at each place it was written, and the parser then missed the name and
+said DL0201. The lexer now reads a word in any script (`char::is_alphanumeric`, and `_`) as one identifier and refuses
+it once: DL0101 *"`计算` is not a name: identifiers are ASCII letters, digits and `_`"*. The word still becomes a name
+token, so the parse goes on as written, and the refusal keeps any program holding it from being accepted. Identifiers
+stay ASCII, which DL0107's Trojan-source argument relies on. A bidirectional control is not alphanumeric, so it never
+joins a word. `explain DL0101` says so.
+
+**C13.** At DL0210 (too deep) and DL0202 (no expression), the parser put an `Int` literal `0` in the tree, and the
+checker typed it `Int`. `if` then refused its condition at the place the parse error had already named.
+- The parser records each placeholder's node in `Module::recovered`, with `#[serde(default, skip_serializing_if =
+  "Vec::is_empty")]`, so a module that parsed serializes as before.
+- `check_expr` gives a recorded placeholder a fresh type.
+- One recovery cascades still: `if + { 1 }` reads the placeholder as the left side of `+ { 1 }`, an `Int`. That is
+  another recovery's shape, and is not changed here.
+
+**Gates.**
+- `campaign_wording`'s two new tests. The 200-deep check runs on a 512 MiB thread, as the CLI gives it; a debug test
+  thread's 2 MiB overflows there.
+- Mutants M898–M901, all killed.
+- The core snapshot was blessed: the conformance witness `DL0202_if_without_condition` (`if { 1 } else { 2 }`) lost its
+  DL0408 and keeps its DL0202.
+- Conformance coverage stays 358/358; DL0408 has its own witness.
+
+**C15 and C14, the same day.**
+- C15 is a reading of `GETTING_STARTED.md`'s *"Minting a capability is pure"*: the agent took it to mean a mint is never
+  refused, and a lease run refused `root.fs_read("./a")` at the call. Both are true. A mint puts no effect in the row
+  and performs none, and it is still checked against the run's grants. The paragraph now says both.
+- C14 is kept. NE-07 made `remove_effect_from_row` carry `safe` (it narrows authority, never widens it) and
+  `requires_human` (whether to narrow a published row is the author's call) as two answers to two questions. The human
+  line shows both, and `check --json` carries both as fields.
+
+## 2026-10-29 — the laptop: the WASM engine's call depth, measured and documented (A4, RW 6.35)
+
+A4 had both engines' exit codes for `rec(n)`: the interpreter refused at 10,000 frames, a bound documented and not
+configurable, and the WASM engine refused somewhere between 12,000 and 30,000, a bound stated nowhere.
+
+Measured on the laptop with the release binary, by bisection, using the builder's one-parameter `rec`:
+- `--engine wasm` ran 16,351 calls deep and was refused by 16,448, DL0905 *"recursion depth exceeded (guest stack
+  exhausted)"*: wasmtime's default guest stack;
+- the interpreter refused `rec(10000)`.
+
+The WASM bound is a stack, so it moves with each frame's size. `GETTING_STARTED.md`'s DL0905 row and
+`docs/for-agents.md` now give both bounds, and advise writing a recursion that may go thousands deep as a loop.
+
+One bound for both engines would mean a depth counter in every compiled call, which costs every call. It is not taken,
+and RW 6.35 says so.
+
+## 2026-10-29 — the laptop: a `Map` lookup on the WASM engine copies nothing (A5, RW 6.36)
+
+**Read first.** #89 read green on its run `40791344842` (14 jobs success) and was fast-forwarded onto `master` at
+`31d26bc`. #86 to #88 had landed together at `3523b2c` on #88's run `40789442622` (14 jobs success).
+
+**Reproduced.** The builder's data was not kept, so the laptop generated a comparable input: 2 MB, 372,300 words, 38
+distinct (`gen.py` in the scratchpad), counted into a `Map[Str, Int]`. The counting loop took 1,283–1,317 ms on
+`--engine wasm` and 632–802 ms on the interpreter. Normalizing and splitting took about the same on both.
+
+**Why.** A `Map` lives in the guest's memory as pairs in key order (`GuestMap`), and the host finds a key by binary
+search. Each probe called `GuestMap::key`, which read the pair's 8-byte slot into a `Vec` and, for a `Str`, the key's
+text into a new `String`. `map_key_of` read the wanted key the same way, and `GuestMap::read` copied the 12-byte header
+into a `Vec`. That came to 14.31 allocations for each `get` and `insert` against eight words.
+
+**The change.**
+- `GuestMap::search` takes the guest's raw key and compares in one borrow of the memory, with no allocation: an `Int`
+  by value, a `Bool` as nonzero, a `Str` by its bytes.
+- Two strings compare by their bytes when both are UTF-8, which is `str`'s order. Otherwise they compare as their lossy
+  readings, the case only a hand-written `.dwx` makes, so every answer equals the one the copies gave.
+- `GuestMap::read` reads the header in place.
+- `GuestMap::key` and `map_key_of` are gone.
+
+**Gates.**
+- `crates/delulu-wasm/tests/map_steps.rs` counts this thread's allocations while the module runs, and differences
+  1,000 and 2,000 steps. It reported 14.31 allocations a step on the old host and 0 now.
+- Mutants:
+  - M902 (a probe reads its key out again: 10.31 a step) and M903 (the header copied: 1.81) turn it red;
+  - M904 (texts compared in the wrong order) turns `map_parity` red.
+- `cargo test -p delulu-wasm`: every target passed.
+
+**Measured** with the release binary: the counting loop takes 285–295 ms on WASM, one run 414 ms. A4's depth
+documentation and this change are stacked on #90.
+
+## 2026-10-29 — the laptop: a write refused through a written type names the type (C6, RW 6.37)
+
+**Read first.** #91 read green on its run `40793604231` (14 jobs success, 2 skipped) and was fast-forwarded onto
+`master` at `15c977d`. #90's push run `40793498011` on `c5feb63` was green. **One red:** `master`'s push run
+`40793268946` on `31d26bc` failed `test (macos-latest)` (job `123183433447`) in `monitor_cli`
+`a_long_chain_does_not_kill_a_healthy_monitor`: six periods into the watch, the monitor over a 101,251-record chain (one
+whole read 1.45 s) had been revoked by its own 500 ms dead-man, with the run and the node minted after the watch began.
+The same test passed on that commit's pull-request run and on `c5feb63`'s push run. It is RW 7.23's class, a wall-clock
+test once red on a runner; it is examined next, on its own.
+
+**What the agent found** (C6, the zero-authority agent, Haiku 5.5, 2026-10-24), and what the laptop met again while
+measuring A5: `let b: List[Int] = []` then `b.push(2)` is refused DL1604 *"cannot write a list element (push) through a
+`val` receiver"*. Nothing in the program says `val`. A written type with no capability keyword takes its type's default,
+`val` for a list or a map, where an unannotated literal is `ref`. A12's hint (RW 6.19) made it likelier: it suggested
+`let m: Map[Str, List[Str]] = Map()`, which a program then could not insert into.
+
+**Kept.** The default is the language's rule, not a papercut: a `val` binding is what makes C64's lift at a call sound,
+and the six reference capabilities read the same in a `let` as in a parameter.
+
+**The change** (`rcap_check.rs`, `check.rs`).
+- A binding records why it is `val` when nothing wrote `val`: `WhyVal::Lift`, A1's call, or `WhyVal::Written`, a `let`
+  whose written type names no capability keyword and whose type's default is `val`.
+- A refused write through a `Written` binding says that `b`'s written type names no reference capability, which reads
+  as `val`, and to write `let b: ref …` or to leave the type out. A second span labels the type: *"`b` is `val` by this
+  type"*.
+- A binding already `val` by its type keeps that reason when it is later passed to a `val` parameter. The call took
+  nothing from it, so the lift message would have named the wrong cause.
+- A12's DL0405 hint writes `let m: ref Map[Str, List[Str]] = Map()` and `let xs: ref List[Int] = []`.
+- `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` adds it.
+
+**Gates.**
+- `campaign_wording` `a_write_refused_through_a_written_type_names_the_type`: the message, the remedy, the second span's
+  text (`List[Int]`) and label; `ref List[Int]` and no type are accepted; an explicit `val` gets no such reason; a
+  binding `val` by its type and then passed to `keep(xs: List[Int])` keeps the type as its reason. Red on the old
+  `rcap_check.rs`.
+- Mutants, each killed at its own assertion: M905 (no `Written` reason recorded), M906 (a later call replaces the
+  type's reason), M907 (an explicit `val` given the type's reason).
+- `unknown_receiver` checks the hint's `let m: ref Map[`.
+- `cargo test -p delulu-check` (10 targets) and `-p delulu-diag` passed; `core_invariance` passed with the snapshot
+  unchanged.
+
+## 2026-10-29 — on-demand routine run 7: a stopped daemon is not its monitor's silence (DEADMAN-DEAF-1, D-V2-194; RW 4.87, 7.25)
+
+**Read first.** Opus 5.5 at xhigh: `CLAUDE_EFFORT=xhigh`, and every reply in the transcript `"effort":"xhigh"`. One branch was
+ahead of `master`: `laptop/val-by-type` (#92, C6), green on its run `40921845188` (14 jobs success, 2 skipped). Its two
+autosave snapshots were checked against it: `1667859` landed whole in `579f60d`, and `59df027` is an earlier draft of the
+same paths. #92 was fast-forwarded onto `master` at `579f60d`, and its push run `40954259791` read green (14 jobs, 2
+skipped). The Survey and `doctor` were healthy at the start. The session's harness refused to delete `laptop/val-by-type`
+from `origin`, so the branch is left for the laptop.
+
+**The red.** `master`'s push run `40793268946` on `31d26bc` failed `test (macos-latest)` (job `123183433447`) in
+`monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`. Six periods into the watch, the monitor (over 101,251
+records, one whole read 1.45 s) and the run under it were revoked at seq 101258, the record right after the delegation
+the test made at four periods. The message named the nodes' states and nothing else, so it could not tell three causes
+apart:
+- (a) the monitor not scheduled for a period, which is what a dead-man is for;
+- (b) the monitor stopped on an error, since every error ends the watch and leaves its dead-man armed (by design), and
+  it fires one period later;
+- (c) the daemon.
+
+It was not reproduced in the VM: 3 of 3 green on a quiet VM, and 6 of 6 beside four copies of the whole `monitor_cli`
+target (load average 7 on 4 CPUs).
+
+**The class, asked of each party in turn.** A monitor stopped for longer than its period is revoked
+(`a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes`), by design. Nobody had stopped the DAEMON. Stopped with
+`SIGSTOP` for three periods while the monitor beat, it revoked the monitor (73 beats counted) and its run, and told the
+monitor *"this monitor sent no beat within 500 ms"*, which was false. Red 3 of 3 on the old `brokerd.rs`. The mechanism:
+DEADMAN-BUSY-1 (D-V2-127) stamps each request's arrival on a reader thread of its own, so a held handler no longer counts
+against a holder. But that thread is the daemon's. A daemon that is not running stamps the beats waiting in its socket
+only when it runs again, after their deadline, and the serve loop, woken by its own timeout, can judge before the reader
+threads have run at all.
+
+**The fix (D-V2-194, `brokerd.rs`).**
+- A hearing clock: monotonic time that stands still while the daemon could not hear.
+- While a dead-man is armed, a thread of its own looks at the time every 10 ms. A gap past 50 ms is deaf time, and the
+  clock leaves it out. Until the thread looks again, the time since its last look past the slack is left out too, so a
+  judgment made the moment the daemon resumes already leaves the pause out.
+- Every instant a dead-man is judged by reads this clock: the arming (listening before the dead-man exists), its first
+  period, a beat's and a disarm's arrival, the loop's wait, and its as-of.
+- `broker.log` names each gap of 100 ms or more. The wall clock stays for `broker.log`'s late-answer lines.
+- With nothing armed the thread sleeps, so an idle daemon still never wakes.
+- A holder that is itself stopped is still dead: its dead-man fires one period of hearing after its last beat.
+
+**Whether (c) was the macOS red** is not known, and cannot be now: the run kept no evidence. A macOS runner (3 cores,
+7 GB) running `monitor_cli`'s tests three at a time beside a 33 MB chain is a host on which a process can go
+unscheduled, and (a) is as possible as (c). What changed is that the next red says which. Both witnesses print the
+monitor's exit status and standard error (its `ended` line) and `broker.log`: a dead-man's firing with the beats it
+counted, a late answer, and now the daemon's own deaf interval.
+
+**Gates.**
+- `monitor_cli` `a_stopped_daemon_is_not_its_monitors_silence` (unix): the daemon stopped for three periods, and the
+  monitor and its run stay live. The daemon's `broker.log` names its stop, so the witness looked. Then the monitor is
+  killed and its dead-man still fires, read about 500 ms later (514, 540, 502 ms), so a clock left standing still cannot
+  pass. Red 3 of 3 on the old `brokerd.rs`.
+- `brokerd` `hearing_tests` (4): a gap is deaf time; a stale look already leaves the stop out; a clock that is not
+  listening counts nothing; and over 200 generated histories (80,000 reads, over a thousand stops) the clock is monotone
+  and never faster than the wall. Plus `an_arming_is_answered_with_the_hearing_clock_listening`.
+- Mutants M908–M915, each red, control green:
+  - M908, no stale look: two `hearing_tests`;
+  - M909, no deaf time added: the witness;
+  - M910, listening counts its sleep: two `hearing_tests`;
+  - M911, the loop's as-of by the wall: the witness;
+  - M912, a beat's arrival by the wall: the witness;
+  - M913, never listening: the witness;
+  - M914, the arming's own listen removed: it survived `monitor_cli`, since a window of microseconds before the loop's
+    next turn is one no process-level witness can hold, and is killed by the handler test written for it;
+  - M915, a hearing thread that never looks: the witness, whose killed monitor then never fires.
+- `scripts/clippy.sh -j 4` clean; `scripts/check-other-os.sh x86_64-pc-windows-msvc aarch64-apple-darwin` clean.
+- `witness.yml` with every `delulu` test target at `1f5206c` on the branch:
+  - macOS `40958776212`: success, 1,088 passed, 0 failed (101 binaries; the witness and the clock's tests named);
+  - Windows `40958779882`: success, 1,055 passed, 0 failed (the clock's tests and the long-chain witness named; the stop
+    witness is unix-only).
+- The full suite in the VM: 2,600 passed, 0 failed, 16 ignored, 189 binaries (`scripts/suite.sh`, `EXIT=0`, the tree
+  unmoved).
+- `master`'s push run on `1f5206c`: `40960549621`, green, 14 jobs success and 2 skipped. `actors_pingpong` NOT MEASURED
+  on all three (Ubuntu and Windows busy or SMT; macOS 3 hardware threads, 1.58x observed).

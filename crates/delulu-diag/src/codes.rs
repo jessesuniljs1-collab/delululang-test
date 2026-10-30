@@ -790,7 +790,10 @@ pub fn code_explain(code: &str) -> Option<String> {
         // ===== DL01xx — lexing =============================================
         "DL0101" => "The lexer met a character that cannot begin any token. Usually a stray \
              non-ASCII character pasted from a document, a smart quote where a straight one was \
-             meant, or a control character. Delete it, or replace it with the ASCII it stands for.",
+             meant, or a control character. Delete it, or replace it with the ASCII it stands for. \
+             A word written in another script (`café`, `计算`) is refused once, as a whole: an \
+             identifier is ASCII letters, digits and `_`, so that every name reads one way to every \
+             reviewer. Spell it in ASCII.",
         "DL0102" => "A string literal opened and the file ended before it closed. Add the closing \
              quote. If the string was meant to span lines, note that a string literal does not: \
              break it into pieces or use an escape.",
@@ -809,10 +812,13 @@ pub fn code_explain(code: &str) -> Option<String> {
              comments NEST, so an inner `/*` needs its own close — count them from the top of the \
              comment. Nesting is deliberate: it lets you comment out a region that already contains \
              comments, which is the one time you actually need to.",
-        "DL0106" => "This name is RESERVED for a future stage and cannot be declared. The word is \
+        "DL0106" => "This name is RESERVED and cannot be declared. Six reserved words are the reference \
+             capabilities a type can carry (`iso`, `trn`, `ref`, `val`, `box`, `tag`). Three keep a \
+             declaration from posing as an authority-bearing type (`plugin`, `secret`, `cap`). The rest \
+             are kept for a future stage (`async`, `await`, `trait`, `impl`, `where`, `pure`). The word is \
              still legal as a member name after `.`, which is how `root.secret(…)` coexists with \
-             `secret` being reserved. Reserving a word early is a promise that adding it later will \
-             not break your code — the alternative is a breaking change dressed as a feature.",
+             `secret` being reserved. Reserving a word early is a promise that adding it later will not \
+             break your code — the alternative is a breaking change dressed as a feature.",
         "DL0107" => "A Unicode bidirectional control character was found in the raw source. These \
              characters reorder how text RENDERS without changing how it LEXES, so a reviewer can \
              be shown one program while the compiler reads another — the 'Trojan Source' attack \
@@ -1233,7 +1239,9 @@ pub fn code_explain(code: &str) -> Option<String> {
              with no capability keyword is one), because the callee may keep it; a later write \
              through it is this error, and it names that call. If the callee only reads, declare its \
              parameter `box`, which reads a `ref` without keeping it; otherwise write before the \
-             call. (A1, the agent test campaign of 2026-10-24.)",
+             call. (A1, the agent test campaign of 2026-10-24.) A `let` whose written type names no \
+             capability keyword is `val` too (`let b: List[Int] = []`), and the error points at that \
+             type: write `let b: ref List[Int] = []` to keep the write, or leave the type out. (C6.)",
         "DL1605" => "A `recover` block cannot reference a non-sendable binding from outside it. \
              `recover` produces a value with a stronger capability than its parts; that is only \
              sound if nothing outside can still reach into it.",
