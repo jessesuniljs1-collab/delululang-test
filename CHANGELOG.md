@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sandboxed run's fault names its place, 2026-10-31
+
+- **Improved: under `--sandbox` the guest's fault names its line and column** (RW 6.39). It printed `guest: error[DL0904]:
+  …` alone, where an ordinary run points at the expression, because the guest was never told the program's name. The
+  host now sends the file's last component with the program, and the guest's fault reads as the ordinary run's, each
+  line marked `guest:` as before. The host's directories are never sent. What the guest may reach is unchanged.
+
 ## Unreleased — `list_dir` runs on the WASM engine and in a `.dwx`, 2026-10-31
 
 - **Added: `Cap[FsRead].list_dir(path)` on `--engine wasm` and `build --target wasm`** (the agent test campaign's A7, RW

@@ -10456,3 +10456,32 @@ authority than it holds, and the run ends where it asked. A URL the egress clien
 is) is a failed request the program handles as it handles any `Err`; ending the run there would take that choice from
 it. What was missing was the statement: `docs/for-agents.md` now gives both shapes, the exit codes, and where a harness
 that must know of every refused request reads it (`egress.records[].reason` in the run report, and the operator's note).
+
+## 2026-10-31 — the laptop: a sandboxed run's fault names its place (RW 6.39)
+
+**What was seen** while closing B5: the `broker_cli` daemon test, asked to check every route's place, found the sandboxed
+guest's fault unplaced. The guest printed *"error[DL0904]: …"* alone, relayed as `guest: error[DL0904]: …`, where the
+interpreter and (since B5) the WASM engine point at the call. The guest holds the program and the fault's span; it was
+never told the program's name, since the channel's `Program` frame carried the text, its hash, the seed and the clock.
+
+**The change.**
+- `channel.rs`: `Program` gains `name`, `#[serde(default)]`. Host and guest are one version (D-V2-56: a version mismatch
+  is refused in words), and a frame without the field reads as an empty name, so nothing else of the protocol moves.
+- `guest.rs`: the sandboxed run passes the name it reports the program under (the file, or a package's flattened name)
+  through to the frame, which carries its LAST COMPONENT only, never the host's directories. The internal runner and the
+  probe send none. The guest renders its fault as an ordinary run does (`runtime fault here`, under that name) when it
+  has a name and a span, and keeps the one-line form otherwise; the message stays escaped (TERMINAL-TEXT-1), and the
+  host's relay marks and escapes every line as before.
+
+**Why it is safe.** The channel's rule is that the guest is told what to execute, never what it may reach. A file's last
+component grants nothing and names nothing on the host; the test runs a program by its absolute path and holds that no
+guest line carries its directory.
+
+**Gates.** `sandbox_run_cli` `a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories` (red before):
+the guest's DL0902 placed at `share.delulu:5:16`, `runtime fault here`, and no line naming the temporary directory.
+`broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now checks the sandboxed route's place too (it
+was left out, naming this row). Mutants M943 (the guest ignores the name), M944 (no name sent), M945 (the whole path
+sent), each killed. `broker_cli`, `terminal_text_cli`, `sandbox_run_cli`, `sandbox_modes_cli`, `sandbox_guard_e2e` and
+`delulu-runtime`'s channel tests passed.
+
+With this row every finding of the agent test campaign of 2026-10-24 is closed or decided.
