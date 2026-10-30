@@ -21,6 +21,7 @@
   "capabilities": [
     {
       "kind": "Console",
+      "requested_computed": false,
       "requested_scopes": [],
       "resource_class": "console",
       "resources": [
@@ -32,6 +33,7 @@
     },
     {
       "kind": "FsRead",
+      "requested_computed": false,
       "requested_scopes": [
         "./config"
       ],
@@ -43,6 +45,7 @@
     },
     {
       "kind": "FsWrite",
+      "requested_computed": false,
       "requested_scopes": [
         "./out"
       ],
@@ -54,6 +57,7 @@
     },
     {
       "kind": "Http",
+      "requested_computed": false,
       "requested_scopes": [
         "example.com"
       ],

@@ -19,6 +19,7 @@
   "capabilities": [
     {
       "kind": "Console",
+      "requested_computed": false,
       "requested_scopes": [],
       "resource_class": "console",
       "resources": [
@@ -30,6 +31,7 @@
     },
     {
       "kind": "PluginHost",
+      "requested_computed": false,
       "requested_scopes": [],
       "resource_class": "plugin_host",
       "resources": [

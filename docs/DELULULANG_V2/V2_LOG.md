@@ -10320,3 +10320,70 @@ licenses sources` ok. `cargo test -p delulu-wasm` (every target, `wasmtime_featu
 
 **Landed with** #93 (B5), #94 (RW 6.41) and #95 (RW 6.40), stacked below it: this branch's run is the one that covers
 all four. The next merge into `launch/2.0.0` takes it, and CHECKLIST-2.0 criterion 4 names the three advisories.
+
+## 2026-10-31 — the laptop: a keyword in a module's name is refused as a keyword (C9, RW 6.42)
+
+**What the agent found** (C9, the zero-authority agent, Haiku 5.5, 2026-10-24), and what the laptop measured on the binary
+before the change: `module t.actor` was DL0209 *"expected end of statement"* at the `.`; `module fn`, `module type`,
+`module let` and the rest at the next line's item, since the line break after a keyword does not end a statement and
+`parse_path` takes a keyword as its first part. `module true`, `module new`, `module be` and `module a.new` checked clean.
+
+**The change** (`parser.rs`). The `module` header and an `import` read their path through `parse_module_path`: a part
+that is a keyword is refused DL0201 *"`actor` is a keyword and cannot be part of a module's name"*, at the keyword, and
+read as the part so the line goes on. After a refused part, an item that follows at once is read as an item: otherwise
+the statement's recovery would have skipped it as the rest of a bad line. `true` and `false` stay names there, so nothing
+accepted before is refused, and every keyword was refused before: what a module's name may be is unchanged. `parse_path`
+itself, which reads types, effect rows and patterns, is untouched.
+
+**Gates.** `campaign_wording` `a_keyword_in_a_module_name_is_refused_as_a_keyword`: `module t.actor`, `module fn`,
+`module a.type.b` and `import a.actor`, each one DL0201 at its keyword with `fn main` still read; `module true`,
+`module new`, `module a.new` and `module ok.fine` check clean. Red on the old parser (DL0209 at the `.`). Mutants M928 (an
+item after a refused part skipped), M929 (no part refused), M930 (`true` refused), each killed. `cargo test -p
+delulu-syntax -p delulu-check -p delulu-conform` and `core_invariance` passed, the snapshot unchanged.
+
+## 2026-10-31 — the laptop: a source file that is not UTF-8 is refused at its first bad byte (C11, RW 6.43)
+
+**What the agent found** (C11, the zero-authority agent, Haiku 5.5, 2026-10-24), measured on the laptop before the change:
+`delulu check` of a file holding a Latin-1 `é` (byte `0xE9`) said *"error: cannot read `f`: stream did not contain valid
+UTF-8"* and exited 2, a usage error; `run` the same. Under `--json` the fallback envelope said `kind: usage`,
+`summary.errors: 1`, and listed no diagnostic. The words were the standard library's, with no place: C27's class, an
+OS-level error where a diagnostic belongs, which C65 had closed for a `.dwx` handed to a source command.
+
+**The change** (`cli.rs`). When the loader's read fails as invalid data and the file is not a `.dwx`, `refuse_non_utf8`
+reads its bytes, finds the first that begins no UTF-8 character, and refuses it as DL0101 (*"unexpected character"*; no
+new code): *"this file is not UTF-8: 0xE9 here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as
+UTF-8"*, exit 1. The source map holds the file with each bad sequence shown as `�`, so the line renders with the byte under
+the caret; nothing is checked or run from it. The loader runs before a command has its options in hand, so `run` records
+the command and `--json` once (`INVOCATION`) and the refusal answers in that channel: one envelope, with the diagnostic.
+`delulu explain DL0101` says a file that is not UTF-8 is refused there.
+
+**Gates.** `artifact_review` `a_source_file_that_is_not_utf8_is_refused_at_its_first_bad_byte`: `check` and `run` exit 1
+with DL0101 at `3:25`; `--json` gives one envelope with the diagnostic and no `error` fallback. Red on the old CLI (exit 2,
+the library's words). Mutants M931 (no refusal made), M932 (`--json` ignored), M933 (the span one byte off), each killed.
+`json_contract`, `cli_contract`, `artifact_review` and `cargo test -p delulu-diag` passed.
+
+## 2026-10-31 — the laptop: `delulu authority` names the scopes a program requests (A8, RW 6.44)
+
+**What the agent found** (A8, the builder, Sonnet 5.5, 2026-10-24), measured on the laptop before the change: for a
+program whose source says `root.fs_read("./data")` the human `delulu authority` printed `FsRead   (scope granted at
+runtime)`, while `--json` listed `requested_scopes: ["./data"]`. NE-10 (2026-09) had put the requested scopes into the JSON
+and the Atlas's chain; the human line never read them. A reader of the human report could not see which directories a
+program asks for. My earlier note called it a decision because a Stage-3 test pins the human report byte for byte.
+
+**The decision.** That pin is Stage 4's criterion 7: adding the foreign surface must change nothing in a report without
+foreign code. It does not say the report may never say more, and the line it pins was the gap. It moves, with its comment
+saying why; criterion 7 still holds, since the foreign surface changes nothing in the report.
+
+**The change.** `delulu_atlas::scope_words` writes a capability's scope for the authority report and the Atlas's digest
+alike: the scopes a manifest grants, else the scopes the program writes, *"./data (requested; the grant decides)"*. Where
+another minting site of the kind computes its scope (SCOPE-HIDDEN-1's hidden kinds), it adds *"and one computed at run
+time"*, so the literals are not read as all the program asks for. Where the source writes none, it keeps *"(scope granted
+at runtime)"*. Each capability in `--json` gains `requested_computed`, additive and described in the report's schema
+(`schema.rs`; `within_cli` holds every report to it).
+
+**Gates.** `cli` `the_human_authority_report_names_the_scopes_a_program_requests`: literal scopes, a literal beside a
+computed site, a computed site alone; red on the old source. Mutants M934 (the requested scopes ignored), M935 (the
+computed note dropped), M936 (`requested_computed` always false), each killed. The core snapshot, blessed, changed in
+exactly 10 human lines (each now naming its program's requested scope) and 38 `"requested_computed": false` fields; the
+Atlas chain snapshots in 17 such fields. `within_cli`, `json_contract`, `atlas_chain`, `atlas_cli`, `atlas_e2e`,
+`cargo test -p delulu-atlas` and `core_invariance` passed.

@@ -734,6 +734,14 @@ impl<'a> Pass<'a> {
             let hint = match k {
                 K::Known(Rcap::Iso) => " — `consume` it to transfer the unique reference",
                 K::Unknown => " — the value's reference capability could not be determined",
+                // A13: a `ref` handed to a parameter whose type names no capability (so `val`). The two ways out, where
+                // the agent found none and rewrote its program: a parameter the function only reads may be `box`, which
+                // reads a `ref` as well as a `val`; or the caller hands over a copy. A `val` the author wrote is left be.
+                K::Known(Rcap::Ref) | K::Unaliased(Rcap::Ref) if dest == Rcap::Val && !dest_written && what.starts_with("argument ") => {
+                    " — the parameter's type names no reference capability, which reads as `val`. If the function only reads \
+                     it, declare the parameter `box` (write `box` before its type), which reads a `ref` as well as a `val`; \
+                     or pass a copy (a list's `.concat([])` is one)"
+                }
                 _ => "",
             };
             let shown = match k {

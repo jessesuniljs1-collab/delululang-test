@@ -11,6 +11,32 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu authority` names the scopes a program requests, 2026-10-31
+
+- **Changed: the human authority report names a capability's requested scope** (the agent test campaign's A8, RW 6.44).
+  `FsRead   (scope granted at runtime)` became `FsRead   ./data (requested; the grant decides)` for a program whose source
+  says `root.fs_read("./data")`; only `--json` had listed it. A kind that another minting site computes at run time says
+  so: `./data (requested, and one computed at run time; the grant decides)`. A kind whose scope the source never writes
+  keeps `(scope granted at runtime)`. The Atlas's digest prints the same line.
+- **Added: `requested_computed`** on each capability of `delulu authority --json`, true where a minting site of the kind
+  computes its scope (an additive field; the report's schema describes it).
+
+## Unreleased — a source file that is not UTF-8 is refused at its first bad byte, 2026-10-31
+
+- **Improved: a `.delulu` file that is not UTF-8 is DL0101 at its first bad byte, exit 1** (the agent test campaign's
+  C11, RW 6.43). It was a usage error, exit 2, quoting the standard library's *"stream did not contain valid UTF-8"*, with
+  no place; under `--json` its envelope counted an error and listed no diagnostic. Now: *"this file is not UTF-8: 0xE9
+  here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as UTF-8"*, with its line and column, in
+  either channel. `delulu explain DL0101` says so. What is refused is unchanged.
+
+## Unreleased — a keyword in a module's name is refused as a keyword, 2026-10-31
+
+- **Improved: `module t.actor` and `module fn` say that a keyword cannot be part of a module's name** (the agent test
+  campaign's C9, RW 6.42). They were *"expected end of statement"*, at the `.` before the keyword or, for `module fn`, at
+  the next line's item, since the line break after a keyword does not end a statement. The refusal is now DL0201 at the
+  keyword, once, and the item on the next line is still read; an `import` the same. What a module's name may be is
+  unchanged: every name that was accepted still is (`true`, `new`, a dotted name), and every keyword was refused before.
+
 ## Unreleased — wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424, 2026-10-31
 
 - **Security: wasmtime 48.0.7 → 48.0.8** (with its Cranelift and Pulley crates, 30 packages, patch releases only). Three
