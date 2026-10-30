@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 336 |
-| Rust lines | 194551 |
+| Rust lines | 194622 |
 | Rust files outside `src/` (test/bench targets) | 166 |
 | Markdown documents | 272 |
-| Markdown lines | 89608 |
+| Markdown lines | 89649 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1568 / 17595 |
+| Nodes / edges in this map | 1568 / 17623 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 47408 lines
+- **Modules:** 44 files, 47451 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -106,7 +106,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/budget.rs` | 397 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 189 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 11726 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 11769 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 387 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
@@ -237,12 +237,12 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 4000 lines
+- **Modules:** 9 files, 4001 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 445 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 2139 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 2140 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 192 |  |
 | `src/json.rs` | 173 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |

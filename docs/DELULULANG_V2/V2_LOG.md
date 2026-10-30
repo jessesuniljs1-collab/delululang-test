@@ -10340,3 +10340,24 @@ itself, which reads types, effect rows and patterns, is untouched.
 `module new`, `module a.new` and `module ok.fine` check clean. Red on the old parser (DL0209 at the `.`). Mutants M928 (an
 item after a refused part skipped), M929 (no part refused), M930 (`true` refused), each killed. `cargo test -p
 delulu-syntax -p delulu-check -p delulu-conform` and `core_invariance` passed, the snapshot unchanged.
+
+## 2026-10-31 — the laptop: a source file that is not UTF-8 is refused at its first bad byte (C11, RW 6.43)
+
+**What the agent found** (C11, the zero-authority agent, Haiku 5.5, 2026-10-24), measured on the laptop before the change:
+`delulu check` of a file holding a Latin-1 `é` (byte `0xE9`) said *"error: cannot read `f`: stream did not contain valid
+UTF-8"* and exited 2, a usage error; `run` the same. Under `--json` the fallback envelope said `kind: usage`,
+`summary.errors: 1`, and listed no diagnostic. The words were the standard library's, with no place: C27's class, an
+OS-level error where a diagnostic belongs, which C65 had closed for a `.dwx` handed to a source command.
+
+**The change** (`cli.rs`). When the loader's read fails as invalid data and the file is not a `.dwx`, `refuse_non_utf8`
+reads its bytes, finds the first that begins no UTF-8 character, and refuses it as DL0101 (*"unexpected character"*; no
+new code): *"this file is not UTF-8: 0xE9 here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as
+UTF-8"*, exit 1. The source map holds the file with each bad sequence shown as `�`, so the line renders with the byte under
+the caret; nothing is checked or run from it. The loader runs before a command has its options in hand, so `run` records
+the command and `--json` once (`INVOCATION`) and the refusal answers in that channel: one envelope, with the diagnostic.
+`delulu explain DL0101` says a file that is not UTF-8 is refused there.
+
+**Gates.** `artifact_review` `a_source_file_that_is_not_utf8_is_refused_at_its_first_bad_byte`: `check` and `run` exit 1
+with DL0101 at `3:25`; `--json` gives one envelope with the diagnostic and no `error` fallback. Red on the old CLI (exit 2,
+the library's words). Mutants M931 (no refusal made), M932 (`--json` ignored), M933 (the span one byte off), each killed.
+`json_contract`, `cli_contract`, `artifact_review` and `cargo test -p delulu-diag` passed.

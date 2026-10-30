@@ -793,7 +793,8 @@ pub fn code_explain(code: &str) -> Option<String> {
              meant, or a control character. Delete it, or replace it with the ASCII it stands for. \
              A word written in another script (`café`, `计算`) is refused once, as a whole: an \
              identifier is ASCII letters, digits and `_`, so that every name reads one way to every \
-             reviewer. Spell it in ASCII.",
+             reviewer. Spell it in ASCII. A file that is not UTF-8 is refused here too, at its first \
+             byte that begins no UTF-8 character: source is UTF-8, so save the file as UTF-8.",
         "DL0102" => "A string literal opened and the file ended before it closed. Add the closing \
              quote. If the string was meant to span lines, note that a string literal does not: \
              break it into pieces or use an escape.",

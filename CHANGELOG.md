@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a source file that is not UTF-8 is refused at its first bad byte, 2026-10-31
+
+- **Improved: a `.delulu` file that is not UTF-8 is DL0101 at its first bad byte, exit 1** (the agent test campaign's
+  C11, RW 6.43). It was a usage error, exit 2, quoting the standard library's *"stream did not contain valid UTF-8"*, with
+  no place; under `--json` its envelope counted an error and listed no diagnostic. Now: *"this file is not UTF-8: 0xE9
+  here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as UTF-8"*, with its line and column, in
+  either channel. `delulu explain DL0101` says so. What is refused is unchanged.
+
 ## Unreleased — a keyword in a module's name is refused as a keyword, 2026-10-31
 
 - **Improved: `module t.actor` and `module fn` say that a keyword cannot be part of a module's name** (the agent test

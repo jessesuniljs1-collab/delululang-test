@@ -1093,6 +1093,8 @@ pub(crate) fn own_words(args: &[String]) -> &[String] {
 
 pub fn run(args: &[String]) -> i32 {
     let wants_json = own_words(args).iter().any(|a| a == "--json");
+    let command = args.iter().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
+    let _ = INVOCATION.set((command, wants_json));
     let code = run_inner(args);
     if wants_json && code != 0 && !JSON_EMITTED.load(std::sync::atomic::Ordering::Relaxed) {
         // No DL code is invented here. The registry is a stable contract and a usage error is not a
@@ -3093,10 +3095,51 @@ pub(crate) fn load_into(map: &mut SourceMap, file: &str) -> Result<(u32, String)
                 );
                 return Err(2);
             }
+            if e.kind() == std::io::ErrorKind::InvalidData {
+                if let Some(code) = refuse_non_utf8(map, file) {
+                    return Err(code);
+                }
+            }
             eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             Err(2)
         }
     }
+}
+
+/// A source file that is not UTF-8 (C11 of the agent test campaign): DL0101 at its first byte that begins no UTF-8
+/// character, exit 1, in the command's own channel (`--json` included). It was a usage error, exit 2, quoting the standard
+/// library's *"stream did not contain valid UTF-8"*: no place, and an envelope with no diagnostic. The map holds the file
+/// with each such byte shown as `�`, so the line renders; nothing is run or checked from it. `None` if the bytes cannot be
+/// read again or turn out to be UTF-8 after all, and the caller says what it said before.
+fn refuse_non_utf8(map: &mut SourceMap, file: &str) -> Option<i32> {
+    let bytes = std::fs::read(file).ok()?;
+    let bad = std::str::from_utf8(&bytes).err()?;
+    let at = bad.valid_up_to();
+    let len = bad.error_len().unwrap_or(bytes.len() - at);
+    let shown: Vec<String> = bytes[at..at + len].iter().map(|b| format!("0x{b:02X}")).collect();
+    let id = map.add_file(file.to_string(), String::from_utf8_lossy(&bytes).into_owned());
+    // `from_utf8_lossy` keeps every byte before the first bad one and writes one U+FFFD (3 bytes) for it.
+    let span = delulu_diag::Span::new(id, at as u32, at as u32 + 3);
+    let d = Diagnostic::error(
+        "DL0101",
+        format!(
+            "this file is not UTF-8: {} here begin{} no UTF-8 character — DeluluLang source is UTF-8; save the file as UTF-8",
+            shown.join(" "),
+            if len == 1 { "s" } else { "" }
+        ),
+    )
+    .with_span(span, "not UTF-8");
+    let (command, json) = invocation();
+    print_diagnostics(&command, &[d], map, None, json);
+    Some(1)
+}
+
+/// The command and whether `--json` was asked, as [`run`] read them: for a refusal made before a command has its options
+/// in hand (a source file that is not UTF-8), so that it still answers in the command's own channel.
+static INVOCATION: std::sync::OnceLock<(String, bool)> = std::sync::OnceLock::new();
+
+fn invocation() -> (String, bool) {
+    INVOCATION.get().cloned().unwrap_or_default()
 }
 
 /// `authority <file>.dwx`: report the artifact's own embedded `delulu:authority` manifest.
