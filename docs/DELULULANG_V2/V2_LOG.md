@@ -10298,3 +10298,25 @@ on both engines, and the same `DL0905` place; red on the old source (the WASM en
 line not printed), M926 (`depth_at_call` does nothing), M927 (the raw message again), each killed. `cargo test -p
 delulu-wasm -p delulu-runtime` (every target), `actors_cli`, `cli_contract` and `core_invariance` passed, the snapshot
 unchanged.
+
+## 2026-10-31 — the laptop: wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424
+
+**What turned it red.** #93's run `41112572896` passed every test job on Linux, macOS, Windows and arm64, and failed
+`supply-chain` alone: `cargo deny check advisories` named three wasmtime advisories published on 2026-10-30, each fixed in
+48.0.8 (and in 49.0.5 and 50.0.1). They hold for every tree, `master` and `launch/2.0.0` among them; the next nightly would
+have been red.
+
+**Reachable here?** No, read against the code. -0422: typed functions with `i31` or `nullref` arguments (the GC and
+function-references proposals); -0423: host-created struct types with supertypes (GC); -0424: borrowed resources passed
+between components (the component model). `harden_wasm_features` turns off GC, function references and the component
+model, and the host's functions take and give `i32`, `i64` and `f64` alone.
+
+**The change.** `cargo update -p wasmtime --precise 48.0.8`: 30 packages, wasmtime's own, Cranelift's (0.135.7 → 0.135.8)
+and Pulley's, every one a patch release; nothing added or removed. The `cache` feature stays off (#76, 2026-10-27).
+
+**Gates.** `cargo deny check advisories` on the old lock: the three advisories, failed; on the new one: ok. `bans
+licenses sources` ok. `cargo test -p delulu-wasm` (every target, `wasmtime_features` and B5's placement tests among them),
+`wasm_cli` 22 and `core_invariance` passed on 48.0.8.
+
+**Landed with** #93 (B5), #94 (RW 6.41) and #95 (RW 6.40), stacked below it: this branch's run is the one that covers
+all four. The next merge into `launch/2.0.0` takes it, and CHECKLIST-2.0 criterion 4 names the three advisories.
