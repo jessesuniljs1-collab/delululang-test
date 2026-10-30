@@ -101,7 +101,7 @@ fn forged_capability_handle_is_refused_dl0904() {
     let wasm = attacker(999, 0, None);
     let r = run_console_fn(&wasm, "attack", &[]);
     match r {
-        Err(WasmError::Trap(msg)) => assert!(msg.contains("DL0904"), "expected a scope violation, got: {msg}"),
+        Err(WasmError::Trap(msg, _)) => assert!(msg.contains("DL0904"), "expected a scope violation, got: {msg}"),
         other => panic!("a forged handle must be refused (DL0904), got {other:?}"),
     }
 }
@@ -113,7 +113,7 @@ fn out_of_bounds_string_pointer_is_refused_dl0903() {
     let wasm = attacker(0, 100_000, None);
     let r = run_console_fn(&wasm, "attack", &[]);
     match r {
-        Err(WasmError::Trap(msg)) => assert!(msg.contains("DL0903"), "expected out-of-bounds, got: {msg}"),
+        Err(WasmError::Trap(msg, _)) => assert!(msg.contains("DL0903"), "expected out-of-bounds, got: {msg}"),
         other => panic!("an out-of-bounds pointer must be refused (DL0903), got {other:?}"),
     }
 }
@@ -124,7 +124,7 @@ fn hugely_negative_pointer_does_not_panic_the_host() {
     // and refuse cleanly rather than overflow `usize` and abort the process.
     let wasm = attacker(0, -1, None);
     let r = run_console_fn(&wasm, "attack", &[]);
-    assert!(matches!(r, Err(WasmError::Trap(_))), "a -1 pointer must be refused, not crash: {r:?}");
+    assert!(matches!(r, Err(WasmError::Trap(..))), "a -1 pointer must be refused, not crash: {r:?}");
 }
 
 #[test]

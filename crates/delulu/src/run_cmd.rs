@@ -343,7 +343,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         }
         Err(e) => {
             let msg = e.message();
-            let d = Diagnostic::error(wasm_fault_code(&msg), format!("`{file}`: {msg}"));
+            let code = wasm_fault_code(&msg);
+            let d = Diagnostic::error(code, format!("`{file}`: {}", wasm_fault_words(&msg, code)));
             print_diagnostics("run", &[d], &map, None, opts.json);
             1
         }
@@ -1415,7 +1416,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         if foreign_process && program_binds_foreign && !opts.json {
             eprintln!("note: --foreign-isolation process is not yet applied on the WASM engine (foreign runs in-process); use the interpreter engine for worker isolation");
         }
-        let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
+        let (wasm, sites) = match delulu_wasm::compile_checked_sited(&checked.module, &checked.result) {
             Ok(w) => w,
             Err(e) => {
                 let d = wasm_refusal(&e, "omit `--engine wasm` to run it on the interpreter");
@@ -1485,8 +1486,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 0
             }
             Err(e) => {
+                // B5: in the interpreter's words, at the place it names (the innermost frame the site map knows).
                 let msg = e.message();
-                let d = Diagnostic::error(wasm_fault_code(&msg), format!("WASM engine: {msg}"));
+                let code = wasm_fault_code(&msg);
+                let mut d = Diagnostic::error(code, wasm_fault_words(&msg, code));
+                if let Some(span) = sites.locate(e.frames()) {
+                    d = d.with_span(span, "runtime fault here");
+                }
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 1
             }

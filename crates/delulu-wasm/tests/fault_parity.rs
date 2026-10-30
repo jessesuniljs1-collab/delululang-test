@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use delulu_check::check_source;
 use delulu_runtime::{set_capture, set_rand_seed, take_capture, Grants, Interp, Value};
-use delulu_wasm::{compile_and_run_int, compile_module, run_main, HostConfig};
+use delulu_wasm::{compile_and_run_int, compile_checked_sited, compile_module, run_main, HostConfig};
 
 /// The DL code the interpreter faults with (or "OK" if it does not fault).
 fn interp_fault_code(src: &str) -> String {
@@ -388,4 +388,89 @@ fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
             }
         }
     }
+}
+
+/// B5 (the agent test campaign): a WASM fault is placed where the interpreter places it. The WASM engine's fault carried no
+/// place, so `delulu run --engine wasm` printed it with no `--> file:line` where the interpreter pointed at the expression.
+/// The compiler's site map, read against the guest's frames, now names the same span for a trap in the guest's own code,
+/// a trap in a helper the compiler wrote (the checked `+`, `%`), a host call's refusal, an index out of bounds, and each
+/// of them inside a called function or a generic one the compiler inlined.
+#[test]
+fn a_wasm_fault_is_placed_where_the_interpreter_places_it() {
+    let console = || (HostConfig { console: true, ..HostConfig::default() }, Grants { console: true, ..Default::default() });
+    let nothing = || (HostConfig::default(), Grants::default());
+    let shapes: Vec<(&str, String, (HostConfig, Grants))> = vec![
+        ("a division in the guest", DIVZERO.to_string(), console()),
+        ("the checked add, a helper", OVERFLOW.to_string(), console()),
+        ("the checked remainder, a helper", REMZERO.to_string(), console()),
+        (
+            "a division in a called function",
+            "module m\nfn d(x: Int) -> Int {\n  let y = x + 1\n  100 / (y - 1)\n}\nfn main(root: Root) ! {Write} {\n  \
+             let o = root.console()\n  o.println(\"before\")\n  o.println(str(d(0)))\n}\n"
+                .to_string(),
+            console(),
+        ),
+        (
+            "an index out of bounds",
+            "module m\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  let xs = [1, 2]\n  \
+             o.println(str(xs[1] + xs[5]))\n}\n"
+                .to_string(),
+            console(),
+        ),
+        (
+            "an index out of bounds in an inlined generic",
+            "module m\nfn at[T](xs: List[T], i: Int) -> T { xs[i] }\nfn main(root: Root) ! {Write} {\n  \
+             let o = root.console()\n  o.println(str(at([1, 2], 7)))\n}\n"
+                .to_string(),
+            console(),
+        ),
+        (
+            "an ungranted console, a host refusal",
+            "module m\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  o.println(\"x\")\n}\n".to_string(),
+            nothing(),
+        ),
+        (
+            "a refused path, a host refusal in a called function",
+            "module m\nfn open(root: Root) -> Bool ! {Read} {\n  let fs = root.fs_read(\"a\\\\b\\u{0}c\")\n  true\n}\n\
+             fn main(root: Root) ! {Write, Read} {\n  let o = root.console()\n  o.println(str(open(root)))\n}\n"
+                .to_string(),
+            console(),
+        ),
+    ];
+    for (what, src, (cfg, g)) in shapes {
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{what} should check clean:\n{src}\n{:?}", checked.diagnostics);
+        let (wasm, sites) = compile_checked_sited(&checked.module, &checked.result)
+            .unwrap_or_else(|e| panic!("{what} should compile to WASM: {e:?}\n{src}"));
+        let w = run_main(&wasm, &cfg).expect_err(what);
+        set_capture(true);
+        let i = Interp::new(&checked.module).run_main(Value::Root(Rc::new(g.build_root()))).expect_err(what);
+        let _ = take_capture();
+        let placed = |s: Option<delulu_diag::Span>| s.map(|s| &src[s.start as usize..s.end as usize]);
+        let interp_at = placed(i.span);
+        assert!(interp_at.is_some(), "{what}: the interpreter places its fault ({} {})", i.code, i.message);
+        assert_eq!(
+            placed(sites.locate(w.frames())),
+            interp_at,
+            "{what}: the WASM fault is placed where the interpreter's is ({}; frames {:?})",
+            w.message(),
+            w.frames()
+        );
+    }
+}
+
+/// B5: a refusal that a check records itself, a custody's denial or an effect an artifact does not declare
+/// (ARTIFACT-CLAIM-1), is placed too, at the call it refused. The checks are asked through the host call's caller, which
+/// records where the guest was when one said no.
+#[test]
+fn a_refusal_a_check_records_is_placed_at_the_call_it_refused() {
+    let src = "module m\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  o.println(\"x\")\n}\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let (wasm, sites) = compile_checked_sited(&checked.module, &checked.result).expect("compiles to WASM");
+    let cfg = HostConfig { console: true, declared_effects: Some(Default::default()), ..HostConfig::default() };
+    let w = run_main(&wasm, &cfg).expect_err("an effect the manifest does not declare is refused");
+    assert!(w.message().contains("DL1202"), "{}", w.message());
+    let at = sites.locate(w.frames()).map(|s| &src[s.start as usize..s.end as usize]);
+    assert_eq!(at, Some("o.println(\"x\")"), "placed at the write it refused (frames {:?})", w.frames());
 }
