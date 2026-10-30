@@ -10438,3 +10438,21 @@ shipped as a `.dwx`.
 
 The entries come in the operating system's order on both engines (`beneath` does not sort); a program that prints them
 should sort them, as the tests do.
+
+## 2026-10-31 — the laptop: a refusal's two shapes, kept and documented (B8, RW 6.47)
+
+**What the agent found** (B8, the least-authority agent, Sonnet 5.5, 2026-10-24, *low, info*): refusals come in two
+shapes. A host outside the allowlist, a path outside a path scope and a scope escape end the run (DL0904, exit 1); a
+special-use address, a scheme, userinfo, a port or a backslash come back as `Err(Refused)` (exit 0). A script that reads
+only the exit code sees the second as success.
+
+**Measured again** on the laptop's binary: under `--grant net=api.example.invalid`, `get("https://other.invalid/x")` is
+DL0904 at the call; `get("http://api.example.invalid/x")` and `get("https://user@api.example.invalid/x")` are
+`ERR:Refused`, each with the operator's note on standard error naming the reason (`[egress: scheme]`,
+`[egress: userinfo]`).
+
+**Decided: kept.** The two are different events. A request beyond what the grant names is the program asking for more
+authority than it holds, and the run ends where it asked. A URL the egress client will not send (for what the URL itself
+is) is a failed request the program handles as it handles any `Err`; ending the run there would take that choice from
+it. What was missing was the statement: `docs/for-agents.md` now gives both shapes, the exit codes, and where a harness
+that must know of every refused request reads it (`egress.records[].reason` in the run report, and the operator's note).
