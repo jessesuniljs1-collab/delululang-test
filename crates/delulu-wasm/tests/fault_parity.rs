@@ -459,6 +459,23 @@ fn a_wasm_fault_is_placed_where_the_interpreter_places_it() {
     }
 }
 
+/// B5: a recursion that runs out of guest stack is placed at the call that went one deeper, a call with no argument
+/// included (its code is emitted before any expression inside it ends, so only the mark made on entering it names it).
+/// The interpreter's DL0905 names no place, so the place is held to the call's text.
+#[test]
+fn a_recursion_too_deep_is_placed_at_the_call_that_went_deeper() {
+    let src = "module m\nfn deeper() -> Int { 1 + deeper() }\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  \
+               o.println(str(deeper()))\n}\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let (wasm, sites) = compile_checked_sited(&checked.module, &checked.result).expect("compiles to WASM");
+    let w = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() }).expect_err("too deep");
+    assert!(w.message().contains("DL0905"), "{}", w.message());
+    let at = sites.locate(w.frames()).map(|s| (s.start, &src[s.start as usize..s.end as usize]));
+    let inner = src.find("1 + deeper()").expect("the call") as u32 + 4;
+    assert_eq!(at, Some((inner, "deeper()")), "placed at the recursive call (frames {:?})", w.frames());
+}
+
 /// B5: a refusal that a check records itself, a custody's denial or an effect an artifact does not declare
 /// (ARTIFACT-CLAIM-1), is placed too, at the call it refused. The checks are asked through the host call's caller, which
 /// records where the guest was when one said no.
