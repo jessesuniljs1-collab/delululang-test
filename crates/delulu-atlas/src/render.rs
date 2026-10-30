@@ -106,9 +106,7 @@ impl Atlas {
                 let _ = writeln!(out, "  capabilities:");
                 for c in caps {
                     let kind = c.get("kind").and_then(|k| k.as_str()).unwrap_or("?");
-                    let scopes = strs(c.get("scopes"));
-                    let scope_str = if scopes.is_empty() { "(scope granted at runtime)".into() } else { scopes.join(", ") };
-                    let _ = writeln!(out, "    - {kind:<8} {scope_str}");
+                    let _ = writeln!(out, "    - {kind:<8} {}", scope_words(c));
                 }
             }
         }
@@ -277,4 +275,21 @@ impl Atlas {
 
 fn strs(v: Option<&Value>) -> Vec<String> {
     v.and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
+}
+
+/// One capability's scope, as the authority report and the Atlas print it: the scopes a manifest grants, or else those the
+/// program writes at its minting sites, labelled requested (A8 of the agent test campaign: the human report said `(scope
+/// granted at runtime)` where `--json` listed `requested_scopes: ["./data"]`). The grant decides what a run receives; a
+/// kind with a computed scope says so, since its literals may not be all it asks for.
+pub fn scope_words(c: &Value) -> String {
+    let (scopes, requested) = (strs(c.get("scopes")), strs(c.get("requested_scopes")));
+    let computed = c.get("requested_computed").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !scopes.is_empty() {
+        scopes.join(", ")
+    } else if !requested.is_empty() {
+        let more = if computed { ", and one computed at run time" } else { "" };
+        format!("{} (requested{more}; the grant decides)", requested.join(", "))
+    } else {
+        "(scope granted at runtime)".into()
+    }
 }

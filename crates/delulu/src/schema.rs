@@ -282,7 +282,9 @@ fn defs() -> Value {
         "summary": obj(&[("errors", t("integer")), ("warnings", t("integer"))], &[]),
         "capability": obj(
             &[("kind", t("string")), ("scopes", str_list.clone())],
-            &[("requested_scopes", str_list.clone())],
+            // `requested_computed` (A8): a minting site of this kind computes its scope, so the literals in
+            // `requested_scopes` may not be all the program asks for.
+            &[("requested_scopes", str_list.clone()), ("requested_computed", t("boolean"))],
         ),
         "foreign_call": json!({ "anyOf": [
             obj(&[

@@ -4293,6 +4293,9 @@ fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
             let v = walk.found.get(&kind).cloned().unwrap_or_default();
             if let Some(obj) = c.as_object_mut() {
                 obj.insert("requested_scopes".into(), json!(v));
+                // A8: whether a minting site of this kind computes its scope, so a reader of the literals is told
+                // they may not be all the program asks for (SCOPE-HIDDEN-1's kinds, per capability).
+                obj.insert("requested_computed".into(), json!(walk.hidden.contains(&kind)));
             }
         }
     }
@@ -4625,8 +4628,7 @@ fn render_authority(report: &Json) -> String {
         let _ = writeln!(out, "  capabilities:");
         for c in &caps {
             let kind = c["kind"].as_str().unwrap_or("?");
-            let scopes = strs(&c["scopes"]);
-            let scope_str = if scopes.is_empty() { "(scope granted at runtime)".to_string() } else { scopes.join(", ") };
+            let scope_str = delulu_atlas::scope_words(c);
             let _ = writeln!(out, "    - {kind:<8} {scope_str}");
         }
     }

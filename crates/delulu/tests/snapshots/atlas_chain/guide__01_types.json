@@ -16,6 +16,7 @@
   "capabilities": [
     {
       "kind": "Console",
+      "requested_computed": false,
       "requested_scopes": [],
       "resource_class": "console",
       "resources": [

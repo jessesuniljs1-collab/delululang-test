@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu authority` names the scopes a program requests, 2026-10-31
+
+- **Changed: the human authority report names a capability's requested scope** (the agent test campaign's A8, RW 6.44).
+  `FsRead   (scope granted at runtime)` became `FsRead   ./data (requested; the grant decides)` for a program whose source
+  says `root.fs_read("./data")`; only `--json` had listed it. A kind that another minting site computes at run time says
+  so: `./data (requested, and one computed at run time; the grant decides)`. A kind whose scope the source never writes
+  keeps `(scope granted at runtime)`. The Atlas's digest prints the same line.
+- **Added: `requested_computed`** on each capability of `delulu authority --json`, true where a minting site of the kind
+  computes its scope (an additive field; the report's schema describes it).
+
 ## Unreleased — a source file that is not UTF-8 is refused at its first bad byte, 2026-10-31
 
 - **Improved: a `.delulu` file that is not UTF-8 is DL0101 at its first bad byte, exit 1** (the agent test campaign's

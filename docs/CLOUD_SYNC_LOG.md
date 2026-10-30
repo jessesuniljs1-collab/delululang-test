@@ -6373,3 +6373,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** land #93–#96 on #96's green run, then #97 and this; merge `master` into `launch/2.0.0`;
   RW 6.39; the papercuts A7, A8, A13, B8; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — `delulu authority` names the scopes a program requests: A8 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/authority-requested-scopes` (stacked on #98, #97, #96, #95, #94, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-atlas/src/render.rs`, `crates/delulu-atlas/src/lib.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/src/schema.rs`, `crates/delulu/tests/cli.rs`, `crates/delulu/tests/snapshots/atlas_chain/*.json` (12),
+  `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.44),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93–#96 on #96's green run, then #97, #98 and this in order; merge `master` into
+  `launch/2.0.0`; RW 6.39; the papercuts A7, A13, B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 336 |
-| Rust lines | 194622 |
+| Rust lines | 194682 |
 | Rust files outside `src/` (test/bench targets) | 166 |
 | Markdown documents | 272 |
-| Markdown lines | 89649 |
+| Markdown lines | 89698 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1568 / 17623 |
+| Nodes / edges in this map | 1568 / 17633 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 47451 lines
+- **Modules:** 44 files, 47455 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -106,7 +106,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/budget.rs` | 397 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 189 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 11769 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 11771 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 387 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
@@ -134,7 +134,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/repl.rs` | 161 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 2226 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 689 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
-| `src/schema.rs` | 1055 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
+| `src/schema.rs` | 1057 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 896 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 | `src/toolchain.rs` | 167 | P4-02: `delulu toolchain --json` — what this toolchain IS, as data. |
 | `src/within.rs` | 1626 | P9-01 — `delulu authority FILE --within BOUNDARY` (`V2_OPENSHELL_STUDY.md` §4.8, `V2_P9_DESIGN.md`). |
@@ -145,7 +145,7 @@ The Atlas: a typed, deterministic code + authority graph derived only from Delul
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 6 files, 2275 lines
+- **Modules:** 6 files, 2290 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -154,7 +154,7 @@ The Atlas: a typed, deterministic code + authority graph derived only from Delul
 | `src/lib.rs` | 264 | The Atlas — a typed, deterministic graph of a checked Delulu program, derived ONLY from |
 | `src/model.rs` | 303 | The Atlas data model: typed nodes and edges, stable ids, and the versioned `atlas/1` envelope. |
 | `src/query.rs` | 450 | Agent-side query verbs: `node`, `path`, `callers`, `calls`, `why`. Each answers a small |
-| `src/render.rs` | 280 | Human/agent text formats for the atlas: the `tree` overview and the token-budgeted `digest`. |
+| `src/render.rs` | 295 | Human/agent text formats for the atlas: the `tree` overview and the token-budgeted `digest`. |
 
 ### `delulu-broker`
 

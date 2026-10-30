@@ -10361,3 +10361,29 @@ the command and `--json` once (`INVOCATION`) and the refusal answers in that cha
 with DL0101 at `3:25`; `--json` gives one envelope with the diagnostic and no `error` fallback. Red on the old CLI (exit 2,
 the library's words). Mutants M931 (no refusal made), M932 (`--json` ignored), M933 (the span one byte off), each killed.
 `json_contract`, `cli_contract`, `artifact_review` and `cargo test -p delulu-diag` passed.
+
+## 2026-10-31 — the laptop: `delulu authority` names the scopes a program requests (A8, RW 6.44)
+
+**What the agent found** (A8, the builder, Sonnet 5.5, 2026-10-24), measured on the laptop before the change: for a
+program whose source says `root.fs_read("./data")` the human `delulu authority` printed `FsRead   (scope granted at
+runtime)`, while `--json` listed `requested_scopes: ["./data"]`. NE-10 (2026-09) had put the requested scopes into the JSON
+and the Atlas's chain; the human line never read them. A reader of the human report could not see which directories a
+program asks for. My earlier note called it a decision because a Stage-3 test pins the human report byte for byte.
+
+**The decision.** That pin is Stage 4's criterion 7: adding the foreign surface must change nothing in a report without
+foreign code. It does not say the report may never say more, and the line it pins was the gap. It moves, with its comment
+saying why; criterion 7 still holds, since the foreign surface changes nothing in the report.
+
+**The change.** `delulu_atlas::scope_words` writes a capability's scope for the authority report and the Atlas's digest
+alike: the scopes a manifest grants, else the scopes the program writes, *"./data (requested; the grant decides)"*. Where
+another minting site of the kind computes its scope (SCOPE-HIDDEN-1's hidden kinds), it adds *"and one computed at run
+time"*, so the literals are not read as all the program asks for. Where the source writes none, it keeps *"(scope granted
+at runtime)"*. Each capability in `--json` gains `requested_computed`, additive and described in the report's schema
+(`schema.rs`; `within_cli` holds every report to it).
+
+**Gates.** `cli` `the_human_authority_report_names_the_scopes_a_program_requests`: literal scopes, a literal beside a
+computed site, a computed site alone; red on the old source. Mutants M934 (the requested scopes ignored), M935 (the
+computed note dropped), M936 (`requested_computed` always false), each killed. The core snapshot, blessed, changed in
+exactly 10 human lines (each now naming its program's requested scope) and 38 `"requested_computed": false` fields; the
+Atlas chain snapshots in 17 such fields. `within_cli`, `json_contract`, `atlas_chain`, `atlas_cli`, `atlas_e2e`,
+`cargo test -p delulu-atlas` and `core_invariance` passed.
