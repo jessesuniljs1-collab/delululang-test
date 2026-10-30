@@ -777,7 +777,9 @@ impl<'a> Pass<'a> {
             LValue::Index(base, _) => {
                 let (recv_k, recv_ty) = self.resolve_lvalue(base);
                 let lift = self.lift_of_lvalue(base);
-                self.require_writable_receiver(recv_k, target.span(), "element", lift);
+                // "list element", as a `push` or a `pop` names it: an index assigns into a list alone (RW 6.41: it was
+                // "element", and the sentence read "cannot write a element").
+                self.require_writable_receiver(recv_k, target.span(), "list element", lift);
                 if let Some(Type::List(elem)) = recv_ty {
                     if let Some(d) = self.default_of(&elem) {
                         self.check_storable(vk, d, span, "list element", false);

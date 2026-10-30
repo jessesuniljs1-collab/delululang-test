@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 336 |
-| Rust lines | 194357 |
+| Rust lines | 194377 |
 | Rust files outside `src/` (test/bench targets) | 166 |
 | Markdown documents | 272 |
-| Markdown lines | 89451 |
+| Markdown lines | 89478 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1568 / 17529 |
+| Nodes / edges in this map | 1568 / 17541 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -192,7 +192,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 16477 lines
+- **Modules:** 18 files, 16479 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -209,7 +209,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/plugin.rs` | 580 | `kind = "plugin"` packages: the plugin manifest tables and the manifest-vs-code fence |
 | `src/prim_table.rs` | 436 | The declarative primitive-table index (Stage 9, invariant 42 — the coverage law). |
 | `src/program.rs` | 593 | Whole-program (multi-module) checking (Stage 2, §5). Stage 1's `check_source` handles one |
-| `src/rcap_check.rs` | 1851 | The reference-capability checking PASS (Stage 7, phases 7c–7f) — the second checking axis. |
+| `src/rcap_check.rs` | 1853 | The reference-capability checking PASS (Stage 7, phases 7c–7f) — the second checking axis. |
 | `src/rcaps.rs` | 737 | Reference-capability core (Stage 7, spec §3) — Pony's production-proven system, adopted |
 | `src/resolve.rs` | 676 | Name resolution (spec §5): build the declaration table for a module, detect duplicates |
 | `src/ty.rs` | 497 | The representation of authority in the type system (spec §6.1). |

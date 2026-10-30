@@ -129,3 +129,21 @@ fn a_write_refused_through_a_written_type_names_the_type() {
     let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").expect("DL1604");
     assert!(m.contains("written type") && !m.contains("became `val`"), "{m}");
 }
+
+/// RW 6.41 (seen while closing B5): a write through an index on a `val` list was *"cannot write a element through a `val`
+/// receiver"*. It names a list element now, as the other writes to a list do, and every DL1604 reads as a sentence.
+#[test]
+fn a_write_through_an_index_names_a_list_element() {
+    let d = diags("module m\nfn main() {\n    let xs: val List[Int] = [1, 2]\n    xs[0] = 3\n}\n");
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").expect("DL1604 at the write");
+    assert!(m.starts_with("cannot write a list element through a `val` receiver"), "{m}");
+    for (src, what) in [
+        ("let xs: val List[Int] = [1, 2]\n    xs[0] = 3", "an index"),
+        ("let xs: val List[Int] = [1, 2]\n    xs.push(3)", "a push"),
+        ("let m: val Map[Str, Int] = Map()\n    m.insert(\"a\", 1)", "an insert"),
+    ] {
+        let d = diags(&format!("module m\nfn main() {{\n    {src}\n}}\n"));
+        let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").unwrap_or_else(|| panic!("{what}: {d:?}"));
+        assert!(!m.contains(" a e") && !m.contains(" a a") && !m.contains(" a i"), "{what}: an article before a vowel: {m}");
+    }
+}
