@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424, 2026-10-31
+
+- **Security: wasmtime 48.0.7 → 48.0.8** (with its Cranelift and Pulley crates, 30 packages, patch releases only). Three
+  wasmtime advisories were published on 2026-10-30: typed functions with `i31` or `nullref` arguments
+  (RUSTSEC-2026-0422), host-created struct types with supertypes (-0423), and borrowed resources passed between components
+  (-0424). None was reachable here: the engine turns off garbage-collected types, function references and the component
+  model (`harden_wasm_features`), and the host creates no such types and calls no such functions. The gate asks for the
+  fixed release all the same, and it is taken.
+
 ## Unreleased — an actor's death and a recursion too deep read alike on both engines, 2026-10-31
 
 - **Fixed: the line for an actor that died printed its fault's words raw** (RW 6.40, TERMINAL-TEXT-1). A behaviour's failed
