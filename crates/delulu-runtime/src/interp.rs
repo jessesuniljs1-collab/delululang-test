@@ -1028,10 +1028,12 @@ impl Interp {
                 let r = self.eval_expr(recv, env)?;
                 self.field(r, &name.name, name.span)
             }
-            Expr::Index { recv, index, .. } => {
+            Expr::Index { recv, index, span, .. } => {
                 let r = self.eval_expr(recv, env)?;
                 let i = self.eval_expr(index, env)?;
-                self.index(r, i, recv.span())
+                // The whole `xs[i]`, as a unary or binary fault is placed: it was `xs` alone, which hid the index that was
+                // out of bounds (B5, where the WASM engine's first place for it was compared with this one).
+                self.index(r, i, *span)
             }
             Expr::Unary { op, operand, span, .. } => {
                 let v = self.eval_expr(operand, env)?;

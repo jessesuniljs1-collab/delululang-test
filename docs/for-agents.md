@@ -804,7 +804,9 @@ overstate it downstream:
   56 ms on WASM (2026-10-29). Counting 372,300 words into a `Map[Str, Int]` is faster on WASM too: 0.29 s, against
   0.63–0.80 s interpreted (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
   list or a record field holding a function. A program WASM cannot compile is refused with `DL1201`, naming its line,
-  and never runs half-compiled.
+  and never runs half-compiled. A run that faults reads the same on both engines: its code once, the same words, and
+  the line and column of the expression that faulted (since 2026-10-31); a `.dwx` names its file instead, having no
+  source to point into.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
   (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
   this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a

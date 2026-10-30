@@ -6419,6 +6419,17 @@ pub(crate) fn wasm_fault_code(msg: &str) -> &'static str {
         .unwrap_or("DL0904")
 }
 
+/// What a WASM run's error says, in the interpreter's words where it is the program's fault (B5 of the agent test
+/// campaign): a trap's detail without the `WASM trap: ` around it, and without its own code where the diagnostic names
+/// that code already — `error[DL0904]: path … escapes the granted scope`, not `error[DL0904]: WASM engine: WASM trap:
+/// DL0904: path …`. An error of the engine itself (a module it could not load) still says it is the engine's.
+pub(crate) fn wasm_fault_words(msg: &str, code: &str) -> String {
+    match msg.strip_prefix("WASM trap: ") {
+        Some(detail) => detail.strip_prefix(code).and_then(|d| d.strip_prefix(": ")).unwrap_or(detail).to_string(),
+        None => format!("WASM engine: {msg}"),
+    }
+}
+
 /// Map this run's grants to the root-node authority the daemon issues (Stage 5 phase 5f: the
 /// `--grant` flags in daemon mode are sugar for issue-then-run at the root, spec §3.2). Paths are
 /// the SAME absolute, lexically-normalized strings the embedded `RootVal` carries, so the broker's

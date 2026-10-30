@@ -242,6 +242,74 @@ fn a_wasm_refusal_names_the_line_it_refuses() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// B5 (the agent test campaign): a run's fault on the WASM engine reads as the interpreter's: its code once, the same
+/// words, the same place. It was `error[DL0904]: WASM engine: WASM trap: DL0904: path … escapes the granted scope`, with
+/// no `-->` line. Two faults: a refusal the host records (a path outside the granted scope, in a called function), and
+/// a trap in the guest's own code (a division by zero in another). A `.dwx` has no source to point into: its fault names
+/// the file and says the same words.
+#[test]
+fn a_wasm_fault_reads_as_the_interpreters_at_the_same_place() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-fault-place-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("allowed")).unwrap();
+    std::fs::create_dir_all(dir.join("forbidden")).unwrap();
+    std::fs::write(dir.join("allowed").join("ok.txt"), "hi").unwrap();
+    std::fs::write(dir.join("forbidden").join("secret.txt"), "secret").unwrap();
+    let allowed = dir.join("allowed").to_string_lossy().replace('\\', "/");
+    let read = dir.join("read.delulu");
+    std::fs::write(
+        &read,
+        format!(
+            "module read\n\nfn show(r: Result[Str, IoErr], out: Cap[Console]) ! {{Write}} {{\n    match r {{\n        \
+             Ok(t) => out.println(\"OK:\" + t)\n        Err(e) => out.println(\"ERR:\" + str(e))\n    }}\n}}\n\n\
+             fn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    let rd = root.fs_read(\"{allowed}\")\n    \
+             show(rd.read_text(\"ok.txt\"), out)\n    show(rd.read_text(\"../forbidden/secret.txt\"), out)\n}}\n"
+        ),
+    )
+    .unwrap();
+    let div = dir.join("div.delulu");
+    std::fs::write(
+        &div,
+        "module div\n\nfn share(total: Int, ways: Int) -> Int {\n    let each = total / ways\n    each\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"before\")\n    \
+         out.println(str(share(10, 0)))\n}\n",
+    )
+    .unwrap();
+    let fs_grant = format!("fs.read={allowed}");
+    let fault = |o: &Output| {
+        let err = String::from_utf8_lossy(&o.stderr).to_string();
+        err.find("error[").map(|at| err[at..].to_string()).unwrap_or(err)
+    };
+    for (file, grants, code, at) in [
+        (&read, vec!["--grant", "console", "--grant", fs_grant.as_str()], "DL0904", "read.delulu:14:10"),
+        (&div, vec!["--grant", "console"], "DL0902", "div.delulu:4:16"),
+    ] {
+        let f = file.to_string_lossy().to_string();
+        let mut args = vec!["run", f.as_str()];
+        args.extend(grants.iter().copied());
+        let interp = delulu(&args);
+        args.extend(["--engine", "wasm"]);
+        let wasm = delulu(&args);
+        assert_eq!((interp.status.code(), wasm.status.code()), (Some(1), Some(1)), "{}\n{}", fault(&interp), fault(&wasm));
+        assert_eq!(stdout(&wasm), stdout(&interp), "what each printed before the fault");
+        let (i, w) = (fault(&interp), fault(&wasm));
+        assert!(i.starts_with(&format!("error[{code}]: ")) && i.contains(at), "the interpreter's fault, at {at}:\n{i}");
+        assert_eq!(w, i, "the WASM engine's fault reads as the interpreter's, at the same place");
+    }
+
+    let dwx = dir.join("read.dwx");
+    let built = delulu(&["build", &read.to_string_lossy(), "--target", "wasm", "-o", &dwx.to_string_lossy()]);
+    assert_eq!(built.status.code(), Some(0), "{}", String::from_utf8_lossy(&built.stderr));
+    let ran = delulu(&["run", &dwx.to_string_lossy(), "--grant", "console", "--grant", &fs_grant]);
+    let err = fault(&ran);
+    assert!(
+        err.starts_with("error[DL0904]: `") && err.contains(".dwx`: path `../forbidden/secret.txt` escapes the granted scope"),
+        "a `.dwx` says the interpreter's words, its code once:\n{err}"
+    );
+    assert!(!err.contains("WASM trap"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn run_engine_wasm_ungranted_console_is_refused() {
     // No console grant → root.console() is refused host-side; the run fails.

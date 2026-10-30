@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a fault on the WASM engine reads as the interpreter's, at the same place, 2026-10-31
+
+- **Improved: a run's fault on `--engine wasm` names the line and column of the expression that faulted** (the agent test
+  campaign's B5, RW 6.38). It named no place, and its code twice: *"error[DL0904]: WASM engine: WASM trap: DL0904: path
+  `../forbidden/secret.txt` escapes the granted scope"*, where the interpreter pointed at the call. It now reads as the
+  interpreter's: the code once, the same words, the same `-->` line and `runtime fault here`. This holds for a refusal the
+  host makes (under the broker daemon too), a trap in the program's own code, and either inside a called or a generic
+  function; `--json` carries the span. A recursion too deep for the WASM engine's stack is placed at the call that went
+  one deeper. A `.dwx` names its file and says the same words: it has no source to point into.
+- **Changed: an index out of bounds is placed at the whole `xs[i]`** on the interpreter, as a unary or a binary fault is.
+  It underlined `xs` alone.
+- What a program may do, and what either engine refuses, is unchanged. So is the compiled code: a `.dwx` is byte for byte
+  what it was.
+
 ## Unreleased — a stopped broker daemon no longer revokes a healthy monitor, 2026-10-29
 
 - **Fixed: a broker daemon that was stopped or not scheduled revoked every monitor whose dead-man it held, and every run
