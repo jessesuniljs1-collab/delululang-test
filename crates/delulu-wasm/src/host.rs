@@ -1571,6 +1571,80 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
+    // A7: `Cap[FsRead].list_dir(path)`, as `fs_read_text` reads (and in the interpreter's order): the `Read` record at
+    // dispatch, the custody asked with the resolved path, the scope by the interpreter's own rule, then the directory opened
+    // through `beneath` at the pinned path. The answer is `Result[List[Str], IoErr]`: the entries' names in the
+    // interpreter's order, or its error.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "fs_list_dir",
+            |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32, file: i32, start: i32, end: i32| -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (scope, anchor) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::FsRead(scope, anchor)) => (scope.clone(), anchor.clone()),
+                    _ => {
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                        return 0;
+                    }
+                };
+                let Some(rel) = read_guest_str(&mut caller, path_ptr) else {
+                    caller.refuse("DL0903: list_dir path pointer is out of bounds".into());
+                    return 0;
+                };
+                let pointed = normalize(&scope.join(&rel));
+                caller.data_mut().push_fs_trace(("Read", "list_dir", "FsRead"), &rel, &pointed, &scope, file, start, end);
+                let pin = delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel);
+                let resolved_str = match &pin {
+                    Some(real) => delulu_runtime::prim::disk_spelling(real),
+                    None => pointed.to_string_lossy().to_string(),
+                };
+                if !caller.custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                    caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
+                    return 0;
+                }
+                if let Err(fault) =
+                    delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0))
+                {
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
+                    caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
+                    return 0;
+                }
+                let listed = match pin.or_else(|| delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel)) {
+                    Some(real) => delulu_runtime::beneath::list_dir_at(&real),
+                    None => delulu_runtime::beneath::Outcome::Escaped(delulu_runtime::beneath::OUTSIDE),
+                };
+                let built = match listed {
+                    delulu_runtime::beneath::Outcome::Done(names) => {
+                        write_str_list(&mut caller, &names).and_then(|list| write_variant_cell(&mut caller, 0, Some(list)))
+                    }
+                    delulu_runtime::beneath::Outcome::Io(e) => {
+                        use std::io::ErrorKind::*;
+                        match e.kind() {
+                            NotFound => build_err_ioerr(&mut caller, 0, None),
+                            PermissionDenied => build_err_ioerr(&mut caller, 1, None),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
+                        }
+                    }
+                    delulu_runtime::beneath::Outcome::Escaped(why) => {
+                        caller.refuse(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
+                        return 0;
+                    }
+                };
+                match built {
+                    Ok(ptr) => ptr,
+                    Err(()) => {
+                        caller.refuse("guest heap exhausted building the fs result".into());
+                        0
+                    }
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
     // `root.http(hosts)`: minted by the interpreter's own `call_root_method` over the list rebuilt from its descriptor — each
     // requested entry within a granted one (D-V2-139), the `net.special=` subset carried, and its DL0703 in its words.
     // Pure, as on the interpreter: no trace, no custody round-trip.

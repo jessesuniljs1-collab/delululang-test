@@ -10387,3 +10387,24 @@ computed note dropped), M936 (`requested_computed` always false), each killed. T
 exactly 10 human lines (each now naming its program's requested scope) and 38 `"requested_computed": false` fields; the
 Atlas chain snapshots in 17 such fields. `within_cli`, `json_contract`, `atlas_chain`, `atlas_cli`, `atlas_e2e`,
 `cargo test -p delulu-atlas` and `core_invariance` passed.
+
+## 2026-10-31 — the laptop: a `ref` list refused at a `val` parameter names both ways to pass it (A13, RW 6.45)
+
+**What the agent found** (A13, the builder, Sonnet 5.5, 2026-10-24): a list built through a `ref` helper (`fill(acc)`,
+`acc: ref List[Int]`) could not then be handed to `fn total(xs: List[Int])`: DL1603 *"cannot store `ref` (aliases as
+`ref`) where `val` is required (argument `xs`)"*. Nothing named a way out, so the agent rewrote "fill it in a helper, then
+read it elsewhere" as pure recursion.
+
+**Kept.** A parameter with no capability keyword is `val` (spec §2's default), and the callee may keep what it is given;
+a `ref` passed there could be written by the caller after the callee kept it. Two ways out exist and work today, measured
+on the laptop: declare the parameter `box` (it reads a `ref` as well as a `val`, and keeps nothing), or pass a copy
+(`acc.concat([])` is a fresh list, accepted).
+
+**The change** (`rcap_check.rs`): DL1603 for a `ref` argument at a parameter whose type names no capability keyword adds
+that the type reads as `val`, and the two remedies. A parameter that writes `val` gets no such advice, since its author
+chose it. `codes.rs`: `delulu explain DL1603` gains the case.
+
+**Gates.** `campaign_wording` `a_ref_list_refused_at_a_val_parameter_names_both_ways_to_pass_it`: the message names `box`
+and `.concat([])`; each is then accepted; `xs: val List[Int]` gets no advice. Red before. Mutants M937 (no hint), M938 (the
+hint for a written `val` too), each killed. `cargo test -p delulu-check -p delulu-diag` and `core_invariance` passed, the
+snapshot unchanged.
