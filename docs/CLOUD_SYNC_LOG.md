@@ -6396,3 +6396,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** land the stack #93–#99 and this by fast-forward, each on a green run; merge `master` into
   `launch/2.0.0`; RW 6.39; the papercuts A7 and B8; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — `list_dir` runs on the WASM engine and in a `.dwx`: A7 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-list-dir` (stacked on #100, #99, #98)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: A `crates/delulu-wasm/tests/list_dir_parity.rs`. M `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`
+  (row 6.46), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next, in order:** land #98, #99, #100 and this in order on green runs; merge `master` into `launch/2.0.0`;
+  RW 6.39; B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

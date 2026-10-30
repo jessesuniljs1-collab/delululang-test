@@ -10408,3 +10408,33 @@ chose it. `codes.rs`: `delulu explain DL1603` gains the case.
 and `.concat([])`; each is then accepted; `xs: val List[Int]` gets no advice. Red before. Mutants M937 (no hint), M938 (the
 hint for a written `val` too), each killed. `cargo test -p delulu-check -p delulu-diag` and `core_invariance` passed, the
 snapshot unchanged.
+
+## 2026-10-31 — the laptop: `list_dir` runs on the WASM engine and in a `.dwx` (A7, RW 6.46)
+
+**What the agent found** (A7, the builder, Sonnet 5.5, 2026-10-24): its `textstats` program walked a directory, and on
+`--engine wasm` and `build --target wasm` it was DL1201 *"WASM codegen does not support the method `.list_dir`"*;
+`read_text` and `write_text` ran there. A program that walks a directory ran on the interpreter alone, and could not be
+shipped as a `.dwx`.
+
+**The change.**
+- `codegen.rs`: `Cap[FsRead].list_dir(path)` lowers to a call of `delulu:cap.fs_list_dir(cap, path, file, start, end)`,
+  typed `Result[List[Str], IoErr]` (the list boxed in the `Ok`, as any list in a slot). The import is declared only by a
+  module that calls `list_dir`, so every other module compiles byte for byte as before: the 11 `.dwx` builds of the
+  examples, the book's samples and B5's programs were identical to the previous build.
+- `host.rs`: `fs_list_dir` performs the listing in `fs_read_text`'s order, which is the interpreter's: the `Read` record
+  at dispatch (with where the path pointed and the scope, RW 6.13), the custody asked with the resolved path, the scope by
+  the interpreter's own `resolve_in_anchor`, then `beneath::list_dir_at` at the pinned path (FS-RACE-1, RW 4.72). The
+  names come back as a `List[Str]` written in one allocation (`write_str_list`); the errors as the interpreter maps them.
+
+**Gates.**
+- `list_dir_parity` (new): a directory listed alike on both engines, with its empty subdirectory, a missing directory, a
+  file named as one, and each listed file read back; a listing past the scope refused DL0904 in the interpreter's exact
+  words; an artifact that does not declare `Read` refused DL1202 at the listing.
+- `wasm_cli` `a_directory_walk_runs_on_wasm_and_as_a_dwx_and_traces_alike`: the same output and the same `--trace-out`,
+  record for record, on both engines; the `.dwx` builds and runs. Every one red on the old backend (DL1201).
+- Mutants: M939 (the lowering off), M940 (no custody check), M941 (no scope check), M942 (no trace record), each
+  killed. (M941's first spelling was a no-op, `Result::and` keeping the `Err`, and survived; rewritten, killed.)
+- `cargo test -p delulu-wasm` (every target) passed.
+
+The entries come in the operating system's order on both engines (`beneath` does not sort); a program that prints them
+should sort them, as the tests do.

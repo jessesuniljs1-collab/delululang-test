@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `list_dir` runs on the WASM engine and in a `.dwx`, 2026-10-31
+
+- **Added: `Cap[FsRead].list_dir(path)` on `--engine wasm` and `build --target wasm`** (the agent test campaign's A7, RW
+  6.46). It was DL1201 *"WASM codegen does not support the method `.list_dir`"*, so a program that walked a directory ran
+  on the interpreter alone. The WASM host lists as the interpreter does, after the same custody and scope checks and at
+  the same pinned path: the same names (in the operating system's order, on both engines), the same `IoErr`s, the same
+  DL0904 past the scope, and the same effect trace, record for record. A module that does not call `list_dir` compiles
+  byte for byte as before.
+
 ## Unreleased — a `ref` list refused at a `val` parameter names both ways to pass it, 2026-10-31
 
 - **Improved: DL1603 at an argument names the two ways out** (the agent test campaign's A13, RW 6.45). A list filled
