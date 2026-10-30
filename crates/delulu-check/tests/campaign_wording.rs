@@ -130,6 +130,32 @@ fn a_write_refused_through_a_written_type_names_the_type() {
     assert!(m.contains("written type") && !m.contains("became `val`"), "{m}");
 }
 
+/// C9 (the agent test campaign): a keyword in a module's name was *"expected end of statement"*: at the `.` before it
+/// (`module t.actor`), or, for a first part, at the next line's item (`module fn`), since the line break after a keyword
+/// does not end a statement. It is refused as a keyword, once, at the keyword, and the next line's item is still read; an
+/// `import` the same. What read before still reads: `true`, a contextual word, a dotted name.
+#[test]
+fn a_keyword_in_a_module_name_is_refused_as_a_keyword() {
+    for (head, word) in
+        [("module t.actor", "actor"), ("module fn", "fn"), ("module a.type.b", "type"), ("module m\nimport a.actor", "actor")]
+    {
+        let src = format!("{head}\n\nfn main() {{ }}\n");
+        let checked = check_source(0, &src);
+        let errors: Vec<_> = checked.diagnostics.iter().filter(|d| d.is_error()).collect();
+        assert_eq!(errors.len(), 1, "{head}: one refusal: {errors:?}");
+        let message = format!("`{word}` is a keyword and cannot be part of a module's name");
+        assert_eq!((errors[0].code, errors[0].message.as_str()), ("DL0201", message.as_str()), "{head}");
+        let at = errors[0].spans[0].span;
+        assert_eq!(&src[at.start as usize..at.end as usize], word, "{head}: placed at the keyword");
+        let main = |it: &delulu_syntax::ast::Item| matches!(it, delulu_syntax::ast::Item::Fn(f) if f.name.name == "main");
+        assert!(checked.module.items.iter().any(main), "{head}: the next line's `fn main` is still read");
+    }
+    for ok in ["module true", "module new", "module a.new", "module ok.fine"] {
+        let d = diags(&format!("{ok}\n\nfn main() {{ }}\n"));
+        assert!(d.is_empty(), "{ok} reads as it did: {d:?}");
+    }
+}
+
 /// RW 6.41 (seen while closing B5): a write through an index on a `val` list was *"cannot write a element through a `val`
 /// receiver"*. It names a list element now, as the other writes to a list do, and every DL1604 reads as a sentence.
 #[test]

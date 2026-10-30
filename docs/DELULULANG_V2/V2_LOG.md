@@ -10320,3 +10320,23 @@ licenses sources` ok. `cargo test -p delulu-wasm` (every target, `wasmtime_featu
 
 **Landed with** #93 (B5), #94 (RW 6.41) and #95 (RW 6.40), stacked below it: this branch's run is the one that covers
 all four. The next merge into `launch/2.0.0` takes it, and CHECKLIST-2.0 criterion 4 names the three advisories.
+
+## 2026-10-31 — the laptop: a keyword in a module's name is refused as a keyword (C9, RW 6.42)
+
+**What the agent found** (C9, the zero-authority agent, Haiku 5.5, 2026-10-24), and what the laptop measured on the binary
+before the change: `module t.actor` was DL0209 *"expected end of statement"* at the `.`; `module fn`, `module type`,
+`module let` and the rest at the next line's item, since the line break after a keyword does not end a statement and
+`parse_path` takes a keyword as its first part. `module true`, `module new`, `module be` and `module a.new` checked clean.
+
+**The change** (`parser.rs`). The `module` header and an `import` read their path through `parse_module_path`: a part
+that is a keyword is refused DL0201 *"`actor` is a keyword and cannot be part of a module's name"*, at the keyword, and
+read as the part so the line goes on. After a refused part, an item that follows at once is read as an item: otherwise
+the statement's recovery would have skipped it as the rest of a bad line. `true` and `false` stay names there, so nothing
+accepted before is refused, and every keyword was refused before: what a module's name may be is unchanged. `parse_path`
+itself, which reads types, effect rows and patterns, is untouched.
+
+**Gates.** `campaign_wording` `a_keyword_in_a_module_name_is_refused_as_a_keyword`: `module t.actor`, `module fn`,
+`module a.type.b` and `import a.actor`, each one DL0201 at its keyword with `fn main` still read; `module true`,
+`module new`, `module a.new` and `module ok.fine` check clean. Red on the old parser (DL0209 at the `.`). Mutants M928 (an
+item after a refused part skipped), M929 (no part refused), M930 (`true` refused), each killed. `cargo test -p
+delulu-syntax -p delulu-check -p delulu-conform` and `core_invariance` passed, the snapshot unchanged.

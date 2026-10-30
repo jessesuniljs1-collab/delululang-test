@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a keyword in a module's name is refused as a keyword, 2026-10-31
+
+- **Improved: `module t.actor` and `module fn` say that a keyword cannot be part of a module's name** (the agent test
+  campaign's C9, RW 6.42). They were *"expected end of statement"*, at the `.` before the keyword or, for `module fn`, at
+  the next line's item, since the line break after a keyword does not end a statement. The refusal is now DL0201 at the
+  keyword, once, and the item on the next line is still read; an `import` the same. What a module's name may be is
+  unchanged: every name that was accepted still is (`true`, `new`, a dotted name), and every keyword was refused before.
+
 ## Unreleased — wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424, 2026-10-31
 
 - **Security: wasmtime 48.0.7 → 48.0.8** (with its Cranelift and Pulley crates, 30 packages, patch releases only). Three

@@ -392,10 +392,17 @@ impl Parser {
 
     fn recover_item(&mut self) {
         while !self.at_eof() {
-            if self.at_kw_ident("foreign") {
+            if self.at_item_start() {
                 return;
             }
-            if matches!(
+            self.bump();
+        }
+    }
+
+    /// Whether the next token begins an item (or an import): where [`Parser::recover_item`] stops.
+    fn at_item_start(&self) -> bool {
+        self.at_kw_ident("foreign")
+            || matches!(
                 self.peek(),
                 TokenKind::KwFn
                     | TokenKind::KwType
@@ -404,11 +411,7 @@ impl Parser {
                     | TokenKind::KwLet
                     | TokenKind::KwImport
                     | TokenKind::KwActor
-            ) {
-                return;
-            }
-            self.bump();
-        }
+            )
     }
 
     // ----- the guarded list loop -------------------------------------------
@@ -449,8 +452,8 @@ impl Parser {
         let attrs = self.parse_attributes();
         // `module` header (§3). Recoverable if missing.
         let name = if self.eat(&TokenKind::KwModule) {
-            let path = self.parse_path();
-            self.expect_term();
+            let (path, refused) = self.parse_module_path();
+            self.end_module_path(refused);
             path
         } else {
             self.error("DL0204", "file must begin with a `module` declaration", self.span(), "add `module <name>` here");
@@ -627,7 +630,7 @@ impl Parser {
         let start = self.span();
         let public = self.eat(&TokenKind::KwPub); // `pub import` re-exports (§2)
         self.bump(); // import
-        let path = self.parse_path();
+        let (path, refused) = self.parse_module_path();
         let alias = if let TokenKind::Ident(a) = self.peek().clone() {
             if a == "as" {
                 self.bump();
@@ -639,8 +642,51 @@ impl Parser {
             None
         };
         let span = start.to(self.prev_span());
-        self.expect_term();
+        self.end_module_path(refused);
         Some(Import { public, path, alias, span })
+    }
+
+    /// A module's name, in a `module` header or an `import` (C9 of the agent test campaign). Each part is a name, and a
+    /// keyword in one is refused as a keyword (DL0201, at the keyword). It was *"expected end of statement"*: at the `.`
+    /// before it (`module t.actor`), or, for a first part, at the next line's item (`module fn`), since the line break
+    /// after a keyword does not end a statement. `true` and `false` read as names here, as they always did. Returns the
+    /// path, and whether a part was refused.
+    fn parse_module_path(&mut self) -> (Path, bool) {
+        let mut refused = false;
+        let mut segs = vec![self.module_path_part(&mut refused)];
+        while self.at(&TokenKind::Dot) {
+            let next = self.peek_at(1);
+            if matches!(next, TokenKind::Ident(_)) || keyword_part(next) {
+                self.bump(); // dot
+                segs.push(self.module_path_part(&mut refused));
+            } else {
+                break;
+            }
+        }
+        (Path { segs }, refused)
+    }
+
+    fn module_path_part(&mut self, refused: &mut bool) -> Ident {
+        let k = self.peek().clone();
+        if keyword_part(&k) {
+            let name = k.keyword_lexeme().unwrap_or_default().to_string();
+            let span = self.span();
+            self.bump();
+            self.error("DL0201", format!("`{name}` is a keyword and cannot be part of a module's name"), span, "a keyword");
+            *refused = true;
+            return Ident { name, span };
+        }
+        self.expect_member_name()
+    }
+
+    /// The end of a module path's line. After a refused keyword part the next line's item may follow at once (the line
+    /// break after a keyword was not a terminator), and it is read as an item rather than skipped as the rest of a bad line.
+    fn end_module_path(&mut self, refused: bool) {
+        if refused && self.at_item_start() {
+            self.panicking = false;
+            return;
+        }
+        self.expect_term();
     }
 
     fn parse_path(&mut self) -> Path {
@@ -2194,6 +2240,12 @@ impl Parser {
         let span = start.to(self.prev_span());
         Expr::Lambda { params, ret, row, body, id: self.node_id(), span }
     }
+}
+
+/// A keyword in a module's name ([`Parser::parse_module_path`]): every keyword but the literals `true` and `false`, which a
+/// module's name has always been allowed to spell.
+fn keyword_part(k: &TokenKind) -> bool {
+    k.keyword_lexeme().is_some() && !matches!(k, TokenKind::KwTrue | TokenKind::KwFalse)
 }
 
 #[cfg(test)]
