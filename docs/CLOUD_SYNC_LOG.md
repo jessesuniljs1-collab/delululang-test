@@ -6650,8 +6650,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
   (landed in `ff0b4f6`). The Survey and `doctor` healthy at the start (1572 nodes, 17840 edges; 26 checks). `gh` is
   installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
-- Commits: `ab46618` (the fix and its witness), this entry's records commit (with `scripts/mutants.py`'s `MUTANTS_KEEP`), and
-  this entry's closing commit (the push runs read).
+- Commits: `ab46618` (the fix and its witness), `d3e5599` (these records, with `scripts/mutants.py`'s `MUTANTS_KEEP`), and
+  this entry's closing commit (the push runs and the nightly read).
 - Files and folders (`git diff --name-status 9553ab7..HEAD`): A `crates/delulu-runtime/src/scrub.rs`,
   `docs/assistant-memory/a-scan-point-must-not-allocate.md`. M `crates/delulu-runtime/src/lib.rs`, `interp.rs`, `prim.rs`,
   `value.rs` (a comment); `crates/delulu/src/ceiling.rs`; `crates/delulu/tests/broker_cli.rs`; `crates/delulu/Cargo.toml`
@@ -6664,9 +6664,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - CI read:
   - `9553ab7`'s push run `41190824409` (run 11's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
     (2.90x against 1.48x, passed), NOT MEASURED on Ubuntu; disk Ubuntu 82 → 67 GB free, arm64 104 → 91.
-  - The nightly `41187794369` (2026-10-31, on `1289d8b`): 17 of 18 jobs success when these records were written, the broker's `miri-slow` still running (2 h 54 min in, under the 4 h cap) — read at the closing commit.
+  - The nightly `41187794369` (2026-10-31, on `1289d8b`): **18 of 18 success** — `miri-slow` the broker 3 h 14 min, the
+    checker 1 h 31 min, the syntax 17 min.
   - `witness.yml` at `ab46618`, every test of `broker_cli`: Ubuntu `41198603696` and arm64 `41198609344` — 20 passed each, the witness among them (its control proves a non-root runner reads its child's memory); macOS `41198605560` and Windows `41198607230` — success (the witness is Linux-only; the other secret sends run there through the changed allocator).
-  - Push runs: `ab46618`'s CI `41199511756` in progress when these records were written; both read at this entry's closing commit.
+  - `ab46618`'s push run `41199511756`: 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.84x, passed),
+    NOT MEASURED on macOS (3 hardware threads), Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS
+    93 → 89 GiB, arm64 104 → 91.
+  - `d3e5599`'s push run `41199808938` (these records): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.96x, passed), NOT MEASURED on the other three; disk as above but Windows 217 → 202 GB (a larger runner).
+  - On this entry's closing commit: Open / next 1.
 - **Loop engineering:** `scripts/mutants.py` keeps each mutant's `delulu` under `MUTANTS_KEEP=DIR` (falsified: a kept
   M963 binary left copies by hand where the restored tree's left none); `docs/CLOUD_ROUTINE.md` step 5 says a memory scan
   waits where the program allocates nothing, counts a fragment, and reads only resident pages; `HANDOFF.md` §11.5 records
@@ -6678,12 +6684,12 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   allocator's), §11.5 (a scan point that allocates erases what it looks for; never `git stash drop` a mutant), and
   `docs/assistant-memory/a-scan-point-must-not-allocate.md`.
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `master`'s push runs on this entry's records and closing commits, and the nightly `41187794369`'s last job (the broker's Miri) if this entry's closing commit does not name its end.
+  1. Read `master`'s push run on this entry's closing commit (records only; `d3e5599`'s `41199808938` is green).
   2. Bring `launch/2.0.0` current with `master` (step 4.3, `scripts/launch-gates.sh`): fold RW 4.67's CHANGELOG section
      (a *Fixed* and a *Documented* line — neither moves a surface `STABILITY.md` §1 holds stable, so the *Breaking*
      paragraph should not change; judge it), dispatch its `everything` run and release dry run, read them, cite them.
   3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
-     cap turns it red (the nightly `41187794369`'s took over 2 h 54 min — see the closing commit).
+     cap turns it red (the nightly `41187794369`'s took 3 h 14 min, 31 min under that line).
   4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
      dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
   5. The work order's items 5–7, now that RW 4.66 and 4.67 are closed: RW 2.12's last methods (PUT, PATCH, DELETE — P9's

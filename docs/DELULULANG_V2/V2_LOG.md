@@ -10744,7 +10744,8 @@ mutants, the full suite, the other runners — with RW 4.66 decided alongside, w
 
 **Housekeeping.** `master` at `9553ab7` (run 11's close), its push run `41190824409` green (14 jobs success, 2 skipped;
 `actors_pingpong` MEASURED on arm64, 2.90x where the machine gave 3.95x against a bar of 1.48x, NOT MEASURED on Ubuntu;
-disk Ubuntu 82 → 67 GB free, arm64 104 → 91). The nightly `41187794369` (on `1289d8b`): 17 of 18 jobs success when these records were written, the broker's `miri-slow` still running (2 h 54 min in, under the 4 h cap) — read at the closing commit. No branch held a
+disk Ubuntu 82 → 67 GB free, arm64 104 → 91). The nightly `41187794369` (on `1289d8b`): **18 of 18 success** (`miri-slow` the broker 3 h 14 min, the checker 1 h 31 min, the
+syntax 17 min). No branch held a
 commit `master` lacks but the archived ones (`claude/peaceful-carson-dfkzl9` and `laptop/sandbox-fault-place` are in its
 history); `origin/autosave/laptop`'s newest snapshot is still `942c069` (landed in `ff0b4f6`). The Survey matched the tree
 (1572 nodes, 17840 edges) and `doctor --check` passed 26 checks. Effort `xhigh` (`CLAUDE_EFFORT` and the transcript).
@@ -10801,3 +10802,9 @@ not taken, for the reasons recorded there.
 three by hand to probe its survivors, and an improvised undo, `git stash push` then `git stash drop`, took the fix with a
 mutant — re-applied from the record); `docs/CLOUD_ROUTINE.md` step 5 says where a memory scan must wait; `HANDOFF.md`
 §11.5 records both traps, with the four by-hand reds that were the old binary.
+
+**Read after the push.** `ab46618`'s push run `41199511756`: 14 jobs success, 2 skipped (`actors_pingpong` MEASURED on
+arm64, 2.84x against 1.48x, passed; NOT MEASURED on macOS — 3 hardware threads — Ubuntu and Windows; disk Ubuntu 82 → 67 GB
+free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91). `d3e5599`'s (the records) `41199808938`: 14 success, 2 skipped
+(arm64 MEASURED 2.96x). **`master` green at the end of the run.** The final form of the witness under load, four concurrent
+copies of its test binary: 4 of 4 green.
