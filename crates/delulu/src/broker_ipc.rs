@@ -367,6 +367,13 @@ impl Request {
 
 impl ReqBody {
     /// The request's name and nothing it carries, for the broker log: a request's fields can be a token or a beat's key.
+    /// ESTOP-QUEUE-1 (RW 4.53): a REVOCATION — the operator's e-stop (`grants revoke`) or a monitor's quarantine. The
+    /// daemon handles one before every request that waits ahead of it: a revocation only narrows, so a request it
+    /// overtakes is decided against less authority, never more.
+    pub fn is_revocation(&self) -> bool {
+        matches!(self, ReqBody::Revoke { .. } | ReqBody::Quarantine { .. })
+    }
+
     pub fn kind(&self) -> &'static str {
         match self {
             ReqBody::Status => "Status",
