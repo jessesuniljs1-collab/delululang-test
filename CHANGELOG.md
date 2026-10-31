@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a call through a local reaches what the local holds, 2026-11-01
+
+- **Fixed: a call by a name that a local binds goes to what the local holds** (LOCAL-CALLEE-1, RW 2.24, D-V2-200). The
+  interpreter asked only whether the local held a closure. A plugin's export kept in a local named like one of the
+  module's functions therefore called that function instead. With an export typed pure and a module function that
+  prints, `delulu why Write` said the program cannot write, and the run printed. It needed `--grant plugin=`, and the
+  console capability still bounded the effect. The WASM engine runs no plugins and was not affected.
+
 ## Unreleased — a closure reads each name as it was where the closure was written, 2026-11-01
 
 - **Fixed: a closure no longer reads a name that a `let` binds after the closure was made** (LATE-LET-1, RW 2.23,

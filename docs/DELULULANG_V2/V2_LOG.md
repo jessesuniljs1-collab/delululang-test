@@ -11100,3 +11100,23 @@ and `within_cli` (24 tests) and `broker_cli` hold them. The row is closed as of 
 
 The lesson is HANDOFF §11.8's, applied in full this time: a scan for this week's closures cannot find a row that went
 stale weeks ago. The sweep reads the status of every open row, not only the rows that just moved.
+
+## 2026-11-01 — the laptop: a call through a local reaches what the local holds (LOCAL-CALLEE-1, RW 2.24, D-V2-200)
+
+**What was found.** After LATE-LET-1 the laptop read the interpreter's other name lookups against the checker's. A local
+named like a builtin, like a module function, or like a constructor is resolved local-first by both, so each of those
+probes was refused as DL0501. A record's field holding a function is called `(b.len)(…)`, never as a method (DL0405).
+An actor's behaviour's effect reaches its sender's row (DL0501). One lookup disagreed: `eval_call` asked only whether a
+local held a closure, and a plugin's export is a `Value::PluginFn`. Witnessed on the release binary of `cccb001` with a
+plugin built by `delulu plugin build`:
+- a local `shout` holding the export, in a module with its own `fn shout`, printed the module's `hello?`;
+- with an export typed pure in the local's annotation and a module function `relay` that prints, `delulu why Write`
+  said the program cannot write, and the run printed.
+
+**The change** (D-V2-200). A local binding of the name decides the call, whatever it holds: a closure, a plugin's export,
+or DL0907 for anything else. The A14 fast path is taken only when no local binds the name.
+
+**Gates.** `plugin_load_cli` `a_local_holding_an_export_is_called_never_a_module_function_of_its_name`. Its effect half
+comes first, so a mutant shows the escape itself. Mutants M981 and M982 were each red, and the control green. The suites
+the call reaches passed. `SOUNDNESS_AUDIT.md` §D's box of the same day names it (entrenched;
+`ENTRENCHED_CHANGE_RECORD.md`).

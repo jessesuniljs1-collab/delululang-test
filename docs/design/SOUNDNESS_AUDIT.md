@@ -385,6 +385,13 @@ tests are the actual guarantee.*
 > implementation with the checker's meaning finds what they share. The witnesses are `late_let_cli`
 > and `loop_parity`'s `a_function_value_never_reads_a_name_bound_after_it`, which assert the values
 > the checker's meaning gives.
+>
+> **And once more the same day — LOCAL-CALLEE-1 (D-V2-200).** The checker resolves a call's name
+> to a local before a module function. The interpreter asked only whether the local held a closure,
+> so a plugin's export kept in a local named like a module function called that function. With an
+> export typed pure, `delulu why Write` said **"program cannot perform `Write`"**, and the module's
+> function printed. The witness is `plugin_load_cli`'s
+> `a_local_holding_an_export_is_called_never_a_module_function_of_its_name`.
 
 ## E. New test obligations (added to the laundering suite)
 

@@ -6998,3 +6998,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** read the sweep's run `41246969522` and the launch runs `41247420596` and `41247423239` (#105's entry),
   then cite the launch runs. RW 3.24 is anyone's, profile first.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — LOCAL-CALLEE-1: a call through a local reaches what the local holds (RW 2.24, D-V2-200) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/local-callee` (stacked on `laptop/rw-4-29` and #105)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu/tests/plugin_load_cli.rs`,
+  `docs/design/SOUNDNESS_AUDIT.md` (entrenched: one paragraph in §D's box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 2.24), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-200),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- For the laptop's memory: HANDOFF §11.4 (LOCAL-CALLEE-1).
+- **Open / next, in order:** land this on a green run; read the sweep's run `41246969522` and the launch runs
+  `41247420596` and `41247423239`; bring `launch/2.0.0` current again (one section to fold, LOCAL-CALLEE-1: not
+  breaking, since v1.0.0 had no plugin export at run time, `PluginFn` and `load` being V2's P2, so no released surface
+  moves); cite the newest launch runs; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
