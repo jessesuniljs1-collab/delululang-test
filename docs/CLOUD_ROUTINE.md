@@ -266,7 +266,8 @@ another OS, and then takes about seven minutes itself (run 5).
   annotation (D-V2-47) — record each OS's verdict; the step before it prints that runner's sandbox
   properties (PS-E-01, D-V2-57) — record those too (a `tail_lines` of about 45 reaches both on a RED run;
   on a green one the cache save follows them, so ask for about 3,000 lines — saved to a file — and grep
-  `##[notice]`, run 4). **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
+  `##[notice]`, run 4). **A failed job with no failed step died with its runner** (on-demand run 9: a full disk): its log
+  answers 404, and its check run's annotations (below) carry the runner's own last words. **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
   VM** — `curl -s https://api.github.com/repos/jessesuniljs1-collab/delululang-test/check-runs/JOB_ID/annotations`
   returns each test job's verdict and properties as JSON, no log at all (a job's id is its check run's); and
   `curl -s ".../actions/runs?per_page=15"` (add `&event=schedule` for the nightly) and `.../actions/runs/ID/jobs` list
@@ -298,7 +299,9 @@ another OS, and then takes about seven minutes itself (run 5).
    Survey's binary there, so an exported `CARGO_TARGET_DIR` elsewhere fails it); `git merge --no-ff origin/master`; fold
    `master`'s new `## Unreleased` CHANGELOG sections into `## [2.0.0]` as `###` entries with `python3 -I
    scripts/launch-changelog.py` (on-demand run 8 — it refuses an order it cannot fold), then judge the 2.0.0 *Breaking*
-   paragraph against each section it lists, by hand; keep both sides of the
+   paragraph against each section it lists, by hand — a section that moves a surface `STABILITY.md` §1 holds stable (a
+   refused program's code, a command's exit code for an outcome, a JSON field's type or meaning, syntax that parsed) is
+   breaking, though the program stays refused (on-demand run 9: C9's DL0209 → DL0201, C11's exit 2 → 1); keep both sides of the
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
    rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document
    gates there (`book`, `core_invariance`, `distribution`, `doctor_cli`, `editor_contract`, `evidence_claims`,
