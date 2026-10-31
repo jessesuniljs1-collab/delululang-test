@@ -6854,7 +6854,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 ### 2026-10-31 — on-demand routine run 15: `launch/2.0.0` brought current with `master` at `19629a7` (ESTOP-QUEUE-1; release procedure step 1); criterion 2's line written by a tool
 - Session: `https://claude.ai/code/session_01Deh6WBteyF5ovaXJkePjoN`   Model: Claude Opus 5.5 (the routine; no fallback
   notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
-  0's command, all `"effort":"xhigh"` (2 at the start of the run, 148 when its first records were written). The
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 148 when its first records were written, 204 at its
+  closing commit). The
   setup script had run: the 1.96.1 toolchain was installed before the first command.
 - Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
   (`../launch-wt`, removed at the close). The session's own branch `claude/peaceful-carson-xmq3m4` held nothing beyond
@@ -6874,9 +6875,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `doctor` healthy at the start (1577 nodes, 17931 edges; 26 checks). `gh` is installed (not used). `cargo-deny` 0.20.2
   installed in the VM. The session's permission classifier refused `git push --delete` for the merged branches (*"Git
   Destructive"*): they stay for the laptop.
-- Commits: on `launch/2.0.0`, `fc7faff` (the merge). On `master`, this entry's first commit (the records and
-  `scripts/launch-criterion-2.py`), then its closing commit (the runs read); then the merge of the closing commit into
-  `launch/2.0.0` (the citations).
+- Commits: on `launch/2.0.0`, `fc7faff` (the merge). On `master`, `e2354df` (the records and
+  `scripts/launch-criterion-2.py`), then this entry's closing commit (the runs read); then the merge of the closing commit
+  into `launch/2.0.0` (the citations).
 - Files and folders (`master`, `git diff --name-status 19629a7..HEAD`): A `scripts/launch-criterion-2.py`. M
   `scripts/launch-gates.sh` (names the helper when `criterion-2-cited` fails), `docs/CLOUD_ROUTINE.md` (step 4.3),
   `docs/REPOSITORY_STRUCTURE.md` (the script's row), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`
@@ -6888,8 +6889,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   - `19629a7`'s push run `41223529177` (run 14's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
     (2.91x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS
     (3 hardware threads, 2.32x observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
-  - `launch/2.0.0` `fc7faff`, dispatched 17:33 UTC: `everything` `41225113353` and the release dry run `41225115918` — read
-    in this entry's closing commit.
+  - `launch/2.0.0` `fc7faff`, dispatched 17:33 UTC: the release dry run `41225115918` **success** (2 min 54 s; four
+    `package` jobs success, each archive checked for its target, its binary's target and commit, and installed the way
+    `INSTALL.md` says; `release` skipped, no tag); `everything` `41225113353`: **18 of 18 jobs success** (3 h 15 min,
+    17:33 → 20:48 UTC) — the four test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+    `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 20 min, the checker 1 h 09 min, the
+    broker **3 h 14 min**, its longest yet — under the 240-minute cap). `actors_pingpong` MEASURED on arm64 (2.89x where the
+    machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3 hardware
+    threads, 2.24x observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
+    CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`, pushed
+    after it (`git log -1 origin/launch/2.0.0`).
+  - `e2354df`'s push run `41225469666` (this entry's first records): 14 jobs success, 2 skipped (22 min);
+    `actors_pingpong` MEASURED on arm64 (2.87x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on the
+    other three (macOS 1.56x observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 91 → 89 GiB, arm64 104 → 91.
+  - On this entry's closing commit: Open / next 1.
 - **Loop engineering:** `scripts/launch-criterion-2.py LABEL [BASE]` measures criterion 2's three on the launch tree,
   refuses to write unless all three are clean, and appends the sentence in the one shape `criterion-2-cited` reads (runs 8,
   9, 11, 13 and 15 typed it by hand). `--self-test` (five mutants of its walls, each killed), and three probes on the
@@ -6909,8 +6922,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      the live documents scanned for claims the code has overtaken.
   3. Keep `launch/2.0.0` current as `master` moves (step 4.3: `scripts/launch-criterion-2.py`, then
      `scripts/launch-gates.sh`).
-  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
-     cap turns it red.
+  4. The broker's Miri: `41225113353`'s took **3 h 14 min**, the longest yet (the ten before it 1 h 39 min – 3 h 12 min).
+     If a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h cap turns it red —
+     and the weekly sweep's `everything` (item 2) is the next reading.
   5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
      dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
   6. The work order's items 5–7: RW 3.24 (the interpreter's variables resolved to slots) is the largest open user-facing

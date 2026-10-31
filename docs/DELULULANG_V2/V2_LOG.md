@@ -10996,8 +10996,23 @@ ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stampe
 above; `criterion-2-cited` ok (`19629a7` at 358/358); `cargo deny --all-features check advisories` ok and `bans licenses
 sources` ok.
 
-**Dispatched at `fc7faff`** (17:33 UTC): `everything` `41225113353` and the release dry run `41225115918` — read in this
-entry's closing commit.
+**Read at `fc7faff`** (dispatched 17:33 UTC):
+- The release dry run `41225115918`: **success** in 2 min 54 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each step read: the archive is for the target the job claims, the binary names its target and
+  commit, installed the way `INSTALL.md` says), its attestation and keep steps and its `release` job skipped (no tag).
+- `everything` `41225113353`: **18 of 18 jobs success** (3 h 15 min in all, 17:33 → 20:48 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 20 min, the checker 1 h 09 min, **the
+  broker 3 h 14 min** — the longest of the eleven broker-Miri times CHECKLIST-2.0 criterion 3 cites (the ten before it
+  1 h 39 min to 3 h 12 min), 46 min under the 240-minute cap and 31 min under the 3 h 45 min line at which *Open / next*
+  says to shorten that job). `actors_pingpong` MEASURED on arm64 (2.89x where the machine gave 3.95x, against a bar of 1.48x: passed);
+  NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 2.24x observed). Disk: Ubuntu 82 → 67
+  GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41225113353` and `41225115918`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `e2354df` (this entry's first records) `41225469666`: 14 jobs success, 2 skipped (22 min);
+  `actors_pingpong` MEASURED on arm64 (2.87x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on the other three (macOS 1.56x
+  observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 91 → 89 GiB, arm64 104 → 91.
 
 **Loop engineering: criterion 2's line is written by a tool.** Runs 8, 9, 11, 13 and this one each ran criterion 2's three
 commands and wrote its sentence into CHECKLIST-2.0 by hand, and since run 13 the gate `criterion-2-cited` greps that
