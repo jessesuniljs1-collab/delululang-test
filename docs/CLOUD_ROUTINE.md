@@ -304,8 +304,9 @@ another OS, and then takes about seven minutes itself (run 5).
    in Rust), `doctor --check`, the document gates (`book`, `core_invariance`, `distribution`, `doctor_cli`,
    `editor_contract`, `evidence_claims`, `governance`, `release`, `repository_structure`), `delulu-survey`'s own suite,
    criterion 2's three (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples
-   docs/book/samples`), that criterion 2's row cites the merged `master`'s hash at the count just measured
-   (`criterion-2-cited`, on-demand run 13 — so write the row BEFORE the gates) and `cargo deny` (criterion 4) — ending `LAUNCH-GATES=ok` only when every one ran and passed, with a
+   docs/book/samples`), that criterion 2's row's newest citation at the count just measured is the merged `master`,
+   or a commit with the same criterion-2 inputs (`criterion-2-cited`, on-demand run 13 — so a merge that brings in code
+   writes the row BEFORE the gates, and a records-only citations merge needs no new line) and `cargo deny` (criterion 4) — ending `LAUNCH-GATES=ok` only when every one ran and passed, with a
    note saying whether the merged tree's Rust is `master`'s. **Judge the *Breaking* paragraph against 1.x itself** (run
    11): `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH` — RW 4.79's order (the daemon's custody asked before the
    capability) was already 1.x's, so its code move is breaking. Commit, push the branch, and dispatch `ci.yml`

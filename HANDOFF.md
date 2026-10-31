@@ -1974,6 +1974,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   restore the exact text (`scripts/mutants.py`; `MUTANTS_KEEP=DIR` keeps each mutant's `delulu` for by-hand probes), and
   compare `git diff` with a saved patch after each. And a by-hand run after a stashed red reading runs the binary the old
   code built: four reds in a row were that binary, not the fix — `cargo build` first.
+- **A new gate is run against every merge that will call it, not only the one it was written on** (on-demand routine
+  run 13). `scripts/launch-gates.sh`'s `criterion-2-cited` first asked criterion 2's row to cite the merged `master`'s
+  own hash; it passed on the code merge it was written for, and would have gone red on the citations merge that follows
+  every such run, whose `master` is a records-only closing commit the row never cites. Found before that merge, by
+  asking which calls the procedure makes; the gate now accepts a citation whose criterion-2 inputs are the base's, and
+  was falsified on both shapes.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

@@ -10853,13 +10853,33 @@ ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stampe
 11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion 2's three as
 above; `cargo deny --all-features check advisories` ok and `bans licenses sources` ok.
 
-**Dispatched at `df32509`** (13:11 UTC): `everything` `41204426153` and the release dry run `41204428474` — read in this
-run's closing records.
+**Read at `df32509`** (dispatched 13:11 UTC):
+- The release dry run `41204428474`: **success** in 9 min 2 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each step read: the archive is for the target the job claims, the binary names its target and
+  commit, installed the way `INSTALL.md` says), its `release` job skipped (no tag).
+- `everything` `41204426153`: **18 of 18 jobs success** (2 h 07 min in all, 13:11 → 15:18 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 22 min, the checker 48 min, the
+  broker 2 h 07 min — under the 240-minute cap). `actors_pingpong` MEASURED on arm64 (2.88x where the machine gave 3.94x,
+  against a bar of 1.48x: passed); NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads,
+  1.77x observed). Disk: Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41204426153` and `41204428474`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `1ada477` (this entry's first records) `41204848160`: 14 jobs success, 2 skipped (19 min);
+  `actors_pingpong` MEASURED on arm64 (2.93x against 1.48x, passed), NOT MEASURED on the other three (macOS 1.75x
+  observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
 
 **Loop engineering: the gates read criterion 2's row back.** Runs 8, 9, 11 and this one each re-measured criterion 2 and
 wrote it into CHECKLIST-2.0 by hand, and no gate read what was written: a merge that forgot the row, or copied a stale
-count, passed. `scripts/launch-gates.sh` gains `criterion-2-cited`: the row must cite the merged base's hash at the anchor
-count `delulu-conform --coverage` measures now (`` `HASH`: **N/N (100%)** ``). Falsified on the committed launch tree with
-`LAUNCH_GATES_ONLY=criterion-2-cited`: base `origin/master` (cited) exit 0; base `origin/master~1` (`d3e5599`, never
-cited) exit 1, *"does not cite"*; the row's count planted as 357/358 exit 1; the row restored, the tree clean.
-`docs/CLOUD_ROUTINE.md` step 4.3 names it and says to write the row before the gates.
+count, passed. `scripts/launch-gates.sh` gains `criterion-2-cited`: the row's newest citation at the anchor count
+`delulu-conform --coverage` measures now (`` `HASH`: **N/N (100%)** ``) must be the merged base, or a commit whose
+criterion-2 inputs (`crates`, `tests`, `examples`, `docs/reference`, `docs/book/samples`, `Cargo.toml`, `Cargo.lock`) are
+the base's. **Its first form was wrong and was caught before use:** it asked for the base's own hash, which passed on the
+code merge (`1ada477`) and would have refused the citations merge that follows every launch run, whose base is a
+records-only closing commit the row never cites. Falsified on the committed launch tree with
+`LAUNCH_GATES_ONLY=criterion-2-cited`: base `d84b9e1` (cited) exit 0; base `1ada477` (records only after it) exit 0;
+base `9553ab7` (before `ab46618`'s Rust) exit 1, naming the changed inputs; the row's count planted as 357/358 exit 1 (the
+newest 358/358 citation then `1927bca`, before `ab46618`); the row's newest line removed exit 1; the row restored, the
+tree clean. `docs/CLOUD_ROUTINE.md` step 4.3 names it; `HANDOFF.md` §11.5 and
+`docs/assistant-memory/a-gate-runs-on-every-caller.md` keep the lesson — a gate is run against every call the procedure
+makes of it.
