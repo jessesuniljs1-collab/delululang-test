@@ -7031,6 +7031,12 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   pattern a lowercase name binds, so a lowercase nullary constructor cannot be matched by name). M (this commit):
   `crates/delulu-wasm/tests/loop_parity.rs`, `docs/REMAINING_WORK.md` (row 2.26), `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **A third commit on the same branch:** the WASM call orders its lookups as the checker does. CTOR-SHADOW-1 reached
+  WASM where a call had no expected type, and WASM-BUILTIN-SHADOW-1 (RW 2.27): a local named like a builtin was never
+  called there. M: `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/late_let_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (rows 2.25, 2.27),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-201), `docs/DELULULANG_V2/V2_LOG.md`, `docs/design/SOUNDNESS_AUDIT.md`
+  (the CTOR paragraph, not yet landed), `HANDOFF.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Mutants M988, M989.
 - **Open / next, in order:** land #106, then this, on green runs; read the sweep's run `41246969522` and the launch runs
   `41247420596` and `41247423239`; bring `launch/2.0.0` current. There are two sections to fold:
   - LOCAL-CALLEE-1, not breaking, since v1.0.0 had no plugin export at run time;

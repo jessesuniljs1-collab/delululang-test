@@ -266,10 +266,31 @@ fn main(root: Root) ! {Write} {
   let a = match s { Circle(n) => n, Dot => 0 }
   let b = match d { Circle(n) => n, Dot => 0 - 1 }
   let e = empty
-  out.println(str(a) + " " + str(b) + " " + str(apply(Double, 5)) + " " + str(size(cell(8))) + str(size(e)))
+  let c = Circle(4)
+  let f = match c { Circle(n) => n, Dot => 0 }
+  out.println(str(a) + " " + str(b) + " " + str(apply(Double, 5)) + " " + str(size(cell(8))) + str(size(e)) + " " + str(f))
 }
 "#;
-    assert_eq!(assert_parity(src), "3 -1 10 80\n", "the values themselves");
+    assert_eq!(assert_parity(src), "3 -1 10 80 4\n", "the values themselves");
+}
+
+/// **WASM-BUILTIN-SHADOW-1** (found 2026-11-01 beside CTOR-SHADOW-1): a local function value named like a prelude
+/// builtin is called, as the checker resolves the name to its innermost binding. The WASM engine asked the builtins
+/// first, so `str(5)` and `int(1.5)` ran the builtins and printed `5 builtin`; the interpreter called the locals.
+#[test]
+fn a_local_named_like_a_builtin_is_called_on_both_engines() {
+    let src = r#"module m
+
+fn named(n: Int) -> Str { if n == 77 { "seventy-seven" } else { "builtin" } }
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let str = fn(x: Int) -> Str { "local" }
+  let int = fn(x: Float) -> Int { 77 }
+  out.println(str(5) + " " + named(int(1.5)))
+}
+"#;
+    assert_eq!(assert_parity(src), "local seventy-seven\n", "the values themselves");
 }
 
 /// The host writes what it reads into the guest's heap too (`fs.read_text`), and grows the memory by the same rule — a

@@ -17,8 +17,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   constructor, as the checker always said** (CTOR-SHADOW-1, RW 2.25, D-V2-201). The interpreter called the function, so
   a value the checker typed `Shape` was the function's `Int`. An effectful function named like a pure constructor wrote
   from a program `delulu authority` called "provably pure", with no special grant. A capitalized function passed as a
-  value faulted *"not callable"* (DL0907), and now runs. The WASM engine built the constructor for a call already; it
-  now also binds `let d = Dot` as the constructor, which it refused (DL1201).
+  value faulted *"not callable"* (DL0907), and now runs. The WASM engine built the constructor where the call had an
+  expected type, and called the function where it had none (`let h = Wrap(c)` printed there too); it now builds the
+  constructor in both, and binds `let d = Dot` as the constructor, which it refused (DL1201). A constructor whose name
+  is lowercase, which the checker admits, now runs on the interpreter as a value and as a call (it was *"unbound
+  name"*).
+- **Fixed: on the WASM engine, a local function value named like a prelude builtin is called** (WASM-BUILTIN-SHADOW-1,
+  RW 2.27, D-V2-201). `let str = fn(x: Int) -> Str { "local" }` then `str(5)` ran the builtin there, so a checked
+  program printed other values than on the interpreter. The prelude's free functions are pure, so no effect moved.
 
 ## Unreleased — a call through a local reaches what the local holds, 2026-11-01
 

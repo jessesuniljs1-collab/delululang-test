@@ -395,8 +395,9 @@ tests are the actual guarantee.*
 >
 > **And a third — CTOR-SHADOW-1 (D-V2-201), with no special grant.** A function may share its name
 > with a constructor of the module's own type, and the checker resolves the name to the
-> constructor. The interpreter called the function, so `fn Wrap(c) -> Holder ! {Write}`, named like
-> the constructor `Wrap`, wrote from a function this report called pure. The witness is
+> constructor. The interpreter called the function, and so did the WASM engine where the call had
+> no expected type, so `fn Wrap(c) -> Holder ! {Write}`, named like the constructor `Wrap`, wrote
+> from a function this report called pure. The witness is
 > `late_let_cli`'s `a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name`.
 > The three share one lesson: read every runtime name lookup against the checker's order.
 

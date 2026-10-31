@@ -11153,3 +11153,15 @@ In a pattern, a lowercase name is a binding by the parser's convention, so `matc
 for every `t`, on both engines and to the checker alike. That is the language's meaning, not a runtime defect, and it is
 recorded as RW 2.26, open, with its three ways out: a warning, which is additive, or refusing such names, or reading
 them as constructors, both breaking.
+
+**Later still, the WASM call (CTOR-SHADOW-1's WASM half, and WASM-BUILTIN-SHADOW-1).** The order of the WASM engine's
+call was read the same way. It compiled the prelude's builtins first, then a local function value, then the generics,
+then a constructor, but the constructor only where no module function had the name. So:
+- `let h = Wrap(c)`, a call with no expected type, ran the effectful `fn Wrap` on WASM as well, and printed. Its first
+  witness had `Wrap(c)` as the function's result, whose expected type took the constructor's path.
+- `let str = fn …; str(5)` ran the builtin `str` on WASM (`5 builtin`, where the interpreter printed
+  `local seventy-seven`).
+
+D-V2-201 now orders the WASM call as the checker does: a local, the builtins, a constructor of the module, the generics
+and the functions. The CLI test takes the unannotated form and runs both engines, and `loop_parity` gains
+`a_local_named_like_a_builtin_is_called_on_both_engines`. M988 and M989 are red. RW 2.27 closes the builtin half.
