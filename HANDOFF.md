@@ -1291,6 +1291,15 @@ spells the same thing?**
   policy` went ahead too. Their loaders checked types and never called the pin check. Every route that runs, ships or
   plans a package calls `supply_chain_gate` now. Never soften this to "the pin is a build-time check": a pin is enforced
   wherever the dependency's code can run. Search key: `resolve_workspace(` without `supply_chain_gate` on the same path.
+- **RW 4.79 — a record says what happened, not what the first judge asked would have allowed** (on-demand routine run 10,
+  2026-10-31, D-V2-195). A capability may hold less than its node, and every gate asked the custody first: under the daemon
+  a write or a request the program's own capability refused left `use allow` in the chain (19 of them across seven calls
+  and three routes), and a Guard rule was asked about a read that could never happen — DL1410 told the agent to request a
+  permit for it. Now a verdict that needs nothing from the custody (the capability's, `prim::capability_refusal`) is made
+  before the custody is asked, and the custody is TOLD it: one `use deny`, `refused_by: capability`. A refusal that needs
+  the custody's answer (the egress client's, an envelope's) still follows it as an overriding `deny`. Never soften this to
+  "the effect re-checks anyway": the chain is what a monitor and an auditor read, and never let a capability refusal go
+  unrecorded either — a monitor's `denies=N/MS` counts it. Search key: `check_at(` reached before `capability_refusal`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1931,6 +1940,15 @@ Added in V2 (2026-09-17 → 2026-09-28):
   was a thin margin, and the test jobs' new disk notices (`f5a1d58`) refuted it at once. Ubuntu had 82 GB free before
   the suite and 67 GB after it (`target/` 2.9 → 18 GB), so that death was the runner's, not the build's. Read those
   notices first if a job dies that way again.
+- **A test that asserts the order a defect lives in is the defect's record** (on-demand routine run 10). `grants_cli`'s
+  sealed-artifact case asserted that an out-of-scope read was refused *"by the custody, which the host asks first … not by
+  the scope's own check"*, and the WASM F1 test that both engines ASK the custody about a read the scope refuses; RW 4.79
+  moved the order, and both went red. Neither was weakened: each was rewritten to what it protected — the lease's custody
+  still decides what the capability allows (a read inside it, refused by a `guarded` rule), and the two engines still
+  meet the custody alike (they tell it the refusal, in the same words). Read what such a test was FOR before changing it.
+- **A fresh routine VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`. Delete
+  `target/debug/incremental` and the stale test binaries before a mutant batch and before the suite (`scripts/suite.sh`
+  refuses under 10 GB); a batch of fifteen mutants with `CARGO_INCREMENTAL=0` took about 45 minutes and no disk.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

@@ -5171,3 +5171,66 @@ root-causing a once-seen macOS red (RW 7.25) whose message held no evidence.
   `an_arming_is_answered_with_the_hearing_clock_listening`.
 - Mutants M908 to M915 are each red, M914 by the handler test written for it. The runners: macOS `40958776212`, Windows
   `40958779882`, with every `delulu` test target.
+
+## D-V2-195 — RW 4.79: a use the program's own capability refuses is judged before its custody is asked, and the chain records it refused (`refused_by: capability`), never allowed — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Question.** A capability may hold less than its node: a directory narrowed under the node's, one host of the node's, a
+path or a method fewer. Every gate that asks a custody (the interpreter's, a sandboxed guest's host's, the WASM host's)
+asked it first, against the node's grant, and the effect then judged the capability. What should the chain say about a
+call the capability refuses, and who answers it first?
+
+**What it was.** Measured on `658daf1` by on-demand routine run 10, under `--broker daemon`: each of seven such calls —
+`write_text`, `append_text`, `get`, `get_with`, `post`, `get_with_secret`, `post_with_secret` — left a `use allow` in the
+chain on every route that ran it, then faulted DL0904: nineteen allowed uses that never happened (three routes for five calls, two for the two that carry a broker-held secret, which a guest's channel cannot). A write neither the
+capability nor the node allows left the custody's own `deny`. Under a lease with a Guard rule on reads, a read beside its
+capability's directory was asked of the Guard: a `guarded` rule refused it DL1410 and told the agent to request a permit
+for a read its capability can never make, and a `warn` rule printed its warning and recorded `guard_warn` `allow`.
+
+**Options.**
+- (a) Judge the capability first and record nothing (the row's first sketch). Rejected: the write neither allows is
+  recorded `deny` today, and an out-of-band monitor's `denies=N/MS` rule (P8-04, D-V2-100) counts it — a program probing
+  `../../` would leave the chain.
+- (b) Keep the custody first and append an overriding `deny` after its `allow`, as RW 4.46 (egress) and P8-04 (an
+  envelope) do. Rejected: those refusals are made after the custody by a party that needs what it answered (where the
+  name resolved, the command's magnitudes); a capability's verdict needs nothing from the custody, so the `allow` would
+  record a decision that was never needed, and a Guard would still be asked about a use that cannot happen.
+- (c) **Chosen:** the capability first, on every gate, and the custody TOLD its refusal.
+
+**Decision.**
+- `prim::capability_refusal` is the effect's own rule — `resolve_in_anchor` for a file, `url_verdict` for a request — in
+  the effect's own words, judged before the custody and performing nothing. The gate refuses the call with it and does
+  not ask the custody; a guest's handle carries no scope and is judged by the host that holds the capability. A URL that
+  is not `https://` is still answered `Refused`, a value, with no use asked (HTTP-SCHEME-1).
+- The custody is told: `Custody::note_capability_refusal` (a no-op by default; embedded custody keeps no chain). Under
+  the daemon the broker records one `use` `deny` at the argument the use would have been asked about, naming
+  `refused_by: capability`, `code: DL0904`, a machine-readable `reason` (`outside-scope`, `hostile-path`, `other-host`,
+  `outside-path`, `other-method`, `ambiguous-path`) and, for a network use, its `url_path` and a method other than GET, as
+  the broker's own record of a use names them. Never the request's words: a URL's query is in no record (D-V2-169).
+- Recorded exactly where a use of its class is: every synchronous-class use (a write, a request), and an epoch-class use
+  (a read) only where a Guard rule makes it round-trip. An ungated read its capability refuses is recorded by no one, as
+  an ungated read is.
+- The wire: `CapabilityRefused`, an additive `broker/1` request. A record lost to a held chain lock is answered DL1401,
+  never `Recorded` (RW 4.61's rule), and the client says once on standard error that the chain lacks it; an op the broker
+  does not know is refused in words, nothing recorded.
+- The WASM host asks it between ARTIFACT-CLAIM-1's declared-effects ceiling and the custody, so an artifact's undeclared
+  effect is refused DL1202 first, as before.
+- The effect keeps its own check after the custody. A link swapped in after the capability's judgment is refused at the
+  open (FS-RACE-1, RW 4.72) — `a_narrowed_directory_swapped_for_a_link_reads_nothing_outside` still swaps it.
+
+**Not changed.** What runs and what is refused: every call refused before is refused now, and none refused now ran before.
+The custody's own judgment of a use the capability allows, the Guard's, and their records. The trace (the dispatch, then
+`<op>.refused`, RW 4.62), byte for byte on both engines. Authority and the Guard mean what they meant: this hardens the
+chain's account of them.
+
+**What moves, for the 2.0.0 *Breaking* judgment.** A call its capability refuses is refused DL0904 under every custody.
+Under the daemon, a Guard rule's DL1410–DL1413, or a revoked or expired node's DL0801/DL1402/DL1403, could answer such a
+call first; now the capability's DL0904 does, and the custody's code answers the next call the capability allows. The
+chain's record of such a call is `deny` with `refused_by: capability` (was `allow`, `guard_warn` or `guard_block`).
+STABILITY.md §1 promises a refused program's code for the typing, effect and authority rules of `docs/reference`, which
+name no order between a capability and its custody; the move is named in CHANGELOG all the same, for the merge into
+`launch/2.0.0` to judge.
+
+**Evidence.** `broker_cli` `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed` (eight calls and an
+ungated read, on the interpreter, the WASM engine and a sandboxed guest) and `guard_e2e`
+`a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard` (both tiers, both engines), each read
+red on `658daf1` first; the broker's and the daemon's unit tests; mutants M946–M960 (V2_LOG, on-demand routine run 10).

@@ -6499,3 +6499,38 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      refuses it), RW 4.66 and RW 4.67 (red team F3, F4; LOW) are open and in reach.
   6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-e5h9x9` from `origin`.
   7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 10: a use its capability refuses is recorded refused, never allowed (RW 4.79, D-V2-195)
+- Session: `https://claude.ai/code/session_01Deh6WAYtoRt9tGM11ue53h`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command.
+- Branch: `claude/peaceful-carson-dfkzl9` for the code's runner witnesses, then `master` fast-forwarded to it and pushed
+  (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `658daf1` (`master` at the start; its push run `41171405565` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.79 closed end to end — a use the program's own capability refuses is
+  judged before its custody is asked, by the interpreter, the WASM engine and a sandboxed guest's host, and the chain says
+  what happened. **Delivered:** `4cdad8a` — `prim::capability_refusal` judges first at all three gates; the custody is told
+  (`Custody::note_capability_refusal`), and under the daemon one `use deny` naming `refused_by: capability`, `code`,
+  `reason` and a request's path and method is recorded where a use of that class is (every write and request; a read under
+  a Guard rule); the wire's `CapabilityRefused`. Read red first on `658daf1`: nineteen `use allow` for calls that never
+  happened, and a Guard asked about reads that could not happen (DL1410 telling an agent to request a permit for one).
+  Mutants M946–M960 red; the full suite 2620 passed, 0 failed; macOS and Windows witnesses green before `master` moved.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot (`942c069`) landed in
+  `ff0b4f6` (diff on its paths empty). The Survey and `doctor` healthy at the start (1569 nodes, 17736 edges; 26 checks).
+  `gh` is installed (not used; CI read with the REST API and the GitHub MCP tools).
+- Commits: `4cdad8a` (the fix and its witnesses), this entry's records commit, and its closing commit (the push run read).
+- Files and folders (`git diff --name-status 658daf1..HEAD`): M `crates/delulu-runtime/src/prim.rs`, `interp.rs`,
+  `channel.rs`, `custody.rs`; `crates/delulu-wasm/src/host.rs`, `lib.rs` (the F1 parity test); `crates/delulu-broker/src/validate.rs`;
+  `crates/delulu/src/broker_client.rs`, `broker_ipc.rs`, `brokerd.rs`; `crates/delulu/tests/broker_cli.rs`, `guard_e2e.rs`,
+  `grants_cli.rs`; `scripts/suite.sh`; `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md` (row 4.79),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-195), `V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md`,
+  `HANDOFF.md` (§11.4, §11.5), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  A `docs/assistant-memory/a-record-says-what-happened.md`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `658daf1`'s push run `41171405565` (run 9's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on macOS
+    (2.52x against 1.40x, passed), NOT MEASURED on Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+    macOS 93 → 89 GiB.
+  - `witness.yml` at `4cdad8a`, every test of `broker_cli`, `guard_e2e` and `grants_cli`: macOS `41176123350` success,
+    Windows `41176125665` success.

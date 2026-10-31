@@ -11,6 +11,22 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a use its capability refuses is recorded refused, never allowed, 2026-10-31
+
+- **Fixed: the audit chain no longer records `use allow` for a call the program's own capability refuses** (RW 4.79,
+  D-V2-195). A capability may hold less than the node it was minted under — `root.fs_write("./data/sub")` under
+  `fs.write=./data`, one host of the node's, a path or a method fewer — and the broker was asked about the call first,
+  against the node's grant: it recorded `allow`, and the capability then refused the call (DL0904). Under `--broker daemon`
+  each such write or request left an allowed use that never happened, on the interpreter, the WASM engine and a sandboxed
+  guest alike. Now the capability judges first, in the same words, and the broker is not asked; it records one `use`
+  `deny` naming `refused_by: capability`, `code: DL0904`, a `reason` (`outside-scope`, `other-host`, `outside-path`,
+  `other-method`, …) and, for a request, its path and method — never its query. A monitor's `denies=N/MS` counts it. A read
+  is recorded only where a Guard rule makes reads round-trip, as before.
+- **Changed: a call its capability refuses is refused DL0904 under every custody.** Under the daemon a Guard rule could
+  answer it first — DL1410 told an agent to request a permit for a read its own capability could never make, and a `warn`
+  rule warned and recorded `guard_warn` — as could a revoked or expired lease (DL0801, DL1402, DL1403). Those codes now
+  answer the next call the capability allows. Nothing that was refused runs, and nothing that ran is refused.
+
 ## Unreleased — a sandboxed run's fault names its place, 2026-10-31
 
 - **Improved: under `--sandbox` the guest's fault names its line and column** (RW 6.39). It printed `guest: error[DL0904]:
