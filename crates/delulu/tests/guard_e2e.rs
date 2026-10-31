@@ -416,3 +416,74 @@ fn a_use_the_custody_refuses_is_followed_by_its_refusal_in_the_trace() {
     let _ = delulu_in(&cwd, &state, &["broker", "stop"]);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// **RW 4.79: a guarded read its own capability refuses is refused by the capability, never decided by the Guard.** A read
+/// is an epoch-class use, recorded only where a Guard rule makes it round-trip; under one, a read beside the capability's
+/// directory was asked of the Guard first — a `guarded` rule refused it DL1410 and told the agent to request a permit for a
+/// read its capability can never make, and a `warn` rule printed its warning and recorded `guard_warn` `allow` before the
+/// capability refused the call. Now the capability judges first, on both engines, and the chain holds one `use` `deny`
+/// naming `refused_by: capability` for each call — and no Guard record at all.
+#[test]
+fn a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard() {
+    let base = std::env::temp_dir().join(format!("dl479_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(cwd.join("data/sub")).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(cwd.join("data/in.txt"), "42").unwrap();
+    for (file, call) in [("read.delulu", "read_text(\"../in.txt\")"), ("list.delulu", "list_dir(\"..\")")] {
+        let program = format!(
+            "module r\n\nfn main(root: Root) ! {{Read, Write}} {{\n    let c = root.console()\n    let fr = root.fs_read(\"./data/sub\")\n    \
+             match fr.{call} {{\n        Ok(v) => c.println(\"read\")\n        Err(e) => c.println(\"no\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let owner = extract_owner_code(&format!("{}{}", stdout(&o), stderr(&o))).expect("owner code");
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Read,Write", "--fs-read", "./data", "--multi", "--owner", &owner, "--json"],
+    );
+    assert!(o.status.success(), "delegate: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    let token = v["token"].as_str().unwrap().to_string();
+    let mut runs = 0;
+    for tier in ["guarded", "warn"] {
+        let o = delulu_in(&cwd, &state, &["guard", "policy", "set", "fs_read:*", tier, "--owner", &owner]);
+        assert!(o.status.success(), "policy set {tier}: {}", stderr(&o));
+        for file in ["read.delulu", "list.delulu"] {
+            for engine in ["interp", "wasm"] {
+                let o = delulu_in(&cwd, &state, &["run", file, "--lease", &token, "--no-prompt", "--engine", engine]);
+                let what = format!("{tier}, {file}, {engine}");
+                assert_eq!(o.status.code(), Some(1), "{what}: {}{}", stdout(&o), stderr(&o));
+                assert!(stderr(&o).contains("DL0904"), "{what}: refused by its capability: {}", stderr(&o));
+                assert!(!stderr(&o).contains("DL1410") && !stderr(&o).contains("guard warn"), "{what}: {}", stderr(&o));
+                assert_eq!(stdout(&o), "", "{what}: the program was told nothing");
+                runs += 1;
+            }
+        }
+    }
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let mine: Vec<&serde_json::Value> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["target"].as_str().is_some_and(|t| t.replace('\\', "/").contains("w/data")))
+        .collect();
+    assert_eq!(mine.len(), runs, "one record for each call: {mine:#?}");
+    for r in &mine {
+        assert_eq!((r["action"].as_str(), r["decision"].as_str()), (Some("use"), Some("deny")), "{r:#}");
+        assert_eq!(r["authority"]["refused_by"], "capability", "{r:#}");
+        assert_eq!(r["authority"]["op"], "FsRead", "{r:#}");
+    }
+    let o = delulu_in(&cwd, &state, &["audit", "verify", "--dir", &audit_dir]);
+    assert!(o.status.success(), "the chain verifies: {}", stderr(&o));
+    let _ = delulu_in(&cwd, &state, &["broker", "stop"]);
+    let _ = std::fs::remove_dir_all(&base);
+}

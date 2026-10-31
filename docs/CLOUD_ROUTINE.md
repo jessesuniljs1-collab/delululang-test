@@ -406,6 +406,8 @@ lints only the targets named — about two minutes for one, against seven for al
 first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that
 does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
 kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
+**A mutant's witnesses in several targets take one command** (on-demand run 10): libtest takes several name filters —
+`cargo test -p delulu --test broker_cli --test guard_e2e -- NAME_A NAME_B` — fifteen mutants so took about 45 minutes.
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
@@ -589,6 +591,9 @@ refuses a deletion, name the branch in *Open / next* for the laptop.
   fires ended in seconds on `rate_limit: rejected (five_hour)`.
 - **The VM's limits (official docs):** 4 vCPUs, 16 GB, 30 GB; a command waits 2 minutes by default and
   at most 10, then moves to the background — run the suite in the background and poll its output file.
+  **A fresh VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`, and a full suite beside it
+  died at link (`scripts/suite.sh` now says `DISK-FULL:`); under about 20 GB free, delete `target/` whole before the suite —
+  a clean build fits in the 28 GB that leaves.
   **The disk fills** (run 6): `scripts/check-other-os.sh` leaves about 3.6 GB of cross builds in `target/<triple>`, and
   incremental caches reach about 7 GB after a few suites — run 6's fourth suite died on ENOSPC. `df -h /` before a suite;
   delete `target/<triple>` after the lint; run suites with `CARGO_INCREMENTAL=0`. A dependency change re-hashes every

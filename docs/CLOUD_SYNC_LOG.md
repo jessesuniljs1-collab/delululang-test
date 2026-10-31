@@ -6540,3 +6540,66 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      refuses it), RW 4.66 and RW 4.67 (red team F3, F4; LOW) are open and in reach.
   6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-e5h9x9` from `origin`.
   7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 10: a use its capability refuses is recorded refused, never allowed (RW 4.79, D-V2-195)
+- Session: `https://claude.ai/code/session_01Deh6WAYtoRt9tGM11ue53h`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command.
+- Branch: `claude/peaceful-carson-dfkzl9` for the code's runner witnesses, then `master` fast-forwarded to it and pushed
+  (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `658daf1` (`master` at the start; its push run `41171405565` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.79 closed end to end — a use the program's own capability refuses is
+  judged before its custody is asked, by the interpreter, the WASM engine and a sandboxed guest's host, and the chain says
+  what happened. **Delivered:** `4cdad8a` — `prim::capability_refusal` judges first at all three gates; the custody is told
+  (`Custody::note_capability_refusal`), and under the daemon one `use deny` naming `refused_by: capability`, `code`,
+  `reason` and a request's path and method is recorded where a use of that class is (every write and request; a read under
+  a Guard rule); the wire's `CapabilityRefused`. Read red first on `658daf1`: nineteen `use allow` for calls that never
+  happened, and a Guard asked about reads that could not happen (DL1410 telling an agent to request a permit for one).
+  Mutants M946–M960 red; the full suite 2620 passed, 0 failed; macOS and Windows witnesses green before `master` moved.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot (`942c069`) landed in
+  `ff0b4f6` (diff on its paths empty). The Survey and `doctor` healthy at the start (1569 nodes, 17736 edges; 26 checks).
+  `gh` is installed (not used; CI read with the REST API and the GitHub MCP tools).
+- Commits: `4cdad8a` (the fix and its witnesses), this entry's records commit, and its closing commit (the push run read).
+- Files and folders (`git diff --name-status 658daf1..HEAD`): M `crates/delulu-runtime/src/prim.rs`, `interp.rs`,
+  `channel.rs`, `custody.rs`; `crates/delulu-wasm/src/host.rs`, `lib.rs` (the F1 parity test); `crates/delulu-broker/src/validate.rs`;
+  `crates/delulu/src/broker_client.rs`, `broker_ipc.rs`, `brokerd.rs`; `crates/delulu/tests/broker_cli.rs`, `guard_e2e.rs`,
+  `grants_cli.rs`; `scripts/suite.sh`; `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md` (row 4.79),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-195), `V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md`,
+  `HANDOFF.md` (§11.4, §11.5), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  A `docs/assistant-memory/a-record-says-what-happened.md`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `658daf1`'s push run `41171405565` (run 9's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on macOS
+    (2.52x against 1.40x, passed), NOT MEASURED on Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+    macOS 93 → 89 GiB.
+  - `witness.yml` at `4cdad8a`, every test of `broker_cli`, `guard_e2e` and `grants_cli`: macOS `41176123350` success,
+    Windows `41176125665` success.
+  - `92ffb1a`'s push runs (the fix and these records): CI `41177377312` **14 jobs success, 2 skipped** (22 min) —
+    `actors_pingpong` MEASURED on arm64 (2.85x where the machine gave 3.95x, against a bar of 1.48x: passed), NOT MEASURED
+    on macOS (3 hardware threads), Ubuntu and Windows (busy or SMT); disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+    macOS 93 → 89 GiB, arm64 104 → 91 GB. `ocsf` `41177377173` success.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/suite.sh` says `DISK-FULL:` when the disk filled (this run's first suite died at link and
+  read as one more `EXIT=101`) and which flags it passes itself; `docs/CLOUD_ROUTINE.md` names a fresh VM's 13 GB beside
+  the setup snapshot's 16 GB `target/` (delete it whole before a suite under ~20 GB free) and a mutant's witnesses in
+  several targets by one command (libtest's several name filters).
+- **Redo on the laptop:** delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-dfkzl9` from `origin` (both in
+  `master`'s history; this session's harness refused `git push --delete`, as runs 7's, 8's and 9's did).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.79 — a record says what happened; judge what needs nothing from the
+  custody first, and tell it), §11.5 (a test asserting the order a defect lives in; a fresh VM's disk), and
+  `docs/assistant-memory/a-record-says-what-happened.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `92ffb1a`'s runs are read above).
+  2. Bring `launch/2.0.0` current with `master` (step 4.3): fold RW 4.79's CHANGELOG section and judge its *Changed* line
+     — a call its capability refuses is DL0904 under every custody, where a Guard rule (DL1410–DL1413) or a revoked or
+     expired lease (DL0801, DL1402, DL1403) could answer first under the daemon — against STABILITY.md §1 for the 2.0.0
+     *Breaking* paragraph; dispatch its `everything` run and release dry run, read them, cite them.
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  5. The work order's items 5–7: RW 4.66 and RW 4.67 (routine run 25's red team, F3 and F4; LOW) are the open
+     containment rows a Linux VM can verify.
+  6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-dfkzl9` from `origin`.
+  7. *[laptop]* the launch, only on the owner's word.

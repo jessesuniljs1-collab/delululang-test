@@ -34,13 +34,31 @@ instead of DL0904 (D-V2-190); every `--seed` draws a different sequence than und
 receives the kind of failure, such as `invalid filename`, not the operating system's message (D-V2-193); a `module`
 header or an `import` with a keyword in its name is refused as DL0201 at the keyword, where 1.x said DL0209 at the `.`
 or refused the next line's item (RW 6.42); a source file that is not UTF-8 is DL0101 at its first bad byte, exit 1, where
-1.x made it a usage error, exit 2 (RW 6.43).
+1.x made it a usage error, exit 2 (RW 6.43); under `--broker daemon`, a call the program's own capability refuses is
+DL0904 before its custody is asked, where 1.x let a Guard rule (DL1410–DL1413) or a revoked or expired lease (DL0801,
+DL1402, DL1403) answer it first (RW 4.79, D-V2-195).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a use its capability refuses is recorded refused, never allowed, 2026-10-31
+
+- **Fixed: the audit chain no longer records `use allow` for a call the program's own capability refuses** (RW 4.79,
+  D-V2-195). A capability may hold less than the node it was minted under — `root.fs_write("./data/sub")` under
+  `fs.write=./data`, one host of the node's, a path or a method fewer — and the broker was asked about the call first,
+  against the node's grant: it recorded `allow`, and the capability then refused the call (DL0904). Under `--broker daemon`
+  each such write or request left an allowed use that never happened, on the interpreter, the WASM engine and a sandboxed
+  guest alike. Now the capability judges first, in the same words, and the broker is not asked; it records one `use`
+  `deny` naming `refused_by: capability`, `code: DL0904`, a `reason` (`outside-scope`, `other-host`, `outside-path`,
+  `other-method`, …) and, for a request, its path and method — never its query. A monitor's `denies=N/MS` counts it. A read
+  is recorded only where a Guard rule makes reads round-trip, as before.
+- **Changed: a call its capability refuses is refused DL0904 under every custody.** Under the daemon a Guard rule could
+  answer it first — DL1410 told an agent to request a permit for a read its own capability could never make, and a `warn`
+  rule warned and recorded `guard_warn` — as could a revoked or expired lease (DL0801, DL1402, DL1403). Those codes now
+  answer the next call the capability allows. Nothing that was refused runs, and nothing that ran is refused.
 
 ### a sandboxed run's fault names its place, 2026-10-31
 

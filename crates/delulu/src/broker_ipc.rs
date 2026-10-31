@@ -269,6 +269,17 @@ pub enum ReqBody {
     /// RW 4.46 (D-V2-112): a fetch the run's egress client refused after the broker allowed the use of its
     /// host — recorded as a `deny` citing that `allow`. `reason` is the egress client's machine-readable one.
     EgressRefused { node: String, host: String, reason: String, overrides_seq: Option<u64> },
+    /// RW 4.79: a use the run's own CAPABILITY refused before the broker was asked — recorded as a `use` `deny` naming
+    /// `refused_by: capability` at `target` (what `Check` would have been asked), with a network use's `url_path` and
+    /// non-GET `method`. `reason` is the capability's machine-readable one. Records, never decides. Answered `Recorded`.
+    CapabilityRefused {
+        node: String,
+        op: String,
+        target: Option<String>,
+        url_path: Option<String>,
+        method: Option<String>,
+        reason: String,
+    },
     /// P8-04's `break-glass` rule (D-V2-116): a break-glass run's use, bound to the node its lease redeemed — recorded as
     /// `break-glass-run` `allow` on `node`, citing the ticket's fingerprint, before a line of the program runs. Answered
     /// `Recorded`; a use whose record was lost does not happen (the run does not run).
@@ -375,6 +386,7 @@ impl ReqBody {
             ReqBody::Check { .. } => "Check",
             ReqBody::DeviceRefused { .. } => "DeviceRefused",
             ReqBody::EgressRefused { .. } => "EgressRefused",
+            ReqBody::CapabilityRefused { .. } => "CapabilityRefused",
             ReqBody::BreakGlassRun { .. } => "BreakGlassRun",
             ReqBody::NodeState { .. } => "NodeState",
             ReqBody::Expose { .. } => "Expose",

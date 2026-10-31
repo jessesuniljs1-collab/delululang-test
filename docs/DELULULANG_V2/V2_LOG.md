@@ -10599,3 +10599,95 @@ reason. RW 7.26 is closed; the notices stay, so a second death names its margin.
 **Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 says what decides the *Breaking* paragraph (STABILITY.md §1's
 surfaces), and `scripts/launch-changelog.py` says it when it folds; step 3 says that a job whose runner died has no log
 and no failed step, and that its check run's annotations name why.
+
+## 2026-10-31 — on-demand routine run 10: a use its capability refuses is recorded refused, never allowed (RW 4.79, D-V2-195)
+
+**The milestone, named before building:** RW 4.79 closed end to end — a use the program's own capability refuses is
+judged before its custody is asked, by the interpreter, the WASM engine and a sandboxed guest's host, and the chain says
+what happened (one `use deny` naming `refused_by: capability` where a use of that class is recorded, never `use allow`):
+witnessed red per op, fixed, mutants, the full suite, the other runners, CI.
+
+**Housekeeping.** `master` at `658daf1` (run 9's close), its push run `41171405565` green (14 jobs success, 2 skipped;
+`actors_pingpong` MEASURED on macOS, 2.52x against a bar of 1.40x, NOT MEASURED on Ubuntu and Windows; the disk readings
+Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB). No branch ahead of `master` but the archived ones; the
+newest autosave snapshot (`942c069`) landed whole in `ff0b4f6`, as run 9 recorded (`git diff 942c069 ff0b4f6` on its two
+paths, empty). The Survey matched the tree (1569 nodes, 17736 edges) and `doctor --check` passed 26 checks.
+
+**What it was** — read red on `658daf1` with the new witness before any fix, under `--broker daemon`. Each program mints a
+capability narrower than its node and makes one call the capability refuses and the node allows. The chain, per target:
+
+| call (capability vs node) | interp | WASM | guest's host |
+|---|---|---|---|
+| `write_text("../w.txt")` from `./data/sub` (node `./data`) | `use allow` | `use allow` | `use allow` |
+| `append_text("../a.txt")` | `use allow` | `use allow` | `use allow` |
+| `get` outside `*.example.invalid/v1/**` (node: the whole host, GET and POST) | `use allow` | `use allow` | `use allow` |
+| `get_with` to another host than `other.example.invalid` | `use allow` | `use allow` | `use allow` |
+| `post` under a GET-only capability | `use allow` | `use allow` | `use allow` |
+| `get_with_secret` outside `/v1/**` (a broker-held secret) | `use allow` | `use allow` | — (a guest's channel carries no secret) |
+| `post_with_secret` under a GET-only capability | `use allow` | `use allow` | — |
+| `write_text("../../e.txt")` — neither allows | the custody's `deny` | the same | the same |
+
+Nineteen allowed uses that never happened, each followed by a DL0904 at the call. Under a lease with `guard policy set
+fs_read:* guarded`, a read beside its capability's directory was DL1410, *"needs approval to use
+`fs_read:…/data/in.txt` … request access: delulu guard request …"*, a permit for a read the capability can never make;
+under `warn` it printed *"guard warn: `fs_read:*` used by delegated node … (audited)"*, recorded `guard_warn allow`, and
+then faulted DL0904 — on both engines.
+
+**The decision (D-V2-195).** The capability first, everywhere, and the custody told. Recording nothing (the row's first
+sketch) was rejected: the write neither allows is a `deny` today, and a monitor's `denies=N/MS` counts it. An overriding
+`deny` after the custody's `allow` (RW 4.46's and P8-04's shape) was rejected too: those refusals need what the custody
+answered, and a capability's verdict needs nothing from it. A read is recorded only where a Guard rule makes it
+round-trip, as a read is.
+
+**What changed.**
+- `prim::capability_refusal` (with `fs_scope_refusal` and `net_scope_refusal`, which the effect itself now calls for its
+  own refusal, so the words are one function's): the effect's rule, judged before the custody, performing nothing. Its
+  `reason` is machine-readable (`outside-scope`, `hostile-path`, `other-host`, `outside-path`, `other-method`,
+  `ambiguous-path`); the URL is never recorded.
+- The gates: the interpreter's (`interp.rs`, `capability_refusal_for`), a sandboxed guest's host's (`channel.rs`), the WASM
+  host's (`host.rs`, `use_allows`, between ARTIFACT-CLAIM-1's declared-effects ceiling and the custody; its two unused
+  `custody_allows_*` wrappers folded into it). A guest's handle carries no scope; its host judges.
+- `Custody::note_capability_refusal` (a no-op by default; `PluginUseCustody` forwards to the run's custody); the broker
+  client sends it for every synchronous-class use and for a read only when a Guard rule makes reads round-trip; the
+  daemon's `CapabilityRefused` (additive `broker/1`) records one `use` `deny` through
+  `Broker::record_capability_refusal`, its lost record answered DL1401 (RW 4.61's rule), an unknown op refused in words.
+- Tests that held the old order, each rewritten to what it was protecting: `broker_cli`'s GET-only POST now has no
+  `allow` and one capability `deny` (it counted the defect's record, `n + 1`); the WASM F1 parity test (on-demand run 5's
+  red team) now holds that both engines SAY the refusal to the custody, with the same path and reason, and ask it
+  nothing; `grants_cli`'s sealed-artifact case (DWX-FLAGS-1) asserted that an out-of-scope read was refused *"by the
+  custody, which the host asks first, in the lease's words"* — that read is now the capability's DL0904, and the lease's
+  custody is witnessed deciding the artifact's effects by a read inside its capability that a `guarded` rule refuses
+  (DL1410).
+
+**Evidence.**
+- The witnesses, each read red on `658daf1` first (the table above; `guard_e2e`'s at its first assertion, DL1410) and
+  green on the fix: `broker_cli` `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed` — the eight calls on
+  every route that can run them (no `allow`; one `deny` per run, `refused_by: capability`, `code: DL0904`, its reason, a
+  request's `url_path` and a POST's `method`), an ungated read its capability refuses recorded by no one, nothing written,
+  the chain verified — and `guard_e2e` `a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard`
+  (`read_text` and `list_dir`, `guarded` and `warn`, both engines: DL0904, no DL1410, no warning, eight `use deny`, no
+  Guard record). Unit tests: `validate.rs` `a_capability_refusal_is_recorded_as_a_denied_use_for_a_held_node_only`,
+  `brokerd.rs` `a_capability_refusal_whose_record_was_lost_is_not_answered_as_recorded`.
+- **Mutants M946–M960, every one red, the control green** (`scripts/mutants.py`, each mutant's witnesses in two targets by
+  one command — libtest takes several name filters): the interpreter's judgment skipped (M946) or its note dropped (M947);
+  the guest host's (M948, M949); the WASM host's (M950, M951); the broker client noting no synchronous use (M952), every
+  read (M953, red on the ungated read), or no read (M954); `capability_refusal` blind to files (M955) or requests (M956), or
+  naming the wrong reason (M957); the broker's record naming `envelope` (M958) or a GET's method (M959); the daemon
+  answering a lost record `Recorded` (M960).
+- The two-engine differential, 50,000 programs, green (145 s, release); `scripts/clippy.sh -j 4` clean and stamped.
+- **The full suite in the VM: 2620 passed, 0 failed, 16 ignored, 190 binaries**, the tree unmoved (`scripts/suite.sh`, on
+  a clean build: the first attempt died at link, `No space left on device` — 12 GB free beside the setup snapshot's
+  16 GB `target/`; `target/` deleted, 28 GB free, run again).
+- The new tests on the other runners, before `master` moved (`witness.yml` at `4cdad8a` on this run's branch, every test of
+  `broker_cli`, `guard_e2e` and `grants_cli`): macOS `41176123350` success (19, 5 and 5 passed), Windows `41176125665`
+  success (18, 5 and 5 passed; the only orphan the runner terminated was MSVC's `vctip`).
+- The Survey 1569 nodes, 17766 edges after the code, check ok, findings 0 errors and 15 warnings.
+- `master` fast-forwarded to `92ffb1a` (the fix `4cdad8a` and these records): its push run `41177377312` **14 jobs success,
+  2 skipped** — `actors_pingpong` MEASURED on arm64 (2.85x against 1.48x, passed), NOT MEASURED on the other three;
+  `ocsf` `41177377173` success. The records' Survey 1570 nodes, 17811 edges, findings 0 errors; `doctor --check` 26
+  checks; the document gates and the Survey's own suite (73) passed.
+
+**Loop engineering.** `scripts/suite.sh` names a full disk (`DISK-FULL:`) where it was one more `EXIT=101`, and says it
+passes `--workspace --no-fail-fast -j 4` itself (a second `--no-fail-fast` stops cargo before a test runs — this run's first
+attempt). `docs/CLOUD_ROUTINE.md`: a fresh VM's disk with the snapshot's `target/`, and a mutant's witnesses in several
+targets by one command.

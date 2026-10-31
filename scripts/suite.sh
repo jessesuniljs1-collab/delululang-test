@@ -10,6 +10,7 @@
 # line, beside cargo's own exit code (never a pipeline's).
 #
 # usage: scripts/suite.sh OUTFILE [extra cargo test arguments…]
+#   It passes `--workspace --no-fail-fast -j 4` itself: a second `--no-fail-fast` stops cargo before a test runs.
 #   OUTFILE ends with `EXIT=<cargo's code>` and, when the tree changed, a `TREE-MOVED:` line. Below
 #   SUITE_MIN_FREE_GB (default 10) of free disk, or on a stale Survey map, it does not start: `EXIT=3` and why.
 #   Wait on it with: until grep -q '^EXIT=' OUTFILE; do sleep 15; done
@@ -52,6 +53,12 @@ CARGO_INCREMENTAL=0 cargo test --workspace --no-fail-fast -j 4 "$@" > "$out" 2>&
 code=$?
 after=$(fingerprint)
 echo "EXIT=$code" >> "$out"
+# On-demand run 10: 12 GB free passed the floor beside a 16 GB `target/`, and the suite died at link — an `EXIT=101` that
+# read like a failing test. Say it is the disk.
+if grep -q "No space left on device" "$out"; then
+    echo "DISK-FULL: the disk filled while the suite built or ran — no test result; free it (delete target/, or its stale" \
+         "test binaries) and run the suite again" >> "$out"
+fi
 if [ "$before" != "$after" ]; then
     echo "TREE-MOVED: the working tree changed while the suite ran — a stale map fails doctor_cli and the" \
          "Survey's freshness test for that reason alone; regenerate the map and re-run them (or the suite)" >> "$out"
