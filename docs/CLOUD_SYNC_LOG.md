@@ -6429,3 +6429,73 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   sections; CHECKLIST-2.0 criterion 4 names RUSTSEC-2026-0422/0423/0424) and dispatch its `everything` run and release
   dry run; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — on-demand routine run 9: `launch/2.0.0` brought current with `master` at `9a82bf9` (release procedure step 1); #103 landed; RUNNER-DISK-1 measured
+- Session: `https://claude.ai/code/session_01Deh6W869fPE8rBr7jgXnC7`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 222 at its records' first commit at its
+  close). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). Pull request: none of this run's (#103, the laptop's, landed by fast-forward).
+- Base: `6516ae5` (`master` at the start; its push run `41127219112` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** the newest entries' *Open / next* 2 — `launch/2.0.0` brought current with
+  `master` once #103 lands (11 commits, B5 through RW 6.39), its CHANGELOG folded and its *Breaking* paragraph judged,
+  CHECKLIST-2.0 criterion 4 naming RUSTSEC-2026-0422/0423/0424 and criterion 2 re-measured, the gates and document gates
+  green on the merged tree, its `everything` run and release dry run dispatched, READ and cited. **Delivered:** the merge
+  `1a7a1c3` on `launch/2.0.0` (pushed); the *Breaking* paragraph gains C9 (a refused module header's code, DL0209 →
+  DL0201) and C11 (a non-UTF-8 source's exit code, 2 → 1), each a surface `STABILITY.md` §1 holds stable; every gate green
+  there; its release dry run `41163621006` read success; its `everything` `41163618866` read 16 of 18 success at this entry's
+  first commit, with the checker's and the broker's `miri-slow` running (Open / next 1). CHECKLIST-2.0 criteria 1, 3, 4
+  and 8 cite them in a records merge into `launch/2.0.0` once the run is read to its end.
+- **Housekeeping:** `laptop/sandbox-fault-place` (#103, RW 6.39) was the one branch ahead of `master`, green on
+  `41124338693`; read as a stranger's diff, its witnesses re-run in the VM and its witness read red on a mutant;
+  `master` fast-forwarded to `9a82bf9` (GitHub closed #103 as merged). The newest autosave snapshot (`942c069`) landed
+  whole in `ff0b4f6`. The Survey and `doctor` healthy at the start (1569 nodes, 17699 edges; 26 checks). `gh` is
+  installed (not used; CI read with the REST API and the GitHub MCP tools). `cargo-deny` 0.20.2 installed in the VM.
+  **A finding:** #101's run `41121497877` died on its Ubuntu test job of a full runner disk — RUNNER-DISK-1, RW 7.26, the
+  one such death in 223 CI runs; `f5a1d58` makes every test job read its disk's margin before and after the suite.
+- Commits: on `master`, `9a82bf9` (the laptop's #103, fast-forwarded), `f5a1d58` (the disk readings), this entry's
+  commit (these records, the loop's edits). On `launch/2.0.0`, `1a7a1c3` (the merge), then the merge of this entry's
+  commit (the citations).
+- Files and folders (`master`, `git diff --name-status 9a82bf9..HEAD`): M `.github/workflows/ci.yml` (RUNNER-DISK-1's four
+  steps), `scripts/launch-changelog.py` (its *Breaking* advice), `docs/CLOUD_ROUTINE.md` (steps 3 and 4.3),
+  `docs/REMAINING_WORK.md` (row 7.26), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing. On `launch/2.0.0`
+  (`1a7a1c3`): `master`'s 11 commits, `CHANGELOG.md` (ten sections folded; the *Breaking* paragraph names RW 6.42 and
+  RW 6.43), its release checklist (CHECKLIST-2.0, criteria 2 and 4), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `6516ae5`'s push run `41127219112` (green, 14 and 2 skipped); the nightly `41033994313` (2026-10-30, 18 of 18; the
+    broker's Miri 3 h 11 min); the stack's pull-request runs, #93–#95's red on `supply-chain` alone (RUSTSEC-2026-0422 to
+    -0424, fixed by `d879eda`) and #101's `41121497877` red on a dead Ubuntu runner (RUNNER-DISK-1); #103's `41124338693`
+    (green). Every failed job of the 223 CI runs since 2026-10-20 read by its annotations.
+  - `master` `9a82bf9`'s push run `41163006021`: 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.90x,
+    passed), NOT MEASURED on the other three; the Linux and Windows cache restores failed (*"Egress is over the account
+    limit"*) and those jobs passed cold. `f5a1d58`'s `41164074066`: 14 success, 2 skipped; the first disk readings, Ubuntu
+    82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `1a7a1c3`: the release dry run `41163621006` success (8 min 39 s; four `package` jobs; `release`
+    skipped, no tag); `everything` `41163618866` 16 of 18 success at this entry's first commit (`actors_pingpong` MEASURED
+    on arm64, 2.82x against 1.48x; NOT MEASURED on the other three), `miri-slow` (check, broker) running.
+  - On this entry's commit: Open / next 2.
+- **Loop engineering:** `docs/CLOUD_ROUTINE.md` step 4.3 says what decides the *Breaking* paragraph (a surface
+  `STABILITY.md` §1 holds stable, moved), and `scripts/launch-changelog.py` says it when it folds; step 3 says a failed
+  job with no failed step died with its runner, its log 404 and its annotations naming why; the test jobs read their disk.
+- **Redo on the laptop:** delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-e5h9x9` from `origin` (both in
+  `master`'s history; this session's git proxy refused `git push --delete`, as runs 7's and 8's did).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a job whose runner died leaves no log, and its annotations say why; a
+  runner's disk is a budget the suite spends).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `everything` `41163618866` to its end — `miri-slow` (delulu-check) and (delulu-broker), the broker's 1 h 51 min
+     on `2667105` and 3 h 11 min on the 2026-10-30 nightly — then cite it and `41163621006` in CHECKLIST-2.0 criteria 1,
+     3, 4 and 8 by a records merge into `launch/2.0.0` (this run does it if it is read before the run closes; the entry's
+     last commit says).
+  2. Read `master`'s push run on this entry's commit (records only).
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first. And if a test
+     job dies with no failed step again, read its `RUNNER-DISK-1` notices and its annotations before anything else.
+  5. With every finding of the agent campaign closed or decided, the work order's items 5–7: a `REMAINING_WORK.md` row a
+     Linux VM can verify — RW 4.79 (a use the custody allows recorded `allow` though the program's narrower capability
+     refuses it), RW 4.66 and RW 4.67 (red team F3, F4; LOW) are open and in reach.
+  6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-e5h9x9` from `origin`.
+  7. *[laptop]* the launch, only on the owner's word.

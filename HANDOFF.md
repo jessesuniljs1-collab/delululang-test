@@ -1924,6 +1924,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
   and nothing that could tell a starved monitor from one that stopped on an error or from a daemon that did not run. Load
   did not reproduce it (6 of 6 green). `SIGSTOP` on the daemon, the one party nobody had stopped, was red at once and
   every time. `kill -STOP PID` holds a process's window open deterministically, where load only makes it likelier.
+- **A job whose runner died leaves no log, and its annotations say why** (on-demand routine run 9, RW 7.26): #101's Ubuntu
+  test job failed with no failed step, and `get_job_logs` answered 404. Its check run's annotations
+  (`/check-runs/JOB_ID/annotations`) held the runner's last words, *"No space left on device"*. Reading every failed job
+  of 223 runs that way took one script and showed it was the only such death. Then measure before you guess: the guess
+  was a thin margin, and the test jobs' new disk notices (`f5a1d58`) refuted it at once. Ubuntu had 82 GB free before
+  the suite and 67 GB after it (`target/` 2.9 → 18 GB), so that death was the runner's, not the build's. Read those
+  notices first if a job dies that way again.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

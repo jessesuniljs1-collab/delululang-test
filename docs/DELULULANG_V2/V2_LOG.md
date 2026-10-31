@@ -10485,3 +10485,82 @@ sent), each killed. `broker_cli`, `terminal_text_cli`, `sandbox_run_cli`, `sandb
 `delulu-runtime`'s channel tests passed.
 
 With this row every finding of the agent test campaign of 2026-10-24 is closed or decided.
+
+## 2026-10-31 — on-demand routine run 9: `launch/2.0.0` brought current with `master` at `9a82bf9` (release procedure step 1)
+
+**Read first.**
+- The laptop's session of 2026-10-30 evening (`session_01Deh6W8qqxwXgHPRfKCrupn`) landed #93–#102 on `master`, B5
+  through B8: `6516ae5`'s push run `41127219112` 14 jobs success, 2 skipped. Of the stack's pull-request runs, #93's
+  `41112572896`, #94's `41113095075` and #95's `41114885037` were red on `supply-chain` alone (RUSTSEC-2026-0422 to -0424,
+  fixed by `d879eda` in #96), and #101's `41121497877` (`ff0b4f6`) on its Ubuntu test job alone — the runner's disk
+  (RUNNER-DISK-1, below). The nightly `41033994313` (2026-10-30, `54ab0c1`): 18 of 18 (the broker's Miri 3 h 11 min).
+- One branch was ahead of `master`: `laptop/sandbox-fault-place` (#103, RW 6.39, `9a82bf9`, on `6516ae5`), its
+  pull-request run `41124338693` 14 jobs success, 2 skipped. Read as a stranger's diff and re-run in the VM:
+  `sandbox_run_cli` 20, `broker_cli` 18 and `terminal_text_cli` 11 passed; its witness
+  `a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories` red with the name not sent (a mutant of
+  `converse`, *"at its place"*), green restored. `master` fast-forwarded to it; GitHub closed #103 as merged (03:07:48 UTC).
+  The git proxy refused the branch's deletion (*"the remote end hung up unexpectedly"*), as it refused runs 7's and 8's.
+- `origin/autosave/laptop`'s newest snapshot, `942c069` (on `78e9648`, 20:05 UTC, `laptop/wasm-list-dir`), landed whole
+  in `ff0b4f6` (`git diff` over its two paths empty).
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1569 nodes, 17699 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+
+**The milestone.** `master` held 11 commits `launch/2.0.0` lacked (#93–#103). Release procedure step 1, in a worktree,
+`git merge --no-ff origin/master`, as `1a7a1c3`:
+- `scripts/launch-changelog.py` folded `master`'s ten new `## Unreleased` sections into `## [2.0.0]` (B8 changed
+  documents only and wrote none). `CHANGELOG.md` and the map were the only conflicts; `Cargo.lock` merged clean
+  (wasmtime 48.0.8, the workspace at 2.0.0).
+- **The *Breaking* paragraph, judged by hand against the ten, gains two.** The test is STABILITY.md §1: *"a program
+  refused today is still refused — with the same code"*, and *"a command's exit code for a given outcome does not
+  change"*. C9 moves a refused module header's code (DL0209 at the `.`, or a refusal of the next line's item, to DL0201 at
+  the keyword; RW 6.42), and C11 a source file that is not UTF-8 from a usage error, exit 2, to DL0101, exit 1 (RW 6.43).
+  Each refused program is refused still, but a driver that branched on the old code or exit code reads a new one. The
+  other eight change a refusal's or a fault's words or place (B5, RW 6.39, RW 6.40, RW 6.41, A13), add `list_dir` on the
+  WASM engine (A7) or an additive JSON field (A8's `requested_computed`; STABILITY's JSON row: consumers ignore unknown
+  fields), or update wasmtime by a patch release: none can stop a 1.x program, driver or deployment.
+- CHECKLIST-2.0 criterion 4 names RUSTSEC-2026-0422, -0423 and -0424, why none was reachable, and `d879eda`'s update
+  (its push run `41119921640`'s `supply-chain` success). Criterion 2 re-measured on the merged tree: `delulu-conform
+  --coverage` 358/358 (diag 155, prim 86, grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24
+  chapters); `delulu fmt --check examples docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust sources equal `master`'s at `9a82bf9`; only the 2.0.0 version (`Cargo.toml`, `Cargo.lock`) and
+  the editor's launch files differ, so `master`'s push runs on three systems already cover its code.
+
+**Gates on the merged tree** (the VM): `scripts/clippy.sh -j 4` clean and stamped; the Survey 1570 nodes, 17755 edges,
+check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; the document gates `book` 9,
+`core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance` 11,
+`release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; `cargo deny --all-features
+check advisories` ok and `bans licenses sources` ok (cargo-deny 0.20.2, the advisory database of 2026-10-31).
+
+**Read at `1a7a1c3`:**
+- `everything` `41163618866`: at this entry's first commit **16 of 18 jobs success** — the Linux, Windows, macOS and
+  arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`, `microvm-reproducible`,
+  `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax, 22 min) — with `miri-slow` (check, broker) still running.
+  `actors_pingpong` MEASURED on arm64 (2.82x where the machine gave 3.94x, against a bar of 1.48x: passed); NOT MEASURED
+  on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 1.94x observed). The sandbox properties as
+  recorded before (macOS `filesystem_confinement absent`, its reads not confined).
+- The release dry run `41163621006`: **success** in 8 min 39 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows), its `release` job skipped (no tag).
+- `master`'s push runs: `9a82bf9` (#103) `41163006021` 14 jobs success, 2 skipped (`actors_pingpong` MEASURED on arm64,
+  2.90x against 1.48x; NOT MEASURED on the other three). Its Linux and Windows test jobs could not restore their cache
+  (*"Failed to restore: Egress is over the account limit"*, an Actions annotation) and passed on a cold build. `f5a1d58`
+  `41164074066` 14 jobs success, 2 skipped, with the first disk readings (below).
+
+**RUNNER-DISK-1 (RW 7.26).** #101's Ubuntu test job (`124288578335`) died 2 min 50 s in: its annotation is the runner's
+own *"System.IO.IOException: No space left on device"* writing its diagnostic log, its suite step has no conclusion, and
+its log answers 404. Every failed job of the 223 CI runs since 2026-10-20 was read by its annotations: this is the one
+disk death; the others are advisories (`supply-chain`), reds already recorded (RW 7.21–7.25, and the two wording tests
+#86's run read red, 2026-10-29) and one formatting red. The same
+code passed on `6516ae5`'s pull-request and push runs. About a minute into the suite means the disk was nearly full when
+the build began, after the cache restore, and nothing said how full. `f5a1d58` makes every test job and the arm64 job read
+the margin: the workspace disk's free space and `target/`'s size before the suite (the restored cache) and after it (the
+suite's build), each a notice, never failing the job (each reading guarded for a missing `target/` and a `du` error under
+`bash -eo pipefail`, both tried in the VM).
+The first readings, `41164074066`: Ubuntu **82 GB free of 145 GB before the suite and 67 GB after** (`target/` 2.9 GB, the
+restored cache, then 18 GB); Windows 144 → 129 GB of 150 (3.2 → 19 GB); macOS 93 → 89 GiB of 320 (2.1 → 6.1 GB); arm64
+104 → 91 GB of 145 (2.3 → 16 GB). The margin is wide on all four, so the first guess, a thin margin, is refuted on its
+first reading: the suite spends about 15 GB of a disk with 67 GB left, and that runner's disk was full for its own
+reason. RW 7.26 is closed; the notices stay, so a second death names its margin.
+
+**Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 says what decides the *Breaking* paragraph (STABILITY.md §1's
+surfaces), and `scripts/launch-changelog.py` says it when it folds; step 3 says that a job whose runner died has no log
+and no failed step, and that its check run's annotations name why.
