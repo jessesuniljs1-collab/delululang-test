@@ -1950,6 +1950,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A fresh routine VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`. Delete
   `target/debug/incremental` and the stale test binaries before a mutant batch and before the suite (`scripts/suite.sh`
   refuses under 10 GB); a batch of fifteen mutants with `CARGO_INCREMENTAL=0` took about 45 minutes and no disk.
+- **A command that exits 0 whatever it finds is not a gate until something counts what it says** (on-demand routine run
+  11). `survey findings` prints `error:` lines and exits 0, and three launch merges in a row read its count by eye.
+  `scripts/launch-gates.sh` counts them (red on a planted broken link) and refuses `ok` when `cargo-deny` is missing (red,
+  exit 127) — a gate that did not run is a failure, never a skip. **And judge a launch's *Breaking* paragraph against 1.x
+  itself**, not against the V2 state just before the change: `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH`.
+  RW 4.79 moved an order 1.x already had (the daemon's custody asked before the capability), so its code move is breaking.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
