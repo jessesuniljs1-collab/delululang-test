@@ -10711,7 +10711,19 @@ installed in the VM this run).
 - The release dry run `41183916484`: **success** in 4 min 3 s, its four `package` jobs success (x86-64 and arm64 Linux,
   macOS arm64, Windows; each archive checked for its target, its binary naming target and commit, and installed the way
   `INSTALL.md` says), its `release` job skipped (no tag).
-- `everything` `41183914783`: pending at this entry's first commit.
+- `everything` `41183914783`: **18 of 18 jobs success** (1 h 39 min in all, 08:16 → 09:55 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 12 min, the checker 1 h 32 min, the
+  broker 1 h 39 min — well under the 240-minute cap). 16 of 18 were read at 08:46 UTC, the two `miri-slow` at 09:56.
+  `actors_pingpong` MEASURED on arm64 (2.91x where the machine gave 3.95x, against a bar of 1.48x: passed); NOT MEASURED
+  on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 2.24x observed). The sandbox properties as
+  recorded before (macOS `filesystem_confinement absent`, its reads not confined). Disk: Ubuntu 82 → 67 GB free, Windows
+  144 → 129, macOS 92 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41183914783` and `41183916484`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `1289d8b` (this entry's first records) `41184451019`: 14 jobs success, 2 skipped (22 min);
+  `actors_pingpong` MEASURED on arm64 (2.89x against 1.48x, passed), NOT MEASURED on the other three; the disk as above.
+  The nightly `41187794369` (2026-10-31, on `1289d8b`) was running at this entry's closing commit.
 
 **Loop engineering: `scripts/launch-gates.sh`.** Runs 8, 9 and this one each typed the same dozen gate commands of step
 4.3 by hand, and read `survey findings`' error count by eye — that command exits 0 whatever it finds, so the step's "0

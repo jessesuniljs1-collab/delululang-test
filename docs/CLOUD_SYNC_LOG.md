@@ -6566,8 +6566,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 ### 2026-10-31 — on-demand routine run 11: `launch/2.0.0` brought current with `master` at `1927bca` (RW 4.79; release procedure step 1); `scripts/launch-gates.sh`
 - Session: `https://claude.ai/code/session_01Deh6W7pbXyHNgHeCtaNAJX`   Model: Claude Opus 5.5 (the routine; no fallback
   notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
-  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup
-  script had run: the 1.96.1 toolchain was installed before the first command.
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 201 when its
+  closing commit was written). The setup script had run: the 1.96.1 toolchain was installed before the first command.
 - Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
   (`../launch-wt`, removed at the close). Pull request: none.
 - Base: `1927bca` (`master` at the start; its push run `41178859307` green, 14 jobs success, 2 skipped).
@@ -6577,14 +6577,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   release dry run dispatched, READ and cited. **Delivered:** the merge `6193479` on `launch/2.0.0` (pushed); the *Breaking*
   paragraph gains RW 4.79 — judged against v1.0.0's own code, which asked the daemon's custody before the capability, so a
   refused call's code under `--broker daemon` moves from a Guard's DL1410–DL1413 or a lease's DL0801/DL1402/DL1403 to DL0904;
-  criterion 2 358/358; every gate green by the new `scripts/launch-gates.sh` (`LAUNCH-GATES=ok`). The runs: below.
+  criterion 2 358/358; every gate green by the new `scripts/launch-gates.sh` (`LAUNCH-GATES=ok`); its release dry run
+  `41183916484` read success and its `everything` `41183914783` read **18 of 18 success** (1 h 39 min).
 - **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
   (landed in `ff0b4f6`). Run 10's six witnesses re-run in the VM, all passed. The Survey and `doctor` healthy at the start
   (1570 nodes, 17817 edges; 26 checks). `gh` is installed (not used; CI read with the REST API and the GitHub MCP tools).
   `cargo-deny` 0.20.2 installed in the VM. The git proxy refused `git push --delete` for `claude/peaceful-carson-dfkzl9`
   and `laptop/sandbox-fault-place` (*"the remote end hung up unexpectedly"*), as it refused runs 7–10's.
-- Commits: on `launch/2.0.0`, `6193479` (the merge). On `master`, this entry's records commit, then its closing commit (the
-  runs read); then the merge of the closing commit into `launch/2.0.0` (the citations).
+- Commits: on `launch/2.0.0`, `6193479` (the merge). On `master`, `1289d8b` (the records, the script), then this entry's
+  closing commit (the runs read); then the merge of the closing commit into `launch/2.0.0` (the citations).
 - Files and folders (`master`, `git diff --name-status 1927bca..HEAD`): A `scripts/launch-gates.sh`,
   `docs/assistant-memory/a-gate-counts-what-it-reads.md`. M `docs/CLOUD_ROUTINE.md` (step 4.3), `docs/REPOSITORY_STRUCTURE.md`
   (the script's row), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `HANDOFF.md` (§11.5),
@@ -6599,7 +6600,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   - `launch/2.0.0` `6193479`, dispatched 08:16 UTC: the release dry run `41183916484` **success** (4 min 3 s; its four
     `package` jobs success — x86-64 and arm64 Linux, macOS arm64, Windows — each packaged, checked for its target and its
     binary's target and commit, and installed the way `INSTALL.md` says; `release` skipped, no tag); `everything`
-    `41183914783` PENDING at this records commit.
+    `41183914783` **18 of 18 success** (1 h 39 min; `miri-slow` syntax 12 min, the checker 1 h 32 min, the broker 1 h 39
+    min; `actors_pingpong` MEASURED on arm64, 2.91x against 1.48x, NOT MEASURED on the other three). CHECKLIST-2.0
+    criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`, pushed after it
+    (`git log -1 origin/launch/2.0.0`).
+  - `1289d8b`'s push run `41184451019` (this entry's first records): 14 jobs success, 2 skipped; `actors_pingpong`
+    MEASURED on arm64 (2.89x, passed), NOT MEASURED on the other three; disk as before.
+  - The nightly `41187794369` (2026-10-31, on `1289d8b`): in progress at the closing commit — Open / next 1.
+  - On this entry's closing commit: Open / next 1.
 - **Loop engineering:** `scripts/launch-gates.sh` — step 4.3's gates in one command, `survey findings`' errors counted (the
   command exits 0 whatever it finds), a missing `cargo-deny` a failure, a note whether the merged tree's Rust is `master`'s;
   falsified red twice before its green run. Step 4.3 names it and says to judge the *Breaking* paragraph against v1.0.0.
@@ -6608,8 +6616,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.5 (a command that exits 0 whatever it finds is not a gate until something counts
   it; judge *Breaking* against 1.x itself) and `docs/assistant-memory/a-gate-counts-what-it-reads.md`.
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `41183914783` and `41183916484` if this entry still says PENDING, and cite them in CHECKLIST-2.0 criteria 1, 3, 4
-     and 8 on `launch/2.0.0`.
+  1. Read `master`'s push run on this entry's closing commit (records only; `1289d8b`'s `41184451019` is green) and the
+     nightly `41187794369` (on `1289d8b`), and record the hash of `launch/2.0.0`'s citations merge that follows them.
   2. Keep `launch/2.0.0` current as `master` moves (step 4.3, now `scripts/launch-gates.sh`).
   3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
      cap turns it red.
