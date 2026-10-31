@@ -308,7 +308,8 @@ DeluluLang/
 │   │                               #   sections folded into `## [2.0.0]` as `###` — on-demand run 8
 │   ├── launch-gates.sh             # that merge's gates in one command: the map, clippy, doctor, the
 │   │                               #   document gates, conformance, cargo-deny; counts the findings'
-│   │                               #   errors itself; `LAUNCH-GATES=ok` only when all ran — on-demand run 11
+│   │                               #   errors itself; `LAUNCH-GATES=ok` only when all ran — on-demand run 11;
+│   │                               #   CHECKLIST-2.0 criterion 2 cites the merged hash — run 13
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught

@@ -10808,3 +10808,58 @@ arm64, 2.84x against 1.48x, passed; NOT MEASURED on macOS — 3 hardware threads
 free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91). `d3e5599`'s (the records) `41199808938`: 14 success, 2 skipped
 (arm64 MEASURED 2.96x). **`master` green at the end of the run.** The final form of the witness under load, four concurrent
 copies of its test binary: 4 of 4 green.
+
+## 2026-10-31 — on-demand routine run 13: `launch/2.0.0` brought current with `master` at `d84b9e1` (RW 4.67; release procedure step 1)
+
+**Read first.**
+- Run 12's three commits (`ab46618`, `d3e5599`, `d84b9e1`) were `master`'s newest; `d84b9e1`'s push run `41201440036`:
+  14 jobs success, 2 skipped (`heavy-gates`, `miri-slow`). `actors_pingpong` MEASURED on arm64 (2.90x where the machine
+  gave 3.94x, against a bar of 1.48x: passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware
+  threads, 1.57x observed). The disk: Ubuntu 82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 217 → 202, macOS 93 → 89
+  GiB, arm64 104 → 91.
+- Run 12's witnesses re-run in the VM on `d84b9e1`, each passed: `broker_cli`
+  `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`, and `delulu-runtime`'s
+  `scrub::tests::a_window_is_open_until_its_last_holder_drops_it` and `a_wipe_zeroes_every_byte_whatever_the_alignment`.
+  Its records checked against the tree: RW 4.66 and 4.67 struck in `REMAINING_WORK.md`, D-V2-196 and D-V2-197 in the
+  decision log, `DEPLOYMENT.md` §5 naming RW 4.66, `scripts/mutants.py`'s `MUTANTS_KEEP`, the memory file.
+- No branch held a commit `master` lacks but the archived ones; `origin/autosave/laptop`'s newest snapshot is still
+  `942c069` (`git diff 942c069 ff0b4f6` over its two Rust paths empty: landed). The VM's local `master` was the setup
+  snapshot's `6516ae5`, 12 commits behind `origin/master`; fast-forwarded before any edit. The git proxy refused the
+  deletion of `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9` and `laptop/sandbox-fault-place` (all in
+  `master`'s history; *"the remote end hung up unexpectedly"*), as it refused runs 7–12's.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1574 nodes, 17875 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+  `cargo-deny` 0.20.2 installed in the VM.
+
+**The milestone.** `master` held three commits `launch/2.0.0` lacked. Release procedure step 1 in a worktree, `git merge
+--no-ff origin/master`, as `df32509`:
+- `scripts/launch-changelog.py` folded the one new `## Unreleased` section (RW 4.67, with RW 4.66's *Documented* line) into
+  `## [2.0.0]`. `CHANGELOG.md` and the map were the only conflicts; the decision log merged clean (D-V2-155 kept, D-V2-196
+  and D-V2-197 in) and so did `Cargo.lock` (`cargo metadata --locked --offline` ok).
+- **The *Breaking* paragraph is unchanged**, judged against `STABILITY.md` §1 and against 1.x itself. The *Fixed* line
+  moves no refused program's code, no exit code, no JSON field and no syntax — what a program can do is unchanged, and
+  outside a send a free costs one atomic load. And v1.0.0 (`git fetch origin tag v1.0.0`) had no secret-sending primitive
+  (no `with_secret` in its `prim_table.rs`), no `ceiling` module and no global allocator, so no 1.x program, driver or
+  deployment can observe the change. The *Documented* line (RW 4.66) changes no behaviour.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree: `delulu-conform --coverage` 358/358 (diag 155, prim 86,
+  grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check examples
+  docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust under `crates/` and `fuzz/` is `master`'s at `d84b9e1`, so `master`'s push runs on three systems
+  already cover its code.
+
+**Gates on the merged tree, by `scripts/launch-gates.sh`:** `LAUNCH-GATES=ok` — the Survey 1575 nodes, 17919 edges, check
+ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stamped; `doctor --check` 26 checks passed;
+`book` 9, `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance`
+11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion 2's three as
+above; `cargo deny --all-features check advisories` ok and `bans licenses sources` ok.
+
+**Dispatched at `df32509`** (13:11 UTC): `everything` `41204426153` and the release dry run `41204428474` — read in this
+run's closing records.
+
+**Loop engineering: the gates read criterion 2's row back.** Runs 8, 9, 11 and this one each re-measured criterion 2 and
+wrote it into CHECKLIST-2.0 by hand, and no gate read what was written: a merge that forgot the row, or copied a stale
+count, passed. `scripts/launch-gates.sh` gains `criterion-2-cited`: the row must cite the merged base's hash at the anchor
+count `delulu-conform --coverage` measures now (`` `HASH`: **N/N (100%)** ``). Falsified on the committed launch tree with
+`LAUNCH_GATES_ONLY=criterion-2-cited`: base `origin/master` (cited) exit 0; base `origin/master~1` (`d3e5599`, never
+cited) exit 1, *"does not cite"*; the row's count planted as 357/358 exit 1; the row restored, the tree clean.
+`docs/CLOUD_ROUTINE.md` step 4.3 names it and says to write the row before the gates.

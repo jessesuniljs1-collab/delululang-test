@@ -6697,3 +6697,64 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      daemon's queue behind other writers on a short chain, not re-run since routine run 16), or a sweep (Sunday).
   6. *[laptop]* delete the merged branches above from `origin` if the cloud's proxy still refuses it.
   7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 13: `launch/2.0.0` brought current with `master` at `d84b9e1` (RW 4.67; release procedure step 1); criterion 2 read back by the gates
+- Session: `https://claude.ai/code/session_01Deh6W8tbAzgsH27h559GP5`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 160 when its first records were written). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). The session's own branch `claude/peaceful-carson-ubupyf` held nothing beyond
+  `master`. Pull request: none.
+- Base: `d84b9e1` (`master` at the start; its push run `41201440036` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** `launch/2.0.0` brought current with `master` at `d84b9e1` (run 12's *Open /
+  next* 2): RW 4.67's CHANGELOG section folded, the 2.0.0 *Breaking* paragraph judged for it against STABILITY.md §1 and
+  v1.0.0, CHECKLIST-2.0 criterion 2 re-measured, the gates green on the merged tree, its `everything` run and release dry
+  run dispatched, READ and cited. **Delivered:** the merge `df32509` on `launch/2.0.0` (pushed); the *Breaking* paragraph
+  unchanged — RW 4.67 moves no §1 surface, and v1.0.0 had no secret-sending primitive, no `ceiling` module and no global
+  allocator; criterion 2 358/358; `LAUNCH-GATES=ok`.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The VM's local `master` was the setup snapshot's `6516ae5`, 12 behind; fast-forwarded first.
+  Run 12's three witnesses re-run in the VM, all passed; its records checked against the tree. The Survey and `doctor`
+  healthy at the start (1574 nodes, 17875 edges; 26 checks). `gh` is installed (not used). `cargo-deny` 0.20.2 installed in
+  the VM. The git proxy refused `git push --delete` for `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`
+  and `laptop/sandbox-fault-place` (*"the remote end hung up unexpectedly"*), as it refused runs 7–12's.
+- Commits: on `launch/2.0.0`, `df32509` (the merge). On `master`, the records with `scripts/launch-gates.sh`'s new gate, then
+  this entry's closing commit (the runs read); then the merge of the closing commit into `launch/2.0.0` (the citations).
+- Files and folders (`master`, `git diff --name-status d84b9e1..HEAD`): M `scripts/launch-gates.sh` (`criterion-2-cited`),
+  `docs/CLOUD_ROUTINE.md` (step 4.3), `docs/REPOSITORY_STRUCTURE.md` (the script's row), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing. On `launch/2.0.0` (`df32509`): `master`'s three commits, `CHANGELOG.md` (one section folded), its release
+  checklist (CHECKLIST-2.0, criterion 2), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `d84b9e1`'s push run `41201440036` (run 12's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.90x against 1.48x, passed), NOT MEASURED on the other three (macOS 3 hardware threads, 1.57x observed); disk Ubuntu
+    82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `df32509`, dispatched 13:11 UTC: the release dry run `41204428474` and `everything` `41204426153` —
+    dispatched with the merge; read in this entry's closing commit (Open / next 1 until then).
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/launch-gates.sh` gains `criterion-2-cited` — CHECKLIST-2.0's criterion 2 row must cite the
+  merged base's hash at the anchor count measured now; runs 8, 9, 11 and 13 wrote that row by hand and no gate read it
+  back. Falsified on the committed launch tree: a base the row never cited and a planted 357/358 each exit 1, the cited
+  base exit 0. Step 4.3 says to write the row before the gates.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-ubupyf` (this session's, at `d84b9e1`) and
+  `laptop/sandbox-fault-place` from `origin` — each in `master`'s history; the cloud's proxy refuses the deletion.
+- For the laptop's memory: nothing new beyond step 4.3's line (the gate is its own record).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only), and record the hash of `launch/2.0.0`'s
+     citations merge that follows it (`git log -1 origin/launch/2.0.0`).
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (RW 4.67's allocator window, or `http.post_with_secret`), and the live
+     documents scanned for claims the code has overtaken.
+  3. Keep `launch/2.0.0` current as `master` moves (step 4.3, `scripts/launch-gates.sh`; write criterion 2's row first).
+  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 4.53's original measurement (the serial daemon's queue behind other writers' appends
+     on a short chain, not re-run since routine run 16); RW 2.12's last methods (PUT, PATCH, DELETE) only when a program
+     needs one (P9's design).
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.

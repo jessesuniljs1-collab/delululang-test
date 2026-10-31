@@ -67,6 +67,24 @@ rust_note() {
     fi
 }
 
+# Step 4.3 re-measures CHECKLIST-2.0's criterion 2 on the merged tree and writes it into that row; runs 8, 9, 11 and 13
+# wrote it by hand and nothing read it back (on-demand routine run 13). The row must cite BASE's hash with the anchor
+# count measured now: "`HASH`: **N/N (100%)**". Write the row first, then run the gates.
+criterion_2_cited() {
+    local short measured row
+    short=$(git rev-parse --short=7 "$base")
+    measured=$(cargo run -q -p delulu-conform -j "$jobs" -- --coverage \
+        | sed -n 's/^anchors: \([0-9]*\) | covered (pos+neg): \([0-9]*\) .*/\2\/\1/p')
+    [ -n "$measured" ] || { echo "could not read delulu-conform --coverage's anchor count"; return 1; }
+    row=$(grep '^| 2 |' docs/release/CHECKLIST-2.0.md)
+    if [[ "$row" == *"\`$short\`: **$measured (100%)**"* ]]; then
+        echo "CHECKLIST-2.0 criterion 2 cites $short at $measured"
+    else
+        echo "CHECKLIST-2.0 criterion 2 does not cite \`$short\`: **$measured (100%)** — re-measure it on this tree and write it"
+        return 1
+    fi
+}
+
 cargo_deny() {
     if ! command -v cargo-deny >/dev/null 2>&1; then
         echo "cargo-deny is not installed (\`cargo install cargo-deny --locked\`, about four minutes) — criterion 4 unchecked"
@@ -87,6 +105,7 @@ gate survey-suite cargo test -q -p delulu-survey -j "$jobs"
 gate conform-coverage cargo run -q -p delulu-conform -j "$jobs" -- --coverage
 gate check-reference cargo run -q -p delulu-conform -j "$jobs" -- --check-reference
 gate fmt-samples cargo run -q -p delulu -j "$jobs" -- fmt --check examples docs/book/samples
+gate criterion-2-cited criterion_2_cited
 gate cargo-deny cargo_deny
 
 echo
