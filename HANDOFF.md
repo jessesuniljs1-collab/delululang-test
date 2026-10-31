@@ -1993,6 +1993,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   DL1401 at 15 s. Closing the row on the clean number would have closed it on the wrong question. And **a witness of an
   order places every member it is about**: the first form asserted only that the e-stop overtook the queue, and M970 —
   the quarantine left out of the lane — survived it.
+- **A line a gate reads back is written by a tool, not by hand** (on-demand routine run 15). CHECKLIST-2.0 criterion 2's
+  sentence was typed five times by five runs, and since run 13 `criterion-2-cited` greps it in one exact shape — a
+  typo there is a red gate, and a stale count copied forward a false citation. `scripts/launch-criterion-2.py` measures
+  and writes it, and refuses a tree under 100%. Where a procedure writes text that a check later parses, give the
+  writing to the same kind of program as the reading.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

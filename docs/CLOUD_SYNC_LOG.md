@@ -6850,3 +6850,70 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      interpreter's variables resolved to slots) is the largest open user-facing item a VM can build and verify.
   7. *[laptop]* delete the merged branches above from `origin`.
   8. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 15: `launch/2.0.0` brought current with `master` at `19629a7` (ESTOP-QUEUE-1; release procedure step 1); criterion 2's line written by a tool
+- Session: `https://claude.ai/code/session_01Deh6WBteyF5ovaXJkePjoN`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 148 when its first records were written). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). The session's own branch `claude/peaceful-carson-xmq3m4` held nothing beyond
+  `master`. Pull request: none.
+- Base: `19629a7` (`master` at the start; its push run `41223529177` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** `launch/2.0.0` brought current with `master` at `19629a7` (run 14's *Open /
+  next* 3): ESTOP-QUEUE-1's CHANGELOG section folded, the 2.0.0 *Breaking* paragraph judged for it against STABILITY.md
+  §1 and v1.0.0, CHECKLIST-2.0 criterion 2 re-measured and written before the gates, the gates green on the merged tree,
+  its `everything` run and release dry run dispatched, READ and cited. **Delivered:** the merge `fc7faff` on
+  `launch/2.0.0` (pushed); the *Breaking* paragraph unchanged — the *Changed* line moves words only (DL1401's code and
+  `broker status`/`stop`/`rotate-key`'s exit 1 and `{"running": false}` are v1.0.0's), and the *Fixed* line's order was a
+  race under 1.x too (v1.0.0's daemon decided in accept order; the wire is unchanged); criterion 2 358/358;
+  `LAUNCH-GATES=ok`.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The VM's local `master` was the setup snapshot's `6516ae5`; fast-forwarded first. Run 14's three
+  witnesses re-run in the VM, all passed (`brokerd::tests`, 58 passed); its records checked against the tree. The Survey and
+  `doctor` healthy at the start (1577 nodes, 17931 edges; 26 checks). `gh` is installed (not used). `cargo-deny` 0.20.2
+  installed in the VM. The session's permission classifier refused `git push --delete` for the merged branches (*"Git
+  Destructive"*): they stay for the laptop.
+- Commits: on `launch/2.0.0`, `fc7faff` (the merge). On `master`, this entry's first commit (the records and
+  `scripts/launch-criterion-2.py`), then its closing commit (the runs read); then the merge of the closing commit into
+  `launch/2.0.0` (the citations).
+- Files and folders (`master`, `git diff --name-status 19629a7..HEAD`): A `scripts/launch-criterion-2.py`. M
+  `scripts/launch-gates.sh` (names the helper when `criterion-2-cited` fails), `docs/CLOUD_ROUTINE.md` (step 4.3),
+  `docs/REPOSITORY_STRUCTURE.md` (the script's row), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`
+  (row 17), `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing. On `launch/2.0.0`
+  (`fc7faff`): `master`'s three commits, `CHANGELOG.md` (one section folded), its release checklist (CHECKLIST-2.0,
+  criterion 2), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `19629a7`'s push run `41223529177` (run 14's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.91x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS
+    (3 hardware threads, 2.32x observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `fc7faff`, dispatched 17:33 UTC: `everything` `41225113353` and the release dry run `41225115918` — read
+    in this entry's closing commit.
+- **Loop engineering:** `scripts/launch-criterion-2.py LABEL [BASE]` measures criterion 2's three on the launch tree,
+  refuses to write unless all three are clean, and appends the sentence in the one shape `criterion-2-cited` reads (runs 8,
+  9, 11, 13 and 15 typed it by hand). `--self-test` (five mutants of its walls, each killed), and three probes on the
+  launch tree: its `--dry-run` printed this run's hand-written line byte for byte; a write appended exactly one sentence
+  and a second call wrote nothing; an example put out of format made it exit 1, writing nothing. `launch-gates.sh` and
+  step 4.3 name it; `HANDOFF.md` §11.5 keeps the lesson (a line a gate reads back is written by a tool).
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-0fcquc`, this session's `claude/peaceful-carson-xmq3m4` and
+  `laptop/sandbox-fault-place` from `origin` once each is in `master`'s history (each checked with `git merge-base
+  --is-ancestor` this run; `claude/peaceful-carson-ubupyf`, which run 14 named, is no longer on `origin`).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a line a gate reads back is written by a tool, not by hand).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only), and record the hash of `launch/2.0.0`'s
+     citations merge that follows it (`git log -1 origin/launch/2.0.0`).
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (the revocation line of D-V2-198, or RW 4.67's allocator window), and
+     the live documents scanned for claims the code has overtaken.
+  3. Keep `launch/2.0.0` current as `master` moves (step 4.3: `scripts/launch-criterion-2.py`, then
+     `scripts/launch-gates.sh`).
+  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 3.24 (the interpreter's variables resolved to slots) is the largest open user-facing
+     item a VM can build and verify; RW 2.12's last methods (PUT, PATCH, DELETE) only when a program needs one.
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.
