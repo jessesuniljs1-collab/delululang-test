@@ -375,6 +375,209 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// RW 4.67 (routine run 25's red team, F4): once a run has SENT a broker-held secret, no copy of its bytes stays in the
+/// run's memory. Under the daemon the bytes enter the run only to be sent, and before the send a scan of the run finds
+/// none; but the copies made on the way to the wire — the custody's answer as it is parsed, `reveal`'s copy, each header,
+/// reqwest's header value, hyper's serialized request — were freed without being cleared, and one of them was still in
+/// the run's heap when it ended (red on `9553ab7`: `…on: rw467-…`, in the arena of reqwest's runtime thread; the WASM
+/// engine's send the same). So the run sends the secret over real TLS to a server that answers, then waits — on the
+/// interpreter for a line on its standard input, which allocates nothing, so a block freed on the run's own thread is not
+/// reused before the scan; on the WASM engine, which has no `readline`, in a second request to a listener that holds it —
+/// and meanwhile this test reads the run's memory through `/proc`. It looks for the whole secret and for its last 24
+/// bytes: a freed block's first bytes are the allocator's own, so a copy left in one is partial (`SecretVal`'s own zeroing
+/// removed leaves exactly that). A sandboxed guest is never handed a secret (DL1401).
+///
+/// Two controls make the scan mean something: the server saw the secret arrive (the bytes did pass through the run), and
+/// the same scan finds a string the program itself holds (it reads the run's heap). The run is this test's own child and
+/// dumpable, so a non-root runner may read it; on a host whose ptrace policy forbids even that, the scan says so and fails.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done() {
+    // Both engines are measured before anything is asserted, so a red reading names each one's count.
+    let runs: Vec<_> = [&[][..], &["--engine", "wasm"][..]].into_iter().map(|e| (e, scan_a_run_after_its_send(e))).collect();
+    for (engine, (first, arrived, own, _)) in &runs {
+        assert_eq!(first, "delivered", "{engine:?}: the send never completed");
+        assert!(arrived, "{engine:?}: the server never saw the secret — the bytes did not pass through the run");
+        let own =
+            own.as_ref().unwrap_or_else(|e| panic!("this host forbids reading the run's memory ({e}), so nothing was measured"));
+        assert!(*own > 0, "{engine:?}: the scan read the run's heap without finding the program's own path");
+    }
+    let copies: Vec<_> = runs.iter().map(|(engine, (_, _, own, copies))| (engine, own, copies)).collect();
+    assert!(
+        copies.iter().all(|(_, _, c)| **c == Ok((0, 0))),
+        "copies of the sent secret left in the run's memory after its request, per engine (with the control's count): {copies:?}"
+    );
+}
+
+/// One run of the witness above on `engine`: what the send printed, whether the server saw the secret, and the scan's
+/// counts — the program's own path (the control), and the whole secret and its last 24 bytes.
+#[cfg(target_os = "linux")]
+#[allow(clippy::type_complexity)]
+fn scan_a_run_after_its_send(engine: &[&str]) -> (String, bool, Result<usize, String>, Result<(usize, usize), String>) {
+    use std::io::{BufRead as _, Read as _, Seek as _, Write as _};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+    let base = std::env::temp_dir().join(format!("delulu_bscrub_{}_{}", std::process::id(), engine.len()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    // The secret is spelled at run time, so no literal of this binary or the program's source holds it whole; long
+    // enough that its last 24 bytes outlast the allocator's own words at the head of a freed block.
+    let secret = format!("rw467-{}-{}-{}", "bQx7", std::process::id() % 9973 + 10_000, "Kq3VbX9mWz7Lp2Rt5Yc8Hn4Jd6F");
+    // A server presenting a certificate only `SSL_CERT_FILE` vouches for, answering 200 and noting whether the secret came.
+    let ck = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()]).unwrap();
+    let roots = base.join("roots.pem");
+    std::fs::write(&roots, ck.cert.pem()).unwrap();
+    let key = rustls::pki_types::PrivateKeyDer::Pkcs8(ck.signing_key.serialize_der().into());
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let cfg = Arc::new(
+        rustls::ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![ck.cert.der().clone()], key)
+            .unwrap(),
+    );
+    let tls_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let tls_port = tls_listener.local_addr().unwrap().port();
+    let arrived = Arc::new(Mutex::new(false));
+    let (needle, seen) = (secret.clone(), arrived.clone());
+    std::thread::spawn(move || {
+        if let Ok((tcp, _)) = tls_listener.accept() {
+            tcp.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+            let mut tls = rustls::StreamOwned::new(rustls::ServerConnection::new(cfg).unwrap(), tcp);
+            let (mut head, mut chunk) = (Vec::new(), [0u8; 2048]);
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                match tls.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&chunk[..n]),
+                }
+            }
+            *seen.lock().unwrap() = String::from_utf8_lossy(&head).contains(&needle);
+            let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+            tls.conn.send_close_notify();
+            let _ = tls.flush();
+        }
+    });
+    // The listener the run's second request waits on, held open until the scan is done.
+    let hold = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let hold_port = hold.local_addr().unwrap().port();
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        if let Ok((tcp, _)) = hold.accept() {
+            let _ = held_tx.send(tcp);
+        }
+    });
+    // The wait: a line on standard input on the interpreter, a held request on the WASM engine (no `readline` there).
+    let (row, wait) = if engine.is_empty() {
+        ("Net, Read, Write", "let line = out.readline()\n    out.println(\"read\")".to_string())
+    } else {
+        (
+            "Net, Write",
+            format!(
+                "match h.get(\"https://127.0.0.1:{hold_port}/held\") {{\n        Ok(b) => out.println(\"held\")\n        \
+             Err(e) => out.println(\"released\")\n    }}"
+            ),
+        )
+    };
+    let program = format!(
+        "module m\n\nfn main(root: Root) ! {{{row}}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1\"])\n    \
+         let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+         match h.get_with_secret(\"https://127.0.0.1:{tls_port}/rw467-the-programs-own-path\", hs, \"Authorization\", tok) {{\n        \
+         Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n    {wait}\n}}\n"
+    );
+    std::fs::write(cwd.join("send.delulu"), program).unwrap();
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", &secret]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let grant = format!("secret:API_TOKEN@127.0.0.1:{tls_port}=broker");
+    let mut run = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&cwd)
+        .env("DELULU_STATE_DIR", &state)
+        .env("SSL_CERT_FILE", &roots)
+        .args(["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant])
+        .args(["--no-prompt", "--broker", "daemon"])
+        .args(engine)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the run starts");
+    let mut out = std::io::BufReader::new(run.stdout.take().expect("the run's output"));
+    let mut first = String::new();
+    // `custody: daemon` comes first, then the send's own line.
+    while first.trim() != "delivered" && first.trim() != "not delivered" {
+        first.clear();
+        if out.read_line(&mut first).unwrap_or(0) == 0 {
+            break;
+        }
+    }
+    // The send is done and its client dropped; on the WASM engine, wait for the second request to connect.
+    let held = if engine.is_empty() { None } else { held_rx.recv_timeout(Duration::from_secs(30)).ok() };
+    // The scan: every page of the run's writable mappings that is in memory (or swapped out), through `/proc/PID/mem`.
+    // Bytes made at run time live only where the run can write — its heap, stacks and data, never its code — and a page
+    // never touched holds none; skipping those (`/proc/PID/pagemap`) keeps the interpreter's large stack reservation from
+    // costing the scan half a minute.
+    let pid = run.id();
+    // SAFETY: a plain query of the page size.
+    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
+    let scan = |what: &[u8]| -> Result<usize, String> {
+        let maps = std::fs::read_to_string(format!("/proc/{pid}/maps")).map_err(|e| format!("maps: {e}"))?;
+        let mut mem = std::fs::File::open(format!("/proc/{pid}/mem")).map_err(|e| format!("mem: {e}"))?;
+        let mut pagemap = std::fs::File::open(format!("/proc/{pid}/pagemap")).map_err(|e| format!("pagemap: {e}"))?;
+        let mut found = 0;
+        for line in maps.lines() {
+            let mut f = line.split_whitespace();
+            let (Some(range), Some(perms)) = (f.next(), f.next()) else { continue };
+            let name = f.nth(3).unwrap_or("");
+            if !perms.starts_with("rw") || name.starts_with("[vvar") || name.starts_with("[vsys") {
+                continue;
+            }
+            let Some((a, b)) = range.split_once('-') else { continue };
+            let (a, b) = (u64::from_str_radix(a, 16).unwrap(), u64::from_str_radix(b, 16).unwrap());
+            let mut entries = vec![0u8; ((b - a) / page * 8) as usize];
+            if pagemap.seek(std::io::SeekFrom::Start(a / page * 8)).is_err() || pagemap.read_exact(&mut entries).is_err() {
+                continue;
+            }
+            // Each run of resident pages, read whole: a byte string cannot cross into a page that holds nothing.
+            let resident: Vec<bool> =
+                entries.chunks_exact(8).map(|e| u64::from_le_bytes(e.try_into().unwrap()) & (0b11 << 62) != 0).collect();
+            let mut i = 0;
+            while i < resident.len() {
+                if !resident[i] {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                while i < resident.len() && resident[i] {
+                    i += 1;
+                }
+                let mut data = vec![0u8; (i - start) * page as usize];
+                if mem.seek(std::io::SeekFrom::Start(a + start as u64 * page)).is_ok() && mem.read_exact(&mut data).is_ok() {
+                    found += data.windows(what.len()).filter(|w| *w == what).count();
+                }
+            }
+        }
+        Ok(found)
+    };
+    let tail = &secret.as_bytes()[secret.len() - 24..];
+    let copies = scan(secret.as_bytes()).and_then(|whole| scan(tail).map(|tail| (whole, tail)));
+    let own = scan(b"rw467-the-programs-own-path");
+    // Release the run: a line for `readline`, or the held request's connection closed.
+    if let Some(mut stdin) = run.stdin.take() {
+        let _ = stdin.write_all(b"go\n");
+    }
+    drop(held);
+    let _ = run.wait();
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+    let arrived = *arrived.lock().unwrap();
+    (first.trim().to_string(), arrived, own, copies)
+}
+
 /// P9-05 (d), D-V2-183: `post_with_secret` of a broker-held secret under the daemon — the bytes are asked of the broker for
 /// the one origin, as `get_with_secret`'s are, and the request leaves as a POST. The chain holds the custody's `use` of
 /// the host naming `method: POST`, then the `send`. A capability minted without POST refuses it at the call, before the

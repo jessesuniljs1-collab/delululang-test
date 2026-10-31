@@ -54,6 +54,12 @@ net = ["delulu-runtime/net"]
 # P4-08: the AI usability benchmark's scorer and negative controls are tested here, where the real
 # `delulu` binary is `CARGO_BIN_EXE_delulu`. Test-only; `delulu-measure` depends on nothing of ours.
 delulu-measure = { path = "../delulu-measure" }
+# RW 4.67: `broker_cli` scans a run's memory once it has SENT a secret, so the send must complete: the test stands up a
+# TLS server on loopback, as `delulu-runtime`'s egress tests do. `rcgen` makes a certificate nobody trusts, at test time
+# (no private key is committed), and `rustls` serves it; the run under test trusts it through `SSL_CERT_FILE`, which the
+# platform trust store reads (rustls-native-certs). Test-only, and both are already in the graph at these versions.
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
 
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }

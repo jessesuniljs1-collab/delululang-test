@@ -2598,8 +2598,13 @@ pub fn broker_secret_send(
         Err(reason) => return Ok(SecretSend::Answered(prim::answer_value(crate::egress::refuse_unsent(&url, reason)))),
     };
     let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+    // RW 4.67: the custody's answer is read and parsed into buffers this process frees as it goes, so every block freed
+    // while it is asked for is zeroed (`crate::scrub`). The bytes then live in one `SecretVal`, which zeroes them as it is
+    // dropped, and the request that sends them opens its own window (`prim`).
+    let scrub = crate::scrub::Window::open();
     let bytes =
         custody.send_secret(handle, &origin.to_string(), Some(&span_str)).map_err(|d| Fault::at(d.code, d.message, span))?;
+    drop(scrub);
     let name = s.audience().map(|a| a.name.clone()).unwrap_or_else(|| handle.to_string());
     let held = SecretVal::bound(bytes, Some(Rc::new(crate::value::SecretAudience { name, to: vec![origin] })));
     let mut args = argvals.to_vec();

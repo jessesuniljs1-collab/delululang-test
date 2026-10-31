@@ -986,8 +986,9 @@ impl Drop for SecretVal {
         //
         // Still honest about the limit: this zeroes the CURRENT allocation only. Any earlier
         // buffer left behind by a `String` reallocation, and any copy made by `reveal`, is not
-        // reachable from here and is not zeroed. Zeroization bounds exposure; it does not
-        // eliminate it.
+        // reachable from here. RW 4.67 (D-V2-196) clears those where they matter most — while a
+        // send's bytes are in the process, the `delulu` binary's allocator zeroes every block it
+        // frees (`crate::scrub`) — but zeroization bounds exposure; it does not eliminate it.
         if let SecretInner::Local(v) = &self.inner {
             let mut v = v.borrow_mut();
             // SAFETY: writing 0 preserves the UTF-8 invariant (NUL is valid UTF-8), and the
