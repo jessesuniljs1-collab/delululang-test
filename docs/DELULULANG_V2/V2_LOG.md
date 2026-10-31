@@ -11120,3 +11120,25 @@ or DL0907 for anything else. The A14 fast path is taken only when no local binds
 comes first, so a mutant shows the escape itself. Mutants M981 and M982 were each red, and the control green. The suites
 the call reaches passed. `SOUNDNESS_AUDIT.md` §D's box of the same day names it (entrenched;
 `ENTRENCHED_CHANGE_RECORD.md`).
+
+## 2026-11-01 — the laptop: a name a constructor and a function share is the constructor (CTOR-SHADOW-1, RW 2.25, D-V2-201)
+
+**What was found.** Reading the interpreter's name lookups against the checker's order, after LOCAL-CALLEE-1: a function
+may share its name with a constructor of the module's own sum type. The checker resolves the name to the constructor,
+and the interpreter called the function, or for a value took any capitalized name for a constructor before asking the
+functions. Witnessed on the release binary of `cccb001`:
+- a pure function calling `Wrap(c)` ran an effectful `fn Wrap`, printing from a program `authority` called provably pure,
+  with no special grant;
+- `Circle(3)` was an `Int` where the checker typed a `Shape`;
+- `apply(Double, 5)` faulted *"not callable"*;
+- the WASM engine was right for calls, but refused `let d = Dot`.
+v1.0.0 had the same order.
+
+**The change** (D-V2-201). `Home::ctors` holds the module's constructors. They are asked before the functions in
+`eval_var` and in both call paths, and the prelude's capitalized fallback comes after the functions. The WASM `let`
+never binds a constructor as a function value (`EnumEnv::is_ctor`). Refusing a function named like a constructor was
+not taken: it would refuse programs that check today.
+
+**Gates.** `late_let_cli` (the escape) and `loop_parity` (`3 -1 10` on both engines), each red before; mutants M983–M987,
+all red. The bash heredoc that wrote the CLI test turned the `\n` in an assertion's message into a real line break,
+the trap HANDOFF §11.5 names; the result compiled, and was corrected with the editor before the commit.

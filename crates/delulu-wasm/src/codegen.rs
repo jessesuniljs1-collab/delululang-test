@@ -2719,10 +2719,7 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
             // So does binding a name that is one — `let h = double`, `let g = h` (RW 3.4) — but never a constructor of the
             // module's own types, which the checker resolves before a function of the same name (CTOR-SHADOW-1).
             if let Expr::Var { path, .. } = value {
-                if path.segs.len() == 1
-                    && cx.lookup(&path.segs[0].name).is_none()
-                    && !cx.env.is_ctor(&path.segs[0].name)
-                {
+                if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() && !cx.env.is_ctor(&path.segs[0].name) {
                     if let Ok(c) = resolve_callable(value, cx) {
                         cx.bind_after();
                         cx.callables.last_mut().unwrap().insert(name.name.clone(), c);

@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a name a constructor and a function share is the constructor, 2026-11-01
+
+- **Fixed: where a function shares its name with a constructor of the module's own sum type, the interpreter builds the
+  constructor, as the checker always said** (CTOR-SHADOW-1, RW 2.25, D-V2-201). The interpreter called the function, so
+  a value the checker typed `Shape` was the function's `Int`. An effectful function named like a pure constructor wrote
+  from a program `delulu authority` called "provably pure", with no special grant. A capitalized function passed as a
+  value faulted *"not callable"* (DL0907), and now runs. The WASM engine built the constructor for a call already; it
+  now also binds `let d = Dot` as the constructor, which it refused (DL1201).
+
 ## Unreleased — a call through a local reaches what the local holds, 2026-11-01
 
 - **Fixed: a call by a name that a local binds goes to what the local holds** (LOCAL-CALLEE-1, RW 2.24, D-V2-200). The

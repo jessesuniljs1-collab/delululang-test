@@ -5441,3 +5441,44 @@ before: `hello?`. Mutants M981 (the fast path asks for a closure only) and M982 
 `LEAK: the module's relay`, and the control was green. `delulu-runtime` (351), `plugin_load_cli` (25), `plugin_cli`,
 `late_let_cli`, `examples_run`, `core_invariance`, `conformance`, `actors_cli`, `stdlib_p3`, `wasm_cli`, `for_loop_cli`
 and `loop_parity` passed.
+
+## D-V2-201 — CTOR-SHADOW-1 (RW 2.25): a name a constructor of the module and a function share is the constructor, on both engines — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** A function may share its name with a constructor of the module's own sum type. DL0302 refuses only a
+function named like a prelude builtin. The checker resolves such a name to the constructor, as a call (`let s: Shape =
+Circle(3)` checks, and `let n: Int = Circle(3)` is DL0401) and as a value. The interpreter's order differed:
+- for a call, `eval_call`'s two paths asked the module's functions before its capitalized-name fallback;
+- for a value, `eval_var` asked the capitalized-name fallback before the functions.
+
+Found 2026-11-01 by the laptop, reading the interpreter's name lookups against the checker's after LATE-LET-1 and
+LOCAL-CALLEE-1. On the release binary of `cccb001`, with no special grant:
+- `type Holder = Wrap(Cap[Console]) | Empty` with `fn Wrap(c) -> Holder ! {Write}` that prints, called from a pure
+  `hold`: `authority` said *"(none — provably pure)"*, `why Write` said *"program cannot perform `Write`"*, and the run
+  printed. This is C88's shape, R-4.
+- `Circle(3)` was the function's `Int`, and a `match` on it as a `Shape` faulted.
+- `apply(Double, 5)`, with no constructor `Double`, faulted *"value `Double` is not callable"* (DL0907).
+- The WASM engine built the constructor for a call, and refused `let d = Dot` (DL1201: its `let` bound the bare name to
+  the function value).
+- v1.0.0's interpreter had the same order.
+
+**Decision.**
+1. **The interpreter keeps the module's constructors** (`Home::ctors`, from its sum types' variants). It builds a
+   constructor before it asks the functions: in `eval_var`, in the A14 fast call path (a function that shares a
+   constructor's name is never taken there), and in the general call path. The capitalized-name fallback, which
+   serves a prelude's constructors (`None`, `NotFound`), now comes after the functions in `eval_var`, as it already did
+   for a call. A prelude constructor cannot be a function (DL0302), so the fallback never meets one.
+2. **The WASM engine never binds a constructor as a function value** (`EnumEnv::is_ctor`, asked over every sum type,
+   since `enum_of_ctor` answers nothing for a name two types share).
+3. **Not taken:** refusing a function named like one of the module's constructors (DL0302 widened). That would refuse
+   programs that check today, which STABILITY.md §1 forbids within a major and asks a decision of its own for 2.0. The
+   runtime now gives the meaning the checker already gives, so no program changes verdict.
+
+**Evidence.** `late_let_cli`'s `a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name` (red
+before: the `LEAK` line). `loop_parity`'s
+`a_constructor_is_built_where_a_function_shares_its_name_and_a_function_is_passed_where_none_does` holds both engines to
+`3 -1 10`; red before: the WASM engine refused the program, and the interpreter faulted. Mutants M983 (the general path
+asks the functions first), M984 (the fast path takes a function that shares a constructor's name), M985 (a value asks
+the functions first), M986 (a capitalized value is a constructor before a function) and M987 (the WASM `let` binds a
+constructor as a function value) were all red, and the control green. `delulu-runtime` (351), `delulu-wasm` (217),
+`late_let_cli`, `plugin_load_cli`, `examples_run`, `core_invariance`, `conformance`, `actors_cli`, `stdlib_p3`,
+`wasm_cli`, `book`, `corpus_cli` and `deep_values_cli` passed.

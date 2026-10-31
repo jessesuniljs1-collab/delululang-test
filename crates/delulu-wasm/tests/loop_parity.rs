@@ -238,8 +238,9 @@ fn main(root: Root) ! {Write} {
 /// resolves the name to the constructor, as a call and as a value. The interpreter asked the module's functions first
 /// for a call, so `Circle(3)` ran the function (300, an `Int`, where the checker typed a `Shape`, and the `match` on it
 /// faulted). And it turned a capitalized name into a constructor before asking the functions for a value, so `Double`
-/// passed to `apply` was a constructor with no fields, *"not callable"* (DL0907). The WASM engine resolved both as the
-/// checker does.
+/// passed to `apply` was a constructor with no fields, *"not callable"* (DL0907). A constructor whose name is lowercase
+/// (`cell`, `empty`), which the checker admits, was no capitalized name either, so the interpreter faulted *"unbound
+/// name"* on it as a value and as a call. The WASM engine resolved all of these as the checker does.
 #[test]
 fn a_constructor_is_built_where_a_function_shares_its_name_and_a_function_is_passed_where_none_does() {
     let src = r#"module m
@@ -254,16 +255,21 @@ fn Double(x: Int) -> Int { x * 2 }
 
 fn apply[T](g: fn(T) -> T, x: T) -> T { g(x) }
 
+type Slot = cell(Int) | empty
+
+fn size(s: Slot) -> Int { match s { cell(n) => n, _ => 0 } }
+
 fn main(root: Root) ! {Write} {
   let out = root.console()
   let s: Shape = Circle(3)
   let d = Dot
   let a = match s { Circle(n) => n, Dot => 0 }
   let b = match d { Circle(n) => n, Dot => 0 - 1 }
-  out.println(str(a) + " " + str(b) + " " + str(apply(Double, 5)))
+  let e = empty
+  out.println(str(a) + " " + str(b) + " " + str(apply(Double, 5)) + " " + str(size(cell(8))) + str(size(e)))
 }
 "#;
-    assert_eq!(assert_parity(src), "3 -1 10\n", "the values themselves");
+    assert_eq!(assert_parity(src), "3 -1 10 80\n", "the values themselves");
 }
 
 /// The host writes what it reads into the guest's heap too (`fs.read_text`), and grows the memory by the same rule — a

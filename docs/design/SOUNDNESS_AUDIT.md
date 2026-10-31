@@ -392,6 +392,13 @@ tests are the actual guarantee.*
 > export typed pure, `delulu why Write` said **"program cannot perform `Write`"**, and the module's
 > function printed. The witness is `plugin_load_cli`'s
 > `a_local_holding_an_export_is_called_never_a_module_function_of_its_name`.
+>
+> **And a third — CTOR-SHADOW-1 (D-V2-201), with no special grant.** A function may share its name
+> with a constructor of the module's own type, and the checker resolves the name to the
+> constructor. The interpreter called the function, so `fn Wrap(c) -> Holder ! {Write}`, named like
+> the constructor `Wrap`, wrote from a function this report called pure. The witness is
+> `late_let_cli`'s `a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name`.
+> The three share one lesson: read every runtime name lookup against the checker's order.
 
 ## E. New test obligations (added to the laundering suite)
 

@@ -1135,9 +1135,6 @@ impl Interp {
         }
         // A nullary constructor of the module's own types as a value (a user enum's `Red`) — before a function of the same
         // name, as the checker resolves it (CTOR-SHADOW-1).
-        if name.chars().next().is_some_and(char::is_uppercase) {
-            return Ok(Value::variant(name, vec![]));
-        }
         // A top-level function used AS A VALUE — `apply(double, 21)`, `xs.map(double)`.
         //
         // The checker types this fine (that is the whole point of row polymorphism), and a
