@@ -6985,7 +6985,7 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 
 ### 2026-11-01 — RW 4.29 closed: its condition met since 2026-10-13 (made on the laptop)
 - Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
-- Branch: `laptop/rw-4-29` (stacked on `laptop/records-1101`, #105)   Pull request: opened with this commit
+- Branch: `laptop/local-callee` (made on `laptop/rw-4-29`, which was folded into it)   Pull request: the one that carries LOCAL-CALLEE-1, below
 - **What:** see V2_LOG's entry of the same name. The weekly sweep's documents scan, second pass, read every open row's
   status. Row 4.29 read *"P9-04 and P9-05 next"*, though P9-01 to P9-03, its whole closing condition, were complete on
   2026-10-13 (D-V2-126). Checked against the binary of `cccb001`, and closed.
@@ -7001,7 +7001,7 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 
 ### 2026-11-01 — LOCAL-CALLEE-1: a call through a local reaches what the local holds (RW 2.24, D-V2-200) (made on the laptop)
 - Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
-- Branch: `laptop/local-callee` (stacked on `laptop/rw-4-29` and #105)   Pull request: opened with this commit
+- Branch: `laptop/local-callee` (on `master` `8b2784b`, #105; it also carries RW 4.29 and RW 3.24 above)   Pull request: opened with this commit
 - **What:** see V2_LOG's entry of the same name.
 - Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu/tests/plugin_load_cli.rs`,
   `docs/design/SOUNDNESS_AUDIT.md` (entrenched: one paragraph in §D's box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`,
