@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `run --engine` refuses a value it does not know, 2026-11-01
+
+- **Fixed: `delulu run --engine` takes `interp` or `wasm`, and refuses any other value** (RW 6.48). Any other value ran
+  the program on the interpreter and exited 0, so `--engine wsam`, a typo of `wasm`, ran on the other engine and said
+  nothing. Now it is a usage error (exit 2), `unknown --engine `wsam` (interp | wasm)`, and nothing runs, as
+  `--isolation` and `--broker` already refused theirs.
+
 ## Unreleased — a name a constructor and a function share is the constructor, 2026-11-01
 
 - **Fixed: where a function shares its name with a constructor of the module's own sum type, the interpreter builds the

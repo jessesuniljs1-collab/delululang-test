@@ -7043,3 +7043,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   - CTOR-SHADOW-1, not breaking, since v1.0.0 had the same order and the checked meaning is 1.x's.
   Then cite the newest launch runs. *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — `run --engine` refuses a value it does not know (RW 6.48) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/engine-value` (stacked on `laptop/ctor-shadow`, #107)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/cli_contract.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.48), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next:** as #107's entry says: land #107, then this. Read the sweep's run and the launch runs. Bring
+  `launch/2.0.0` current: the sections to fold are LOCAL-CALLEE-1, CTOR-SHADOW-1 with WASM-BUILTIN-SHADOW-1, and this
+  one. This one is a usage error where a run happened, so judge it against STABILITY.md §1's exit codes: `run` with an
+  unknown `--engine` exited 0 under 1.x.
+- Survey and doctor (after the last edit): in the commit message.

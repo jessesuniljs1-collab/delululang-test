@@ -11165,3 +11165,14 @@ then a constructor, but the constructor only where no module function had the na
 D-V2-201 now orders the WASM call as the checker does: a local, the builtins, a constructor of the module, the generics
 and the functions. The CLI test takes the unannotated form and runs both engines, and `loop_parity` gains
 `a_local_named_like_a_builtin_is_called_on_both_engines`. M988 and M989 are red. RW 2.27 closes the builtin half.
+
+## 2026-11-01 — the laptop: `run --engine` refuses a value it does not know (RW 6.48)
+
+Writing LATE-LET-1's two-engine CLI test, the laptop passed `--engine interp` and found that any value but `wasm` ran
+the interpreter. `--engine wsam` ran on the interpreter and exited 0. A typo of the engine was a silent run on the
+other one, the shape `refuse_unknown_flags` exists to prevent, one step further in. A sandboxed run refuses `--engine`
+and a `.dwx` refuses anything but `wasm`, so only a source or package run was open. `cmd_run_inner` now refuses an
+unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | wasm)`.
+
+`cli_contract`'s `a_flag_value_nobody_understood_is_refused` was red before (`--engine wsam` ran). It also holds
+`--isolation` and `--broker`, which refused already, and that `interp` and `wasm` still run.
