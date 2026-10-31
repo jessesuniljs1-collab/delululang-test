@@ -1108,6 +1108,38 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::CapabilityRefused { node, op, target, url_path, method, reason } => {
+            let Some(op) = Op::from_wire_name(&op) else {
+                return (
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("unknown op `{}` (nothing recorded)", delulu_diag::terminal_line(&op)),
+                        requires_human: false,
+                    },
+                    false,
+                );
+            };
+            let node = GrantId::from_trusted(node);
+            failed.set(false);
+            match broker.record_capability_refusal(&node, op, target.as_deref(), url_path.as_deref(), method.as_deref(), &reason)
+            {
+                // RW 4.61's rule: `Recorded` is a claim about the chain. A refusal whose record was lost is said as one, and
+                // the client says once on stderr that the chain lacks it — the call stays refused.
+                Ok(seq) if failed.get() => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "broker could not append the audit record of a use its capability refused (the chain's append \
+                             lock was not free within its wait) — audit seq {seq} names no record"
+                        ),
+                        requires_human: false,
+                    },
+                    false,
+                ),
+                Ok(seq) => (Response::Recorded { seq }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::BreakGlassRun { node, ticket, relax } => {
             let node = GrantId::from_trusted(node);
             failed.set(false);
@@ -2993,6 +3025,42 @@ mod tests {
             Ok(Response::Error { code, message, .. }) => {
                 assert_eq!(code, "DL1401", "{message}");
                 assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
+        }
+    }
+
+    /// RW 4.79, under RW 4.61's rule: a use its capability refused whose record was lost is not answered `Recorded`; one the
+    /// tree's chain took is, and an op the broker does not know is refused in words, nothing recorded.
+    #[test]
+    fn a_capability_refusal_whose_record_was_lost_is_not_answered_as_recorded() {
+        let state = temp_state("lostcap");
+        let handle = start_daemon(&state);
+        let root = issue(&state);
+        let refusal = |op: &str| ReqBody::CapabilityRefused {
+            node: root.clone(),
+            op: op.to_string(),
+            target: Some("example.com".to_string()),
+            url_path: Some("/v2".to_string()),
+            method: None,
+            reason: "outside-path".to_string(),
+        };
+        let free = request(&state, refusal("Net"));
+        let unknown = request(&state, refusal("Teleport"));
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, refusal("Net"));
+        drop(held);
+        stop_daemon(&state, handle);
+        assert!(matches!(free, Ok(Response::Recorded { .. })), "the refusal is recorded when the chain is free: {free:?}");
+        assert!(
+            matches!(&unknown, Ok(Response::Error { code, message, .. }) if code == "DL0904" && message.contains("unknown op")),
+            "{unknown:?}"
+        );
+        match lost {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append") && message.contains("capability"), "{message}");
             }
             other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
         }

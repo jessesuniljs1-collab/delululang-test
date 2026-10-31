@@ -466,9 +466,15 @@ fn a_broker_held_secret_rides_a_post_to_its_audience_and_the_use_names_the_metho
             .filter(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "allow")
             .map(|r| r["authority"]["method"].clone())
             .collect();
-        // The GET-only run's custody allowed the node's POST before the program's own capability refused it (RW 4.79): a
-        // `use allow` with no `send` after it. Then one for each engine's POST.
-        assert_eq!(used, vec![serde_json::json!("POST"); n + 1], "{engine}: {rs:#?}");
+        // One for each engine's POST. The GET-only run's POST its capability refused is never allowed (RW 4.79: until it,
+        // its custody was asked first and recorded the node's `allow` for it, a `use allow` with no `send` after it).
+        assert_eq!(used, vec![serde_json::json!("POST"); n], "{engine}: {rs:#?}");
+        let refused: Vec<_> = rs
+            .iter()
+            .filter(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "deny")
+            .map(|r| (r["authority"]["refused_by"].clone(), r["authority"]["method"].clone()))
+            .collect();
+        assert_eq!(refused, [(serde_json::json!("capability"), serde_json::json!("POST"))], "{engine}: {rs:#?}");
     }
     for entry in std::fs::read_dir(state.join("audit")).unwrap() {
         let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
@@ -786,6 +792,174 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
         [post.clone(), get.clone(), get.clone(), post.clone(), get.clone(), get.clone(), post, get.clone(), get],
         "the interpreter's three runs (`post`, `get`, `get_with`), then the guest's, then the WASM engine's: {v:#}"
     );
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// RW 4.79: a use the program's OWN capability refuses is judged before its custody is asked — by the interpreter, by the
+/// WASM engine and by a sandboxed guest's host — and the chain says what happened: one `use deny` naming
+/// `refused_by: capability` and why, never the `use allow` its node's grant gave it while the capability then refused the
+/// call. Each program mints a capability narrower than its node and makes one call the capability refuses: a write beside
+/// its directory, or a host, path or method the node holds and the capability does not — and one write neither allows,
+/// whose `deny` the chain keeps (an out-of-band monitor's `denies=N/MS` counts it). `.invalid` resolves to nothing.
+#[test]
+fn a_use_its_capability_refuses_is_recorded_refused_and_never_allowed() {
+    let base = std::env::temp_dir().join(format!("dlcap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(cwd.join("data/sub")).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    // (program, mint, call, the chain's target, why the capability refused it, a broker-held secret rides it)
+    let fs =
+        |call: &str| format!("let w = root.fs_write(\"./data/sub\")\n    match w.{call} {{ Ok(_) => {{}}, Err(_) => {{}} }}");
+    let net = |mint: &str, call: &str| format!("let h = root.http([\"{mint}\"])\n    {call}");
+    let secret = "let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    ";
+    let cases = [
+        ("write", fs("write_text(\"../w.txt\", \"x\")"), "/data/w.txt", "outside-scope", false),
+        ("append", fs("append_text(\"../a.txt\", \"x\")"), "/data/a.txt", "outside-scope", false),
+        // Neither the capability nor the node: the chain's `deny` stays, now naming the capability that refused it first.
+        ("escape", fs("write_text(\"../../e.txt\", \"x\")"), "/e.txt", "outside-scope", false),
+        (
+            "get",
+            net("*.example.invalid/v1/**", "match h.get(\"https://get.example.invalid/v2/x\") { Ok(_) => {}, Err(_) => {} }"),
+            "get.example.invalid",
+            "outside-path",
+            false,
+        ),
+        (
+            "get_with",
+            net(
+                "other.example.invalid",
+                "match h.get_with(\"https://gw.example.invalid/x\", Map()) { Ok(_) => {}, Err(_) => {} }",
+            ),
+            "gw.example.invalid",
+            "other-host",
+            false,
+        ),
+        (
+            "post",
+            net(
+                "*.example.invalid",
+                "match h.post(\"https://post.example.invalid/x\", Map(), \"{}\") { Ok(_) => {}, Err(_) => {} }",
+            ),
+            "post.example.invalid",
+            "other-method",
+            false,
+        ),
+        (
+            "get_with_secret",
+            net(
+                "*.example.invalid/v1/**",
+                &format!(
+                    "{secret}match h.get_with_secret(\"https://gws.example.invalid/v2/x\", hs, \"Authorization\", tok) {{ Ok(_) \
+                     => {{}}, Err(_) => {{}} }}"
+                ),
+            ),
+            "gws.example.invalid",
+            "outside-path",
+            true,
+        ),
+        (
+            "post_with_secret",
+            net(
+                "*.example.invalid",
+                &format!(
+                    "{secret}match h.post_with_secret(\"https://pws.example.invalid/x\", hs, \"Authorization\", tok, \"{{}}\") \
+                     {{ Ok(_) => {{}}, Err(_) => {{}} }}"
+                ),
+            ),
+            "pws.example.invalid",
+            "other-method",
+            true,
+        ),
+    ];
+    for (name, body, ..) in &cases {
+        let program = format!("module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    {body}\n}}\n");
+        std::fs::write(cwd.join(format!("{name}.delulu")), program).unwrap();
+    }
+    // A read is an epoch-class use: decided on the node's cached snapshot and recorded by no one unless a Guard rule makes it
+    // round-trip (`guard_e2e` has that case). Its capability's refusal is recorded nowhere either.
+    std::fs::write(
+        cwd.join("read.delulu"),
+        "module m\n\nfn main(root: Root) ! {Read} {\n    let r = root.fs_read(\"./data/sub\")\n    \
+         match r.read_text(\"../r.txt\") { Ok(_) => {}, Err(_) => {} }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(cwd.join("data/r.txt"), "inside the node, beside the capability").unwrap();
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    // The node holds every host under `example.invalid` by GET and POST, `other.example.invalid` by name, and the data
+    // directory; each capability holds less.
+    let grants = [
+        "fs.write=./data",
+        "fs.read=./data",
+        "net.special=*.example.invalid:GET,POST",
+        "net.special=other.example.invalid",
+        "secret:API_TOKEN@gws.example.invalid:443=broker",
+    ];
+    let routes: [(&str, &[&str]); 3] = [("interp", &[]), ("wasm", &["--engine", "wasm"]), ("sandbox", &["--sandbox"])];
+    for (route, flags) in routes {
+        for (name, _, _, _, rides_secret) in cases.iter().chain([&("read", String::new(), "", "", false)]) {
+            // A sandboxed guest's channel carries no secret (`doctor`'s sandbox note), so its run is refused for that.
+            if *rides_secret && route == "sandbox" {
+                continue;
+            }
+            let file = format!("{name}.delulu");
+            let mut args = vec!["run", file.as_str(), "--no-prompt", "--broker", "daemon"];
+            for g in grants {
+                args.extend(["--grant", g]);
+            }
+            args.extend_from_slice(flags);
+            let o = delulu_in(&cwd, &state, &args);
+            assert_eq!(o.status.code(), Some(1), "{route}, {name}: {}{}", stdout(&o), stderr(&o));
+            assert!(stderr(&o).contains("DL0904"), "{route}, {name}: refused by its capability: {}", stderr(&o));
+        }
+    }
+    for f in ["data/w.txt", "data/a.txt", "e.txt"] {
+        assert!(!cwd.join(f).exists(), "nothing was written: {f}");
+    }
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let records = v["records"].as_array().expect("records");
+    for (name, _, target, reason, rides_secret) in &cases {
+        let at = |r: &&serde_json::Value| {
+            let t = r["target"].as_str().unwrap_or("");
+            if target.starts_with('/') {
+                t.replace('\\', "/").ends_with(&format!("work{target}"))
+            } else {
+                t == *target
+            }
+        };
+        let mine: Vec<&serde_json::Value> = records.iter().filter(at).collect();
+        assert!(
+            mine.iter().all(|r| r["decision"] != "allow"),
+            "{name}: no use its capability refused is recorded as allowed: {mine:#?}"
+        );
+        assert!(mine.iter().all(|r| r["action"] == "use"), "{name}: one kind of record, a use: {mine:#?}");
+        let routes = if *rides_secret { 2 } else { 3 };
+        assert_eq!(mine.len(), routes, "{name}: one record for each route's call: {mine:#?}");
+        for r in &mine {
+            let a = &r["authority"];
+            assert_eq!((r["decision"].as_str(), a["refused_by"].as_str()), (Some("deny"), Some("capability")), "{name}: {r:#}");
+            assert_eq!((a["code"].as_str(), a["reason"].as_str()), (Some("DL0904"), Some(*reason)), "{name}: {r:#}");
+            if !target.starts_with('/') {
+                // A network use's record names its path and a POST's method, as the custody's own record of a use does.
+                assert!(a["url_path"].is_string(), "{name}: {r:#}");
+                assert_eq!(a["method"].as_str(), name.starts_with("post").then_some("POST"), "{name}: {r:#}");
+            }
+        }
+    }
+    let unrecorded: Vec<_> = records
+        .iter()
+        .filter(|r| r["target"].as_str().is_some_and(|t| t.replace('\\', "/").ends_with("work/data/r.txt")))
+        .collect();
+    assert!(unrecorded.is_empty(), "an ungated read is recorded by no one, refused or not: {unrecorded:#?}");
+    let o = delulu_in(&cwd, &state, &["audit", "verify", "--dir", &audit_dir]);
+    assert!(o.status.success(), "the chain verifies: {}", stderr(&o));
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }

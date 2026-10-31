@@ -1381,6 +1381,15 @@ impl Interp {
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             let url_path = custody_path_for(op, &argvals);
             let method = custody_method_for(op, &name.name);
+            // RW 4.79: the program's own capability first — it may hold less than its node, and a use it refuses cannot
+            // happen, so its custody is not asked to allow it; the custody is told the refusal, and its chain says so.
+            if let Some(refused) = capability_refusal_for(&recvv, &name.name, &argvals, span) {
+                self.custody.borrow_mut().note_capability_refusal(op, arg.as_deref(), url_path, method, refused.reason);
+                if let Some(t) = &dispatched {
+                    self.trace_refusal(t, &name.name, refused.fault.code, &refused.fault.message, span);
+                }
+                return Err(Escape::Fault(refused.fault));
+            }
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path, method) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
@@ -2596,6 +2605,19 @@ pub fn broker_secret_send(
     let mut args = argvals.to_vec();
     args[3] = Value::Secret(Rc::new(held));
     Ok(SecretSend::Held(args))
+}
+
+/// RW 4.79: what the receiver's own capability says of this call before its custody is asked ([`prim::capability_refusal`]).
+/// `None` for a receiver that is no capability, and for a guest's host handle, which carries no scope to judge: the host
+/// that holds the capability judges it (`channel.rs`).
+pub(crate) fn capability_refusal_for(
+    recvv: &Value,
+    method: &str,
+    argvals: &[Value],
+    span: delulu_diag::Span,
+) -> Option<prim::CapabilityRefusal> {
+    let Value::Cap(c) = recvv else { return None };
+    prim::capability_refusal(c, method, argvals, span)
 }
 
 pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {

@@ -277,6 +277,12 @@ fn a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace() {
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let _guard = DaemonGuard { state: state.clone() };
+    let started = format!("{}{}", stdout(&o), stderr(&o));
+    let owner = started.find("gow1_").map(|i| {
+        let tail = &started[i..];
+        tail[..tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len())].to_string()
+    });
+    let owner = owner.expect("broker start names the Guard owner code");
     let delegate = |scope: &str, multi: bool| {
         let mut args = vec!["grants", "delegate", "--effects", "Read,Write", "--fs-read", scope, "--ttl", "1h", "--json"];
         if multi {
@@ -312,8 +318,10 @@ fn a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace() {
         "{}",
         stderr(&o)
     );
-    // The lease's custody decides the artifact's effects: a read that leaves its scope is refused by the custody, which
-    // the host asks first, in the lease's words — not by the scope's own check (DL0904, "escapes").
+    // A read that leaves the artifact's own capability is refused by that capability, which the host asks first (RW 4.79):
+    // DL0904, "escapes" — never asked of the lease's custody, whose chain would have recorded its `allow` for a read
+    // inside the lease that the capability then refused. That the lease's custody decides the artifact's other effects is
+    // witnessed below, under a Guard rule.
     let escape = "module e\nfn main(root: Root) ! {Read, Write} {\n  let fr = root.fs_read(\"./data/pub\")\n  \
                   match fr.read_text(\"../priv/f.txt\") { Ok(v) => root.console().println(v), Err(e) => root.console().println(\"no\") }\n}\n";
     std::fs::write(cwd.join("e.delulu"), escape).unwrap();
@@ -321,7 +329,9 @@ fn a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace() {
     assert!(o.status.success(), "build: {}", stderr(&o));
     let o = delulu_in(&cwd, &state, &["run", "e.dwx", "--lease", &token, "--no-prompt"]);
     assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
-    assert!(stderr(&o).contains(&format!("lease `{narrow}` does not grant")) && stdout(&o).is_empty(), "{}", stderr(&o));
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("escapes the granted scope"), "{}", stderr(&o));
+    assert!(stdout(&o).is_empty() && !stderr(&o).contains("does not grant"), "{}", stderr(&o));
+    let (_, guarded) = delegate("./data", true);
     // A lease's write scope is known only once it is redeemed: a trace written into it is refused then, nothing run.
     let o = delulu_in(
         &cwd,
@@ -362,6 +372,13 @@ fn a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace() {
     let tail = stdout(&o);
     let last: Vec<&str> = tail.lines().filter_map(|l| l.split_whitespace().nth(3)).collect();
     assert_eq!(last.iter().filter(|a| ["issue", "deadman-arm", "revoke"].contains(a)).count(), 3, "{tail}");
+    // The lease's custody decides each of the artifact's effects its capability allows: under a `guarded` rule its read
+    // of `pub/f.txt`, inside both, is refused by the custody's Guard (DL1410), and nothing is printed.
+    let o = delulu_in(&cwd, &state, &["guard", "policy", "set", "fs_read:*", "guarded", "--owner", &owner]);
+    assert!(o.status.success(), "policy set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["run", "r.dwx", "--lease", &guarded, "--no-prompt"]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(stderr(&o).contains("DL1410") && stderr(&o).contains("pub/f.txt") && stdout(&o).is_empty(), "{}", stderr(&o));
     drop(_guard);
     let _ = std::fs::remove_dir_all(&base);
 }

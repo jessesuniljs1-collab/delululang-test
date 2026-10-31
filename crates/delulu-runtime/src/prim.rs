@@ -424,6 +424,62 @@ pub(crate) fn url_verdict(url: &str, method: &str, allow: &[String]) -> delulu_b
     delulu_broker::netscope::judge_all(allow, method, host_of(url), path_of(url))
 }
 
+/// RW 4.79: a use the program's OWN capability refuses, and why — judged before its custody is asked, so the custody's
+/// chain never records `allow` for a call the capability then refuses (a capability may hold less than its node: a
+/// narrowed directory, one host of the node's, a path or a method fewer).
+pub struct CapabilityRefusal {
+    /// The fault the effect refuses the call with, in its words: what the program is told.
+    pub fault: Fault,
+    /// Why, for the chain's record: `outside-scope`, `hostile-path`, `other-host`, `outside-path`, `other-method` or
+    /// `ambiguous-path`. Never the request's own words — a URL's query is in no record (D-V2-169).
+    pub reason: &'static str,
+}
+
+/// [`CapabilityRefusal`] for one call — `None` where the capability takes it, where the call is no file or network use, and
+/// where the effect answers rather than refuses (a URL that is not `https://` is told `Refused`, a value: HTTP-SCHEME-1).
+/// Decided by the rule the effect itself applies below ([`resolve_in_anchor`], [`net_scope_refusal`]) and nothing is
+/// performed. One function for every gate that asks a custody: the interpreter's, a sandboxed guest's host's and the WASM
+/// host's.
+pub fn capability_refusal(capv: &CapVal, method: &str, args: &[Value], span: Span) -> Option<CapabilityRefusal> {
+    let file_effect = matches!(
+        (capv.kind, method),
+        (ResourceKind::FsRead, "read_text" | "list_dir") | (ResourceKind::FsWrite, "write_text" | "append_text")
+    );
+    let net_use =
+        capv.kind == ResourceKind::Http && matches!(method, "get" | "get_with" | "get_with_secret" | "post" | "post_with_secret");
+    match (&capv.scope, args.first()) {
+        (CapScope::Fs { root, anchor, .. }, Some(Value::Str(rel))) if file_effect => fs_scope_refusal(root, anchor, rel, span),
+        (CapScope::Net { allow, .. }, Some(Value::Str(url))) if net_use && url.starts_with("https://") => {
+            net_scope_refusal(url, http_method_of(method), allow, span)
+        }
+        _ => None,
+    }
+}
+
+/// A file capability's refusal of `rel` ([`resolve_in_anchor`]), in the words the effect refuses it. Public for the WASM
+/// host, which holds a capability's directory and anchor rather than the capability.
+pub fn fs_scope_refusal(root: &Path, anchor: &Path, rel: &str, span: Span) -> Option<CapabilityRefusal> {
+    let fault = resolve_in_anchor(root, anchor, rel, span).err()?;
+    let reason = if hostile_path(rel, false).is_some() { "hostile-path" } else { "outside-scope" };
+    Some(CapabilityRefusal { fault, reason })
+}
+
+/// A network capability's refusal of a request by `verb` to `url` ([`url_verdict`]), in the words the effect refuses it.
+/// Public for the WASM host, as [`fs_scope_refusal`] is.
+pub fn net_scope_refusal(url: &str, verb: &str, allow: &[String], span: Span) -> Option<CapabilityRefusal> {
+    use delulu_broker::netscope::Verdict;
+    let (reason, message) = match url_verdict(url, verb, allow) {
+        Verdict::Allow => return None,
+        Verdict::OtherHost => ("other-host", format!("host of `{url}` is not in the granted allowlist")),
+        Verdict::OutsidePath => {
+            ("outside-path", format!("the path of `{url}` is outside every path the grant names for its host"))
+        }
+        Verdict::OtherMethod => ("other-method", format!("a `{verb}` to `{url}` is outside the methods the grant names for it")),
+        Verdict::Ambiguous(why) => ("ambiguous-path", format!("`{url}` is refused under a path scope: {why}")),
+    };
+    Some(CapabilityRefusal { fault: Fault::at("DL0904", message, span), reason })
+}
+
 /// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183): `post` and `post_with_secret` a POST,
 /// every other one a GET.
 pub fn http_method_of(method: &str) -> &'static str {
@@ -836,28 +892,8 @@ pub fn call_cap_method_pinned(
                 crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
                 return Ok(Value::err(net_err("Refused")));
             }
-            match url_verdict(&url, verb, allow) {
-                delulu_broker::netscope::Verdict::Allow => {}
-                delulu_broker::netscope::Verdict::OtherHost => {
-                    return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
-                }
-                delulu_broker::netscope::Verdict::OutsidePath => {
-                    return Err(Fault::at(
-                        "DL0904",
-                        format!("the path of `{url}` is outside every path the grant names for its host"),
-                        span,
-                    ));
-                }
-                delulu_broker::netscope::Verdict::OtherMethod => {
-                    return Err(Fault::at(
-                        "DL0904",
-                        format!("a `{verb}` to `{url}` is outside the methods the grant names for it"),
-                        span,
-                    ));
-                }
-                delulu_broker::netscope::Verdict::Ambiguous(why) => {
-                    return Err(Fault::at("DL0904", format!("`{url}` is refused under a path scope: {why}"), span));
-                }
+            if let Some(refusal) = net_scope_refusal(&url, verb, allow, span) {
+                return Err(refusal.fault);
             }
             // P9-04 (d), D-V2-134: a broker-held secret (a daemon or leased run's handle) carries no bytes here — the
             // interpreter asks the broker for them for one origin and hands this table a secret that holds them
