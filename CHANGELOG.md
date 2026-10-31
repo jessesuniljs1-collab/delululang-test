@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a closure reads each name as it was where the closure was written, 2026-11-01
+
+- **Fixed: a closure no longer reads a name that a `let` binds after the closure was made** (LATE-LET-1, RW 2.23,
+  D-V2-199). A `let` binds a new name for the statements after it, and the checker types a closure's names as they
+  were where the closure is written. Both engines read them when the closure ran, in the scopes it was made over, so a
+  later `let` in one of those scopes was what it read. A closure typed pure could call an effectful function that a
+  later `let` gave its callee's name, and print from a program `delulu authority` called "provably pure". Through
+  `Secret.map` that printed a secret's plaintext with no `Declassify` anywhere. A later `let` of another type made an
+  `Int` addition yield a string. The granted capabilities still bounded every effect: without `--grant console` nothing
+  printed.
+- **Changed, for a program that relied on it:** a program that makes a closure, then a `let` of a name the closure
+  reads (in the same block or one around it), then calls the closure, now reads the earlier binding on both engines,
+  as the checker always said. A closure still shares a `var` it reads or assigns with the code that made it. On the
+  WASM engine some such programs now compile that were refused (DL1201).
+
 ## Unreleased — an e-stop goes before the requests waiting at the broker, 2026-10-31
 
 - **Fixed: the operator's e-stop and a monitor's quarantine are handled before every request waiting at the broker

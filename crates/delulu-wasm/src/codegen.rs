@@ -2342,6 +2342,9 @@ struct Cx<'a> {
     inline_floor: usize,
     /// The frames the body being compiled cannot see — empty in a function's own body (WASM-HYGIENE-1).
     hidden: Vec<Hidden>,
+    /// LATE-LET-1: how many scope and callable frames the function values defined in this body see, at most. A `let` into
+    /// a frame one of them sees binds in a new frame ([`Cx::bind_after`]).
+    held: std::cell::Cell<(usize, usize)>,
     /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
     imp: Imports,
     /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
@@ -2382,14 +2385,28 @@ impl<'a> Cx<'a> {
         let seen = |i: usize| !self.hidden.iter().any(|h| (h.callables.0..h.callables.1).contains(&i));
         self.callables.iter().enumerate().rev().filter(|(i, _)| seen(*i)).find_map(|(_, s)| s.get(name).cloned())
     }
-    /// A function value defined here: it will see what this body sees (WASM-HYGIENE-1).
+    /// A function value defined here: it will see what this body sees (WASM-HYGIENE-1), and no binding made after it
+    /// (LATE-LET-1).
     fn callable(&self, params: &[Param], body: &Block) -> Callable {
+        let (scopes, callables) = self.held.get();
+        self.held.set((scopes.max(self.scopes.len()), callables.max(self.callables.len())));
         Callable {
             params: params.to_vec(),
             body: body.clone(),
             hidden: self.hidden.clone(),
             scopes_at: self.scopes.len(),
             callables_at: self.callables.len(),
+        }
+    }
+    /// LATE-LET-1: before a `let` binds, a new frame if a function value defined here sees the innermost one. It is
+    /// inlined where it is called, and its body reads the frames it was defined over by index — so a `let` in one of
+    /// them, made after it, was what the inlined body found (a pure callee's name given an effectful function), where
+    /// the checker resolved the name where the function value was written. The block's end closes the new frame.
+    fn bind_after(&mut self) {
+        let (scopes, callables) = self.held.get();
+        if scopes >= self.scopes.len() || callables >= self.callables.len() {
+            self.scopes.push(HashMap::new());
+            self.callables.push(HashMap::new());
         }
     }
     fn alloc_local(&mut self, ty: Ty) -> Result<u32, CompileError> {
@@ -2512,6 +2529,7 @@ fn compile_fn<'a>(
         depth: 0,
         loops: Vec::new(),
         inline_floor: 0,
+        held: std::cell::Cell::new((0, 0)),
         hidden: Vec::new(),
         imp,
         foreign_binds,
@@ -2599,6 +2617,7 @@ fn compile_actor_member<'a>(
         depth: 0,
         loops: Vec::new(),
         inline_floor: 0,
+        held: std::cell::Cell::new((0, 0)),
         hidden: Vec::new(),
         imp,
         foreign_binds,
@@ -2643,25 +2662,25 @@ fn compile_block_as(b: &Block, cx: &mut Cx, expected: Ty) -> Result<(), CompileE
 /// match arm is that block's, and the `f` outside it is the outer one again once it ends (WASM-HYGIENE-2 — the binding
 /// had gone into the function's own frame, so an inner `f` replaced the outer for the rest of the function).
 fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    // The frames the block found, to return to at its end: a `let` may have opened more (LATE-LET-1). A function value
+    // defined in the block ends with it, so what the ones defined before it see is what stays held.
+    let base = (cx.scopes.len(), cx.callables.len());
+    let held = cx.held.get();
     cx.scopes.push(HashMap::new());
     cx.callables.push(HashMap::new());
-    let mut result = Ty::Unit;
+    let mut result = Ok(Ty::Unit);
     let n = b.stmts.len();
     for (i, stmt) in b.stmts.iter().enumerate() {
         let is_last = i + 1 == n;
-        let r = compile_stmt(stmt, cx, is_last, expected);
-        match r {
-            Ok(ty) => result = ty,
-            Err(e) => {
-                cx.callables.pop();
-                cx.scopes.pop();
-                return Err(e);
-            }
+        result = compile_stmt(stmt, cx, is_last, expected);
+        if result.is_err() {
+            break;
         }
     }
-    cx.callables.pop();
-    cx.scopes.pop();
-    Ok(result)
+    cx.callables.truncate(base.1);
+    cx.scopes.truncate(base.0);
+    cx.held.set(held);
+    result
 }
 
 /// Compile one statement; a refusal no expression inside it placed is placed at the statement (A10).
@@ -2688,6 +2707,8 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
             if let Expr::Lambda { params, body, .. } = value {
                 let c = cx.callable(params, body);
+                // A `let` is not recursive: the function value does not see its own name (LATE-LET-1).
+                cx.bind_after();
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
@@ -2695,6 +2716,7 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
             if let Expr::Var { path, .. } = value {
                 if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() {
                     if let Ok(c) = resolve_callable(value, cx) {
+                        cx.bind_after();
                         cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                         return Ok(Ty::Unit);
                     }
@@ -2712,6 +2734,7 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
             };
             let idx = cx.alloc_local(ty)?;
             cx.emit(Instruction::LocalSet(idx));
+            cx.bind_after();
             cx.scopes.last_mut().unwrap().insert(name.name.clone(), (idx, ty));
             Ok(Ty::Unit)
         }

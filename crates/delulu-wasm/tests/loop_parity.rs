@@ -192,6 +192,48 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "2\n7 21 31 301\n", "the values themselves");
 }
 
+/// **LATE-LET-1.** A function value never reads a name a `let` binds after it was made: the checker resolved its names
+/// where it was written. Both engines read them where it ran — the interpreter in the scope it closed over, the WASM
+/// engine in the frames it was defined over, by index — and a later `let` bound in that same scope or frame. So `h`
+/// called the second `g` (33 where 23), `f` read the `Str` a later `x` bound (`two40`; the WASM engine refused the `+`
+/// as DL1201), and in `inner` both `f` and `g` read the last `a` (900001 where 321001). The engines agreed with each
+/// other throughout, which is why no parity gate saw it; the values are the witness. `inner` also holds the frames a
+/// `let` opens to its block: after the `if`, `a` is the function's 1 again, not the 20 or 300 bound inside it.
+#[test]
+fn a_function_value_never_reads_a_name_bound_after_it() {
+    let src = r#"module m
+
+fn after(k: Int) -> Int {
+  let g = fn(x: Int) -> Int { x + 1 }
+  let h = fn(x: Int) -> Int { g(x) * 10 }
+  let g = fn(x: Int) -> Int { x + 2 }
+  h(k) + g(k)
+}
+
+fn inner(k: Int) -> Int {
+  let a = 1
+  var seen = 0
+  if k > 0 {
+    let f = fn() -> Int { a }
+    let a = 20
+    let g = fn() -> Int { a + f() }
+    let a = 300
+    seen = g() + a
+  }
+  seen * 1000 + a
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let x = 1
+  let f = fn() -> Int { x }
+  let x = "two"
+  out.println(str(f() + 40) + " " + x + " " + str(after(1)) + " " + str(inner(1)))
+}
+"#;
+    assert_eq!(assert_parity(src), "41 two 23 321001\n", "the values themselves");
+}
+
 /// The host writes what it reads into the guest's heap too (`fs.read_text`), and grows the memory by the same rule — a
 /// file larger than the first heap was a refusal on WASM alone.
 #[test]
