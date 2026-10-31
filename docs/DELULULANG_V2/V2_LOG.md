@@ -10660,3 +10660,66 @@ round-trip, as a read is.
 passes `--workspace --no-fail-fast -j 4` itself (a second `--no-fail-fast` stops cargo before a test runs — this run's first
 attempt). `docs/CLOUD_ROUTINE.md`: a fresh VM's disk with the snapshot's `target/`, and a mutant's witnesses in several
 targets by one command.
+
+## 2026-10-31 — on-demand routine run 11: `launch/2.0.0` brought current with `master` at `1927bca` (RW 4.79; release procedure step 1)
+
+**Read first.**
+- Run 10's three commits (`4cdad8a`, `92ffb1a`, `1927bca`) were `master`'s newest; `1927bca`'s push run `41178859307`:
+  14 jobs success, 2 skipped (`heavy-gates`, `miri-slow`). `actors_pingpong` MEASURED on arm64 (2.83x where the machine
+  gave 3.95x, against a bar of 1.48x: passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware
+  threads, 2.10x observed). The disk: Ubuntu 82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 144 → 129, macOS 92 → 88 GiB,
+  arm64 104 → 91. The newest nightly, `41033994313` (2026-10-30), was read by run 9 (18 of 18); the 2026-10-31 nightly had
+  not started when this entry was written.
+- Run 10's witnesses re-run in the VM on `1927bca`, each passed: `broker_cli`
+  `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed`, `guard_e2e`
+  `a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard`, `grants_cli`'s sealed artifact,
+  `delulu-broker` `a_capability_refusal_is_recorded_as_a_denied_use_for_a_held_node_only`, `delulu-wasm`
+  `a_read_its_scope_refuses_is_said_to_the_custody_never_asked_as_the_interpreter_does`, and `delulu`'s unit test
+  `a_capability_refusal_whose_record_was_lost_is_not_answered_as_recorded`.
+- No branch held a commit `master` lacks but the archived ones; `origin/autosave/laptop`'s newest snapshot is still
+  `942c069` (landed in `ff0b4f6`, runs 9 and 10). The git proxy refused the deletion of `claude/peaceful-carson-dfkzl9`
+  and `laptop/sandbox-fault-place` (both in `master`'s history), as it refused runs 7–10's.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1570 nodes, 17817 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+
+**The milestone.** `master` held three commits `launch/2.0.0` lacked. Release procedure step 1 in a worktree, `git merge
+--no-ff origin/master`, as `6193479`:
+- `scripts/launch-changelog.py` folded the one new `## Unreleased` section (RW 4.79) into `## [2.0.0]`. `CHANGELOG.md`
+  and the map were the only conflicts; the decision log merged clean (D-V2-155 kept, D-V2-195 in).
+- **The *Breaking* paragraph gains RW 4.79, judged against 1.x itself.** Its *Changed* line says a call its capability
+  refuses is DL0904 under every custody, where under the daemon a Guard rule or a revoked or expired lease could answer
+  first. Whether that was 1.x's behaviour or only V2's was read from the tag (`git fetch origin tag v1.0.0`): v1.0.0's
+  interpreter asked the daemon's custody before the capability (`crates/delulu-runtime/src/interp.rs:851` at the tag,
+  *"authorize the effectful op through the trait BEFORE performing it"*), and DL1410–DL1413 and DL0801 were 1.x codes
+  then. So under `--broker daemon` a 1.x driver that branched on DL1410's *"request a permit"* (or a lease's DL1402/DL1403)
+  for such a call reads DL0904 under 2.0.0 — a refused program's code moved (STABILITY.md §1), though nothing refused runs
+  and nothing that ran is refused.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree: `delulu-conform --coverage` 358/358 (diag 155, prim 86,
+  grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check examples
+  docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust under `crates/` and `fuzz/` is `master`'s at `1927bca`; only the 2.0.0 version differs, so
+  `master`'s push runs on three systems already cover its code.
+
+**Gates on the merged tree, by `scripts/launch-gates.sh`** (new, below): `LAUNCH-GATES=ok` — the Survey 1571 nodes, 17861
+edges, check ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stamped; `doctor --check` 26
+checks passed; `book` 9, `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims`
+3, `governance` 11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion
+2's three as above; `cargo deny --all-features check advisories` ok and `bans licenses sources` ok (cargo-deny 0.20.2,
+installed in the VM this run).
+
+**Read at `6193479`** (dispatched 08:16 UTC):
+- The release dry run `41183916484`: **success** in 4 min 3 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each archive checked for its target, its binary naming target and commit, and installed the way
+  `INSTALL.md` says), its `release` job skipped (no tag).
+- `everything` `41183914783`: pending at this entry's first commit.
+
+**Loop engineering: `scripts/launch-gates.sh`.** Runs 8, 9 and this one each typed the same dozen gate commands of step
+4.3 by hand, and read `survey findings`' error count by eye — that command exits 0 whatever it finds, so the step's "0
+errors" was never a gate. The script runs them in order after the merge's last edit, counts the findings' errors itself,
+fails when `cargo-deny` is missing rather than skipping it, notes whether the merged tree's Rust is `master`'s, refuses a
+HEAD that is not a `launch/*` branch, and ends with one line per gate and `LAUNCH-GATES=ok` — or `partial-ok` when
+`LAUNCH_GATES_ONLY` named a subset, never `ok`. Falsified on the merged tree before its real run: a broken link planted
+in `docs/REMAINING_WORK.md` turned `survey-findings` red (*"1 error(s)"*, `LAUNCH-GATES=failed`, exit 1); before
+cargo-deny was installed, `cargo-deny` was red (exit 127); on `master`'s checkout it refused at once (exit 2). The control
+is the green run above. `docs/CLOUD_ROUTINE.md` step 4.3 names it, and says to judge the *Breaking* paragraph against
+v1.0.0's own code.

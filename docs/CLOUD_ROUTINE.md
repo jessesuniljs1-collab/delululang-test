@@ -297,12 +297,18 @@ another OS, and then takes about seven minutes itself (run 5).
    paragraph against each section it lists, by hand — a section that moves a surface `STABILITY.md` §1 holds stable (a
    refused program's code, a command's exit code for an outcome, a JSON field's type or meaning, syntax that parsed) is
    breaking, though the program stays refused (on-demand run 9: C9's DL0209 → DL0201, C11's exit 2 → 1); keep both sides of the
-   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
-   rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document
-   gates there (`book`, `core_invariance`, `distribution`, `doctor_cli`, `editor_contract`, `evidence_claims`,
-   `governance`, `release`, `repository_structure`, and `delulu-survey`'s own suite); re-measure CHECKLIST-2.0's criterion 2
-   (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples docs/book/samples`); commit, push
-   the branch, and dispatch `ci.yml` (`jobs=everything`, about 3 h 10 min — the broker's Miri) and `release.yml` at it.
+   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*`
+   (`git checkout --theirs docs/survey/`); re-measure CHECKLIST-2.0's criterion 2 and write it; then, after the merge's
+   last edit, **`scripts/launch-gates.sh`** (on-demand run 11) — the map rebuilt, `check`, `findings` with its errors
+   counted (the command itself exits 0 whatever it finds), `scripts/clippy.sh` (the hook asks for it on a merge that brings
+   in Rust), `doctor --check`, the document gates (`book`, `core_invariance`, `distribution`, `doctor_cli`,
+   `editor_contract`, `evidence_claims`, `governance`, `release`, `repository_structure`), `delulu-survey`'s own suite,
+   criterion 2's three (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples
+   docs/book/samples`) and `cargo deny` (criterion 4) — ending `LAUNCH-GATES=ok` only when every one ran and passed, with a
+   note saying whether the merged tree's Rust is `master`'s. **Judge the *Breaking* paragraph against 1.x itself** (run
+   11): `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH` — RW 4.79's order (the daemon's custody asked before the
+   capability) was already 1.x's, so its code move is breaking. Commit, push the branch, and dispatch `ci.yml`
+   (`jobs=everything`, about 3 h 10 min — the broker's Miri) and `release.yml` at it.
    Never the reverse merge. Then `git worktree remove` it and delete its target
    (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free). **Under about 15 GB free,
    delete `master`'s `target/debug` before the launch build** (on-demand run 5: the launch build took 13 GB down to 3 GB
