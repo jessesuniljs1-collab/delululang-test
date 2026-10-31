@@ -851,26 +851,30 @@ impl Interp {
     fn exec_block_value(&self, block: &Block, parent: &Env) -> R<Value> {
         // A14: a block binds names in its own scope only by `let`. Without one its scope would stay empty, and every
         // read, write and capture passes through an empty scope to its parent — so the block runs in the parent's.
-        let own;
-        let env = if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) {
-            own = Scope::child(parent);
-            &own
-        } else {
-            parent
-        };
+        let mut env =
+            if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) { Scope::child(parent) } else { Rc::clone(parent) };
         let mut value = Value::Unit;
         let n = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = i + 1 == n;
-            value = self.exec_stmt(stmt, env, is_last)?;
+            value = self.exec_stmt(stmt, &mut env, is_last)?;
         }
         Ok(value)
     }
 
-    fn exec_stmt(&self, stmt: &Stmt, env: &Env, is_last: bool) -> R<Value> {
+    /// `env` is the block's scope; a `let` may open a new one for the statements after it (LATE-LET-1).
+    fn exec_stmt(&self, stmt: &Stmt, env: &mut Env, is_last: bool) -> R<Value> {
         match stmt {
             Stmt::Let { name, value, .. } => {
                 let v = self.eval_expr(value, env)?;
+                // LATE-LET-1: a closure made over this scope — earlier in the block, or in this `let`'s own value — reads
+                // the names the checker resolved where it was written, and this one is not among them: it binds in a
+                // scope of its own, which the statements after it run in. Bound here, a closure typed pure called the
+                // effectful function a later `let` gave its callee's name, and a `Secret.map` callback printed the
+                // plaintext, from a program `authority` called provably pure.
+                if env.is_held() {
+                    *env = Scope::child(env);
+                }
                 env.define(&name.name, v);
                 Ok(Value::Unit)
             }
@@ -1051,6 +1055,8 @@ impl Interp {
             },
             Expr::Match { scrutinee, arms, span, .. } => self.eval_match(scrutinee, arms, *span, env),
             Expr::Lambda { params, body, .. } => {
+                // LATE-LET-1: from now on a `let` in this scope, or any above it, binds where this closure cannot see.
+                env.hold();
                 let v = Value::Closure(Rc::new(Closure {
                     params: params.iter().map(|p| p.name.name.clone()).collect(),
                     body: body.clone(),

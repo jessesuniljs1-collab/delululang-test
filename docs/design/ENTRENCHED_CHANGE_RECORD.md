@@ -585,3 +585,39 @@ identity: an operation reaching outside its capability's scope.
 git checkout <this-commit>^ -- crates/delulu-conform/src/rules.rs tests/conformance/witnesses.toml
 ```
 — together with D-V2-190's code and the registry entry, or the coverage gate fails on an unwitnessed DL0908.
+
+## 2026-11-01 — `docs/design/SOUNDNESS_AUDIT.md`: §D's claim negated a second time (LATE-LET-1)
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/SOUNDNESS_AUDIT.md`: one box added at the end of §D, after *"the tests are the actual guarantee"*. It records that the claim was negated by the runtime's name resolution, gives the program, and names the witnesses. No existing sentence changes. |
+| Entrenched by | `.github/CODEOWNERS:27` → `@jessesuniljs1-collab` |
+| Campaign | the weekly verification sweep of 2026-11-01; `REMAINING_WORK.md` 2.23; decision D-V2-199 |
+| Approved by | **the head chef, 2026-11-01, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+The audit's §D claims that in a well-typed program every runtime effect is in the static row of every function on the
+stack, and it keeps C88's box saying so once already proved false. LATE-LET-1 proved it false again: the checker typed a
+closure's callee as a pure function, and both engines called the effectful one a later `let` bound under the same name.
+A document that names its claim must say when the claim failed, or the next reader relies on it (HANDOFF §11.8: *a
+document that names a residual must be re-read when the code moves*).
+
+**Why this is not an RFC**
+
+Nothing in the language's meaning changes: the box records a defect in the runtime, now fixed, against the meaning the
+checker already gave. No rule is added, removed or reworded.
+
+**Verified before the change**
+
+1. The program in the box checked clean, `authority` said *"(none — provably pure)"*, and `run --grant console`
+   printed, on the binary before D-V2-199; after it, it prints nothing on either engine.
+2. The witnesses named in the box are red before D-V2-199 and green after it (the decision's evidence).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
+```
