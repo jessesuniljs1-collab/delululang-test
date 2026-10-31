@@ -5367,3 +5367,62 @@ dead-men to the earliest waiting arrival while it lasts — a stream only a proc
 in the ordinary line: the old behaviour), M970 (the quarantine left out), M971 (dead-men judged by the revocation's own
 arrival), M972 (no wake: an idle daemon left eight tests' revocations unanswered), M973/M973a/M973b (the words): all red,
 control green. By hand (`f4.py`, F4's shape): 15.18 s DL1401 before, 9.81 s revoked after. The code is `294ddfa`.
+
+## D-V2-199 — LATE-LET-1 (RW 2.23): a `let` binds where no closure made before it can see, on both engines — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** The checker resolves each name a closure (a lambda, or on the WASM engine a function value it inlines) reads
+where the closure is written, and a `let` is not recursive: `let f = fn(n: Int) -> Int { f(n - 1) }` is DL0301, *"unknown
+name `f`"*. Both engines read a closure's names when it runs, in the scopes it was made over:
+- the interpreter's closure holds its maker's `Env` (an `Rc` of the scope chain), and a `let` defined its name in the
+  block's scope, rebinding in place a name already there;
+- the WASM engine inlines a function value where it is called and lets its body read the frames `0..scopes_at` it was
+  defined over, by index (WASM-HYGIENE-1), and a `let` inserted into the innermost of them.
+So a `let` made after a closure, in a scope the closure was made over, was what the closure read. Found 2026-11-01 by the
+laptop while reading the interpreter's scopes for RW 3.24, during the weekly verification sweep. Each shape below
+checked clean:
+- `let g = fn() -> Int { 0 }; let h = fn() -> Int { g() }; let g = fn() -> Int ! {Write} { out.println(…); 1 }; h()`
+  in a function with an empty row: `delulu authority` said *"(none — provably pure)"*, and `run --grant console`
+  printed on both engines. The same held from an inner block through a `var`, and past a parameter of the same name.
+- With a `Secret.map` callback in `h`'s place, the interpreter printed `plaintext: hunter2` from a program with no
+  `Declassify`. This is C88's shape: R-4 and R-2 reopened (`SOUNDNESS_AUDIT.md`). The WASM engine refuses
+  `Secret.map` (DL1205).
+- `let x = 1; let f = fn() -> Int { x }; let x = "two"; f() + 40` gave `two40` on the interpreter, and the WASM engine
+  refused the `+` as DL1201.
+The capability check held throughout (no `--grant console`, DL0703). The engines agreed with each other in every case, so
+no parity test and no run of the 50,000-program differential could see it.
+
+**Decision.**
+1. **The interpreter.** A scope a closure is made over is *held*: `Scope::hold` marks it and every scope above it,
+   stopping at one already held (whose ancestors were held with it), when `Expr::Lambda` makes a closure. A `let` whose
+   block scope is held after its value is evaluated binds in a new child scope, and the block's later statements run in
+   that scope (`exec_stmt` takes the block's `&mut Env`). The value is evaluated first because a `let` is not recursive:
+   a closure made in its own value reads the name the `let` hides (`let y = [fn() -> Int { y }]`).
+2. **The WASM engine.** `Cx::held` records how many scope and callable frames the function values defined in the body
+   see, at most (`Cx::callable` raises it). `Cx::bind_after`, called by each of a `let`'s three forms before it binds,
+   opens a new frame pair when a function value sees the innermost one. `compile_block_inner` truncates both stacks to
+   the frames it found, and restores `held`, because a function value defined in a block ends with it.
+3. **The meaning is the checker's**, which is lexical scope. A program that made a closure, then a `let` of a name the
+   closure reads, then called it, now reads the earlier binding on both engines. A closure still shares a `var` with its
+   maker, by reference (`var count = 0; let inc = fn() -> Int { count = count + 1 … }` counts 1, 2 and leaves 2, as
+   before).
+4. **Not taken:** copying the scope at the closure's making, which would break that sharing of `var`s on both engines; a
+   new scope for every `let`, which would bring back the allocation A14 removed from every block; refusing a `let` that
+   shadows a name a closure reads, which would change the language and refuse ordinary shadowing.
+5. `SOUNDNESS_AUDIT.md` §D gains a box saying its claim was negated a second time, through the runtime's name resolution
+   rather than the checker (entrenched, `ENTRENCHED_CHANGE_RECORD.md`).
+
+**Residual.** The holding is conservative: once a closure is made in a scope, the first `let` after it there, and in each
+scope above it, opens one scope more (one allocation), though the closure may never read that name. The WASM engine's
+extra frames exist only while compiling. A `var` that a closure shares is reached by assignment as before, which is the
+meaning the checker gives it.
+
+**Evidence.** `late_let_cli` (3 tests, the real binary on the interpreter: the effects, the secret, the values), red before
+(`LEAK: a swapped callee`, `LEAK: through a var`, `LEAK: past a parameter`; `plaintext: hunter2`; `two40` and a list
+added to an `Int`). `loop_parity` `a_function_value_never_reads_a_name_bound_after_it` holds both engines to `41 two 23
+321001`; red before: the WASM engine refused the program (DL1201), and the interpreter gave `two40 two 33 900001`.
+Mutants: M974 (no hold at a lambda), M975 (a held scope bound into), M976 (`hold` marks its own scope alone), M977 (held
+asked before the value), M978 (`bind_after` does nothing), M979 (a function value holds nothing) and M980 (a block closes
+one frame) were all red, and the control green. M976 survived the first form of the witness, whose later value was itself
+a lambda made in the outer scope and held it directly; the witness now makes that value in another function. The
+suites: `delulu-runtime` and `delulu-wasm` whole; `examples_run`, `core_invariance`, `conformance`, `for_loop_cli`,
+`actors_cli`, `actors_cycles_cli`, `deep_values_cli`, `wasm_cli`, `book`, `stdlib_p3`; `delulu-check`'s `laundering`.

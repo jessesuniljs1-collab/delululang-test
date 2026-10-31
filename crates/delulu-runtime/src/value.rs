@@ -1058,6 +1058,8 @@ pub type Env = Rc<Scope>;
 pub struct Scope {
     vars: RefCell<Vars>,
     parent: Option<Env>,
+    /// LATE-LET-1: a closure was made over this scope, or over one inside it ([`Scope::hold`]).
+    held: std::cell::Cell<bool>,
 }
 
 /// How many bindings a scope finds by comparing names before it keeps an index (A14).
@@ -1146,10 +1148,24 @@ impl fmt::Display for Name {
 
 impl Scope {
     pub fn root() -> Env {
-        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: None })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: None, held: std::cell::Cell::new(false) })
     }
     pub fn child(parent: &Env) -> Env {
-        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: Some(parent.clone()) })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: Some(parent.clone()), held: std::cell::Cell::new(false) })
+    }
+    /// LATE-LET-1: a closure is being made over this scope. It reads its names here and in every scope above, for as long
+    /// as it lives, and the checker resolved each of them where the closure was written — so a `let` made in any of these
+    /// scopes from now on must bind in a scope of its own ([`Scope::is_held`]), or the closure would read it.
+    pub fn hold(&self) {
+        let mut scope = Some(self);
+        // A scope already held had every scope above it held at the same time.
+        while let Some(s) = scope.filter(|s| !s.held.replace(true)) {
+            scope = s.parent.as_deref();
+        }
+    }
+    /// Does a closure read this scope ([`Scope::hold`])?
+    pub fn is_held(&self) -> bool {
+        self.held.get()
     }
     pub fn define(&self, name: &str, value: Value) {
         let old = self.vars.borrow_mut().put(name, value);

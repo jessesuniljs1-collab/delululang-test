@@ -11058,3 +11058,44 @@ this run had written by hand; a write citing `22e5c8c` appended exactly one sent
 nothing; with `examples/demo.delulu` put out of format it exited 1 and wrote nothing (each probe restored, the tree
 clean). `scripts/launch-gates.sh` names it when `criterion-2-cited` fails, and step 4.3 of `docs/CLOUD_ROUTINE.md` names
 it.
+
+## 2026-11-01 — the laptop: a closure reads each name as it was where the closure was written (LATE-LET-1, RW 2.23, D-V2-199); the weekly verification sweep
+
+**The sweep (`docs/CLOUD_ROUTINE.md` step 4.6).** First, the session synced. On-demand routine runs 9–15 had landed #103,
+closed RW 4.79, 4.67 and 4.53, and kept `launch/2.0.0` current, and every push run they made was read green. The
+adversarial pass covered the two newest features:
+- **ESTOP-QUEUE-1's revocation line.** A revocation needs no authority to reach the line that goes first, so a stream of
+  them holds the dead-men to the earliest waiting arrival for as long as it lasts. D-V2-198's Residual already records
+  exactly that: a stream only a process of the broker's own user can send, RW 4.4. No new defect.
+- **RW 4.67's allocator window.** A block that grows inside the window is moved by alloc, copy and a zeroing `dealloc`,
+  never by the system's `realloc`. A window cannot open in the middle of a realloc that holds the secret, because the
+  bytes enter only after it opens. The window closes after the request's runtime thread is joined. It holds.
+- **The documents scan** (HANDOFF §11.8: a residual named in a document is re-read when the code moves). The live
+  documents were searched for this week's closures (RW 4.53, 4.67, 4.79, 6.38–6.47): the Book and RFC 0001 already
+  describe the revocation line, and none calls a closed row open.
+
+**What was found** while reading the interpreter's scopes for RW 3.24, the next milestone: a `let` rebinds a name in the
+block's own scope, and a closure holds that scope by reference. Witnessed on the release binary of `a999e71`:
+- A function typed pure whose closure calls `g`, after a later `let g = fn() -> Int ! {Write} {…}`: `check` clean,
+  `authority` *"(none — provably pure)"*, and `run --grant console` printed, **on both engines**. The WASM engine inlines
+  a function value and reads the frames it was defined over by index, and the `let` inserted into the same frame.
+- With a `Secret.map` callback in its place, the interpreter printed `plaintext: hunter2`, with no `Declassify` anywhere.
+  This is C88's shape: R-4 and R-2 reopened.
+- A later `let x = "two"` made `f() + 40` yield `two40`, and a closure kept in a list read `"seven"` as an `Int`.
+- The same held from an inner block through a `var`, and past a parameter. Assigning an effectful function to a pure
+  function-typed `var` is refused (DL0401), and the capability check held throughout.
+The two engines agreed in every case, so the parity tests and the differential gate could not see it.
+
+**The change** (D-V2-199). The interpreter holds a scope a closure is made over, and every scope above it. A `let` whose
+scope is held after its value is evaluated binds in a new child scope, which the block's later statements use. The WASM
+engine records how many frames its function values see. A `let` into a seen frame opens a new frame pair, and a block
+closes every frame it opened. A closure still shares its maker's `var`s by reference, as before (`1 2 2` on the
+interpreter; `5` read through a closure on both engines).
+
+**Gates.**
+- `late_let_cli` (3) and `loop_parity`'s `a_function_value_never_reads_a_name_bound_after_it`, each red before.
+- Mutants M974–M980, all red. M976 (`hold` marks its own scope alone) survived the first form of the witness, because
+  the later `let`'s value was itself a lambda made in the outer scope and held it directly. The witness now makes that
+  value in another function, and M976 prints `LEAK: through a var`.
+- `SOUNDNESS_AUDIT.md` §D records the second negation, with the lesson: a gate that compares two implementations finds
+  where they differ; only one held to the checker's meaning finds what they share.

@@ -6972,3 +6972,24 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      item a VM can build and verify; RW 2.12's last methods (PUT, PATCH, DELETE) only when a program needs one.
   7. *[laptop]* delete the merged branches above from `origin`.
   8. *[laptop]* the launch, only on the owner's word.
+
+### 2026-11-01 — LATE-LET-1: a closure reads each name as it was where it was written (RW 2.23, D-V2-199); the weekly sweep (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/late-let`   Pull request: opened with this commit
+- **Synced first:** `master` fast-forwarded `6516ae5` → `a999e71` (routine runs 9–15). Every push run they made was read
+  green, the last `41240827620` on `a999e71` (14 success, 2 skipped). `launch/2.0.0`'s citations merge `43cafaa`
+  (run 15's *Open / next* 1). Deleted from `origin`, each in `master`'s history: `laptop/sandbox-fault-place`,
+  `claude/peaceful-carson-0fcquc`, `-dfkzl9`, `-rx0bf9`, `-xmq3m4` (run 15's *Open / next* 7). Survey and doctor at the
+  start: 1578 nodes, 17942 edges; 29 checks.
+- **What:** see V2_LOG's entry of the same date: the sweep's adversarial pass and documents scan, then LATE-LET-1.
+- Files and folders: A `crates/delulu/tests/late_let_cli.rs`. M `crates/delulu-runtime/src/value.rs`,
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/loop_parity.rs`,
+  `docs/design/SOUNDNESS_AUDIT.md` (entrenched: one box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 2.23), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-199),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4, §11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- For the laptop's memory: HANDOFF §11.4 (LATE-LET-1) and §11.5 (two engines that agree prove only that they agree).
+- **Open / next, in order:** land this on a green run; dispatch the weekly `everything` run at `master` and read every
+  job; bring `launch/2.0.0` current (step 4.3: this section's CHANGELOG and the *Breaking* paragraph judged for it); RW
+  3.24; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

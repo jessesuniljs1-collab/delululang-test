@@ -1316,6 +1316,13 @@ spells the same thing?**
   earliest arrival still waiting. Never put revocations back in the ordinary line, and never judge a dead-man by a
   revocation's own arrival — a beat that arrived in time waits behind it. A new request kind that only narrows (a stop of
   any sort) belongs in `ReqBody::is_revocation`. Search key: `is_revocation` and `revocations.try_recv`.
+- **LATE-LET-1 — a closure reads each name as the checker resolved it** (the laptop, 2026-11-01, D-V2-199). A `let` is
+  not recursive and binds a new name, but both engines read a closure's names in the scopes it was made over, where a
+  later `let` bound them. A function `authority` called pure printed, and a `Secret.map` callback printed a plaintext
+  secret with no `Declassify` (C88's shape, R-4 and R-2 again). Never move a `let` back into a scope a closure holds,
+  however tempting one scope per block is (A14), and never copy a closure's scopes at its making: its maker's `var`s are
+  shared by reference. Search key: `define(` into an `Env` that `Expr::Lambda` captured, and a `callables` or `scopes`
+  insert in a `let` without `Cx::bind_after`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1999,6 +2006,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   typo there is a red gate, and a stale count copied forward a false citation. `scripts/launch-criterion-2.py` measures
   and writes it, and refuses a tree under 100%. Where a procedure writes text that a check later parses, give the
   writing to the same kind of program as the reading.
+- **Two engines that agree prove only that they agree** (the laptop, 2026-11-01, LATE-LET-1). Every parity test and the
+  50,000-program differential compare the interpreter with the WASM engine, and both read a name a later `let` bound,
+  so all of them stayed green on a program that escaped its effect row. Assert the VALUE the checker's meaning gives, not
+  only that the engines match. And **a witness exercises the rule it names alone**: M976 survived because the witness's
+  later value was a lambda made in the very scope the mutant stopped holding, which held it anyway.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
