@@ -412,6 +412,12 @@ kept the last mutant's binary — run 15), and ends with a CONTROL run of the sa
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
+**A scan of a process's memory waits where the program allocates nothing** (on-demand run 12, RW 4.67): a copy freed on
+the run's own thread is overwritten by its next allocation, so a scan made during a second request missed one a mutant
+left (M968); scanned while the program blocked in `console.readline`, it was red 3 of 3. Count a fragment as well as the
+whole, read only resident pages (`/proc/PID/pagemap` — a whole-mapping scan of a debug build took 34 s), and keep a
+mutant's binary for by-hand probes with `MUTANTS_KEEP=DIR scripts/mutants.py …` rather than a stash (one `git stash drop`
+took the fix with the mutant).
 **A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
 `target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
 the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.

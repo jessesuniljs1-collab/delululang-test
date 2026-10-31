@@ -536,7 +536,11 @@ shows as live only what a running holder holds. A `--lease` run's own node is th
 
 These are known, documented, and not fixable by configuration:
 
-- **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does.
+- **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does. Such a process reaches the broker's socket
+  and its state directory alike, and `secrets.json` there holds each secret's bytes in plaintext — so it can also ask the
+  broker for the bytes of a secret a node may only send (`SendSecret`), though the node holds no `Declassify`. The
+  socket's door is the directory's: whoever can ask could already read (RW 4.66, D-V2-197). A sandboxed guest is the one such
+  process that reaches neither: it opens no socket, and the state directory is refused to it.
 - **A concurrent writer into a granted directory — closed as a race, kept as advice.** Filesystem
   containment used to be a check-then-open, so a second writer could swap a checked file for a symlink
   in between (`CONTAIN-TOCTOU-1`). Since V2 P5c (2026-09-27, FS-RACE-1) every file effect opens the

@@ -10735,3 +10735,69 @@ in `docs/REMAINING_WORK.md` turned `survey-findings` red (*"1 error(s)"*, `LAUNC
 cargo-deny was installed, `cargo-deny` was red (exit 127); on `master`'s checkout it refused at once (exit 2). The control
 is the green run above. `docs/CLOUD_ROUTINE.md` step 4.3 names it, and says to judge the *Breaking* paragraph against
 v1.0.0's own code.
+
+## 2026-10-31 — on-demand routine run 12: a sent secret leaves no copy of its bytes in the run (RW 4.67, D-V2-196); RW 4.66 decided (D-V2-197)
+
+**The milestone, named before building:** RW 4.67 closed end to end — a sent secret's plaintext leaves no copy in the run
+process after the send: witnessed red by a scan of the run's memory over real TLS under the daemon custody, fixed,
+mutants, the full suite, the other runners — with RW 4.66 decided alongside, with its evidence.
+
+**Housekeeping.** `master` at `9553ab7` (run 11's close), its push run `41190824409` green (14 jobs success, 2 skipped;
+`actors_pingpong` MEASURED on arm64, 2.90x where the machine gave 3.95x against a bar of 1.48x, NOT MEASURED on Ubuntu;
+disk Ubuntu 82 → 67 GB free, arm64 104 → 91). The nightly `41187794369` (on `1289d8b`): 17 of 18 jobs success when these records were written, the broker's `miri-slow` still running (2 h 54 min in, under the 4 h cap) — read at the closing commit. No branch held a
+commit `master` lacks but the archived ones (`claude/peaceful-carson-dfkzl9` and `laptop/sandbox-fault-place` are in its
+history); `origin/autosave/laptop`'s newest snapshot is still `942c069` (landed in `ff0b4f6`). The Survey matched the tree
+(1572 nodes, 17840 edges) and `doctor --check` passed 26 checks. Effort `xhigh` (`CLAUDE_EFFORT` and the transcript).
+
+**What it was — read red on `9553ab7` before any fix.** A run under `--broker daemon` sent a broker-held secret with
+`get_with_secret` to a TLS server on loopback (a certificate only `SSL_CERT_FILE` vouched for), then waited on a held
+second request while its memory was read through `/proc/PID/mem`: one copy, `…on: hunter2-…` — the serialized request's
+`authorization` header — in an anonymous mapping (the arena of reqwest's runtime thread), three runs of three; the same on
+`--engine wasm`. With a 46- to 8,186-byte secret the unscrubbed binary left up to six partial copies. The copies are made
+by code that is not the runtime's (the custody's decoded answer, `reveal`'s copy, each header the egress client builds,
+reqwest's `HeaderValue`, hyper's head buffer), each freed as it stood; P17-F's `SecretVal` zeroing reaches only its own
+buffer, and said so.
+
+**The decision (D-V2-196) and what changed.**
+- `delulu_runtime::scrub` (new): a process-wide `Window` count, `is_open()` (one atomic load) and `wipe` (volatile, so no
+  store is elided before the free).
+- `crates/delulu/src/ceiling.rs`: while a window is open, `CeilingAware::dealloc` zeroes the block first and `realloc`
+  moves a block by `alloc`, a copy and that `dealloc`, never by the system's `realloc`.
+- Two windows: around the custody's answer (`interp::broker_secret_send`, both engines) and around every secret-bearing
+  request (`prim`'s request arm, any custody), closing after the request's client is dropped and its runtime thread joined.
+- Not taken: zeroing only the runtime's own copies (hyper's was the one left), zeroing every free always, the broker
+  making the request (D-V2-197).
+
+**The witness.** `broker_cli` `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`: over real
+TLS under `--broker daemon`, on the interpreter (scanned while the program waits on standard input — `console.readline`
+allocates nothing) and on the WASM engine (no `readline` there: scanned in a held second request), counting the whole
+secret and its last 24 bytes in every resident page of the run's writable mappings (`/proc/PID/pagemap`). Controls: the
+server saw the secret arrive, and the scan finds the program's own path. Red on `9553ab7`: `[([], Ok(10), Ok(1)),
+(["--engine", "wasm"], Ok(13), Ok(1))]` (the first form, before the fragment count); green with the fix; four concurrent
+copies of the test binary green. A sandboxed guest is never handed a secret (DL1401), so a guest is no case.
+
+**Mutants** (`scripts/mutants.py`, the witness's own command): **red** — M961 (`dealloc` never zeroes), M963 (`is_open`
+always false), M964 (no window around the request), M966 (`wipe` skips its words), M968 (`SecretVal`'s own zeroing
+removed: red only at the stdin scan point — it survived the first form, which scanned during a second request whose
+allocations overwrote the freed block). **Survived, each read before it was recorded:** M962 and M967 (the grown block
+moved by the system's `realloc`, or its old block freed unzeroed) — by hand with secrets up to the 8 KiB header limit, no
+block holding the bytes was grown by a move the scan could see (glibc grew it in place, or a later zeroed free reused it);
+M965 (no window around the custody's answer) — the decoded frame is freed on the run's own thread and reused within the
+request's window, so no scan point reached it, even unscrubbed on the path where a header rule refuses the secret after the
+broker's answer. Those walls stay: the allocator's contract lets `realloc` free the old block as it stands, and the frame
+does hold the bytes when it is freed. Control green.
+
+**RW 4.66 (D-V2-197).** Measured: the socket lives in the `0700` state directory beside `broker.key` and `secrets.json`
+(both `0600`), whose JSON holds each secret in plaintext (`cat` as the same user read `{"API_TOKEN": "hunter2-…"}`); on
+Windows the pipe admits only the broker's own user. So every caller that can send `SendSecret` can read every secret
+without it. Decided: unchanged, a residual named in `docs/DEPLOYMENT.md` §5; the peer binding and the sealed token are
+not taken, for the reasons recorded there.
+
+**Verification.** `scripts/clippy.sh -j 4` clean and stamped; `scripts/check-other-os.sh` clean for all five targets;
+`delulu-runtime`'s `scrub` unit tests (2) passed. The full suite alone at `ab46618`: 2,623 passed, 0 failed, 16 ignored (190 binaries), cargo exit 0, the tree unmoved, no daemon left — three more than run 10's 2,620 (the witness and the two `scrub` unit tests). Read on the runners at
+`ab46618` (every test of `broker_cli`): Ubuntu `41198603696` and arm64 `41198609344` — 20 passed each, the witness among them (its control proves a non-root runner reads its child's memory); macOS `41198605560` and Windows `41198607230` — success (the witness is Linux-only; the other secret sends run there through the changed allocator).
+
+**Loop engineering.** `scripts/mutants.py` keeps each mutant's built `delulu` under `MUTANTS_KEEP=DIR` (this run built
+three by hand to probe its survivors, and an improvised undo, `git stash push` then `git stash drop`, took the fix with a
+mutant — re-applied from the record); `docs/CLOUD_ROUTINE.md` step 5 says where a memory scan must wait; `HANDOFF.md`
+§11.5 records both traps, with the four by-hand reds that were the old binary.

@@ -5234,3 +5234,71 @@ name no order between a capability and its custody; the move is named in CHANGEL
 ungated read, on the interpreter, the WASM engine and a sandboxed guest) and `guard_e2e`
 `a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard` (both tiers, both engines), each read
 red on `658daf1` first; the broker's and the daemon's unit tests; mutants M946–M960 (V2_LOG, on-demand routine run 10).
+
+## D-V2-196 — RW 4.67: while a secret's bytes are in the process for a send, the `delulu` binary's allocator zeroes every block it frees, so a sent secret leaves no copy behind — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** Under the daemon a secret's bytes enter the program process only to be sent: the broker hands them to the
+egress client for one origin (D-V2-134). Routine run 25's red team (F4) found one copy of the plaintext in the run's heap
+after the send, until exit. On-demand routine run 12 read it again on `9553ab7` by scanning the run's memory through
+`/proc` while it waited after the send: one copy, `…on: hunter2-…` — the serialized request's `authorization` header — in
+the arena of reqwest's runtime thread, on the interpreter and on the WASM engine alike. The copies are made by code that
+is not ours (the custody's answer as it is read and parsed, `reveal`'s copy, each header the egress client builds,
+reqwest's `HeaderValue`, hyper's head buffer) and each buffer is freed as it stands. No call site can clear a buffer it
+never sees; zeroing our own copies alone would have left hyper's.
+
+**Decision.**
+1. **A window, and the allocator's rule.** `delulu_runtime::scrub::Window` counts, process-wide, the sends whose bytes
+   are in this process. While one is open, the `delulu` binary's global allocator (`ceiling::CeilingAware`) zeroes every
+   block before it frees it — on every thread, because the request is made on reqwest's — and moves a block that grows
+   by `alloc`, a copy and that same `dealloc`, never by the system's `realloc`, which may free the old block as it stands.
+   Outside a window the cost is one atomic load per free.
+2. **Two windows cover a send.** One while the custody is asked for the bytes (`interp::broker_secret_send`, both
+   engines: the answer is read and decoded into buffers freed as it goes); one around every request that carries a
+   secret (`prim`'s request arm, under any custody), which closes only after the request's client has been dropped and
+   its runtime thread joined. Between the two the bytes live in one `SecretVal`, which zeroes its own buffer as it is
+   dropped (P17-F).
+3. **What it is not.** The rule is the `delulu` binary's: a program embedding `delulu-runtime` under another allocator
+   gets no scrubbing. It clears what is freed, not what is held — the embedded custody holds every secret's bytes in the
+   process for the whole run by design, and there the window clears only the send's own copies. A sandboxed guest is
+   never handed a secret (DL1401), so its host's send is not a case.
+4. **Not taken:** zeroing only our own copies (hyper's head buffer is out of reach — it is the copy run 25 found); a
+   zero-on-every-free allocator (a memset on every free of every program for a residue that exists only during a send);
+   the broker making the request itself (the serial daemon would wait on the network — RW 4.53 — and D-V2-197 says what
+   it would not buy).
+
+**Evidence.** `broker_cli` `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`, over real TLS
+(a server presenting a certificate only `SSL_CERT_FILE` vouches for) under `--broker daemon`, on the interpreter (scanned
+while the program waits on standard input, which allocates nothing) and the WASM engine (scanned in a held second
+request): red on `9553ab7` — `[([], Ok(10), Ok(1)), (["--engine", "wasm"], Ok(13), Ok(1))]`, one copy each beside the
+control's count — and green with the fix; two controls in it (the server saw the secret arrive; the scan finds the
+program's own path). Four concurrent copies of the test binary green. By hand with a 46- to 8,186-byte secret: the
+unscrubbed binary left up to six partial copies, the fixed one none. Mutants: see V2_LOG (on-demand routine run 12).
+
+## D-V2-197 — RW 4.66: a raw `SendSecret` from a caller of the broker's own user stays answered — the socket admits exactly whom the state directory admits, and the directory holds every secret in plaintext — DECIDED, a residual named in `docs/DEPLOYMENT.md` §5 — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** Routine run 25's red team (F3): a raw `SendSecret` naming a node returns the bytes to any caller of the
+socket, though the node holds no `Declassify` and `Expose` would refuse it; the broker cannot tell the run's egress
+client from another process of the operator's user. The row proposed binding a send to the run that redeemed the node
+(the peer credential of the connection), or handing the egress client a one-use sealed token instead of the bytes.
+
+**What was measured** (on-demand routine run 12, Linux): the socket lives in the state directory, which the broker
+makes `0700` (`broker_transport.rs`), beside `broker.key` (`0600`) and `secrets.json` (`0600`), whose JSON holds each
+secret's bytes in plaintext (`{"API_TOKEN": "hunter2-…"}`, read back with `cat` as the same user). On Windows the pipe
+admits only the broker's own user (an owner-only DACL, then the client's SID compared), the user whose directory it is.
+So every caller that can send `SendSecret` can read every secret, and the broker's key, without asking anything.
+
+**Decision.** No change to the broker's answer; RW 4.66 is closed as a decided residual of the same-user boundary,
+which Tiers 0 and 1 do not contain and Tier 2 does (`docs/DEPLOYMENT.md` §5 now says so in these words).
+- **The peer binding is not taken.** A caller that can reach the socket can read the lease token the run was handed (it
+  is on the run's command line, `--lease TOKEN`) and redeem it itself, and so be the peer the binding names; it can read `secrets.json` in any case. A check that protects
+  nothing the caller cannot take another way would read as a boundary that is not there.
+- **The sealed token is not taken.** Something in the program process must put the bytes on the wire; only the broker
+  making the request itself would keep them out of it — a redesign of the serial daemon around network waits (RW 4.53)
+  that would still leave the same caller its `cat`.
+- **The one same-user process that cannot read the directory cannot reach the socket either:** a sandboxed guest opens
+  no new socket (seccomp, GUEST-SOCKET-1, D-V2-61), is refused the state directory and every network but its channel on macOS
+  (Seatbelt, T14), and on Windows runs as a per-run AppContainer with no network and none of the operator's files
+  (PS-B-03, T14). What separates a program's account from the custody is a
+  second account (Tier 2): it reaches neither the socket nor the directory.
+- **Revisit** if the secret store is ever sealed against its own user (a key the user's processes cannot read): then
+  the socket would be the weaker door, and the binding worth building.

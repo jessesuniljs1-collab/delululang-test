@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sent secret leaves no copy of its bytes in the run, 2026-10-31
+
+- **Fixed: once a run has sent a broker-held secret, no copy of its bytes stays in the run's memory** (RW 4.67,
+  D-V2-196). Under `--broker daemon` a secret's bytes enter the program's process only to be sent to an origin its grant
+  names, and the copies made on the way to the wire — the broker's answer, each header, the serialized request — were
+  freed without being cleared: one stayed in the run's heap until the run ended, on the interpreter and on the WASM
+  engine. Now, while a send's bytes are in the process, `delulu` zeroes every block it frees, on every thread, and a scan
+  of the run's memory after the send finds none. What a program can do is unchanged; outside a send, a free costs one
+  atomic load.
+- **Documented: a process of the broker's own user can ask it for a secret's bytes, as it can read them in
+  `secrets.json`** (RW 4.66, D-V2-197). The broker's socket admits exactly whom its state directory admits, and
+  `docs/DEPLOYMENT.md` §5 now says so; a second OS account (Tier 2) is the boundary between them.
+
 ## Unreleased — a use its capability refuses is recorded refused, never allowed, 2026-10-31
 
 - **Fixed: the audit chain no longer records `use allow` for a call the program's own capability refuses** (RW 4.79,

@@ -6628,3 +6628,66 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   6. *[laptop]* delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-nxocco` and `laptop/sandbox-fault-place`
      from `origin`.
   7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 12: a sent secret leaves no copy of its bytes in the run (RW 4.67, D-V2-196); RW 4.66 decided (D-V2-197)
+- Session: `https://claude.ai/code/session_01Deh6W7aG4yTRkBQDRS6Tgn`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 412 when its records were written). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `claude/peaceful-carson-rx0bf9` for the code's runner witnesses, then `master` fast-forwarded to it and pushed
+  (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `9553ab7` (`master` at the start; its push run `41190824409` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.67 closed end to end — a sent secret's plaintext leaves no copy in the
+  run process after the send (witnessed red by a scan of the run's memory over real TLS under the daemon custody, fixed,
+  mutants, the full suite, the runners) — with RW 4.66 decided alongside. **Delivered:** `ab46618` — while a send's
+  bytes are in the process (`delulu_runtime::scrub::Window`: one while the custody is asked, one around every
+  secret-bearing request), the `delulu` binary's allocator zeroes every block it frees, on every thread, and moves a
+  growing block through that free. Read red on `9553ab7` (one copy on the interpreter, one on the WASM engine — hyper's
+  serialized request, in reqwest's runtime thread's arena), green after; mutants M961, M963, M964, M966, M968 red, M962,
+  M965 and M967 read and recorded as walls no scan point reaches; the full suite 2,623 passed, 0 failed; the runners green before
+  `master` moved. RW 4.66 decided (D-V2-197): the socket admits exactly whom the state directory admits, and
+  `secrets.json` there holds every secret in plaintext — a residual of the same-user boundary, now in `DEPLOYMENT.md` §5.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The Survey and `doctor` healthy at the start (1572 nodes, 17840 edges; 26 checks). `gh` is
+  installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+- Commits: `ab46618` (the fix and its witness), this entry's records commit (with `scripts/mutants.py`'s `MUTANTS_KEEP`), and
+  this entry's closing commit (the push runs read).
+- Files and folders (`git diff --name-status 9553ab7..HEAD`): A `crates/delulu-runtime/src/scrub.rs`,
+  `docs/assistant-memory/a-scan-point-must-not-allocate.md`. M `crates/delulu-runtime/src/lib.rs`, `interp.rs`, `prim.rs`,
+  `value.rs` (a comment); `crates/delulu/src/ceiling.rs`; `crates/delulu/tests/broker_cli.rs`; `crates/delulu/Cargo.toml`
+  (dev-dependencies `rcgen`, `rustls`), `Cargo.lock` (their two edges); `scripts/mutants.py`; `CHANGELOG.md`,
+  `docs/DEPLOYMENT.md` (§5), `docs/REMAINING_WORK.md` (rows 4.66, 4.67), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-196, D-V2-197), `V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md` (step 5),
+  `HANDOFF.md` (§11.4, §11.5), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `9553ab7`'s push run `41190824409` (run 11's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.90x against 1.48x, passed), NOT MEASURED on Ubuntu; disk Ubuntu 82 → 67 GB free, arm64 104 → 91.
+  - The nightly `41187794369` (2026-10-31, on `1289d8b`): 17 of 18 jobs success when these records were written, the broker's `miri-slow` still running (2 h 54 min in, under the 4 h cap) — read at the closing commit.
+  - `witness.yml` at `ab46618`, every test of `broker_cli`: Ubuntu `41198603696` and arm64 `41198609344` — 20 passed each, the witness among them (its control proves a non-root runner reads its child's memory); macOS `41198605560` and Windows `41198607230` — success (the witness is Linux-only; the other secret sends run there through the changed allocator).
+  - Push runs: `ab46618`'s CI `41199511756` in progress when these records were written; both read at this entry's closing commit.
+- **Loop engineering:** `scripts/mutants.py` keeps each mutant's `delulu` under `MUTANTS_KEEP=DIR` (falsified: a kept
+  M963 binary left copies by hand where the restored tree's left none); `docs/CLOUD_ROUTINE.md` step 5 says a memory scan
+  waits where the program allocates nothing, counts a fragment, and reads only resident pages; `HANDOFF.md` §11.5 records
+  the `git stash drop` that took the fix with a mutant and the four by-hand reds that were the old binary.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9` (this run's) and
+  `laptop/sandbox-fault-place` from `origin` — all in `master`'s history (`claude/peaceful-carson-nxocco` is gone already)
+  — since this session could not (this session's permission classifier refused `git push --delete` for `claude/peaceful-carson-dfkzl9` and `laptop/sandbox-fault-place`; not retried).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.67 — the copy that stayed was not ours, so the rule is the
+  allocator's), §11.5 (a scan point that allocates erases what it looks for; never `git stash drop` a mutant), and
+  `docs/assistant-memory/a-scan-point-must-not-allocate.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push runs on this entry's records and closing commits, and the nightly `41187794369`'s last job (the broker's Miri) if this entry's closing commit does not name its end.
+  2. Bring `launch/2.0.0` current with `master` (step 4.3, `scripts/launch-gates.sh`): fold RW 4.67's CHANGELOG section
+     (a *Fixed* and a *Documented* line — neither moves a surface `STABILITY.md` §1 holds stable, so the *Breaking*
+     paragraph should not change; judge it), dispatch its `everything` run and release dry run, read them, cite them.
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red (the nightly `41187794369`'s took over 2 h 54 min — see the closing commit).
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  5. The work order's items 5–7, now that RW 4.66 and 4.67 are closed: RW 2.12's last methods (PUT, PATCH, DELETE — P9's
+     open end, "each a primitive of its own when a program needs one"), RW 4.53's original measurement (the serial
+     daemon's queue behind other writers on a short chain, not re-run since routine run 16), or a sweep (Sunday).
+  6. *[laptop]* delete the merged branches above from `origin` if the cloud's proxy still refuses it.
+  7. *[laptop]* the launch, only on the owner's word.
