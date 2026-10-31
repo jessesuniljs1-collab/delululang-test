@@ -6738,3 +6738,80 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      daemon's queue behind other writers on a short chain, not re-run since routine run 16), or a sweep (Sunday).
   6. *[laptop]* delete the merged branches above from `origin` if the cloud's proxy still refuses it.
   7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 13: `launch/2.0.0` brought current with `master` at `d84b9e1` (RW 4.67; release procedure step 1); criterion 2 read back by the gates
+- Session: `https://claude.ai/code/session_01Deh6W8tbAzgsH27h559GP5`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 160 when its first records were written, 262 at its closing commit). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). The session's own branch `claude/peaceful-carson-ubupyf` held nothing beyond
+  `master`. Pull request: none.
+- Base: `d84b9e1` (`master` at the start; its push run `41201440036` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** `launch/2.0.0` brought current with `master` at `d84b9e1` (run 12's *Open /
+  next* 2): RW 4.67's CHANGELOG section folded, the 2.0.0 *Breaking* paragraph judged for it against STABILITY.md §1 and
+  v1.0.0, CHECKLIST-2.0 criterion 2 re-measured, the gates green on the merged tree, its `everything` run and release dry
+  run dispatched, READ and cited. **Delivered:** the merge `df32509` on `launch/2.0.0` (pushed); the *Breaking* paragraph
+  unchanged — RW 4.67 moves no §1 surface, and v1.0.0 had no secret-sending primitive, no `ceiling` module and no global
+  allocator; criterion 2 358/358; `LAUNCH-GATES=ok`.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The VM's local `master` was the setup snapshot's `6516ae5`, 12 behind; fast-forwarded first.
+  Run 12's three witnesses re-run in the VM, all passed; its records checked against the tree. The Survey and `doctor`
+  healthy at the start (1574 nodes, 17875 edges; 26 checks). `gh` is installed (not used). `cargo-deny` 0.20.2 installed in
+  the VM. The git proxy refused `git push --delete` for `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`
+  and `laptop/sandbox-fault-place` (*"the remote end hung up unexpectedly"*), as it refused runs 7–12's.
+- Commits: on `launch/2.0.0`, `df32509` (the merge). On `master`, `1ada477` (the records, the gate's first form), then
+  this entry's closing commit (the runs read; the gate reworked); then the merge of the closing commit into `launch/2.0.0` (the citations).
+- Files and folders (`master`, `git diff --name-status d84b9e1..HEAD`): M `scripts/launch-gates.sh` (`criterion-2-cited`),
+  `docs/CLOUD_ROUTINE.md` (step 4.3), `docs/REPOSITORY_STRUCTURE.md` (the script's row), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `HANDOFF.md` (§11.5), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A `docs/assistant-memory/a-gate-runs-on-every-caller.md`. Deleted, renamed:
+  nothing. On `launch/2.0.0` (`df32509`): `master`'s three commits, `CHANGELOG.md` (one section folded), its release
+  checklist (CHECKLIST-2.0, criterion 2), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `d84b9e1`'s push run `41201440036` (run 12's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.90x against 1.48x, passed), NOT MEASURED on the other three (macOS 3 hardware threads, 1.57x observed); disk Ubuntu
+    82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `df32509`, dispatched 13:11 UTC: the release dry run `41204428474` and `everything` `41204426153` —
+    the release dry run `41204428474` **success** (9 min 2 s; four `package` jobs success, each archive checked for its
+    target, its binary's target and commit, and installed the way `INSTALL.md` says; `release` skipped, no tag);
+    `everything` `41204426153`: **18 of 18 jobs success** (2 h 07 min in all, 13:11 → 15:18 UTC) — the Linux, Windows,
+    macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+    `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 22 min, the checker 48 min, the
+    broker 2 h 07 min — under the 240-minute cap). `actors_pingpong` MEASURED on arm64 (2.88x where the machine gave 3.94x,
+    against a bar of 1.48x: passed); NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads,
+    1.77x observed). Disk: Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+    CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`,
+    pushed after it (`git log -1 origin/launch/2.0.0`).
+  - `1ada477`'s push run `41204848160` (this entry's first records): 14 jobs success, 2 skipped; `actors_pingpong`
+    MEASURED on arm64 (2.93x, passed), NOT MEASURED on the other three; disk Ubuntu 82 → 67 GB free, Windows 217 → 202,
+    macOS 92 → 89 GiB, arm64 104 → 91.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/launch-gates.sh` gains `criterion-2-cited` — CHECKLIST-2.0's criterion 2 row's newest
+  citation at the anchor count measured now must be the merged base or a commit with the same criterion-2 inputs; runs 8,
+  9, 11 and 13 wrote that row by hand and no gate read it back. Its first form (`1ada477`) asked for the base's own hash
+  and would have refused the records-only citations merge; reworked in the closing commit before that merge, and
+  falsified five ways (two shapes green, a changed-inputs base, a planted count and a removed line each exit 1). Step 4.3
+  names it; `HANDOFF.md` §11.5 keeps the lesson.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-ubupyf` (this session's, at `d84b9e1`) and
+  `laptop/sandbox-fault-place` from `origin` — each in `master`'s history; the cloud's proxy refuses the deletion.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a new gate is run against every merge that calls it) and
+  `docs/assistant-memory/a-gate-runs-on-every-caller.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records and the reworked gate; `1ada477`'s `41204848160` is
+     green), and record the hash of `launch/2.0.0`'s citations merge that follows it (`git log -1 origin/launch/2.0.0`).
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (RW 4.67's allocator window, or `http.post_with_secret`), and the live
+     documents scanned for claims the code has overtaken.
+  3. Keep `launch/2.0.0` current as `master` moves (step 4.3, `scripts/launch-gates.sh`; write criterion 2's row first).
+  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 4.53's original measurement (the serial daemon's queue behind other writers' appends
+     on a short chain, not re-run since routine run 16); RW 2.12's last methods (PUT, PATCH, DELETE) only when a program
+     needs one (P9's design).
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.
