@@ -2949,6 +2949,25 @@ pub(crate) fn guard_pattern_for_broker(class: &str, pattern: &str) -> String {
     }
 }
 
+/// What an operator does about a broker that could not be reached, by what [`broker_unreachable_detail`] found
+/// (ESTOP-QUEUE-1): one that ACCEPTED the request and did not answer in time is running — told to start a broker, the
+/// operator of a busy daemon was sent after one that was never missing. Its `broker.log` names each answer that left
+/// late and what it waited for (RW 7.17).
+pub(crate) fn broker_unreachable_advice(detail: &str) -> &'static str {
+    if broker_accepted_and_was_silent(detail) {
+        "it is running but did not answer in time: `broker.log` in its state directory names each late answer and what \
+         it waited for"
+    } else {
+        "start it with `delulu broker start`"
+    }
+}
+
+/// Whether [`broker_unreachable_detail`] found a broker that accepted the request and did not answer in time
+/// ([`crate::brokerd::request_timed`]'s words) — one that is running, not one that is missing.
+pub(crate) fn broker_accepted_and_was_silent(detail: &str) -> bool {
+    detail.contains("accepted the request but did not answer within")
+}
+
 /// Why the broker could not be reached, in words — never the OS's raw error text. `grants inspect`
 /// with no broker printed `No such file or directory (os error 2)` on Linux and macOS (caught by
 /// `tests/unreadable_paths.rs` on the first CI run after the raw-OS-error class was swept; Windows'
@@ -6916,12 +6935,13 @@ fn grants_answer(answer: std::io::Result<crate::broker_ipc::Response>, json: boo
         }
         Ok(resp) => Ok(resp),
         Err(e) => {
+            let detail = broker_unreachable_detail(&e);
             let d = Diagnostic::error(
                 "DL1401",
                 format!(
-                    "broker unreachable: {} — start it with `delulu broker start` \
-                     (fail closed, invariant 27: `grants` verbs never fall back to local state)",
-                    broker_unreachable_detail(&e)
+                    "broker unreachable: {detail} — {} (fail closed, invariant 27: `grants` verbs never fall back to local \
+                     state)",
+                    broker_unreachable_advice(&detail)
                 ),
             );
             print_diagnostics("grants", &[d], &map, None, json);
@@ -8896,12 +8916,13 @@ fn guard_rpc(
         }
         Ok(resp) => Ok(resp),
         Err(e) => {
+            let detail = broker_unreachable_detail(&e);
             let d = Diagnostic::error(
                 "DL1401",
                 format!(
-                    "broker unreachable: {} — start it with `delulu broker start` \
-                     (fail closed, invariant 27: `guard` verbs never fall back to local state)",
-                    broker_unreachable_detail(&e)
+                    "broker unreachable: {detail} — {} (fail closed, invariant 27: `guard` verbs never fall back to local \
+                     state)",
+                    broker_unreachable_advice(&detail)
                 ),
             );
             print_diagnostics("guard", &[d], &map, None, json);

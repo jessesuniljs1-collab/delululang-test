@@ -947,10 +947,11 @@ pub(crate) fn redeem_lease(
         1
     };
     let unreachable_msg = |e: &dyn std::fmt::Display| {
+        let detail = crate::cli::broker_unreachable_detail(e);
         format!(
-            "broker unreachable: {} — start it with `delulu broker start` \
-             (fail closed, invariant 27: a lease run never falls back to embedded custody)",
-            crate::cli::broker_unreachable_detail(e)
+            "broker unreachable: {detail} — {} (fail closed, invariant 27: a lease run never falls back to embedded \
+             custody)",
+            crate::cli::broker_unreachable_advice(&detail)
         )
     };
     let peer = format!("pid:{}", std::process::id());

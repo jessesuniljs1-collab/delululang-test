@@ -1309,6 +1309,13 @@ spells the same thing?**
   thread. Never soften this to "the runtime zeroes its own copies" — that was P17-F's stated limit, and the copy that stayed
   was not ours. A new path that hands a secret's bytes to code outside the runtime opens a window around it. Search key:
   `send_secret(` or `reveal()` with no `scrub::Window::open` around the call.
+- **ESTOP-QUEUE-1 — a revocation goes first** (on-demand routine run 14, 2026-10-31, D-V2-198). The daemon is serial,
+  and on a held audit chain each request waits up to 5 s for its record, so an e-stop in the same line as everything else
+  waited out the whole queue: behind four, `grants revoke` answered DL1401 at 15 s ("start it with `delulu broker
+  start`") and landed at ~25 s. A revocation now has a line the handler reads first, and dead-men are judged as of the
+  earliest arrival still waiting. Never put revocations back in the ordinary line, and never judge a dead-man by a
+  revocation's own arrival — a beat that arrived in time waits behind it. A new request kind that only narrows (a stop of
+  any sort) belongs in `ReqBody::is_revocation`. Search key: `is_revocation` and `revocations.try_recv`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1981,6 +1988,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   every such run, whose `master` is a records-only closing commit the row never cites. Found before that merge, by
   asking which calls the procedure makes; the gate now accepts a citation whose criterion-2 inputs are the base's, and
   was falsified on both shapes.
+- **A measurement that comes back clean is re-asked in the shape that failed** (on-demand routine run 14). RW 4.53's
+  open item was routine run 16's measurement, and on `0ebbc15` it was clean (a revoke beside 12 sandbox loops: 22 ms
+  median). The red team's F4 named a different shape — the chain HELD, requests queued — and that one still answered
+  DL1401 at 15 s. Closing the row on the clean number would have closed it on the wrong question. And **a witness of an
+  order places every member it is about**: the first form asserted only that the e-stop overtook the queue, and M970 —
+  the quarantine left out of the lane — survived it.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

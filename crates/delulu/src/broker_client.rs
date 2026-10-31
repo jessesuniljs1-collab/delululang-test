@@ -25,12 +25,13 @@ use crate::brokerd;
 
 /// The exact fail-closed message every unreachable-broker denial carries (invariant 27).
 fn dl1401(detail: &str) -> CustodyDenial {
+    let detail = crate::cli::broker_unreachable_detail(&detail);
     CustodyDenial::new(
         "DL1401",
         format!(
-            "broker unreachable: {} — start it with `delulu broker start` \
-             (fail closed, invariant 27: effectful ops never fall back to embedded custody)",
-            crate::cli::broker_unreachable_detail(&detail)
+            "broker unreachable: {detail} — {} (fail closed, invariant 27: effectful ops never fall back to embedded \
+             custody)",
+            crate::cli::broker_unreachable_advice(&detail)
         ),
     )
 }

@@ -10914,3 +10914,67 @@ newest 358/358 citation then `1927bca`, before `ab46618`); the row's newest line
 tree clean. `docs/CLOUD_ROUTINE.md` step 4.3 names it; `HANDOFF.md` §11.5 and
 `docs/assistant-memory/a-gate-runs-on-every-caller.md` keep the lesson — a gate is run against every call the procedure
 makes of it.
+
+## 2026-10-31 — on-demand routine run 14: the e-stop goes before the requests waiting at the broker (ESTOP-QUEUE-1, RW 4.53, D-V2-198)
+
+**The milestone, named before building:** RW 4.53 closed end to end — routine run 16's measurement and the red team's F4
+re-run on the current binary; what still failed witnessed red, fixed, mutants, the full suite, the runners, the records.
+
+**Housekeeping.** `master` at `0ebbc15` (run 13's close); its push run `41215074286` green (14 jobs success, 2 skipped;
+`actors_pingpong` MEASURED on macOS, 2.36x where the machine gave 3.59x against a bar of 1.34x, and on arm64, 2.97x against
+1.48x, both passed; NOT MEASURED on Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB,
+arm64 104 → 91). `launch/2.0.0`'s citations merge is `4127776`. No branch held a commit `master` lacks but the archived
+ones; `origin/autosave/laptop`'s newest snapshot is still `942c069` (landed in `ff0b4f6`). The Survey matched the tree
+(1575 nodes, 17887 edges) and `doctor --check` passed 26 checks. Effort `xhigh` (`CLAUDE_EFFORT` and the transcript).
+
+**What was measured.** Routine run 16's measurement, on `0ebbc15` (a frozen debug binary, a fresh daemon, 15 samples):
+beside 12 loops of sandboxed runs (633 runs, a 1,391-record chain) a revoke took 22 ms median, 40 ms p90, 49 ms max, and a
+daemon run 53 / 68 / 71 ms; beside 12 loops of plain runs (no chain writes) 29 / 35 / 50 ms and 50 / 61 / 76 ms; on an
+idle daemon 11 ms and 17 ms. The chain's contention is gone (run 16: 167 ms median, 1,077 ms max). **F4's shape still
+failed:** with the chain's append lock held by another writer (`flock`, as `File::lock`), four `grants delegate`s queued,
+then `grants revoke`: DL1401, "broker unreachable: the broker accepted the request but did not answer within 15s — start
+it with `delulu broker start`", at 15.18 s, exit 1, and the node revoked (by seq 8) only after the queue — about
+25 s. `broker.log` said why: each queued request had waited 5 s for the chain.
+
+**The decision (D-V2-198) and what changed.**
+- `broker_ipc.rs`: `ReqBody::is_revocation` — `Revoke` and `Quarantine`.
+- `brokerd.rs` `serve_inner`: a revocation's own bounded line, read first, with a wake on the ordinary line; a bounded
+  `waiting` line of the requests already handed over; dead-men fired as of the earliest arrival in either.
+- `cli.rs`: `broker_unreachable_advice` and `broker_accepted_and_was_silent`; every DL1401 site (`grants`, `guard`, a
+  lease run, `broker_client`) and `broker status` / `stop` / `rotate-key` (`not_answered`) say a silent broker is running
+  and point at `broker.log`. `delulu explain E-DL1401` gains the sentence.
+- After: the same held chain, the same four queued — `ok: revoked 1 node(s) (audit seq 5 …)` with `warning[DL1401]: … the
+  revocation IS in force, but audit seq 5 names no record` at 9.81 s (`broker.log`: 4,797 ms waiting for the request in
+  hand, 5,000 ms its own record's wait). Against a socket that accepts and never answers, `grants revoke`, `broker status`
+  and `broker stop` each say the broker did not answer and name `broker.log`.
+
+**Witnesses** (`brokerd` unit tests). `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`:
+the test holds the chain while four mints queue, then a revoke and a quarantine arrive, and reads the order from the
+chain's seqs — red on `0ebbc15` (mints at 4–7, the revoke at 8, the quarantine at 9), green after.
+`a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man`: a beat 0.3 s into a 2 s period waits
+behind a held mint; an e-stop that arrives after the deadline goes first; the dead-man must not fire.
+`a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Twelve runs of the three as four concurrent
+copies of the test binary: 12 of 12 green.
+
+**Mutants** (`scripts/mutants.py`, `cargo test -p delulu --bin delulu -- brokerd::tests`, 58 tests): **red** — M969
+(revocations handed to the ordinary line: the old behaviour), M971 (dead-men judged by the revocation's own arrival), M972
+(no wake: eight tests' revocations went unanswered on an idle daemon), M973, M973a, M973b (the words); **M970** (the
+quarantine left out of the lane) **survived the witness's first form**, which placed only the e-stop before the mints —
+the witness now asserts both, and M970 is red. Control green.
+
+**Verification.** `cargo fmt`; `scripts/clippy.sh -j 4` clean and stamped; `scripts/check-other-os.sh` clean for all five
+targets; `delulu`'s unit tests 228 → 231, all passed. The full suite alone at `294ddfa`: 2,626 passed, 0 failed, 16 ignored (190 binaries), cargo exit 0, the tree unmoved, no daemon left — three more than run 12's 2,623 (the three witnesses). Runners at `294ddfa` (`witness.yml`, `bin:delulu`,
+`brokerd::tests`): macOS `41220699505` 57 passed, Windows `41220701916` 53 (the words witness is Unix-only), Ubuntu `41220704527` and arm64 `41220706907` 58 each — 0 failed anywhere, the new witnesses named in each log.
+
+**Loop engineering.** `docs/CLOUD_ROUTINE.md` step 5: a measurement that comes back clean is re-asked in the shape that
+failed (run 16's numbers were clean on `0ebbc15`; F4's held chain was not), and a witness of an order places every member
+it is about (M970). `scripts/estop-measure.py` keeps both of RW 4.53's measurements — the e-stop beside N loops of chain
+writers, and behind a queue on a held chain — which this run rebuilt by hand from run 16's record. `HANDOFF.md` §11.4 and
+§11.5, `docs/assistant-memory/re-ask-the-shape-that-failed.md`.
+
+**Read after the push.** `294ddfa`'s push runs: CI `41221655879` — 14 jobs success, 2 skipped (`actors_pingpong` MEASURED
+on arm64, 2.91x where the machine gave 3.94x against a bar of 1.48x, passed; NOT MEASURED on Ubuntu and Windows — busy or
+SMT — and macOS, 3 hardware threads; disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91);
+OpenShell `41221655891` — success. `22e5c8c`'s (the records) `41221939225`: 14 success, 2 skipped (arm64 MEASURED 2.94x).
+**`master` green at the end of the run.** The merged branches stay on `origin`: the permission classifier refused `git
+push --delete` (recorded for the laptop).

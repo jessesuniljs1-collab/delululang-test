@@ -297,6 +297,9 @@ DeluluLang/
 │   ├── mutants.py                  # a mutant set from a JSON spec against one test command: a unique
 │   │                               #   anchor, BUILD-ERROR told from RED, each file restored with a NEW
 │   │                               #   mtime, and a CONTROL run that must be green — routine run 15
+│   ├── estop-measure.py            # the e-stop timed against a broker daemon in RW 4.53's two shapes:
+│   │                               #   beside N loops of chain writers, and behind a queue on a held
+│   │                               #   chain — on-demand run 14 (D-V2-198)
 │   ├── hooks/pre-commit            # refuses a commit whose Survey map does not match the files it
 │   │                               #   COMMITS (the index, exported and checked) — `git config
 │   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering —

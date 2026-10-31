@@ -1325,7 +1325,12 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL1401" => "The broker daemon could not be reached (or a broker-protocol failure \
              occurred) while this run's custody lives in the daemon. Effectful operations FAIL \
              CLOSED (invariant 27): they never fall back to embedded custody, silently or \
-             otherwise. Start the broker with `delulu broker start` and re-run. Honesty (spec \
+             otherwise. Start the broker with `delulu broker start` and re-run. A broker that \
+             ACCEPTED the request and did not answer within its deadline is running, not missing \
+             — busy (a writer holding the audit chain makes each request wait up to 5 s for it) \
+             or stuck: its `broker.log`, in the state directory, names each answer that left late \
+             and what it waited for, and the operator's revocations are answered before every \
+             other waiting request. Honesty (spec \
              §10): The broker defends against the program and its delegates, not against the OS \
              user: any process running as the same user with default OS permissions could read \
              the broker key. The boundary is process compromise and code-behavior, per the threat \

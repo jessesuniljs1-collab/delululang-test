@@ -1209,6 +1209,11 @@ The watchdog probes the tree, and **every answer that is not "live" means stop**
 expired, broker silent, reply unrecognised. A broker outage parks the arm. That is the direction
 to fail in.
 
+The broker answers one request at a time, and a revocation goes first: it waits for the request the broker is in the
+middle of, never for the ones queued ahead of it. On a machine where another writer holds the audit chain, each request
+may wait up to five seconds for it — and the e-stop still lands within about ten, saying so if the chain could not
+record it, while the arm has parked itself after one second of the broker's silence.
+
 ### What this does not do
 
 DeluluLang commands the policy layer at roughly 1–100 Hz. It is **not** the servo loop, not the

@@ -472,7 +472,7 @@ design — record it so, then remove BOTH in one mutant (`scripts/mutants.py` ta
 witness can fail at all. A wall no double mutant can reach is dead code (run 18, M222).
 **A witness of a normalizing comparison spells the colliding pair both ways round** (run 23, M351: `Accept` then `accept`
 let a mutant that compared the WRITTEN name live; the non-canonical spelling must be the one the comparison reads).
-**A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
+**A measurement that comes back clean is re-asked in the shape that failed** (on-demand run 14): RW 4.53's contention numbers were clean on the current binary, and the red team's F4 — the chain HELD, requests queued — still answered DL1401 at 15 s. Re-run every shape a row's history names before closing it; and a witness of an ORDER places every member it is about (M970, the quarantine left out of the lane, survived a witness that placed only the e-stop). `scripts/estop-measure.py BIN DIR contention N` and `… held Q` time the e-stop in both of RW 4.53's shapes. **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
 `git revert` it in a commit of its own — a dispatch records its SHA when it is created, so the next commit may follow at once
