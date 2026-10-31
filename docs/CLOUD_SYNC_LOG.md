@@ -6982,3 +6982,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      branch; a routine run picks another item.
   3. *[laptop]* the launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — RW 4.29 closed: its condition met since 2026-10-13 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/rw-4-29` (stacked on `laptop/records-1101`, #105)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. The weekly sweep's documents scan, second pass, read every open row's
+  status. Row 4.29 read *"P9-04 and P9-05 next"*, though P9-01 to P9-03, its whole closing condition, were complete on
+  2026-10-13 (D-V2-126). Checked against the binary of `cccb001`, and closed.
+- Files and folders: M `docs/REMAINING_WORK.md` (row 4.29), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** unchanged from the entry above (#105's): read the sweep's run and the launch runs, then cite the
+  launch runs. RW 3.24 is the laptop's.
+- Survey and doctor (after the last edit): in the commit message.
