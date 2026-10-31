@@ -447,6 +447,9 @@ impl<'a> Lexer<'a> {
             '"' => self.string(start),
             c if c.is_ascii_digit() => self.number(start),
             c if c.is_ascii_alphabetic() || c == '_' => self.ident(start),
+            // C12 (the agent test campaign): a word in another script was refused a character at a time, each "unexpected",
+            // and the parser then missed the name it stood for. It is read as one word and refused once (in `ident`).
+            c if c.is_alphabetic() => self.ident(start),
             other => {
                 self.diags.push(
                     Diagnostic::error("DL0101", format!("unexpected character `{other}`")).with_bare_span(self.span_from(start)),
@@ -457,13 +460,21 @@ impl<'a> Lexer<'a> {
 
     fn ident(&mut self, start: usize) {
         while let Some(c) = self.peek() {
-            if c.is_ascii_alphanumeric() || c == '_' {
+            if c.is_alphanumeric() || c == '_' {
                 self.bump();
             } else {
                 break;
             }
         }
         let text = &self.src[start..self.pos];
+        if !text.is_ascii() {
+            // Identifiers are ASCII (DL0107 relies on it). The word is refused once, and still read as a name so the parse
+            // goes on as written; the refusal keeps any program holding it from being accepted.
+            self.diags.push(
+                Diagnostic::error("DL0101", format!("`{text}` is not a name: identifiers are ASCII letters, digits and `_`"))
+                    .with_bare_span(self.span_from(start)),
+            );
+        }
         if text == "_" {
             self.push(TokenKind::Underscore, start);
         } else if let Some(kw) = keyword(text) {

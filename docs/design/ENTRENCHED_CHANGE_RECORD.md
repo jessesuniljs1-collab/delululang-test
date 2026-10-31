@@ -461,3 +461,163 @@ Type variables and open rows (§5), and `Σ`'s internals, stay paper. RW 2.6 is 
 git checkout <this-commit>^ -- docs/design/DELULU_CORE.md
 cargo run -p delulu-survey -- build
 ```
+
+## 2026-10-23 — `tests/conformance/witnesses.toml`: the anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml` — four `[[witness]]` rows for the new anchor `ref.prim.http.post`, after `ref.prim.http.get_with_secret`'s four, with a three-line comment, and four for `ref.prim.http.post_with_secret` after them, with a two-line comment. No existing row is touched. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | V2 P9-05 (d), `REMAINING_WORK.md` 2.12; decision D-V2-183 |
+| Approved by | **the head chef, 2026-10-23, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* — the entrenched files among them, each change with its `D-V2-nn` and this record. |
+
+**Why**
+
+The coverage law (invariant 42) gives every `PRIM_TABLE` row an anchor, and `release_requires_full_coverage` demands an
+accepting and a rejecting witness for each. D-V2-183 adds the row `http.post`, and without these rows the reference would
+carry uncovered anchors. D-V2-183 adds `http.post_with_secret` too, with the same four kinds of rows. The rows name
+the table's own two witnesses, as every primitive has
+(`every_listed_primitive_resolves`, `every_listed_primitive_rejects_a_five_argument_call`). They also name the egress
+client's POST, with its body kept or dropped by each redirect's status
+(`a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status`), and the judge that refuses a
+POST under an entry naming no methods (`netscope`'s `an_entry_judges_its_host_then_its_path_then_its_method`). For
+`post_with_secret` they name the egress client's POST carrying its secret and body inside the audience only
+(`a_post_carries_its_secret_and_its_body_only_inside_the_audience`), and the secret refused outside its audience before
+anything is resolved (`a_secret_outside_its_audience_is_refused_before_anything_is_resolved`, the rule both share).
+
+**Why this is not an RFC**
+
+A witness row maps an existing test to an anchor; it changes no rule, no diagnostic and no behaviour. The behaviour it
+covers, a new primitive, is the language change, taken as D-V2-183 under the same delegation. `PRIM_TABLE_VERSION` goes
+from 7 to 8, an additive change: every version-7 primitive still exists and means the same thing. A grant naming no
+methods still allows GET alone (D-V2-182), so no existing grant reaches a POST. `COVERED_FLOOR` in
+`crates/delulu-conform/` is untouched.
+
+**Verified before the change**
+
+1. The named tests exist and pass on the laptop: `cargo test -p delulu-check --lib prim_table` (11 passed, the
+   pinned count 86), `cargo test -p delulu-runtime --lib egress` (44 passed, 1 ignored), and
+   `cargo test -p delulu-broker --lib netscope`.
+2. `delulu-conform --coverage` reported the one gap (`ref.prim.http.post — no accepting test, no rejecting test`)
+   before the rows and **357 of 357, 100.0%** after both anchors' rows. `cargo test -p delulu-conform` is green. `--reference`
+   regenerated `docs/reference/` (README, coverage, primitives), and `--check-reference` says in sync (24 chapters).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- tests/conformance/witnesses.toml
+```
+— together with D-V2-183's code, or the release gate refuses the uncovered anchor.
+
+## 2026-10-24 — `crates/delulu-check/tests/laundering.rs`: five GENERIC-RIGID-1 witnesses; a witness must parse
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `crates/delulu-check/tests/laundering.rs`: `rejects_with` also asserts the witness lexes and parses (no DL01xx or DL02xx). Two statements on one line are separated in F-3 (`cb(); cb()`), F-3b (`f(); g()`) and F-4 (`out.println(str(x)); x`). Five tests appended: `generic_rigid_a_body_cannot_decide_its_type_parameter`, `generic_rigid_an_effectful_closure_cannot_be_coerced_pure`, `generic_rigid_a_body_cannot_close_its_row_parameter`, `generic_rigid_an_actor_body_cannot_decide_its_parameter`, `generic_rigid_honest_generics_still_check`. |
+| Entrenched by | `.github/CODEOWNERS:28` → `@jessesuniljs1-collab` |
+| Campaign | the agent test campaign of 2026-10-24; `REMAINING_WORK.md` 4.81; decision D-V2-184 |
+| Approved by | **the head chef, 2026-10-24, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+The suite asks one question: can authority escape the type? A generic answered yes (GENERIC-RIGID-1), and the suite had
+no witness for it. Writing one showed that three of its own witnesses never parsed. They still met their codes, through
+the parser's recovery, so a refusal could have come from the repair rather than the rule.
+
+**Nothing is weakened.** No witness is removed or relaxed. The three repaired programs are now the programs their
+comments describe, and each is still refused with its own code (DL0401, DL0504, DL0501). The new assertion makes every
+witness, present and future, prove it parses.
+
+**Verified before the change**
+
+1. `cargo test -p delulu-check --test laundering`: with the stricter helper and the old programs, F-3, F-3b and F-4
+   failed ("does not lex or parse cleanly: DL0209 …"). Repaired, 17 passed.
+2. Mutants of D-V2-184's code turn the new witnesses red (see the decision).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- crates/delulu-check/tests/laundering.rs
+```
+— together with D-V2-184's code, or the generic witnesses fail.
+
+## 2026-10-27 — `crates/delulu-conform/src/rules.rs` and `tests/conformance/witnesses.toml`: DL0908, an argument outside what the operation accepts
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `crates/delulu-conform/src/rules.rs`: the rule `ref.rule.runtime.faults-are-diagnostics` names *"an argument outside what an operation accepts"* among runtime faults in its statement, and `DL0908` in its `enforced_by`. `tests/conformance/witnesses.toml`: two `[[witness]]` rows for the new anchor `ref.diag.DL0908`, a rejecting one after DL0907's and an accepting one after DL0907's. No existing row or rule is touched otherwise. |
+| Entrenched by | `.github/CODEOWNERS:32` and `:33` → `@jessesuniljs1-collab` |
+| Campaign | the agent test campaign of 2026-10-24 (A15); `REMAINING_WORK.md` 6.25; decision D-V2-190 |
+| Approved by | **the head chef, 2026-10-27, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, a new `DL` code where a refusal needs one among them |
+
+**Why**
+
+D-V2-190 registers DL0908 for `r.int(lo, hi)` with `hi <= lo`, which both engines had reported as DL0904, a capability
+scope violation. The coverage law (invariant 42) demands an accepting and a rejecting witness for every registered code,
+so without these rows the reference would carry an uncovered anchor. The rows name `fault_parity`'s
+`an_empty_rand_range_is_dl0908_on_both_engines` (rejecting; its body names `DL0908`, as C37 requires) and
+`a_one_wide_rand_range_draws_its_one_value_on_both_engines` (accepting). The rule is the one that says a runtime fault is a
+diagnostic with a code. DL0908 is such a fault, so leaving it out would make the rule's list incomplete.
+
+**Why this is not an RFC**
+
+`STABILITY.md` §5 lists a new diagnostic code as a minor, additive change. No rule changes meaning; one rule's list of
+codes grows by the new one. The fault moves from DL0904 to DL0908 in a major release (2.0.0), and DL0904 keeps its
+identity: an operation reaching outside its capability's scope.
+
+**Verified before the change**
+
+1. The rejecting witness was red on the unchanged engines (`WASM trap: DL0904: rand.int requires lo < hi`) and is green
+   with D-V2-190's code. The accepting witness is green on both.
+2. `delulu-conform --coverage`: *PASS: 100% anchor coverage*. `--reference` regenerated the reference: 358 of 358
+   anchors, 155 diagnostics.
+3. Mutants M855–M858 of D-V2-190's code turn the rejecting witness red (see the decision).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- crates/delulu-conform/src/rules.rs tests/conformance/witnesses.toml
+```
+— together with D-V2-190's code and the registry entry, or the coverage gate fails on an unwitnessed DL0908.
+
+## 2026-11-01 — `docs/design/SOUNDNESS_AUDIT.md`: §D's claim negated a second time (LATE-LET-1)
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/SOUNDNESS_AUDIT.md`: one box added at the end of §D, after *"the tests are the actual guarantee"*. It records that the claim was negated by the runtime's name resolution, gives the program, and names the witnesses. No existing sentence changes. |
+| Entrenched by | `.github/CODEOWNERS:27` → `@jessesuniljs1-collab` |
+| Campaign | the weekly verification sweep of 2026-11-01; `REMAINING_WORK.md` 2.23; decision D-V2-199 |
+| Approved by | **the head chef, 2026-11-01, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+The audit's §D claims that in a well-typed program every runtime effect is in the static row of every function on the
+stack, and it keeps C88's box saying so once already proved false. LATE-LET-1 proved it false again: the checker typed a
+closure's callee as a pure function, and both engines called the effectful one a later `let` bound under the same name.
+A document that names its claim must say when the claim failed, or the next reader relies on it (HANDOFF §11.8: *a
+document that names a residual must be re-read when the code moves*).
+
+**Why this is not an RFC**
+
+Nothing in the language's meaning changes: the box records a defect in the runtime, now fixed, against the meaning the
+checker already gave. No rule is added, removed or reworded.
+
+**Verified before the change**
+
+1. The program in the box checked clean, `authority` said *"(none — provably pure)"*, and `run --grant console`
+   printed, on the binary before D-V2-199; after it, it prints nothing on either engine.
+2. The witnesses named in the box are red before D-V2-199 and green after it (the decision's evidence).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
+```

@@ -475,7 +475,18 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
         Ok(_) => 0,
         Err(f) => {
             // TERMINAL-TEXT-1: a fault can quote the program's own strings (an assertion's values).
-            eprintln!("error[{}]: {}", f.code, delulu_diag::terminal_line(&f.message));
+            let message = delulu_diag::terminal_line(&f.message);
+            match f.span.filter(|_| !hello.name.is_empty()) {
+                // RW 6.39: at its place, as an ordinary run prints it, under the name the host gave; the host relays each
+                // line marked as the guest's.
+                Some(span) => {
+                    let mut map = delulu_diag::SourceMap::new();
+                    map.add_file(hello.name.clone(), hello.program.clone());
+                    let d = delulu_diag::Diagnostic::error(f.code, message).with_span(span, "runtime fault here");
+                    eprint!("{}", delulu_diag::render_human(&d, &map));
+                }
+                None => eprintln!("error[{}]: {message}", f.code),
+            }
             1
         }
     };
@@ -746,6 +757,12 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     if let Some(code) = refuse_what_the_guest_does_not_apply(opts) {
         return code;
     }
+    // D-V2-21 (A18): the run report is the runtime's alone on this route as on the ordinary one, so a `--report-out` inside
+    // a scope the command line grants the program to write is refused before anything else — a dry run's too, since it
+    // says what the run would do. A lease's scopes are checked once it is redeemed, below.
+    if let Some(code) = crate::run_cmd::refuse_runtime_paths_in_command_line_scopes(opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `run --sandbox` needs a file");
         return 2;
@@ -935,6 +952,11 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             Err(code) => return code,
         }
     }
+    // D-V2-21, the second time (A18): the grants are final now, a lease's included, and the report may not lie in a scope
+    // they let the program write — decided before a root is issued or a guest exists.
+    if let Some(code) = crate::run_cmd::refuse_runtime_paths_in_write_scopes(opts, &grants.build_root().fs_write) {
+        return code;
+    }
     if daemon_mode && !opts.json {
         eprintln!("custody: daemon");
     }
@@ -992,6 +1014,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     let source = if is_package { crate::run_cmd::flattened_name(file) } else { file.to_string() };
     let served = spawn_and_serve_custody(
         &program,
+        &source,
         root,
         limits,
         profile,
@@ -1131,7 +1154,7 @@ pub fn spawn_and_serve_with(
     report_out: Option<ReportTo<'_>>,
     isolation: Isolation,
 ) -> io::Result<i32> {
-    serve_under(program, root, seed, fixed_clock_ms, limits, profile, report_out, isolation, None, None, None)
+    serve_under(program, "", root, seed, fixed_clock_ms, limits, profile, report_out, isolation, None, None, None)
 }
 
 /// Where a sandboxed run's report goes (`--report-out`), and the name its program's calls are reported under — the file as
@@ -1188,6 +1211,7 @@ impl GuestDevices {
 #[allow(clippy::too_many_arguments)]
 fn spawn_and_serve_custody(
     program: &str,
+    name: &str,
     root: Rc<RootVal>,
     limits: crate::jail::Limits,
     profile: crate::policy::Profile,
@@ -1197,12 +1221,13 @@ fn spawn_and_serve_custody(
     custody_record: Option<serde_json::Value>,
     devices: Option<&GuestDevices>,
 ) -> io::Result<i32> {
-    serve_under(program, root, 0xDE1, None, limits, profile, report_out, isolation, custody, custody_record, devices)
+    serve_under(program, name, root, 0xDE1, None, limits, profile, report_out, isolation, custody, custody_record, devices)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn serve_under(
     program: &str,
+    name: &str,
     root: Rc<RootVal>,
     seed: u64,
     fixed_clock_ms: Option<i64>,
@@ -1467,19 +1492,31 @@ fn serve_under(
     // D-V2-87: the statement checked above, so at level 3 a claim that names a property can meet it.
     let need =
         crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external, attested: attested.as_ref() };
-    let served =
-        converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, devices, &mut evidence)
-            // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
-            // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
-            // chain. Escaped and bounded here, once, before any of them. (A profile's refusal is the host's
-            // own words, and keeps its type.)
-            .map_err(|e| {
-                if crate::boundary::is_refusal(&e) {
-                    e
-                } else {
-                    io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024))
-                }
-            });
+    let served = converse(
+        &mut child,
+        &dir,
+        program,
+        name,
+        &generation,
+        &need,
+        root,
+        seed,
+        fixed_clock_ms,
+        custody,
+        devices,
+        &mut evidence,
+    )
+    // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
+    // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
+    // chain. Escaped and bounded here, once, before any of them. (A profile's refusal is the host's
+    // own words, and keeps its type.)
+    .map_err(|e| {
+        if crate::boundary::is_refusal(&e) {
+            e
+        } else {
+            io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024))
+        }
+    });
     // D-V2-59: refused before the program was sent, because the boundary lacks what the profile requires.
     let refused = served.as_ref().err().is_some_and(crate::boundary::is_refusal);
     // The red-team pass on `/3` (F4): a conversation that failed ENDS the guest, and one that said
@@ -2097,6 +2134,7 @@ fn converse(
     child: &mut Guest,
     dir: &std::path::Path,
     program: &str,
+    name: &str,
     generation: &str,
     need: &crate::boundary::Requirement<'_>,
     root: Rc<RootVal>,
@@ -2136,6 +2174,8 @@ fn converse(
         hash: blake3::hash(program.as_bytes()).to_hex().to_string(),
         seed,
         fixed_clock_ms,
+        // RW 6.39: the file's last component, so the guest's fault names its place; never the host's directories.
+        name: std::path::Path::new(name).file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string(),
     })?;
     evidence.sent = true;
     // The refusals come back with the exit code, because a report that lists only what was allowed
@@ -2357,6 +2397,7 @@ pub fn attempt_launch() -> Result<String, String> {
                 hash: blake3::hash(PROBE_PROGRAM.as_bytes()).to_hex().to_string(),
                 seed: 0,
                 fixed_clock_ms: None,
+                name: String::new(),
             })?;
             host.serve(&mut conn)
         })();

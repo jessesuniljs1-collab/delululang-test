@@ -112,6 +112,11 @@ fn at_or(xs: List[Int], i: Int, fallback: Int) -> Int {
 `push` **mutates in place and yields `Unit`** — it is a statement, not an expression. Note the
 binding is `let`: what changes is the list cell, not which list the name refers to.
 
+**A written type with no capability keyword means `val`, read-only, in a `let` as in a parameter.**
+`let out = []` can be pushed to; `let out: List[Int] = []` cannot (DL1604, which points at the type).
+To write the type and keep the write access, say so: `let out: ref List[Int] = []`. The same holds for
+a `Map`: `let m: ref Map[Str, Int] = Map()`.
+
 ```delulu
 fn evens_up_to(n: Int) -> List[Int] {
     let out = []
@@ -224,6 +229,9 @@ fn read_two(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
 }
 ```
 
+`return` leaves a function early, with a value its return type must accept — as a statement, or where an expression
+is expected, such as a match arm: `None => return Err(NotANumber(s))` (`delulu fmt` writes that arm as a block).
+
 **Filesystem calls fail with `IoErr`; network calls fail with `NetErr`.** Different sums, different
 variants, and `?` will not bridge them for you.
 
@@ -283,7 +291,9 @@ scope decides *which* file or host and is checked when it runs.** Nothing claims
 guarantee about a specific path or hostname — the language cannot prove one without dependent
 types, and it refuses to imply otherwise.
 
-Minting a capability is **pure**. Deriving the handle performs no effect; *using* it does.
+Minting a capability is **pure**. Deriving the handle performs no effect and puts none in the row; *using* it
+does. It is still checked when it runs: a mint the run was not granted is refused at that call (DL0703), on an
+ordinary run and under `--lease` alike, so `root.fs_read("./a")` fails where it is written, before any read.
 
 **`Cap[Http]` fetches over verified HTTPS, and only from the hosts you grant.** `client.get(url)`
 type-checks, is counted in the authority report, is checked against the granted hosts, and then the
@@ -318,7 +328,8 @@ records a `send` — so a delegation says where a secret may go: `delulu grants 
 --secret-to API_TOKEN@api.example.com …` (a child may name fewer origins, never another one). A leased
 run's send is guarded like a declassification: approve it per destination, `delulu guard request g_NODE
 --use declassify:API_TOKEN@api.example.com:443 --why "…"`. Not yet: a `--sandbox` guest (it holds no
-secret) or `--engine wasm` (no `http` at all).
+secret). Under `--engine wasm` it runs as on the interpreter (`get_with_secret` since D-V2-174,
+`post_with_secret` since 2026-10-23).
 
 Secrets have no string form and no equality. **Two** operations get information out to your program,
 and **both carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in
@@ -460,7 +471,9 @@ enforced, and easy to meet once you know it.
 | `DL0201` on `type T { A, B(X) }` | Sums use `=` and `\|`, not braces. |
 | `DL0405` "has no method" on a list element | `List.get` returns `Option[T]`. Match it. |
 | `DL0401` expected `List[Int]`, found `Unit` | `push` mutates and returns `Unit`; it is a statement. |
-| `DL1603` `ref` where `val` is required | A `let`-bound list is `ref`; parameters default to `val`. Annotate `let xs: val List[Int]`, or take `ref List[Int]`. |
+| `DL1603` `ref` where `val` is required | A list you annotated `let xs: ref List[Int]` was passed to a parameter, and parameters default to `val`. Take `box List[Int]` if the function only reads it, or `ref List[Int]` if it writes. |
+| `DL1604` on a `push` or a field write, after a call | A `let`-bound literal you did not annotate becomes `val` when you pass it to a `val` parameter, because the callee may keep it, so a later write is refused. The error names that call. Take `box List[Int]` in a function that only reads, or write before the call. |
+| `DL1604` on a `push`, "is `val` by this type" | A written type with no capability keyword means `val`: `let xs: List[Int] = []` cannot be pushed to. Write `let xs: ref List[Int] = []`, or leave the type out. |
 | `DL0202` expected an expression, found `)` | There is no `()` literal. Drop the `else` instead. |
 | `DL0201` "a match arm's body is an expression" | Wrap an assignment in a block: `Some(d) => { acc = d }`. |
 | `DL0302` "is a prelude builtin" | You named a function `str`, `len`, `int`, `float`, `parse_int`, `range`, `push`, `load`, `assert`, `assert_eq`, `Ok`, `Err`, `Some`, or `None`. Rename it. |
@@ -468,7 +481,7 @@ enforced, and easy to meet once you know it.
 | `DL0307` "not a capability resource kind" | You wrote an effect name in `Cap[…]`. See §6. |
 | `DL0501` "performs effect Async" in a `be` | A behavior that sends to another actor must declare `! {Async}`. |
 | `DL0208` on a perfectly good `import` | Imports go before the first item. |
-| `DL0905` at runtime | Recursion passed the interpreter's bound of **10,000** frames. It is not configurable. |
+| `DL0905` at runtime | Recursion passed the interpreter's bound of **10,000** frames. It is not configurable. On `--engine wasm` the bound is the guest's stack, so it depends on each frame's size: a one-parameter recursion reached 16,351 calls and was refused by 16,448 (*"guest stack exhausted"*, 2026-10-29). Write a recursion that may go that deep as a loop. |
 | `DL0703` at runtime | You did not grant the capability. The message now tells you the exact flag. |
 | `DL0107` "bidirectional control character" | Your source (often pasted or AI-generated) contains an invisible text-reordering character that can make code render differently than it runs. It is refused, not warned. If a *string* truly needs the code point, write it as `\u{202e}`. |
 | Integer result is wrong | It is not — overflow is `DL0901` and aborts. Arithmetic is checked, not wrapping. |

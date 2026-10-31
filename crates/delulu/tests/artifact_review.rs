@@ -98,6 +98,33 @@ fn a_tampered_artifact_is_refused_identically_by_authority_and_by_run() {
     assert!(re.contains("DL1202"), "run's refusal should be the same code: {re}");
 }
 
+/// C11 (the agent test campaign): a source file that is not UTF-8 was a usage error, exit 2, quoting the standard
+/// library's `stream did not contain valid UTF-8`; under `--json` its envelope counted an error and held no diagnostic.
+/// It is DL0101 now, exit 1, at the first byte that begins no UTF-8 character, in either channel and from `run` too.
+#[test]
+fn a_source_file_that_is_not_utf8_is_refused_at_its_first_bad_byte() {
+    let dir = std::env::temp_dir().join(format!("delulu-not-utf8-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("latin1.delulu"), b"module m\n\nfn main() { let s = \"caf\xe9\" }\n").unwrap();
+    for cmd in [vec!["check", "latin1.delulu"], vec!["run", "latin1.delulu"]] {
+        let o = delulu(&dir, &cmd);
+        let e = stderr(&o);
+        assert_eq!(o.status.code(), Some(1), "{cmd:?}: a diagnostic, not a usage error: {e}");
+        assert!(e.starts_with("error[DL0101]: this file is not UTF-8: 0xE9 here begins no UTF-8 character"), "{cmd:?}: {e}");
+        assert!(e.contains("latin1.delulu:3:25"), "{cmd:?}: at the byte: {e}");
+        assert!(!e.contains("stream did not contain"), "{cmd:?}: the library's words: {e}");
+    }
+    let o = delulu(&dir, &["check", "latin1.delulu", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("one JSON envelope");
+    let d = &v["diagnostics"][0];
+    assert_eq!((d["code"].as_str(), v["summary"]["errors"].as_u64()), (Some("DL0101"), Some(1)), "{v:#}");
+    assert_eq!((d["spans"][0]["start"]["line"].as_u64(), d["spans"][0]["start"]["col"].as_u64()), (Some(3), Some(25)), "{v:#}");
+    assert!(v.get("error").is_none(), "a diagnostic, not the usage fallback: {v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// C65's other half: a source command handed an artifact must say what it is, not leak an encoding
 /// error. `stream did not contain valid UTF-8` tells the reader nothing about what they did.
 #[test]

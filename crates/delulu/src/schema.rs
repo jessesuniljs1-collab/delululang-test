@@ -282,7 +282,9 @@ fn defs() -> Value {
         "summary": obj(&[("errors", t("integer")), ("warnings", t("integer"))], &[]),
         "capability": obj(
             &[("kind", t("string")), ("scopes", str_list.clone())],
-            &[("requested_scopes", str_list.clone())],
+            // `requested_computed` (A8): a minting site of this kind computes its scope, so the literals in
+            // `requested_scopes` may not be all the program asks for.
+            &[("requested_scopes", str_list.clone()), ("requested_computed", t("boolean"))],
         ),
         "foreign_call": json!({ "anyOf": [
             obj(&[
@@ -352,7 +354,7 @@ fn defs() -> Value {
                 // P9-05 (c), D-V2-140's static half: present only when the program makes a request.
                 ("requests", arr(obj(
                     &[
-                        ("method", en(&["get", "get_with", "get_with_secret"])),
+                        ("method", en(&["get", "get_with", "get_with_secret", "post", "post_with_secret"])),
                         ("url", nullable("string")),
                         ("host", nullable("string")),
                         ("path", nullable("string")),

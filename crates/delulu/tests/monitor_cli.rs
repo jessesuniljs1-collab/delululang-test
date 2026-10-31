@@ -1423,22 +1423,23 @@ fn a_long_chain_does_not_kill_a_healthy_monitor() {
     assert!(stats.records >= n, "{stats:?}");
     let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
     let (run, _) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
-    let mon = start_monitor_args(&f, &m, &["--for", "120000", "--death-after", &PERIOD_MS.to_string()]);
-    let live = |when: &str| {
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000", "--death-after", &PERIOD_MS.to_string()]);
+    let live = |when: &str, mon: &mut Monitor| {
         let states = node_states(&f);
-        assert_eq!(
-            (states[&m].0.as_str(), states[&run].0.as_str()),
-            ("live", "live"),
-            "{when}: a healthy monitor over {n} records (one whole read: {took:?}) was revoked by its own {PERIOD_MS} ms \
-             dead-man: {states:?}"
-        );
+        if (states[&m].0.as_str(), states[&run].0.as_str()) != ("live", "live") {
+            panic!(
+                "{when}: a healthy monitor over {n} records (one whole read: {took:?}) was revoked by its own {PERIOD_MS} ms \
+                 dead-man: {states:?}\n{}",
+                revoked_monitor_evidence(&f, mon)
+            );
+        }
     };
     std::thread::sleep(std::time::Duration::from_millis(4 * PERIOD_MS));
-    live("four periods into the watch");
+    live("four periods into the watch", &mut mon);
     // Appended after the watch began: what the monitor must read.
     let _ = delegate(&f, &["--parent", &run, "--holder-desc", "minted after the watch began"]);
     std::thread::sleep(std::time::Duration::from_millis(2 * PERIOD_MS));
-    live("six periods into the watch");
+    live("six periods into the watch", &mut mon);
     let (report, seen) = stop_monitor(&f, &m, mon);
     eprintln!("measured: {n} records, one whole read {took:?}; the monitor read {} past its start", report["records_read"]);
     assert!(report["ended"].as_str().is_some_and(|e| !e.contains("dead-man")), "{report:#}\n{seen:?}");
@@ -1450,6 +1451,80 @@ fn a_long_chain_does_not_kill_a_healthy_monitor() {
     // The daemon is found through the state directory: stop it first, then remove the long chain.
     drop(guard);
     let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
+}
+
+/// **DEADMAN-DEAF-1: a stopped daemon is not its monitor's silence.** `master`'s push run `40793268946` read a healthy monitor
+/// revoked by its own 500 ms dead-man on macOS, in `a_long_chain_does_not_kill_a_healthy_monitor`, with nothing in the
+/// message to say why. Asked what else can hold a beat past its period, the daemon answered: it judged each beat by when
+/// its own reader thread stamped it, so a daemon that was not running — here STOPPED for three periods, as a busy host's
+/// scheduler or a swap can stop it — stamped the beats that had waited in its socket after their deadline and revoked the
+/// monitor (73 beats counted) and the run under it, telling the monitor it "sent no beat". DEADMAN-BUSY-1 (D-V2-127) had
+/// made the handler's unavailability never count as a holder's silence; the whole process's did. The monitor must stay
+/// live, the daemon must have heard its own stop as deafness (its `broker.log` names it — the witness looked), and the
+/// dead-man must still fire once the monitor really goes quiet after it, so a clock left standing still cannot pass.
+#[cfg(unix)]
+#[test]
+fn a_stopped_daemon_is_not_its_monitors_silence() {
+    const PERIOD_MS: u64 = 500;
+    let f = setup("dstop");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, _) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000", "--death-after", &PERIOD_MS.to_string()]);
+    let pid = std::fs::read_to_string(f.state.join("broker.pid")).expect("broker.pid").trim().to_string();
+    let signal = |sig: &str, pid: &str| {
+        let o = Command::new("kill").args([sig, pid]).output().expect("kill(1)");
+        assert!(o.status.success(), "kill {sig} {pid}: {}", stderr(&o));
+    };
+    std::thread::sleep(std::time::Duration::from_millis(2 * PERIOD_MS));
+    signal("-STOP", &pid);
+    std::thread::sleep(std::time::Duration::from_millis(3 * PERIOD_MS));
+    signal("-CONT", &pid);
+    std::thread::sleep(std::time::Duration::from_millis(2 * PERIOD_MS));
+    let states = node_states(&f);
+    if (states[&m].0.as_str(), states[&run].0.as_str()) != ("live", "live") {
+        panic!(
+            "a healthy monitor was revoked by its own {PERIOD_MS} ms dead-man while its DAEMON was stopped: {states:?}\n{}",
+            revoked_monitor_evidence(&f, &mut mon)
+        );
+    }
+    let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_default();
+    assert!(
+        log.contains("this daemon did not run for") && log.contains("DEADMAN-DEAF-1"),
+        "the baseline — the daemon was stopped, and heard its stop as deafness:\n{log}"
+    );
+    // Not a clock left standing still: once the monitor itself is gone, its dead-man fires.
+    let gone = std::time::Instant::now();
+    let _ = mon.child.kill();
+    let _ = mon.child.wait();
+    let deadline = gone + std::time::Duration::from_secs(20);
+    while node_states(&f)[&m].0 == "live" {
+        assert!(std::time::Instant::now() < deadline, "a killed monitor's dead-man never fired after its daemon's stop");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let states = node_states(&f);
+    assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("revoked", "revoked"), "{states:?}");
+    let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_default();
+    assert!(log.contains("the dead-man on") && log.contains("fired"), "revoked by its dead-man:\n{log}");
+    eprintln!("measured: the killed monitor's node was revoked {} ms after it was killed", gone.elapsed().as_millis());
+    drop(guard);
+}
+
+/// What a witness of a healthy monitor prints beside "revoked", since a CI red keeps nothing else (RW 7.17): whether the
+/// monitor is still running, its standard error so far — its `ended` line says whether it stopped on an error, which leaves
+/// its dead-man armed to fire one period later, or was told it beat too late — and the daemon's `broker.log`, which names a
+/// dead-man's firing with the beats it counted, and every answer that left late and why.
+fn revoked_monitor_evidence(f: &Fixture, mon: &mut Monitor) -> String {
+    // Long enough for a monitor told it was revoked to read the chain and say why it ended.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while let Ok(l) = mon.lines.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+        mon.stderr_seen.push(l);
+    }
+    let status = mon.child.try_wait().map_or_else(|e| format!("unknown ({e})"), |s| format!("{s:?}"));
+    let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_else(|e| format!("(unreadable: {e})"));
+    format!("the monitor's exit status: {status}\nits standard error: {:#?}\nbroker.log:\n{log}", mon.stderr_seen)
 }
 
 /// A node's state by `grants inspect` — one node's answer, which fits a frame however large the tree is.

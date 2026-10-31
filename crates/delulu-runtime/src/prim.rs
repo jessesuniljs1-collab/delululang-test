@@ -263,6 +263,13 @@ pub fn unc_server(p: &str) -> Option<&str> {
 /// embedded NUL is refused (the OS would truncate the name at it).
 ///
 /// `allow_unc`: an operator's `--grant` may name a `\\server\share`; a program's path may not.
+/// A refused path as a refusal quotes it: as written, with each control or line-reordering character shown escaped
+/// (`delulu_diag::terminal_line`). B6 (the agent test campaign): it was `escape_debug`, which also doubled every
+/// backslash, so `\\?\C:\x` was quoted as `\\\\?\\C:\\x`. Shared by both engines.
+pub fn shown_path(p: &str) -> String {
+    delulu_diag::terminal_line(p).into_owned()
+}
+
 pub fn hostile_path(p: &str, allow_unc: bool) -> Option<String> {
     if p.contains('\0') {
         return Some("it contains an embedded NUL, at which the operating system would cut the name".into());
@@ -338,7 +345,7 @@ pub fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, F
 /// the custody) and where it resolves (a narrowed capability's own anchor).
 pub fn resolve_in_anchor(root: &Path, anchor: &Path, rel: &str, span: Span) -> Result<(PathBuf, PathBuf), Fault> {
     if let Some(why) = hostile_path(rel, false) {
-        return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", rel.escape_debug()), span));
+        return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", shown_path(rel)), span));
     }
     let joined = normalize(&root.join(rel));
     let resolved = canonical_existing(&joined).filter(|c| joined.starts_with(root) && c.starts_with(anchor));
@@ -412,13 +419,75 @@ pub fn request_path(url: &str) -> &str {
 
 /// P9-05 (a), D-V2-138: the capability's verdict on `url` — its host against each entry's host pattern, and where an entry
 /// names a path pattern, the path against it (`delulu_broker::netscope`, the reading the egress client and the broker
-/// share).
-pub(crate) fn url_verdict(url: &str, allow: &[String]) -> delulu_broker::netscope::Verdict {
-    delulu_broker::netscope::judge_all(allow, host_of(url), path_of(url))
+/// share) — and the request's `method` against each entry's methods (P9-05 (d), D-V2-182/183).
+pub(crate) fn url_verdict(url: &str, method: &str, allow: &[String]) -> delulu_broker::netscope::Verdict {
+    delulu_broker::netscope::judge_all(allow, method, host_of(url), path_of(url))
 }
 
-pub(crate) fn url_allowed(url: &str, allow: &[String]) -> bool {
-    url_verdict(url, allow) == delulu_broker::netscope::Verdict::Allow
+/// RW 4.79: a use the program's OWN capability refuses, and why — judged before its custody is asked, so the custody's
+/// chain never records `allow` for a call the capability then refuses (a capability may hold less than its node: a
+/// narrowed directory, one host of the node's, a path or a method fewer).
+pub struct CapabilityRefusal {
+    /// The fault the effect refuses the call with, in its words: what the program is told.
+    pub fault: Fault,
+    /// Why, for the chain's record: `outside-scope`, `hostile-path`, `other-host`, `outside-path`, `other-method` or
+    /// `ambiguous-path`. Never the request's own words — a URL's query is in no record (D-V2-169).
+    pub reason: &'static str,
+}
+
+/// [`CapabilityRefusal`] for one call — `None` where the capability takes it, where the call is no file or network use, and
+/// where the effect answers rather than refuses (a URL that is not `https://` is told `Refused`, a value: HTTP-SCHEME-1).
+/// Decided by the rule the effect itself applies below ([`resolve_in_anchor`], [`net_scope_refusal`]) and nothing is
+/// performed. One function for every gate that asks a custody: the interpreter's, a sandboxed guest's host's and the WASM
+/// host's.
+pub fn capability_refusal(capv: &CapVal, method: &str, args: &[Value], span: Span) -> Option<CapabilityRefusal> {
+    let file_effect = matches!(
+        (capv.kind, method),
+        (ResourceKind::FsRead, "read_text" | "list_dir") | (ResourceKind::FsWrite, "write_text" | "append_text")
+    );
+    let net_use =
+        capv.kind == ResourceKind::Http && matches!(method, "get" | "get_with" | "get_with_secret" | "post" | "post_with_secret");
+    match (&capv.scope, args.first()) {
+        (CapScope::Fs { root, anchor, .. }, Some(Value::Str(rel))) if file_effect => fs_scope_refusal(root, anchor, rel, span),
+        (CapScope::Net { allow, .. }, Some(Value::Str(url))) if net_use && url.starts_with("https://") => {
+            net_scope_refusal(url, http_method_of(method), allow, span)
+        }
+        _ => None,
+    }
+}
+
+/// A file capability's refusal of `rel` ([`resolve_in_anchor`]), in the words the effect refuses it. Public for the WASM
+/// host, which holds a capability's directory and anchor rather than the capability.
+pub fn fs_scope_refusal(root: &Path, anchor: &Path, rel: &str, span: Span) -> Option<CapabilityRefusal> {
+    let fault = resolve_in_anchor(root, anchor, rel, span).err()?;
+    let reason = if hostile_path(rel, false).is_some() { "hostile-path" } else { "outside-scope" };
+    Some(CapabilityRefusal { fault, reason })
+}
+
+/// A network capability's refusal of a request by `verb` to `url` ([`url_verdict`]), in the words the effect refuses it.
+/// Public for the WASM host, as [`fs_scope_refusal`] is.
+pub fn net_scope_refusal(url: &str, verb: &str, allow: &[String], span: Span) -> Option<CapabilityRefusal> {
+    use delulu_broker::netscope::Verdict;
+    let (reason, message) = match url_verdict(url, verb, allow) {
+        Verdict::Allow => return None,
+        Verdict::OtherHost => ("other-host", format!("host of `{url}` is not in the granted allowlist")),
+        Verdict::OutsidePath => {
+            ("outside-path", format!("the path of `{url}` is outside every path the grant names for its host"))
+        }
+        Verdict::OtherMethod => ("other-method", format!("a `{verb}` to `{url}` is outside the methods the grant names for it")),
+        Verdict::Ambiguous(why) => ("ambiguous-path", format!("`{url}` is refused under a path scope: {why}")),
+    };
+    Some(CapabilityRefusal { fault: Fault::at("DL0904", message, span), reason })
+}
+
+/// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183): `post` and `post_with_secret` a POST,
+/// every other one a GET.
+pub fn http_method_of(method: &str) -> &'static str {
+    if method == "post" || method == "post_with_secret" {
+        "POST"
+    } else {
+        "GET"
+    }
 }
 
 /// Does `host` fall under the allowlist pattern `pat` — exact, or `*.suffix` on a dot boundary?
@@ -470,7 +539,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "fs_read" => {
             let p = str_arg(args, 0, span)?;
             if let Some(why) = hostile_path(&p, false) {
-                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
+                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", shown_path(&p)), span));
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // Both gates, for the same reason as `resolve_in_scope`: minting the capability
@@ -495,7 +564,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "fs_write" => {
             let p = str_arg(args, 0, span)?;
             if let Some(why) = hostile_path(&p, false) {
-                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
+                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", shown_path(&p)), span));
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // On disk only, as `fs_read` above.
@@ -524,7 +593,39 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                     .collect();
                 Ok(cap(ResourceKind::Http, CapScope::Net { allow: hosts, special }))
             } else {
-                Err(refused("network host", "net=HOST"))
+                // A20 (the agent test campaign): an entry whose host IS granted, with fewer methods or a narrower path, is
+                // named with the grant it exceeds, rather than called a host that was not granted; and a special-use host's
+                // remedy is `net.special=`, the only spelling that grants one (D-NE-28).
+                let short = hosts.iter().find(|h| !root.net.iter().any(|g| delulu_broker::netscope::entry_within(h, g)));
+                let Some(entry) = short else { return Err(refused("network host", "net=HOST")) };
+                let host = delulu_broker::netscope::host_of(entry);
+                let key = if crate::netclass::special_use_class(host).is_some() { "net.special" } else { "net" };
+                let same: Vec<String> =
+                    root.net.iter().filter(|g| delulu_broker::netscope::host_of(g) == host).map(|g| format!("`{g}`")).collect();
+                if same.is_empty() {
+                    // B4 (the agent test campaign): this said "`network host` was not granted" and `net=HOST`, a
+                    // placeholder where the request belongs, so a lease run's refusal could not say which host was asked
+                    // for. It names the entry, and the grant that covers it.
+                    Err(Fault::at(
+                        "DL0703",
+                        format!(
+                            "network access to `{entry}` was not granted to this program — {}",
+                            remedy(&format!("{key}={entry}"))
+                        ),
+                        span,
+                    ))
+                } else {
+                    Err(Fault::at(
+                        "DL0703",
+                        format!(
+                            "`{entry}` asks for more of `{host}` than this program was granted ({}): a method or a path it names \
+                             is outside the grant — {}",
+                            same.join(", "),
+                            remedy(&format!("{key}={entry}"))
+                        ),
+                        span,
+                    ))
+                }
             }
         }
         "clock" => {
@@ -762,12 +863,23 @@ pub fn call_cap_method_pinned(
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
+        (ResourceKind::Http, "get")
+        | (ResourceKind::Http, "get_with")
+        | (ResourceKind::Http, "get_with_secret")
+        | (ResourceKind::Http, "post")
+        | (ResourceKind::Http, "post_with_secret") => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
             let headers = headers_arg(args, method, span)?;
+            // P9-05 (d), D-V2-183: `post(url, headers, body)` — the one request with a body, by POST.
+            let verb = http_method_of(method);
+            let body = match method {
+                "post" => Some(str_arg(args, 2, span)?),
+                "post_with_secret" => Some(str_arg(args, 4, span)?),
+                _ => None,
+            };
             // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in.
-            let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" {
+            let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" || method == "post_with_secret" {
                 let header = str_arg(args, 2, span)?;
                 let Some(Value::Secret(s)) = args.get(3) else {
                     return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
@@ -780,21 +892,8 @@ pub fn call_cap_method_pinned(
                 crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
                 return Ok(Value::err(net_err("Refused")));
             }
-            match url_verdict(&url, allow) {
-                delulu_broker::netscope::Verdict::Allow => {}
-                delulu_broker::netscope::Verdict::OtherHost => {
-                    return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
-                }
-                delulu_broker::netscope::Verdict::OutsidePath => {
-                    return Err(Fault::at(
-                        "DL0904",
-                        format!("the path of `{url}` is outside every path the grant names for its host"),
-                        span,
-                    ));
-                }
-                delulu_broker::netscope::Verdict::Ambiguous(why) => {
-                    return Err(Fault::at("DL0904", format!("`{url}` is refused under a path scope: {why}"), span));
-                }
+            if let Some(refusal) = net_scope_refusal(&url, verb, allow, span) {
+                return Err(refusal.fault);
             }
             // P9-04 (d), D-V2-134: a broker-held secret (a daemon or leased run's handle) carries no bytes here — the
             // interpreter asks the broker for them for one origin and hands this table a secret that holds them
@@ -803,8 +902,10 @@ pub fn call_cap_method_pinned(
             if secret.as_ref().is_some_and(|(_, s)| s.handle_name().is_some()) {
                 return Err(Fault::at(
                     "DL0904",
-                    "`http.get_with_secret` of a broker-held secret reached the request without the broker's answer \
-                     (internal wiring error) — nothing was sent",
+                    format!(
+                        "`http.{method}` of a broker-held secret reached the request without the broker's answer \
+                         (internal wiring error) — nothing was sent"
+                    ),
                     span,
                 ));
             }
@@ -813,6 +914,10 @@ pub fn call_cap_method_pinned(
             // the host, pins, and follows redirects through the same check. For a sandboxed guest this
             // line runs in the HOST — `HostChannel::decide` performs the request here — so one
             // implementation serves L0 and every guest.
+            // RW 4.67: a request carrying a secret copies its bytes — `reveal`'s copy, each header, the serialized request —
+            // into buffers that are not ours. While this window is open every one of them is zeroed as it is freed; the
+            // request's client is dropped, and its runtime thread joined, before `request_for_program` returns.
+            let _scrub = secret.as_ref().map(|_| crate::scrub::Window::open());
             let revealed = secret.as_ref().map(|(_, s)| s.reveal());
             let audience = secret.as_ref().and_then(|(_, s)| s.audience().cloned());
             let carried = match (&secret, &revealed) {
@@ -824,7 +929,15 @@ pub fn call_cap_method_pinned(
                 }),
                 _ => None,
             };
-            Ok(answer_value(crate::egress::get_for_program_with_secret(&url, &headers, carried.as_ref(), allow, special)))
+            Ok(answer_value(crate::egress::request_for_program(
+                verb,
+                &url,
+                &headers,
+                body.as_deref(),
+                carried.as_ref(),
+                allow,
+                special,
+            )))
         }
         (ResourceKind::Clock, "now_ms") => {
             let ms = FIXED_CLOCK
@@ -836,7 +949,9 @@ pub fn call_cap_method_pinned(
             let lo = int_arg(args, 0, span)?;
             let hi = int_arg(args, 1, span)?;
             if hi <= lo {
-                return Err(Fault::at("DL0904", "rand.int requires lo < hi", span));
+                // An argument outside what the operation accepts, not a scope violation (A15, D-V2-190). The WASM host
+                // says the same words (`rand_int_range_fault`).
+                return Err(Fault::at("DL0908", rand_int_range_fault(lo, hi), span));
             }
             // The span `hi - lo` is up to 2^64 - 1, past `Int`'s range: computed modulo 2^64 it is exact as a `u64`,
             // and the drawn offset added modulo 2^64 lands exactly in `lo..hi`. Plain `-` and `+` panicked a debug
@@ -1185,6 +1300,11 @@ pub(crate) fn str_arg(args: &[Value], i: usize, span: Span) -> Result<String, Fa
         _ => Err(Fault::at("DL0907", format!("expected a Str argument at position {i}"), span)),
     }
 }
+/// The text of `rand.int`'s DL0908, the one both engines report for a range with no value in it (A15, D-V2-190).
+pub fn rand_int_range_fault(lo: i64, hi: i64) -> String {
+    format!("rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = {lo}, hi = {hi}")
+}
+
 fn int_arg(args: &[Value], i: usize, span: Span) -> Result<i64, Fault> {
     match args.get(i) {
         Some(Value::Int(n)) => Ok(*n),
@@ -1215,8 +1335,15 @@ fn io_err_for(e: &std::io::Error) -> Value {
     match e.kind() {
         NotFound => io_err("NotFound"),
         PermissionDenied => io_err("Denied"),
-        _ => Value::variant("Other", vec![Value::str(e.to_string())]),
+        _ => Value::variant("Other", vec![Value::str(io_other_text(e))]),
     }
+}
+
+/// What an `IoErr::Other` says: the kind of failure, in Rust's words (`invalid filename`, `is a directory`), the same on
+/// every OS and both engines. B11 (the agent test campaign): it was the OS's own message, in the machine's language,
+/// with its error number — text a program could branch on and that differed by machine.
+pub fn io_other_text(e: &std::io::Error) -> String {
+    e.kind().to_string()
 }
 /// DL0904 for a path that passed the scope check and then was not inside the grant when it was
 /// opened (FS-RACE-1) — the same code as every other escape, with the reason in the text.
@@ -1234,6 +1361,9 @@ fn scope_bug(span: Span) -> Fault {
 use std::cell::Cell;
 thread_local! {
     static RNG: Cell<u64> = Cell::new(seed());
+    /// The key the next actor spawned from this thread derives its generator from, and how many it has derived so far
+    /// ([`next_spawn_key`]; ACTOR-DETERMINISM-1, D-V2-192).
+    static SPAWN: Cell<(u64, u64)> = Cell::new((wall_nanos(), 0));
     static FIXED_CLOCK: Cell<Option<i64>> = const { Cell::new(None) };
     /// When `Some`, `Cap[Console]` output is captured into this buffer instead of stdout — used by
     /// tests and by the WASM backend's two-engine parity harness (§9). Off by default.
@@ -1272,8 +1402,11 @@ fn emit_console(s: &str, newline: bool) {
         }
     }
 }
+fn wall_nanos() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)
+}
 fn seed() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E3779B9) | 1
+    rng_state_from_seed(wall_nanos())
 }
 fn next_rand() -> u64 {
     RNG.with(|r| {
@@ -1288,12 +1421,68 @@ fn next_rand() -> u64 {
 
 /// Deterministic replay (spec §6.2): reseed `Cap[Rand]`'s thread-local xorshift generator. Two
 /// runs on the same thread that call `set_rand_seed` with the same value produce identical
-/// `rand.int`/`rand.float` sequences; different seeds (almost always) diverge. The xorshift
-/// generator gets stuck at zero, so a zero seed is mapped to a fixed nonzero value, matching the
-/// `| 1` bias `seed()` already applies for the non-deterministic default.
+/// `rand.int`/`rand.float` sequences; different seeds diverge, every seed but one pair starting from a state of its
+/// own ([`rng_state_from_seed`], which `seed()` applies to the non-deterministic default too).
 pub fn set_rand_seed(seed: u64) {
-    let s = if seed == 0 { 0x9E3779B9 } else { seed } | 1;
-    RNG.with(|r| r.set(s));
+    RNG.with(|r| r.set(rng_state_from_seed(seed)));
+    SPAWN.with(|s| s.set((seed, 0)));
+}
+
+/// An actor's own `Cap[Rand]` stream (ACTOR-DETERMINISM-1, D-V2-192). The generator is a thread-local and an actor runs
+/// on a worker thread, which `--seed` never reached, so an actor's draws differed on every run. Each actor now carries
+/// its stream between turns, installed for a turn by [`swap_rand_stream`]; its turns run one at a time, so its draws
+/// depend on its key and its own messages, not on which worker runs it.
+#[derive(Clone, Copy, Debug)]
+pub struct RandStream {
+    state: u64,
+    key: u64,
+    spawned: u64,
+}
+
+impl RandStream {
+    /// The stream of an actor spawned with `key` ([`next_spawn_key`]).
+    pub fn from_key(key: u64) -> RandStream {
+        RandStream { state: rng_state_from_seed(key), key, spawned: 0 }
+    }
+}
+
+/// The key for the next actor spawned from this thread's current stream: the stream's own key and how many actors it
+/// has spawned, mixed. `main`'s key is the run's seed; an actor's is the one its spawner gave it.
+pub fn next_spawn_key() -> u64 {
+    SPAWN.with(|s| {
+        let (key, n) = s.get();
+        s.set((key, n + 1));
+        rng_state_from_seed(key ^ rng_state_from_seed(n))
+    })
+}
+
+/// Make `stream` this thread's generator for one actor turn; returns the one it replaces, to be put back after the turn.
+pub fn swap_rand_stream(stream: RandStream) -> RandStream {
+    let state = RNG.with(|r| r.replace(stream.state));
+    let (key, spawned) = SPAWN.with(|s| s.replace((stream.key, stream.spawned)));
+    RandStream { state, key, spawned }
+}
+
+/// The fixed clock this thread reads, if any — for an actor worker to adopt the run's (ACTOR-DETERMINISM-1).
+pub fn fixed_clock_ms() -> Option<i64> {
+    FIXED_CLOCK.with(|c| c.get())
+}
+
+/// The generator's starting state for a seed, the same on both engines: the seed mixed by splitmix64, a bijection on
+/// `u64`, so every seed starts somewhere of its own (D-V2-191). It was `seed | 1`: every even seed drew its odd
+/// neighbour's sequence, and a small seed started xorshift so near zero that its first draws were tiny (seed 1's first
+/// `r.float()` was 5.9e-11). xorshift stays at zero forever, so the one seed that mixes to zero
+/// (`2^64 - 0x9E37_79B9_7F4A_7C15`) starts at that constant instead, where `0xCD36_DA00_563C_5EF6` also starts: 2^64
+/// seeds into 2^64 - 1 nonzero states share at least one, and this is the only pair.
+pub fn rng_state_from_seed(seed: u64) -> u64 {
+    const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut z = seed.wrapping_add(GAMMA);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    match z ^ (z >> 31) {
+        0 => GAMMA,
+        state => state,
+    }
 }
 
 /// Deterministic replay (spec §6.2): fix `Cap[Clock].now_ms()` to always return `ms` on this
@@ -1322,6 +1511,46 @@ mod determinism_tests {
         set_rand_seed(2);
         let b: Vec<u64> = (0..8).map(|_| next_rand()).collect();
         assert_ne!(a, b, "different seeds should (overwhelmingly likely) diverge");
+    }
+
+    /// Every seed its own sequence (D-V2-191). The state was `seed | 1`, so `--seed 2` and `--seed 3` drew one sequence,
+    /// as did every even seed and the odd one after it, and seed 0 shared its sequence with `0x9E3779B8` and `0x9E3779B9`.
+    #[test]
+    fn neighbouring_seeds_draw_different_sequences() {
+        let mut seen = std::collections::HashMap::new();
+        for seed in (0..64u64).chain([0x9E37_79B8, 0x9E37_79B9, u64::MAX - 1, u64::MAX]) {
+            set_rand_seed(seed);
+            let draws: Vec<u64> = (0..4).map(|_| next_rand()).collect();
+            if let Some(other) = seen.insert(draws, seed) {
+                panic!("seeds {other} and {seed} draw the same sequence");
+            }
+        }
+    }
+
+    /// A small seed was a nearly empty xorshift state, so its first draws were tiny: seed 1's first `r.float()` was
+    /// 5.9e-11, and every seed from 1 to 64 drew a first float below 0.01. Mixed, they spread over the range.
+    #[test]
+    fn a_small_seeds_first_draw_is_spread_over_the_range() {
+        let firsts: Vec<f64> = (1..=64u64)
+            .map(|s| {
+                set_rand_seed(s);
+                next_rand() as f64 / u64::MAX as f64
+            })
+            .collect();
+        let mean = firsts.iter().sum::<f64>() / firsts.len() as f64;
+        assert!((0.3..0.7).contains(&mean), "the first draws of seeds 1..=64 average {mean}: {firsts:?}");
+        let tiny = firsts.iter().filter(|f| **f < 0.01).count();
+        assert!(tiny <= 4, "{tiny} of 64 small seeds draw a first float below 0.01: {firsts:?}");
+    }
+
+    /// The one seed that splitmix64 mixes to zero, where xorshift would draw zeros forever, starts where
+    /// `0xCD36_DA00_563C_5EF6` does. Both seeds come from inverting splitmix64: `0x61C8_8646_80B5_83EB` is
+    /// `2^64 - 0x9E37_79B9_7F4A_7C15`, and the other mixes to `0x9E37_79B9_7F4A_7C15`.
+    #[test]
+    fn the_seed_that_mixes_to_zero_still_draws() {
+        assert_eq!(rng_state_from_seed(0x61C8_8646_80B5_83EB), rng_state_from_seed(0xCD36_DA00_563C_5EF6));
+        set_rand_seed(0x61C8_8646_80B5_83EB);
+        assert!((0..4).map(|_| next_rand()).all(|x| x != 0), "a zero state draws zeros forever");
     }
 
     #[test]
@@ -1778,6 +2007,17 @@ mod containment_tests {
 #[cfg(test)]
 mod hostile_path_tests {
     use super::*;
+
+    /// B6 (the agent test campaign): a refused path is quoted as written — a backslash once, as it was typed — and only a
+    /// control character is shown escaped. It was `escape_debug`, which doubled every backslash.
+    #[test]
+    fn a_refused_path_is_quoted_as_written_with_its_controls_escaped() {
+        let span = Span::new(0, 0, 0);
+        let f = resolve_in_scope(Path::new("."), "a\\b\0c", span).expect_err("an embedded NUL is refused everywhere");
+        assert_eq!(f.code, "DL0904");
+        assert!(f.message.starts_with("path `a\\b\\u{0}c` is refused: "), "{}", f.message);
+        assert_eq!(shown_path("C:\\x\u{1b}]0;t\u{7}\n"), "C:\\x\\u{1b}]0;t\\u{7}\\u{a}");
+    }
 
     /// RW 4.17: the machine a UNC grant reaches, by either slash; none for a local path or a prefix `hostile_path` refuses.
     #[test]

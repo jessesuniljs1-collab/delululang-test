@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
-use wasmtime::{Caller, Config, Engine, Instance, Linker, Module, OptLevel, Store, Val};
+use wasmtime::{Caller, Config, Engine, Instance, Linker, Module, OptLevel, Store, Val, WasmBacktrace};
 
 /// The optimizing execution engine — Track A §2.1's "Cranelift-optimized Wasmtime tier".
 ///
@@ -30,6 +30,10 @@ pub(crate) fn optimizing_engine() -> Engine {
     let mut config = Config::new();
     config.cranelift_opt_level(OptLevel::Speed);
     harden_wasm_features(&mut config);
+    // What places a fault (B5): a trap's backtrace, its innermost frames, and the map from machine code back to the module's
+    // offsets. wasmtime's defaults, stated so that a new default cannot leave every WASM fault unplaced unnoticed.
+    config.wasm_backtrace_max_frames(std::num::NonZeroUsize::new(20));
+    config.generate_address_map(true);
     // `Speed` is an always-valid level, so construction cannot fail on wasmtime 27; fall back to
     // the default engine rather than panic if a future wasmtime ever disagrees.
     Engine::new(&config).unwrap_or_default()
@@ -120,7 +124,10 @@ pub enum WasmError {
     Module(String),
     Instantiate(String),
     NoExport(String),
-    Trap(String),
+    /// The run stopped: the refusal or the trap, and the guest's frames where it stopped — innermost first, each a
+    /// function's index and the offset in its body of the instruction it was at ([`crate::SiteMap::locate`], B5). Empty
+    /// where the engine gave none.
+    Trap(String, Vec<(u32, u32)>),
     BadResult,
 }
 
@@ -130,8 +137,16 @@ impl WasmError {
             WasmError::Module(e) => format!("invalid WASM module: {e}"),
             WasmError::Instantiate(e) => format!("instantiation failed: {e}"),
             WasmError::NoExport(n) => format!("no exported function `{n}`"),
-            WasmError::Trap(e) => format!("WASM trap: {e}"),
+            WasmError::Trap(e, _) => format!("WASM trap: {e}"),
             WasmError::BadResult => "unexpected result type from WASM".to_string(),
+        }
+    }
+
+    /// Where the guest was when the run stopped (`Trap`'s frames; none for another error).
+    pub fn frames(&self) -> &[(u32, u32)] {
+        match self {
+            WasmError::Trap(_, frames) => frames,
+            _ => &[],
         }
     }
 }
@@ -164,10 +179,9 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
             // `__alloc` traps this way when the memory cannot give an allocation (past WebAssembly's 4 GiB, or a growth the
             // engine refuses) — the backend emits no other out-of-bounds access — so the text names both.
             Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => MEMORY_EXHAUSTED.to_string(),
-            // The codegen traps checked `+`,`-`,`*` overflow and `%` by zero / INT_MIN%-1 via
-            // `unreachable`. The interpreter reports overflow as DL0901 and rem-by-zero as DL0902;
-            // the two are indistinguishable from the trap alone, so the common case (overflow)
-            // wins and the residual is documented in C20.
+            // The codegen traps checked `+`,`-`,`*` overflow and `INT_MIN % -1` via `unreachable`, each DL0901 on the
+            // interpreter too. `%` by zero is left to `i64.rem_s`, which traps `IntegerDivisionByZero` (DL0902, above);
+            // it used `unreachable` as well, and so read as overflow (C20's residual, closed 2026-10-24).
             Trap::UnreachableCodeReached => "DL0901: integer overflow".to_string(),
             _ => first_line(),
         },
@@ -189,8 +203,8 @@ pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmErro
     let params: Vec<Val> = args.iter().map(|&a| Val::I64(a)).collect();
     let mut results = vec![Val::I64(0)];
     func.call(&mut store, &params, &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
-    if let Some(reason) = store.data().refused.clone() {
-        return Err(WasmError::Trap(reason));
+    if let Some(refused) = refusal(store.data()) {
+        return Err(refused);
     }
     match results.first() {
         Some(Val::I64(n)) => Ok(*n),
@@ -274,6 +288,8 @@ struct HostState {
     /// error returned across the wasm frame aborts on some platforms); the runner turns a set flag
     /// into a clean `WasmError` after the call.
     refused: Option<String>,
+    /// Where the guest was when `refused` was recorded (B5): its frames, as [`WasmError::Trap`] carries them.
+    refused_at: Vec<(u32, u32)>,
     // ----- Stage 4 phase 4g: C FFI + effect tracing --------------------------------------------
     /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` (i.e. some `foreign.c` lib or
     /// `foreign.python` pattern is granted — mirrors the interpreter's `RootVal.foreign_load`).
@@ -319,11 +335,11 @@ impl HostState {
     /// carried from Stage 3/4): the runner surfaces the refusal cleanly after the call, exactly
     /// like the Stage-3 console/fs refusals. `None` custody (embedded) always allows.
     fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
-        self.custody_allows_at(op, arg, None)
+        self.use_allows(op, arg, None, None, None)
     }
 
     /// ARTIFACT-CLAIM-1's ceiling: whether a `.dwx`'s manifest declares `effect` (always, for a program compiled here). A
-    /// refusal is recorded (DL1202) and `false` returned. Asked by [`HostState::custody_allows_at`] of every custody op, and
+    /// refusal is recorded (DL1202) and `false` returned. Asked by [`HostState::use_allows`] of every custody op, and
     /// directly of an effect the host performs with no custody op, as the interpreter does (`Secret.verify`'s `Declassify`).
     fn declared_allows(&mut self, effect: &str) -> bool {
         let Some(declared) = &self.declared_effects else { return true };
@@ -338,9 +354,20 @@ impl HostState {
         false
     }
 
-    /// [`HostState::custody_allows`] for a network use naming its request path (P9-05, D-V2-169): the custody judges it
-    /// and names it in the use's record, as the interpreter's gate does.
-    fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
+    /// [`HostState::custody_allows`] for a use the program's own capability is asked about first (RW 4.79), as the
+    /// interpreter's gate asks it — between the artifact's declared effects and the custody. A use `refused` names (the
+    /// capability's verdict, `prim::fs_scope_refusal` or `prim::net_scope_refusal`) is refused in the effect's words and
+    /// said to the custody, whose chain records it refused, never allowed; the custody is not asked. Otherwise the custody
+    /// judges it — a network use by its request path (P9-05, D-V2-169) and its method when it is not a GET (P9-05 (d),
+    /// D-V2-183: `post`), each named in the use's record.
+    fn use_allows(
+        &mut self,
+        op: CustodyOp,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        refused: Option<delulu_runtime::prim::CapabilityRefusal>,
+    ) -> bool {
         // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
         // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
         // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
@@ -349,8 +376,15 @@ impl HostState {
                 return false;
             }
         }
+        if let Some(r) = refused {
+            if let Some(custody) = &self.custody {
+                custody.borrow_mut().note_capability_refusal(op, arg, url_path, method, r.reason);
+            }
+            self.refused = Some(format!("{}: {}", r.fault.code, r.fault.message));
+            return false;
+        }
         let Some(custody) = &self.custody else { return true };
-        match custody.borrow_mut().check_at(op, arg, url_path) {
+        match custody.borrow_mut().check_at(op, arg, url_path, method) {
             CustodyDecision::Allow => true,
             CustodyDecision::Deny(d) => {
                 self.refused = Some(format!("{}: {}", d.code, d.message));
@@ -431,7 +465,7 @@ fn parse_by_builtin(caller: &mut Caller<'_, HostState>, name: &str, s: i32) -> O
         return None;
     }
     let Some(text) = read_guest_str(caller, s) else {
-        caller.data_mut().refused = Some(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+        caller.refuse(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
         return None;
     };
     let answer = delulu_runtime::prim::call_builtin(name, &[Value::str(text)], delulu_diag::Span::new(0, 0, 0));
@@ -442,12 +476,12 @@ fn parse_by_builtin(caller: &mut Caller<'_, HostState>, name: &str, s: i32) -> O
             _ => {}
         },
         Some(Err(fault)) => {
-            caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+            caller.refuse(format!("{}: {}", fault.code, fault.message));
             return None;
         }
         _ => {}
     }
-    caller.data_mut().refused = Some(format!("`{name}` answered a value the WASM engine does not hold"));
+    caller.refuse(format!("`{name}` answered a value the WASM engine does not hold"));
     None
 }
 
@@ -460,11 +494,11 @@ fn reify_values(caller: &mut Caller<'_, HostState>, desc: i32, ptrs: &[i32]) -> 
         return None;
     }
     let Some(d) = read_guest_str(caller, desc).and_then(|t| crate::reify::parse(&t)) else {
-        caller.data_mut().refused = Some("DL0903: a value's type descriptor is not one the WASM engine wrote".into());
+        caller.refuse("DL0903: a value's type descriptor is not one the WASM engine wrote".into());
         return None;
     };
     let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
-        caller.data_mut().refused = Some("DL0903: a module with no memory".into());
+        caller.refuse("DL0903: a module with no memory".into());
         return None;
     };
     let rebuilt: Result<Vec<Value>, String> = {
@@ -475,7 +509,7 @@ fn reify_values(caller: &mut Caller<'_, HostState>, desc: i32, ptrs: &[i32]) -> 
     match rebuilt {
         Ok(vs) => Some(vs),
         Err(why) => {
-            caller.data_mut().refused = Some(format!("DL0903: {why}"));
+            caller.refuse(format!("DL0903: {why}"));
             None
         }
     }
@@ -483,7 +517,7 @@ fn reify_values(caller: &mut Caller<'_, HostState>, desc: i32, ptrs: &[i32]) -> 
 
 /// Record that the interpreter's `name` answered `got`, which the guest cannot hold, and return `none`.
 fn unheld<T>(caller: &mut Caller<'_, HostState>, name: &str, got: &Value, none: T) -> T {
-    caller.data_mut().refused = Some(format!("`{name}` answered {got:?}, which the WASM engine does not hold"));
+    caller.refuse(format!("`{name}` answered {got:?}, which the WASM engine does not hold"));
     none
 }
 
@@ -496,7 +530,7 @@ fn float_to_guest_str(caller: &mut Caller<'_, HostState>, x: f64) -> i32 {
     match write_str_cell(caller, &Value::Float(x).display()) {
         Ok(ptr) => ptr,
         Err(()) => {
-            caller.data_mut().refused = Some("guest heap exhausted formatting a float".into());
+            caller.refuse("guest heap exhausted formatting a float".into());
             0
         }
     }
@@ -515,7 +549,7 @@ fn encode_fval_return(caller: &mut Caller<'_, HostState>, fv: FVal) -> i64 {
         FVal::Str(s) => match write_str_cell(caller, &s) {
             Ok(ptr) => ptr as u32 as i64,
             Err(()) => {
-                caller.data_mut().refused = Some("guest heap exhausted copying a foreign string return".into());
+                caller.refuse("guest heap exhausted copying a foreign string return".into());
                 0
             }
         },
@@ -541,16 +575,13 @@ fn xorshift64(mut x: u64) -> u64 {
     x
 }
 
-/// The initial PRNG state, matching the interpreter: `set_rand_seed`'s `(s==0 ? GOLDEN : s) | 1` for a
-/// fixed seed, or a nanosecond wall seed (`| 1`) when no seed is given.
+/// The initial PRNG state, the interpreter's own (`rng_state_from_seed`, D-V2-191): the seed mixed, or a nanosecond
+/// wall seed mixed when no seed is given.
 fn seed_rng(seed: Option<u64>) -> u64 {
-    match seed {
-        Some(s) => (if s == 0 { 0x9E37_79B9 } else { s }) | 1,
-        None => {
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E37_79B9)
-                | 1
-        }
-    }
+    let s = seed.unwrap_or_else(|| {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0)
+    });
+    delulu_runtime::prim::rng_state_from_seed(s)
 }
 
 // ----- guest-memory helpers (the host reads/writes the guest's linear memory) ----------------
@@ -562,15 +593,149 @@ fn seed_rng(seed: Option<u64>) -> u64 {
 //   variant `[tag:i32-le @0][field @4]` (8-byte field slot; cell 12 bytes)
 //   Result tags: Ok=0, Err=1.   IoErr tags: NotFound=0, Denied=1, Other=2.
 
+/// `get_with_secret` and `post_with_secret` (D-V2-174; P9-05 (d), D-V2-183): `get`'s order — the record at dispatch, its
+/// detail `«opaque»` as every secret-involving record's is; the custody on the URL's host (and, for the POST, its method),
+/// unless the URL is not `https://`; then the secret judged and, if the broker holds it, its bytes asked for the one origin
+/// by the interpreter's own `broker_secret_send`; then the interpreter's own method, its egress client and all. The bytes
+/// go from the cap table to the egress client; the guest names the entry and is given the answer.
+#[allow(clippy::too_many_arguments)]
+fn send_with_secret(
+    caller: &mut Caller<'_, HostState>,
+    method: &'static str,
+    cap: i32,
+    url_ptr: i32,
+    headers: i32,
+    desc: i32,
+    header_ptr: i32,
+    secret: i32,
+    body_ptr: Option<i32>,
+    file: i32,
+    start: i32,
+    end: i32,
+) -> i32 {
+    let verb = delulu_runtime::prim::http_method_of(method);
+    let verb = (verb != "GET").then_some(verb);
+    if caller.data().refused.is_some() {
+        return 0;
+    }
+    let (allow, special) = match caller.data().caps.get(cap as usize) {
+        Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+        _ => {
+            caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
+            return 0;
+        }
+    };
+    let held = match caller.data().caps.get(secret as usize) {
+        Some(CapKind::Secret(s)) => s.clone(),
+        _ => {
+            caller.refuse(format!("DL0904: handle {secret} is not a secret"));
+            return 0;
+        }
+    };
+    let Some(url) = read_guest_str(caller, url_ptr) else {
+        caller.refuse("DL0903: http get URL pointer is out of bounds".into());
+        return 0;
+    };
+    let Some(header) = read_guest_str(caller, header_ptr) else {
+        caller.refuse("DL0903: a header's name lies outside the guest's memory".into());
+        return 0;
+    };
+    let Some(mut hs) = reify_values(caller, desc, &[headers]) else { return 0 };
+    let headers = hs.pop().unwrap_or(Value::Unit);
+    // `post_with_secret`'s body (P9-05 (d), D-V2-183), read where its pointer is given.
+    let body = match body_ptr {
+        Some(p) => match read_guest_str(caller, p) {
+            Some(b) => Some(b),
+            None => {
+                caller.refuse("DL0903: a request body lies outside the guest's memory".into());
+                return 0;
+            }
+        },
+        None => None,
+    };
+    let detail = Some(delulu_runtime::trace::OPAQUE.to_string());
+    caller.data_mut().push_trace("Net", method, "Http", detail, file, start, end);
+    let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+    if let Some(h) = &host {
+        let url_path = delulu_runtime::prim::request_path(&url);
+        let refused =
+            delulu_runtime::prim::net_scope_refusal(&url, verb.unwrap_or("GET"), &allow, delulu_diag::Span::new(0, 0, 0));
+        if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), verb, refused) {
+            caller.data_mut().push_refusal_trace("Net", method, "Http", file, start, end);
+            return 0;
+        }
+        delulu_runtime::egress::begin_fetch();
+    }
+    let capv = delulu_runtime::value::CapVal {
+        kind: delulu_check::ResourceKind::Http,
+        scope: delulu_runtime::value::CapScope::Net { allow, special },
+    };
+    let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+    let mut args = vec![Value::str(url.clone()), headers, Value::str(header), Value::Secret(held)];
+    if let Some(body) = body {
+        args.push(Value::str(body));
+    }
+    // Embedded custody holds no broker secret, as the interpreter's `EmbeddedCustody` does not: a handle met
+    // here is refused in its words, never sent empty.
+    let send = match &caller.data().custody {
+        Some(custody) => delulu_runtime::interp::broker_secret_send(&mut **custody.borrow_mut(), &capv, method, &args, span),
+        None => {
+            delulu_runtime::interp::broker_secret_send(&mut delulu_runtime::EmbeddedCustody::new(), &capv, method, &args, span)
+        }
+    };
+    let answer = send.and_then(|send| match send {
+        delulu_runtime::interp::SecretSend::AsGiven => delulu_runtime::prim::call_cap_method(&capv, method, &args, span),
+        delulu_runtime::interp::SecretSend::Answered(v) => Ok(v),
+        delulu_runtime::interp::SecretSend::Held(args) => delulu_runtime::prim::call_cap_method(&capv, method, &args, span),
+    });
+    if let Some(h) = &host {
+        if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+            if let Some(custody) = &caller.data().custody {
+                custody.borrow_mut().note_egress_refusal(h, reason);
+            }
+        }
+    }
+    let answer = match answer {
+        Ok(v) => v,
+        Err(fault) => {
+            caller.refuse(format!("{}: {}", fault.code, fault.message));
+            caller.data_mut().push_refusal_trace("Net", method, "Http", file, start, end);
+            return 0;
+        }
+    };
+    match build_net_answer(caller, &answer) {
+        Some(Ok(ptr)) => ptr,
+        Some(Err(())) => {
+            caller.refuse("guest heap exhausted building the http result".into());
+            0
+        }
+        None => unheld(caller, &format!("http.{method}"), &answer, 0),
+    }
+}
+
 /// Read a length-prefixed guest string at `ptr`; `None` if it is out of bounds.
 fn read_guest_str(caller: &mut Caller<'_, HostState>, ptr: i32) -> Option<String> {
     let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
     let data = mem.data(&caller);
-    let p = ptr as u32 as usize;
+    Some(String::from_utf8_lossy(guest_str_bytes(data, ptr as u32)?).to_string())
+}
+
+/// The bytes of the guest string cell (`[len: u32][bytes]`) at `ptr` in `data`, or `None` when they lie outside it.
+fn guest_str_bytes(data: &[u8], ptr: u32) -> Option<&[u8]> {
+    let p = ptr as usize;
     let hend = p.checked_add(4).filter(|&e| e <= data.len())?;
     let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
     let bend = hend.checked_add(len).filter(|&e| e <= data.len())?;
-    Some(String::from_utf8_lossy(&data[hend..bend]).to_string())
+    Some(&data[hend..bend])
+}
+
+/// Two guest strings in the order their texts have as [`read_guest_str`] reads them: by their bytes when both are UTF-8
+/// (`str`'s order is its bytes' order), and as their lossy readings otherwise, which only a hand-written `.dwx` makes.
+fn compare_texts(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    match (std::str::from_utf8(a), std::str::from_utf8(b)) {
+        (Ok(a), Ok(b)) => a.cmp(b),
+        _ => String::from_utf8_lossy(a).cmp(&String::from_utf8_lossy(b)),
+    }
 }
 
 /// Bump-allocate `n` bytes in the guest heap (via the `__heap` global); returns the old pointer. The memory grows by the
@@ -645,7 +810,10 @@ const MAP_CORRUPT: &str = "DL0903: a map's pairs lie outside the guest's memory 
 
 impl GuestMap {
     fn read(caller: &mut Caller<'_, HostState>, at: i32) -> Option<GuestMap> {
-        let b = guest_read(caller, at as u32, 12)?;
+        // Read where it lies (A5): a lookup made no copy of the header, as it makes none of a key.
+        let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+        let a = at as u32 as usize;
+        let b = mem.data(&*caller).get(a..a.checked_add(12)?)?;
         let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
         let (len, cap, data) = (word(0), word(4), word(8));
         (len <= cap).then_some(GuestMap { at: at as u32, len, cap, data })
@@ -655,27 +823,40 @@ impl GuestMap {
         self.data.checked_add(i.checked_mul(16)?)
     }
 
-    /// The key of pair `i`, read as `codegen.rs`'s `store_scalar` wrote it, by its kind (`map_key_tag`).
-    fn key(&self, caller: &mut Caller<'_, HostState>, kind: i32, i: u32) -> Option<delulu_runtime::value::MapKey> {
-        let slot = guest_read(caller, self.pair(i)?, 8)?;
-        let raw = i64::from_le_bytes(slot.try_into().ok()?);
-        map_key_of(caller, kind, if kind == 0 { raw } else { i64::from(raw as u32) })
-    }
-
-    /// Where `key` is — `Ok(i)` — or where it would go, `Err(i)`: the interpreter's `BTreeMap` order, by its own `MapKey`.
-    fn search(
-        &self,
-        caller: &mut Caller<'_, HostState>,
-        kind: i32,
-        key: &delulu_runtime::value::MapKey,
-    ) -> Option<Result<u32, u32>> {
+    /// Where the guest's key `raw` is — `Ok(i)` — or where it would go, `Err(i)`: the interpreter's `BTreeMap` order, by its
+    /// own `MapKey`'s order. A key, as a guest passes it and as `codegen.rs`'s `store_scalar` writes it in a pair's slot, is
+    /// an `Int` itself, a `Bool` as nonzero (a slot's low 32 bits), a `Str` as its cell's pointer; `kind` says which.
+    ///
+    /// A5 (the agent test campaign): each probe read its pair's key out of the guest into a new `MapKey` — a `String` and a
+    /// byte vector for every `Str` key — so a word count's lookups ran slower on WASM than on the interpreter. The keys are
+    /// now compared where they lie, in one borrow of the memory: valid UTF-8 compares by its bytes, which is `str`'s order,
+    /// and anything else as its lossy reading compares ([`compare_texts`]), so the answer is the one the keys read out gave.
+    fn search(&self, caller: &mut Caller<'_, HostState>, kind: i32, raw: i64) -> Option<Result<u32, u32>> {
+        use std::cmp::Ordering;
+        let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+        let data = mem.data(&*caller);
+        let slot = |i: u32| -> Option<i64> {
+            let at = self.pair(i)? as usize;
+            Some(i64::from_le_bytes(data.get(at..at.checked_add(8)?)?.try_into().ok()?))
+        };
+        let wanted: &[u8] = match kind {
+            0 | 1 => &[],
+            2 => guest_str_bytes(data, raw as u32)?,
+            _ => return None,
+        };
         let (mut lo, mut hi) = (0u32, self.len);
         while lo < hi {
             let mid = lo + (hi - lo) / 2;
-            match self.key(caller, kind, mid)?.cmp(key) {
-                std::cmp::Ordering::Less => lo = mid + 1,
-                std::cmp::Ordering::Greater => hi = mid,
-                std::cmp::Ordering::Equal => return Some(Ok(mid)),
+            let at = slot(mid)?;
+            let order = match kind {
+                0 => at.cmp(&raw),
+                1 => (at as u32 != 0).cmp(&(raw != 0)),
+                _ => compare_texts(guest_str_bytes(data, at as u32)?, wanted),
+            };
+            match order {
+                Ordering::Less => lo = mid + 1,
+                Ordering::Greater => hi = mid,
+                Ordering::Equal => return Some(Ok(mid)),
             }
         }
         Some(Err(lo))
@@ -710,20 +891,9 @@ impl GuestMap {
     }
 }
 
-/// The key a guest passes a `delulu:map` import: an `Int` itself, a `Bool` as 0 or 1, a `Str` as its cell's pointer.
-fn map_key_of(caller: &mut Caller<'_, HostState>, kind: i32, raw: i64) -> Option<delulu_runtime::value::MapKey> {
-    use delulu_runtime::value::MapKey;
-    Some(match kind {
-        0 => MapKey::Int(raw),
-        1 => MapKey::Bool(raw != 0),
-        2 => MapKey::Str(read_guest_str(caller, raw as u32 as i32)?),
-        _ => return None,
-    })
-}
-
 /// A map import's failure: recorded in words (the first refusal stands), then a trap, so the guest never goes on past it.
 fn map_fault(caller: &mut Caller<'_, HostState>) -> wasmtime::Error {
-    caller.data_mut().refused.get_or_insert_with(|| MAP_CORRUPT.to_string());
+    caller.refuse_first(|| MAP_CORRUPT.to_string());
     wasmtime::Error::msg(MAP_CORRUPT)
 }
 
@@ -828,7 +998,7 @@ fn join_list(caller: &mut Caller<'_, HostState>, list: i32, sep: i32) -> Option<
 fn link_list_host(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
     let instantiate = |e: wasmtime::Error| WasmError::Instantiate(e.to_string());
     let fault = |caller: &mut Caller<'_, HostState>| {
-        caller.data_mut().refused.get_or_insert_with(|| LIST_CORRUPT.to_string());
+        caller.refuse_first(|| LIST_CORRUPT.to_string());
         wasmtime::Error::msg(LIST_CORRUPT)
     };
     linker
@@ -874,8 +1044,7 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
             |mut caller: Caller<'_, HostState>, map: i32, kind: i32, raw: i64| -> wasmtime::Result<i32> {
                 let found = (|| {
                     let m = GuestMap::read(&mut caller, map)?;
-                    let key = map_key_of(&mut caller, kind, raw)?;
-                    m.search(&mut caller, kind, &key)
+                    m.search(&mut caller, kind, raw)
                 })();
                 match found {
                     Some(Ok(i)) => Ok(i as i32),
@@ -894,8 +1063,7 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
             |mut caller: Caller<'_, HostState>, map: i32, kind: i32, raw: i64| -> wasmtime::Result<i32> {
                 let slot = (|| {
                     let mut m = GuestMap::read(&mut caller, map)?;
-                    let key = map_key_of(&mut caller, kind, raw)?;
-                    let at = match m.search(&mut caller, kind, &key)? {
+                    let at = match m.search(&mut caller, kind, raw)? {
                         Ok(i) => i,
                         Err(i) => {
                             if m.len == m.cap {
@@ -1084,13 +1252,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             if !caller.data().console_granted {
                 let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "console");
                 // RW 6.15: the interpreter's words, remedy included.
-                caller.data_mut().refused = Some(format!("DL0703: `console` was not granted to this program — {remedy}"));
+                caller.refuse(format!("DL0703: `console` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -1108,11 +1276,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 }
                 let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
                 if !ok {
-                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
+                    caller.refuse(format!("DL0904: handle {cap} is not a granted Console capability"));
                     return;
                 }
                 let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
-                    caller.data_mut().refused = Some("guest exports no `memory`".into());
+                    caller.refuse("guest exports no `memory`".into());
                     return;
                 };
                 let s = {
@@ -1124,8 +1292,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     let header_end = match p.checked_add(4) {
                         Some(e) if e <= data.len() => e,
                         _ => {
-                            caller.data_mut().refused =
-                                Some(format!("DL0903: string header at {p} is out of bounds (memory is {} bytes)", data.len()));
+                            caller.refuse(format!(
+                                "DL0903: string header at {p} is out of bounds (memory is {} bytes)",
+                                data.len()
+                            ));
                             return;
                         }
                     };
@@ -1133,7 +1303,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     let body_end = match header_end.checked_add(len) {
                         Some(e) if e <= data.len() => e,
                         _ => {
-                            caller.data_mut().refused = Some(format!(
+                            caller.refuse(format!(
                                 "DL0903: string of {len} bytes at {header_end} runs past the end of memory ({} bytes)",
                                 data.len()
                             ));
@@ -1148,7 +1318,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().push_trace("Write", "println", "Console", Some(s.clone()), file, start, end);
                 // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5) — and
                 // followed in the trace by its refusal (D-V2-129).
-                if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
+                if !caller.custody_allows(CustodyOp::Console, None) {
                     caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
                     return;
                 }
@@ -1169,13 +1339,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             if !caller.data().clock_granted {
                 let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "clock");
                 // RW 6.15: the interpreter's words, remedy included.
-                caller.data_mut().refused = Some(format!("DL0703: `clock` was not granted to this program — {remedy}"));
+                caller.refuse(format!("DL0703: `clock` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -1193,13 +1363,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 }
                 let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Clock)).unwrap_or(false);
                 if !ok {
-                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Clock capability"));
+                    caller.refuse(format!("DL0904: handle {cap} is not a granted Clock capability"));
                     return 0;
                 }
                 // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
                 // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
                 caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
-                if !caller.data_mut().custody_allows(CustodyOp::Clock, None) {
+                if !caller.custody_allows(CustodyOp::Clock, None) {
                     caller.data_mut().push_refusal_trace("Clock", "now_ms", "Clock", file, start, end);
                     return 0;
                 }
@@ -1216,13 +1386,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             if !caller.data().rand_granted {
                 let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "rand");
                 // RW 6.15: the interpreter's words, remedy included.
-                caller.data_mut().refused = Some(format!("DL0703: `rand` was not granted to this program — {remedy}"));
+                caller.refuse(format!("DL0703: `rand` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -1240,18 +1410,19 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 }
                 let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
                 if !ok {
-                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                    caller.refuse(format!("DL0904: handle {cap} is not a granted Rand capability"));
                     return 0;
                 }
                 // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
                 // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
                 caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
-                if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
+                if !caller.custody_allows(CustodyOp::Rand, None) {
                     caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
                     return 0;
                 }
                 if hi <= lo {
-                    caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
+                    // DL0908, the interpreter's code and words (A15, D-V2-190).
+                    caller.refuse(format!("DL0908: {}", delulu_runtime::prim::rand_int_range_fault(lo, hi)));
                     caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
                     return lo;
                 }
@@ -1266,6 +1437,33 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // A21: `r.float()` — the same capability check, trace and custody gate as `int`, one step of the same generator,
+    // mapped exactly as the interpreter maps it (`next_rand() as f64 / u64::MAX as f64`), so a seeded run draws alike.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "rand_float",
+            |mut caller: Caller<'_, HostState>, cap: i32, file: i32, start: i32, end: i32| -> f64 {
+                if caller.data().refused.is_some() {
+                    return 0.0;
+                }
+                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
+                if !ok {
+                    caller.refuse(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                    return 0.0;
+                }
+                caller.data_mut().push_trace("Rand", "float", "Rand", None, file, start, end);
+                if !caller.custody_allows(CustodyOp::Rand, None) {
+                    caller.data_mut().push_refusal_trace("Rand", "float", "Rand", file, start, end);
+                    return 0.0;
+                }
+                let st = caller.data_mut();
+                let x = xorshift64(st.rng);
+                st.rng = x;
+                (x as f64) / (u64::MAX as f64)
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "root_fs_read", |mut caller: Caller<'_, HostState>, root: i32, path_ptr: i32| -> i32 {
             if caller.data().refused.is_some() {
@@ -1273,15 +1471,15 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             let Some(path) = read_guest_str(&mut caller, path_ptr) else {
-                caller.data_mut().refused = Some("DL0903: fs_read path pointer is out of bounds".into());
+                caller.refuse("DL0903: fs_read path pointer is out of bounds".into());
                 return -1;
             };
             if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                caller.refuse(format!("DL0904: path `{}` is refused: {why}", delulu_runtime::prim::shown_path(&path)));
                 return -1;
             }
             // Mint a scope exactly as the interpreter does: normalize(cwd/path), granted iff within a
@@ -1295,7 +1493,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             // directory) — and by its own `mint_anchor` (RW 4.72): the decision and the anchor are one resolution.
             let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_read_roots, &want) else {
                 let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), &format!("fs.read={path}"));
-                caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted — {remedy}"));
+                caller.refuse(format!("DL0703: filesystem read of `{path}` was not granted — {remedy}"));
                 return -1;
             };
             let st = caller.data_mut();
@@ -1314,12 +1512,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let (scope, anchor) = match caller.data().caps.get(cap as usize) {
                     Some(CapKind::FsRead(scope, anchor)) => (scope.clone(), anchor.clone()),
                     _ => {
-                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted FsRead capability"));
                         return 0;
                     }
                 };
                 let Some(rel) = read_guest_str(&mut caller, path_ptr) else {
-                    caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
+                    caller.refuse("DL0903: read_text path pointer is out of bounds".into());
                     return 0;
                 };
                 // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
@@ -1335,7 +1533,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
                 };
-                if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                let refused = delulu_runtime::prim::fs_scope_refusal(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0));
+                if !caller.use_allows(CustodyOp::FsRead, Some(&resolved_str), None, None, refused) {
                     caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                     return 0;
                 }
@@ -1345,7 +1544,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 if let Err(fault) =
                     delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0))
                 {
-                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
                     caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                     return 0;
                 }
@@ -1366,11 +1565,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         match e.kind() {
                             NotFound => build_err_ioerr(&mut caller, 0, None),
                             PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
                         }
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {
-                        caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        caller.refuse(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
                         // As the interpreter records an effect's own refusal after its dispatch record (RW 4.62).
                         caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                         return 0;
@@ -1379,7 +1578,82 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 match built {
                     Ok(ptr) => ptr,
                     Err(()) => {
-                        caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
+                        caller.refuse("guest heap exhausted building the fs result".into());
+                        0
+                    }
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // A7: `Cap[FsRead].list_dir(path)`, as `fs_read_text` reads (and in the interpreter's order): the `Read` record at
+    // dispatch, the custody asked with the resolved path, the scope by the interpreter's own rule, then the directory opened
+    // through `beneath` at the pinned path. The answer is `Result[List[Str], IoErr]`: the entries' names in the
+    // interpreter's order, or its error.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "fs_list_dir",
+            |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32, file: i32, start: i32, end: i32| -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (scope, anchor) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::FsRead(scope, anchor)) => (scope.clone(), anchor.clone()),
+                    _ => {
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                        return 0;
+                    }
+                };
+                let Some(rel) = read_guest_str(&mut caller, path_ptr) else {
+                    caller.refuse("DL0903: list_dir path pointer is out of bounds".into());
+                    return 0;
+                };
+                let pointed = normalize(&scope.join(&rel));
+                caller.data_mut().push_fs_trace(("Read", "list_dir", "FsRead"), &rel, &pointed, &scope, file, start, end);
+                let pin = delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel);
+                let resolved_str = match &pin {
+                    Some(real) => delulu_runtime::prim::disk_spelling(real),
+                    None => pointed.to_string_lossy().to_string(),
+                };
+                let refused = delulu_runtime::prim::fs_scope_refusal(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0));
+                if !caller.use_allows(CustodyOp::FsRead, Some(&resolved_str), None, None, refused) {
+                    caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
+                    return 0;
+                }
+                if let Err(fault) =
+                    delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0))
+                {
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
+                    caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
+                    return 0;
+                }
+                let listed = match pin.or_else(|| delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel)) {
+                    Some(real) => delulu_runtime::beneath::list_dir_at(&real),
+                    None => delulu_runtime::beneath::Outcome::Escaped(delulu_runtime::beneath::OUTSIDE),
+                };
+                let built = match listed {
+                    delulu_runtime::beneath::Outcome::Done(names) => {
+                        write_str_list(&mut caller, &names).and_then(|list| write_variant_cell(&mut caller, 0, Some(list)))
+                    }
+                    delulu_runtime::beneath::Outcome::Io(e) => {
+                        use std::io::ErrorKind::*;
+                        match e.kind() {
+                            NotFound => build_err_ioerr(&mut caller, 0, None),
+                            PermissionDenied => build_err_ioerr(&mut caller, 1, None),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
+                        }
+                    }
+                    delulu_runtime::beneath::Outcome::Escaped(why) => {
+                        caller.refuse(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
+                        return 0;
+                    }
+                };
+                match built {
+                    Ok(ptr) => ptr,
+                    Err(()) => {
+                        caller.refuse("guest heap exhausted building the fs result".into());
                         0
                     }
                 }
@@ -1397,7 +1671,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             let Some(hosts) = reify_values(&mut caller, desc, &[hosts]) else { return -1 };
@@ -1419,7 +1693,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 },
                 Ok(other) => unheld(&mut caller, "root.http", &other, -1),
                 Err(fault) => {
-                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
                     -1
                 }
             }
@@ -1441,19 +1715,20 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let (allow, special) = match caller.data().caps.get(cap as usize) {
                     Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
                     _ => {
-                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Http capability"));
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
                         return 0;
                     }
                 };
                 let Some(url) = read_guest_str(&mut caller, url_ptr) else {
-                    caller.data_mut().refused = Some("DL0903: http get URL pointer is out of bounds".into());
+                    caller.refuse("DL0903: http get URL pointer is out of bounds".into());
                     return 0;
                 };
                 caller.data_mut().push_trace("Net", "get", "Http", Some(url.clone()), file, start, end);
                 let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
                 if let Some(h) = &host {
                     let url_path = delulu_runtime::prim::request_path(&url);
-                    if !caller.data_mut().custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
+                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "GET", &allow, delulu_diag::Span::new(0, 0, 0));
+                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), None, refused) {
                         caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
                         return 0;
                     }
@@ -1475,7 +1750,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let answer = match answer {
                     Ok(v) => v,
                     Err(fault) => {
-                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.refuse(format!("{}: {}", fault.code, fault.message));
                         caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
                         return 0;
                     }
@@ -1483,10 +1758,168 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 match build_net_answer(&mut caller, &answer) {
                     Some(Ok(ptr)) => ptr,
                     Some(Err(())) => {
-                        caller.data_mut().refused = Some("guest heap exhausted building the http result".into());
+                        caller.refuse("guest heap exhausted building the http result".into());
                         0
                     }
                     None => unheld(&mut caller, "http.get", &answer, 0),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // `Cap[Http].post(url, headers, body)` (P9-05 (d), D-V2-183), as `http_get` is: the custody on the URL's host, path AND
+    // method (POST), unless the URL is not `https://`; then the interpreter's own `post` — the allowlist by method, the
+    // egress client with its redirect rules and all. An egress refusal after the custody allowed it is said to the custody.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_post",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             body_ptr: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (allow, special) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+                    _ => {
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
+                        return 0;
+                    }
+                };
+                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
+                    caller.refuse("DL0903: http post URL pointer is out of bounds".into());
+                    return 0;
+                };
+                let Some(body) = read_guest_str(&mut caller, body_ptr) else {
+                    caller.refuse("DL0903: a request body lies outside the guest's memory".into());
+                    return 0;
+                };
+                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
+                let headers = hs.pop().unwrap_or(Value::Unit);
+                caller.data_mut().push_trace("Net", "post", "Http", Some(url.clone()), file, start, end);
+                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+                if let Some(h) = &host {
+                    let url_path = delulu_runtime::prim::request_path(&url);
+                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "POST", &allow, delulu_diag::Span::new(0, 0, 0));
+                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), Some("POST"), refused) {
+                        caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
+                        return 0;
+                    }
+                    delulu_runtime::egress::begin_fetch();
+                }
+                let capv = delulu_runtime::value::CapVal {
+                    kind: delulu_check::ResourceKind::Http,
+                    scope: delulu_runtime::value::CapScope::Net { allow, special },
+                };
+                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+                let args = [Value::str(url.clone()), headers, Value::str(body)];
+                let answer = delulu_runtime::prim::call_cap_method(&capv, "post", &args, span);
+                if let Some(h) = &host {
+                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+                        if let Some(custody) = &caller.data().custody {
+                            custody.borrow_mut().note_egress_refusal(h, reason);
+                        }
+                    }
+                }
+                let answer = match answer {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.refuse(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
+                        return 0;
+                    }
+                };
+                match build_net_answer(&mut caller, &answer) {
+                    Some(Ok(ptr)) => ptr,
+                    Some(Err(())) => {
+                        caller.refuse("guest heap exhausted building the http result".into());
+                        0
+                    }
+                    None => unheld(&mut caller, "http.post", &answer, 0),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // `Cap[Http].get_with(url, headers)` (the agent campaign's A21), as `http_get` is with `post`'s headers: the custody on
+    // the URL's host and path (a GET), unless the URL is not `https://`; then the interpreter's own `get_with`. The trace
+    // names the URL alone, never a header's value (P9-04 (a), D-V2-128).
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_get_with",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (allow, special) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+                    _ => {
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
+                        return 0;
+                    }
+                };
+                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
+                    caller.refuse("DL0903: http get URL pointer is out of bounds".into());
+                    return 0;
+                };
+                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
+                let headers = hs.pop().unwrap_or(Value::Unit);
+                caller.data_mut().push_trace("Net", "get_with", "Http", Some(url.clone()), file, start, end);
+                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+                if let Some(h) = &host {
+                    let url_path = delulu_runtime::prim::request_path(&url);
+                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "GET", &allow, delulu_diag::Span::new(0, 0, 0));
+                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), None, refused) {
+                        caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
+                        return 0;
+                    }
+                    delulu_runtime::egress::begin_fetch();
+                }
+                let capv = delulu_runtime::value::CapVal {
+                    kind: delulu_check::ResourceKind::Http,
+                    scope: delulu_runtime::value::CapScope::Net { allow, special },
+                };
+                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+                let answer = delulu_runtime::prim::call_cap_method(&capv, "get_with", &[Value::str(url.clone()), headers], span);
+                if let Some(h) = &host {
+                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+                        if let Some(custody) = &caller.data().custody {
+                            custody.borrow_mut().note_egress_refusal(h, reason);
+                        }
+                    }
+                }
+                let answer = match answer {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.refuse(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
+                        return 0;
+                    }
+                };
+                match build_net_answer(&mut caller, &answer) {
+                    Some(Ok(ptr)) => ptr,
+                    Some(Err(())) => {
+                        caller.refuse("guest heap exhausted building the http result".into());
+                        0
+                    }
+                    None => unheld(&mut caller, "http.get_with", &answer, 0),
                 }
             },
         )
@@ -1502,11 +1935,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             let Some(name) = read_guest_str(&mut caller, name_ptr) else {
-                caller.data_mut().refused = Some("DL0903: a secret's name lies outside the guest's memory".into());
+                caller.refuse("DL0903: a secret's name lies outside the guest's memory".into());
                 return -1;
             };
             let st = caller.data();
@@ -1525,7 +1958,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 }
                 Ok(other) => unheld(&mut caller, "root.secret", &other, -1),
                 Err(fault) => {
-                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
                     -1
                 }
             }
@@ -1547,12 +1980,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     _ => None,
                 };
                 let (Some(sa), Some(sb)) = (held(&caller, a), held(&caller, b)) else {
-                    caller.data_mut().refused = Some(format!("DL0904: handle {a} or {b} is not a secret"));
+                    caller.refuse(format!("DL0904: handle {a} or {b} is not a secret"));
                     return 0;
                 };
                 let detail = Some(delulu_runtime::trace::OPAQUE.to_string());
                 caller.data_mut().push_trace("Declassify", "verify", "Secret", detail, file, start, end);
-                if !caller.data_mut().declared_allows("Declassify") {
+                if !caller.declared_allows("Declassify") {
                     caller.data_mut().push_refusal_trace("Declassify", "verify", "Secret", file, start, end);
                     return 0;
                 }
@@ -1566,7 +1999,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     Ok(Value::Bool(equal)) => i32::from(equal),
                     Ok(other) => unheld(&mut caller, "Secret.verify", &other, 0),
                     Err(fault) => {
-                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.refuse(format!("{}: {}", fault.code, fault.message));
                         caller.data_mut().push_refusal_trace("Declassify", "verify", "Secret", file, start, end);
                         0
                     }
@@ -1594,93 +2027,55 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
              start: i32,
              end: i32|
              -> i32 {
-                if caller.data().refused.is_some() {
-                    return 0;
-                }
-                let (allow, special) = match caller.data().caps.get(cap as usize) {
-                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
-                    _ => {
-                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Http capability"));
-                        return 0;
-                    }
-                };
-                let held = match caller.data().caps.get(secret as usize) {
-                    Some(CapKind::Secret(s)) => s.clone(),
-                    _ => {
-                        caller.data_mut().refused = Some(format!("DL0904: handle {secret} is not a secret"));
-                        return 0;
-                    }
-                };
-                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
-                    caller.data_mut().refused = Some("DL0903: http get URL pointer is out of bounds".into());
-                    return 0;
-                };
-                let Some(header) = read_guest_str(&mut caller, header_ptr) else {
-                    caller.data_mut().refused = Some("DL0903: a header's name lies outside the guest's memory".into());
-                    return 0;
-                };
-                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
-                let headers = hs.pop().unwrap_or(Value::Unit);
-                let detail = Some(delulu_runtime::trace::OPAQUE.to_string());
-                caller.data_mut().push_trace("Net", "get_with_secret", "Http", detail, file, start, end);
-                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
-                if let Some(h) = &host {
-                    let url_path = delulu_runtime::prim::request_path(&url);
-                    if !caller.data_mut().custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
-                        caller.data_mut().push_refusal_trace("Net", "get_with_secret", "Http", file, start, end);
-                        return 0;
-                    }
-                    delulu_runtime::egress::begin_fetch();
-                }
-                let capv = delulu_runtime::value::CapVal {
-                    kind: delulu_check::ResourceKind::Http,
-                    scope: delulu_runtime::value::CapScope::Net { allow, special },
-                };
-                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
-                let args = [Value::str(url.clone()), headers, Value::str(header), Value::Secret(held)];
-                // Embedded custody holds no broker secret, as the interpreter's `EmbeddedCustody` does not: a handle met
-                // here is refused in its words, never sent empty.
-                let send = match &caller.data().custody {
-                    Some(custody) => delulu_runtime::interp::broker_secret_send(&mut **custody.borrow_mut(), &capv, &args, span),
-                    None => delulu_runtime::interp::broker_secret_send(
-                        &mut delulu_runtime::EmbeddedCustody::new(),
-                        &capv,
-                        &args,
-                        span,
-                    ),
-                };
-                let answer = send.and_then(|send| match send {
-                    delulu_runtime::interp::SecretSend::AsGiven => {
-                        delulu_runtime::prim::call_cap_method(&capv, "get_with_secret", &args, span)
-                    }
-                    delulu_runtime::interp::SecretSend::Answered(v) => Ok(v),
-                    delulu_runtime::interp::SecretSend::Held(args) => {
-                        delulu_runtime::prim::call_cap_method(&capv, "get_with_secret", &args, span)
-                    }
-                });
-                if let Some(h) = &host {
-                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
-                        if let Some(custody) = &caller.data().custody {
-                            custody.borrow_mut().note_egress_refusal(h, reason);
-                        }
-                    }
-                }
-                let answer = match answer {
-                    Ok(v) => v,
-                    Err(fault) => {
-                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
-                        caller.data_mut().push_refusal_trace("Net", "get_with_secret", "Http", file, start, end);
-                        return 0;
-                    }
-                };
-                match build_net_answer(&mut caller, &answer) {
-                    Some(Ok(ptr)) => ptr,
-                    Some(Err(())) => {
-                        caller.data_mut().refused = Some("guest heap exhausted building the http result".into());
-                        0
-                    }
-                    None => unheld(&mut caller, "http.get_with_secret", &answer, 0),
-                }
+                send_with_secret(
+                    &mut caller,
+                    "get_with_secret",
+                    cap,
+                    url_ptr,
+                    headers,
+                    desc,
+                    header_ptr,
+                    secret,
+                    None,
+                    file,
+                    start,
+                    end,
+                )
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `Cap[Http].post_with_secret(url, headers, header, secret, body)` (P9-05 (d), D-V2-183): `get_with_secret`'s order, by
+    // POST, with the body.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_post_with_secret",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             header_ptr: i32,
+             secret: i32,
+             body_ptr: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                send_with_secret(
+                    &mut caller,
+                    "post_with_secret",
+                    cap,
+                    url_ptr,
+                    headers,
+                    desc,
+                    header_ptr,
+                    secret,
+                    Some(body_ptr),
+                    file,
+                    start,
+                    end,
+                )
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
@@ -1696,12 +2091,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             let (scope, anchor) = match caller.data().caps.get(cap as usize) {
                 Some(CapKind::FsRead(scope, anchor)) => (scope.clone(), anchor.clone()),
                 _ => {
-                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                    caller.refuse(format!("DL0904: handle {cap} is not a granted FsRead capability"));
                     return -1;
                 }
             };
             let Some(sub) = read_guest_str(&mut caller, path_ptr) else {
-                caller.data_mut().refused = Some("DL0903: narrow path pointer is out of bounds".into());
+                caller.refuse("DL0903: narrow path pointer is out of bounds".into());
                 return -1;
             };
             match delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &sub, delulu_diag::Span::new(0, 0, 0)) {
@@ -1711,7 +2106,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     (st.caps.len() - 1) as i32
                 }
                 Err(fault) => {
-                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
                     -1
                 }
             }
@@ -1727,21 +2122,21 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             let Some(path) = read_guest_str(&mut caller, path_ptr) else {
-                caller.data_mut().refused = Some("DL0903: fs_write path pointer is out of bounds".into());
+                caller.refuse("DL0903: fs_write path pointer is out of bounds".into());
                 return -1;
             };
             if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                caller.refuse(format!("DL0904: path `{}` is refused: {why}", delulu_runtime::prim::shown_path(&path)));
                 return -1;
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
             let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_write_roots, &want) else {
                 let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), &format!("fs.write={path}"));
-                caller.data_mut().refused = Some(format!("DL0703: filesystem write of `{path}` was not granted — {remedy}"));
+                caller.refuse(format!("DL0703: filesystem write of `{path}` was not granted — {remedy}"));
                 return -1;
             };
             let st = caller.data_mut();
@@ -1772,13 +2167,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let (scope, anchor) = match caller.data().caps.get(cap as usize) {
                     Some(CapKind::FsWrite(scope, anchor)) => (scope.clone(), anchor.clone()),
                     _ => {
-                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsWrite capability"));
+                        caller.refuse(format!("DL0904: handle {cap} is not a granted FsWrite capability"));
                         return 0;
                     }
                 };
                 let (Some(rel), Some(body)) = (read_guest_str(&mut caller, path_ptr), read_guest_str(&mut caller, body_ptr))
                 else {
-                    caller.data_mut().refused = Some(format!("DL0903: a `{op}` argument lies outside the guest's memory"));
+                    caller.refuse(format!("DL0903: a `{op}` argument lies outside the guest's memory"));
                     return 0;
                 };
                 let pointed = delulu_runtime::prim::resolve_norm(&scope, &rel);
@@ -1788,14 +2183,15 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
                 };
-                if !caller.data_mut().custody_allows(CustodyOp::FsWrite, Some(&at)) {
+                let refused = delulu_runtime::prim::fs_scope_refusal(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0));
+                if !caller.use_allows(CustodyOp::FsWrite, Some(&at), None, None, refused) {
                     caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
                     return 0;
                 }
                 if let Err(fault) =
                     delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0))
                 {
-                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.refuse(format!("{}: {}", fault.code, fault.message));
                     caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
                     return 0;
                 }
@@ -1811,11 +2207,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                         match e.kind() {
                             NotFound => build_err_ioerr(&mut caller, 0, None),
                             PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&delulu_runtime::prim::io_other_text(&e))),
                         }
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {
-                        caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        caller.refuse(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
                         caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
                         return 0;
                     }
@@ -1823,7 +2219,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 match built {
                     Ok(ptr) => ptr,
                     Err(()) => {
-                        caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
+                        caller.refuse("guest heap exhausted building the fs result".into());
                         0
                     }
                 }
@@ -1841,12 +2237,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
-                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                caller.refuse(format!("root handle {root} is not the root capability"));
                 return -1;
             }
             if !caller.data().foreign_load_granted {
-                caller.data_mut().refused =
-                    Some("DL0703: foreign loading was not granted (grant a `foreign.c` lib or `foreign.python`)".into());
+                caller.refuse("DL0703: foreign loading was not granted (grant a `foreign.c` lib or `foreign.python`)".into());
                 return -1;
             }
             let st = caller.data_mut();
@@ -1864,17 +2259,17 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let is_load = caller.data().caps.get(load as usize).map(|c| matches!(c, CapKind::ForeignLoad)).unwrap_or(false);
             if !is_load {
-                caller.data_mut().refused = Some(format!("DL0904: handle {load} is not a Cap[ForeignLoad] capability"));
+                caller.refuse(format!("DL0904: handle {load} is not a Cap[ForeignLoad] capability"));
                 return 0;
             }
             let Some(name) = read_guest_str(&mut caller, name_ptr) else {
-                caller.data_mut().refused = Some("DL0903: foreign lib name pointer is out of bounds".into());
+                caller.refuse("DL0903: foreign lib name pointer is out of bounds".into());
                 return 0;
             };
             // Custody gate (Stage 5 phase 5f, SYNCHRONOUS class): a broker round-trip authorizes the
             // bind BEFORE any native code loads. The denial is recorded in HostState and surfaced
             // after the call — NEVER an Err returned from inside this callback (playbook trap 5).
-            if !caller.data_mut().custody_allows(CustodyOp::ForeignBind, Some(&name)) {
+            if !caller.custody_allows(CustodyOp::ForeignBind, Some(&name)) {
                 return 0;
             }
             // Mirror the interpreter's `bind_foreign` exactly: no grant → Err(NotGranted) (DL1303's
@@ -1907,7 +2302,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             match built {
                 Ok(ptr) => ptr,
                 Err(()) => {
-                    caller.data_mut().refused = Some("guest heap exhausted building the foreign bind result".into());
+                    caller.refuse("guest heap exhausted building the foreign bind result".into());
                     0
                 }
             }
@@ -1936,18 +2331,18 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let handle = match caller.data().caps.get(lib as usize) {
                     Some(CapKind::Foreign(h)) => h.clone(),
                     _ => {
-                        caller.data_mut().refused = Some(format!("DL0904: handle {lib} is not a bound foreign lib"));
+                        caller.refuse(format!("DL0904: handle {lib} is not a bound foreign lib"));
                         return 0;
                     }
                 };
                 let Some(method) = read_guest_str(&mut caller, method_ptr) else {
-                    caller.data_mut().refused = Some("DL0903: foreign method name pointer is out of bounds".into());
+                    caller.refuse("DL0903: foreign method name pointer is out of bounds".into());
                     return 0;
                 };
                 // Defensive: only call a method the bound lib actually resolved (else `foreign::call`
                 // would `expect`-panic — a host panic aborts the process inside a wasm callback).
                 if handle.exec.sig(&method).is_none() {
-                    caller.data_mut().refused = Some(format!("DL0904: `{}` has no bound foreign method `{method}`", handle.name));
+                    caller.refuse(format!("DL0904: `{}` has no bound foreign method `{method}`", handle.name));
                     return 0;
                 }
                 // Record the ForeignCall trace BEFORE the call (a bad-return still shows the attempt),
@@ -1955,19 +2350,18 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let detail = format!("{}.{}", handle.name, method);
                 caller.data_mut().push_trace("ForeignCall", &method, &handle.name, Some(detail), file, start, end);
                 let Some(args) = read_fvals(&mut caller, args_ptr, argc) else {
-                    caller.data_mut().refused = Some("DL0903: foreign args buffer is out of bounds".into());
+                    caller.refuse("DL0903: foreign args buffer is out of bounds".into());
                     return 0;
                 };
                 let max_ret = caller.data().max_ret();
                 match handle.exec.call(&method, &args, max_ret) {
                     Ok(fv) => encode_fval_return(&mut caller, fv),
                     Err(ForeignErr::BadReturn(reason)) => {
-                        caller.data_mut().refused =
-                            Some(format!("DL1306: foreign return validation failed: {reason} (ForeignErr::BadReturn)"));
+                        caller.refuse(format!("DL1306: foreign return validation failed: {reason} (ForeignErr::BadReturn)"));
                         0
                     }
                     Err(other) => {
-                        caller.data_mut().refused = Some(format!("DL1306: foreign call failed: {other:?}"));
+                        caller.refuse(format!("DL1306: foreign call failed: {other:?}"));
                         0
                     }
                 }
@@ -1991,7 +2385,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return 0;
             }
             let (Some(s), Some(sep)) = (read_guest_str(&mut caller, s), read_guest_str(&mut caller, sep)) else {
-                caller.data_mut().refused = Some("DL0903: a string given to `split` lies outside the guest's memory".into());
+                caller.refuse("DL0903: a string given to `split` lies outside the guest's memory".into());
                 return 0;
             };
             let parts: Vec<String> = if sep.is_empty() {
@@ -2002,7 +2396,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             match write_str_list(&mut caller, &parts) {
                 Ok(list) => list,
                 Err(()) => {
-                    caller.data_mut().refused = Some(MEMORY_EXHAUSTED.into());
+                    caller.refuse(MEMORY_EXHAUSTED.into());
                     0
                 }
             }
@@ -2012,7 +2406,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     // interpreter's own fault (`interp.rs`'s `index`), word for word.
     linker
         .func_wrap("delulu:list", "index_fault", |mut caller: Caller<'_, HostState>, index: i64, len: i32| {
-            caller.data_mut().refused.get_or_insert_with(|| format!("DL0903: index {index} out of bounds (len {len})"));
+            caller.refuse_first(|| format!("DL0903: index {index} out of bounds (len {len})"));
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     // A `match` testing inside a constructor that no arm matched (`codegen.rs`'s `compile_match_ordered`): the guest calls
@@ -2042,14 +2436,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     return 0;
                 }
                 let Some((name, strs, ints)) = crate::codegen::str_method_arity(method) else {
-                    caller.data_mut().refused = Some(format!("DL0907: no `Str` method numbered {method}"));
+                    caller.refuse(format!("DL0907: no `Str` method numbered {method}"));
                     return 0;
                 };
                 let recv = read_guest_str(&mut caller, s);
                 let given: Option<Vec<String>> = [a, b].into_iter().take(strs).map(|p| read_guest_str(&mut caller, p)).collect();
                 let (Some(recv), Some(given)) = (recv, given) else {
-                    caller.data_mut().refused =
-                        Some(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+                    caller.refuse(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
                     return 0;
                 };
                 let mut args: Vec<Value> = given.into_iter().map(Value::str).collect();
@@ -2057,7 +2450,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let answer = match delulu_runtime::prim::call_str_method(&recv, name, &args, delulu_diag::Span::new(0, 0, 0)) {
                     Ok(v) => v,
                     Err(fault) => {
-                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.refuse(format!("{}: {}", fault.code, fault.message));
                         return 0;
                     }
                 };
@@ -2077,13 +2470,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     (Value::Str(t), _) => write_str_cell(&mut caller, &t),
                     (Value::List(_), Some(parts)) => write_str_list(&mut caller, &parts),
                     _ => {
-                        caller.data_mut().refused =
-                            Some(format!("DL0907: `{name}` answered a value the WASM engine does not hold"));
+                        caller.refuse(format!("DL0907: `{name}` answered a value the WASM engine does not hold"));
                         return 0;
                     }
                 };
                 written.unwrap_or_else(|()| {
-                    caller.data_mut().refused = Some(MEMORY_EXHAUSTED.into());
+                    caller.refuse(MEMORY_EXHAUSTED.into());
                     0
                 })
             },
@@ -2134,7 +2526,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             match write_str_cell(&mut caller, &shown) {
                 Ok(ptr) => ptr,
                 Err(()) => {
-                    caller.data_mut().refused = Some("guest heap exhausted rendering a value".into());
+                    caller.refuse("guest heap exhausted rendering a value".into());
                     0
                 }
             }
@@ -2161,11 +2553,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 }
                 let nactors = caller.data().actor_rt.table.actors.len();
                 if actor_idx < 0 || actor_idx as usize >= nactors {
-                    caller.data_mut().refused = Some(format!("actor index {actor_idx} out of range"));
+                    caller.refuse(format!("actor index {actor_idx} out of range"));
                     return -1;
                 }
                 let Some(args) = read_i64_args(&mut caller, args_ptr, argc) else {
-                    caller.data_mut().refused = Some("DL0903: actor spawn args buffer is out of bounds".into());
+                    caller.refuse("DL0903: actor spawn args buffer is out of bounds".into());
                     return -1;
                 };
                 caller.data_mut().actor_rt.spawn(actor_idx as u32, args) as i64
@@ -2183,11 +2575,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let slot = slot as u64;
                 let nslots = caller.data().actor_rt.slots.len() as u64;
                 if slot >= nslots || behavior_idx < 0 {
-                    caller.data_mut().refused = Some(format!("send to slot {slot} / behaviour {behavior_idx} out of range"));
+                    caller.refuse(format!("send to slot {slot} / behaviour {behavior_idx} out of range"));
                     return;
                 }
                 let Some(args) = read_i64_args(&mut caller, args_ptr, argc) else {
-                    caller.data_mut().refused = Some("DL0903: actor send args buffer is out of bounds".into());
+                    caller.refuse("DL0903: actor send args buffer is out of bounds".into());
                     return;
                 };
                 caller.data_mut().actor_rt.send(slot, behavior_idx as u32, args);
@@ -2206,7 +2598,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             match v {
                 Some(x) => x,
                 None => {
-                    caller.data_mut().refused = Some(format!("field_get out of range (slot {slot}, field {field_idx})"));
+                    caller.refuse(format!("field_get out of range (slot {slot}, field {field_idx})"));
                     0
                 }
             }
@@ -2231,7 +2623,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     }
                 };
                 if !ok {
-                    caller.data_mut().refused = Some(format!("field_set out of range (slot {slot}, field {field_idx})"));
+                    caller.refuse(format!("field_set out of range (slot {slot}, field {field_idx})"));
                 }
             },
         )
@@ -2270,15 +2662,89 @@ fn read_i64_args(caller: &mut Caller<'_, HostState>, ptr: i32, argc: i32) -> Opt
 /// interpreter reports (WASM-REFUSAL-1: a refused `fs.read_text` matched on its error read a placeholder pointer and
 /// reported DL0903, an access out of bounds, where the interpreter reported DL0904).
 fn trap_or_refusal(store: &Store<HostState>, e: &wasmtime::Error) -> WasmError {
-    WasmError::Trap(store.data().refused.clone().unwrap_or_else(|| clean_trap(e)))
+    match refusal(store.data()) {
+        Some(refused) => refused,
+        None => WasmError::Trap(clean_trap(e), e.downcast_ref::<WasmBacktrace>().map(guest_frames).unwrap_or_default()),
+    }
+}
+
+/// The recorded refusal, if there is one, with where the guest made the call that was refused.
+fn refusal(state: &HostState) -> Option<WasmError> {
+    state.refused.clone().map(|why| WasmError::Trap(why, state.refused_at.clone()))
+}
+
+/// A backtrace's frames, innermost first: each wasm function's index and the offset in its body of the instruction it is
+/// at. A frame that called on is read at its call (wasmtime looks a caller's return address up one byte back).
+fn guest_frames(bt: &WasmBacktrace) -> Vec<(u32, u32)> {
+    bt.frames().iter().filter_map(|f| Some((f.func_index(), u32::try_from(f.func_offset()?).ok()?))).collect()
+}
+
+/// A host call's refusal, recorded with where the guest made the call (B5): the frames that name the place the
+/// interpreter names. Every refusal a host call records goes through here; the custody and declared-effect checks, which
+/// record their own, are asked through here too, so theirs is placed as well.
+trait Refuse {
+    fn refuse(&mut self, why: String);
+    /// [`Refuse::refuse`] unless a refusal is already recorded: the first one stands.
+    fn refuse_first(&mut self, why: impl FnOnce() -> String);
+    /// Place the refusal a check just recorded, when it refused.
+    fn placed(&mut self, allowed: bool) -> bool;
+    fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool;
+    fn use_allows(
+        &mut self,
+        op: CustodyOp,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        refused: Option<delulu_runtime::prim::CapabilityRefusal>,
+    ) -> bool;
+    fn declared_allows(&mut self, effect: &str) -> bool;
+}
+
+impl Refuse for Caller<'_, HostState> {
+    fn refuse(&mut self, why: String) {
+        let at = guest_frames(&WasmBacktrace::capture(&*self));
+        let st = self.data_mut();
+        st.refused = Some(why);
+        st.refused_at = at;
+    }
+    fn refuse_first(&mut self, why: impl FnOnce() -> String) {
+        if self.data().refused.is_none() {
+            self.refuse(why());
+        }
+    }
+    fn placed(&mut self, allowed: bool) -> bool {
+        if !allowed {
+            self.data_mut().refused_at = guest_frames(&WasmBacktrace::capture(&*self));
+        }
+        allowed
+    }
+    fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
+        let allowed = self.data_mut().custody_allows(op, arg);
+        self.placed(allowed)
+    }
+    fn use_allows(
+        &mut self,
+        op: CustodyOp,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        refused: Option<delulu_runtime::prim::CapabilityRefusal>,
+    ) -> bool {
+        let allowed = self.data_mut().use_allows(op, arg, url_path, method, refused);
+        self.placed(allowed)
+    }
+    fn declared_allows(&mut self, effect: &str) -> bool {
+        let allowed = self.data_mut().declared_allows(effect);
+        self.placed(allowed)
+    }
 }
 
 fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> Result<String, WasmError> {
     let mut results: [Val; 0] = [];
     func.call(&mut store, params, &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
     let state = store.into_data();
-    if let Some(reason) = state.refused {
-        return Err(WasmError::Trap(reason));
+    if let Some(refused) = refusal(&state) {
+        return Err(refused);
     }
     Ok(state.output)
 }
@@ -2305,6 +2771,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         output: String::new(),
         stream_console: false,
         refused: None,
+        refused_at: Vec::new(),
         foreign_load_granted: false,
         foreign_grants: HashMap::new(),
         foreign_sigs: HashMap::new(),
@@ -2348,6 +2815,7 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         output: String::new(),
         stream_console: cfg.stream_console,
         refused: None,
+        refused_at: Vec::new(),
         foreign_load_granted: cfg.foreign_load,
         foreign_grants: cfg.foreign_grants.clone(),
         foreign_sigs: cfg.foreign_sigs.clone(),
@@ -2467,15 +2935,15 @@ fn run_actors_in(mut store: Store<HostState>, instance: Instance) -> Result<(Str
     // `main`'s own turn: a trap here fails the whole run (it is not an actor turn — no poison).
     let mut results: [Val; 0] = [];
     main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
-    if let Some(reason) = store.data().refused.clone() {
-        return Err(WasmError::Trap(reason));
+    if let Some(refused) = refusal(store.data()) {
+        return Err(refused);
     }
     // Cooperative drain to quiescence (spec §6.1 exit condition: `main` returned AND the queue is
     // empty AND no turn is running — trivially true single-threaded once the queue drains).
     drain_actors(&mut store, &instance)?;
     let data = store.into_data();
-    if let Some(reason) = data.refused {
-        return Err(WasmError::Trap(reason));
+    if let Some(refused) = refusal(&data) {
+        return Err(refused);
     }
     Ok((data.output, data.actor_rt.report()))
 }
@@ -2490,10 +2958,10 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
         match job {
             ActorJob::Create { slot, actor_idx, args } => {
                 let export = store.data().actor_rt.table.actors[actor_idx as usize].ctor_export.clone();
-                let ok = call_actor_export(store, instance, &export, slot, &args)?;
+                let fault = call_actor_export(store, instance, &export, slot, &args)?;
                 store.data_mut().actor_rt.total_turns += 1;
-                if !ok {
-                    poison(store, slot);
+                if let Some(fault) = fault {
+                    poison(store, slot, "new", &fault);
                 }
             }
             ActorJob::Send { slot, behavior_idx, args } => {
@@ -2505,10 +2973,10 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
                     store.data_mut().actor_rt.dropped_sends += 1;
                     continue;
                 }
-                let export = {
+                let (export, member) = {
                     let info = &store.data().actor_rt.table.actors[actor_idx as usize];
                     match info.behaviors.get(behavior_idx as usize) {
-                        Some(b) => b.export.clone(),
+                        Some(b) => (b.export.clone(), b.name.clone()),
                         // An unknown behaviour index cannot come from our codegen; drop+count.
                         None => {
                             store.data_mut().actor_rt.dropped_sends += 1;
@@ -2516,10 +2984,10 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
                         }
                     }
                 };
-                let ok = call_actor_export(store, instance, &export, slot, &args)?;
+                let fault = call_actor_export(store, instance, &export, slot, &args)?;
                 store.data_mut().actor_rt.total_turns += 1;
-                if !ok {
-                    poison(store, slot);
+                if let Some(fault) = fault {
+                    poison(store, slot, &member, &fault);
                 }
             }
         }
@@ -2527,16 +2995,16 @@ fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(),
     Ok(())
 }
 
-/// Call one actor member export `(self_slot, args…)`. Returns `Ok(true)` on success, `Ok(false)`
-/// when the turn traps (a fault → poison, spec §6.6). Only a missing export (a codegen bug) is a
-/// hard `Err`.
+/// Call one actor member export `(self_slot, args…)`. Returns `Ok(None)` on success, `Ok(Some(fault))`
+/// when the turn traps — its words, `CODE: message`, as a run's fault is told (a fault → poison, spec §6.6).
+/// Only a missing export (a codegen bug) is a hard `Err`.
 fn call_actor_export(
     store: &mut Store<HostState>,
     instance: &Instance,
     name: &str,
     slot: u64,
     args: &[i64],
-) -> Result<bool, WasmError> {
+) -> Result<Option<String>, WasmError> {
     let func = instance.get_func(&mut *store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
     let mut params = Vec::with_capacity(1 + args.len());
     params.push(Val::I64(slot as i64));
@@ -2545,13 +3013,18 @@ fn call_actor_export(
     }
     let mut results: [Val; 0] = [];
     match func.call(&mut *store, &params, &mut results) {
-        Ok(()) => Ok(true),
-        Err(_trap) => Ok(false), // a behaviour fault poisons its actor; the system stays live
+        Ok(()) => Ok(None),
+        // A behaviour fault poisons its actor; the system stays live.
+        Err(trap) => Ok(Some(match trap_or_refusal(store, &trap) {
+            WasmError::Trap(why, _) => why,
+            other => other.message(),
+        })),
     }
 }
 
-/// Poison an actor after a faulting turn: mark it dead (once) and count it. Later sends to it drop.
-fn poison(store: &mut Store<HostState>, slot: u64) {
+/// Poison an actor after a faulting turn: mark it dead (once), count it, and say so in the interpreter's words (RW 6.40:
+/// the WASM engine counted a death and named nothing). Later sends to it drop.
+fn poison(store: &mut Store<HostState>, slot: u64, member: &str, fault: &str) {
     let rt = &mut store.data_mut().actor_rt;
     let newly_dead = match rt.slots.get_mut(slot as usize) {
         Some(s) if !s.dead => {
@@ -2562,6 +3035,17 @@ fn poison(store: &mut Store<HostState>, slot: u64) {
     };
     if newly_dead {
         rt.dead_actors += 1;
+        let actor = rt.slots.get(slot as usize).and_then(|s| rt.table.actors.get(s.actor_idx as usize)).map(|a| a.name.as_str());
+        // `CODE: message` from the engine; the interpreter's line puts the code last.
+        let (code, words) = match fault.split_once(": ") {
+            Some((code, words)) if delulu_diag::static_code(code).is_some() => (code, words),
+            _ => ("DL0904", fault),
+        };
+        eprintln!(
+            "actor {} died in `{member}`: {} [{code}] (its later messages will be dropped and counted)",
+            actor.unwrap_or("?"),
+            delulu_diag::terminal_line(words)
+        );
     }
 }
 
@@ -2801,8 +3285,8 @@ mod secret_handle_tests {
         let called = main.call(&mut store, &[Val::I32(0)], &mut []).map_err(|e| trap_or_refusal(&store, &e));
         let memory = instance.get_memory(&mut store, "memory").expect("a memory").data(&store).to_vec();
         let state = store.into_data();
-        let out = called.and(match state.refused {
-            Some(why) => Err(WasmError::Trap(why)),
+        let out = called.and(match refusal(&state) {
+            Some(refused) => Err(refused),
             None => Ok(state.output),
         });
         (out, memory)

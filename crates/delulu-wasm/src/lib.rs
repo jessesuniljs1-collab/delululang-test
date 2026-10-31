@@ -20,7 +20,9 @@ pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};
 pub use artifact::{
     embed_authority, exports_actor_members, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
 };
-pub use codegen::{compile_checked, compile_module, compile_module_with, uses_console, CompileError};
+pub use codegen::{
+    compile_checked, compile_checked_sited, compile_module, compile_module_with, uses_console, CompileError, SiteMap,
+};
 pub use dpx::{
     augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine, DIR_SECTION, DPX_VERSION,
     LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
@@ -394,7 +396,8 @@ mod tests {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
 
-        let wasm = compile_module(&checked.module).expect("compile");
+        // As `run --engine wasm` compiles: with the checker's types.
+        let wasm = compile_checked(&checked.module, &checked.result).expect("compile");
         let cfg = HostConfig { console: true, rand: true, rand_seed: Some(seed), ..HostConfig::default() };
         let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
 
@@ -423,11 +426,48 @@ mod tests {
         assert!((-50..50).contains(&vals[3]), "draw {} out of [-50,50)", vals[3]);
     }
 
+    /// `r.float()` on WASM (the agent campaign's A21: DL1201 "does not support the method `.float`", though `r.int`
+    /// compiled). A float and an int drawn in turn come from ONE stream on each engine, so under one seed both print
+    /// alike, and each float is in [0, 1].
+    #[test]
+    fn rand_float_sequence_matches_the_interpreter() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n let f = r.float()\n out.println(str(f))\n out.println(str(r.int(0, 100)))\n let g = r.float()\n out.println(str(g))\n out.println(str(f >= 0.0 && f <= 1.0 && g >= 0.0 && g <= 1.0 && f != g)) }\n";
+        let out = main_rand_parity(src, 4242);
+        assert_eq!(out.lines().count(), 4, "{out:?}");
+        assert_eq!(out.lines().last(), Some("true"), "{out:?}");
+        // Every seed draws its own sequence, neighbours included (D-V2-191; 4242 and 4243 drew alike under `seed | 1`).
+        assert_ne!(main_rand_parity(src, 4242), main_rand_parity(src, 4243), "the seed decides the draws");
+    }
+
+    /// `str()` of a `Float` that only `r.float()` made: a module carries `float_to_str` when it "makes or takes a
+    /// `Float`", and the test for that looked for a float literal, a `float`/`parse_float` call or a `Float` in a
+    /// signature. A program whose floats all came from a method, as this one's do, was refused DL1201 at the `str`
+    /// (2026-10-27). The checker's types now say where a `Float` is.
+    #[test]
+    fn str_of_a_float_only_a_method_made_runs_on_wasm() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.float()) + \" \" + str(r.float())) }\n";
+        let out = main_rand_parity(src, 7);
+        assert_eq!(out.split_whitespace().count(), 2, "{out:?}");
+    }
+
     #[test]
     fn same_seed_reproduces_the_same_sequence_across_engines() {
         // Determinism: the same seed yields the same output every run (and across both engines).
         let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(1, 1000000)))\n out.println(str(r.int(1, 1000000))) }\n";
         assert_eq!(main_rand_parity(src, 999), main_rand_parity(src, 999));
+    }
+
+    /// The WASM host starts its generator where the interpreter does (`rng_state_from_seed`, D-V2-191), so
+    /// neighbouring seeds draw differently there too, and alike on both engines (`main_rand_parity` asserts it).
+    #[test]
+    fn neighbouring_seeds_draw_differently_on_both_engines() {
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(0, 1000000000)))\n out.println(str(r.int(0, 1000000000))) }\n";
+        let outs: Vec<String> = (0..8u64).map(|s| main_rand_parity(src, s)).collect();
+        for i in 0..outs.len() {
+            for j in i + 1..outs.len() {
+                assert_ne!(outs[i], outs[j], "seeds {i} and {j} draw the same sequence");
+            }
+        }
     }
 
     #[test]
@@ -933,18 +973,29 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A read on the WASM engine asks the custody in the interpreter's order — the dispatch, the custody's question about
-    /// the path the read would open, then the scope — so a read the scope refuses asks the same question on both engines
-    /// before its DL0904 (the red-team pass of on-demand routine run 5, F1: the WASM read checked the scope first, with a
-    /// copy of the rule, and never asked).
+    /// A read on the WASM engine meets its custody in the interpreter's order and words — the dispatch, then the capability's
+    /// own scope (RW 4.79), and a read the scope refuses is never asked of the custody: both engines tell it the refusal,
+    /// once, with the same path and reason, before the same DL0904. (The red-team pass of on-demand routine run 5, F1: the
+    /// WASM read checked the scope with a copy of the rule and said nothing to the custody, where the interpreter asked it;
+    /// until RW 4.79 both engines asked it to allow the read first.)
     #[test]
-    fn a_read_asks_the_custody_before_its_scope_as_the_interpreter_does() {
+    fn a_read_its_scope_refuses_is_said_to_the_custody_never_asked_as_the_interpreter_does() {
         type Asked = std::rc::Rc<std::cell::RefCell<Vec<(String, Option<String>)>>>;
         struct Recording(Asked);
         impl delulu_runtime::Custody for Recording {
             fn check(&mut self, op: delulu_runtime::Op, arg: Option<&str>) -> delulu_runtime::CustodyDecision {
                 self.0.borrow_mut().push((format!("{op:?}"), arg.map(str::to_string)));
                 delulu_runtime::CustodyDecision::Allow
+            }
+            fn note_capability_refusal(
+                &mut self,
+                op: delulu_runtime::Op,
+                arg: Option<&str>,
+                _url_path: Option<&str>,
+                _method: Option<&str>,
+                reason: &str,
+            ) {
+                self.0.borrow_mut().push((format!("{op:?} refused: {reason}"), arg.map(str::to_string)));
             }
             fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
                 Err(delulu_runtime::CustodyDenial::new("DL0904", "no secrets in this fake"))
@@ -989,9 +1040,12 @@ mod tests {
         let words = "path `../outside.txt` escapes the granted scope";
         assert!(w.contains("DL0904") && w.contains(words), "{w}");
         assert!(format!("{i:?}").contains("DL0904") && format!("{i:?}").contains(words), "{i:?}");
-        let reads = |a: &Asked| a.borrow().iter().filter(|(op, _)| op == "FsRead").cloned().collect::<Vec<_>>();
-        assert_eq!(reads(&on_interp).len(), 1, "the interpreter asks once: {:?}", on_interp.borrow());
-        assert_eq!(reads(&on_wasm), reads(&on_interp), "the same question on both engines, before the scope's refusal");
+        let reads = |a: &Asked| a.borrow().iter().filter(|(op, _)| op.starts_with("FsRead")).cloned().collect::<Vec<_>>();
+        let said = reads(&on_interp);
+        assert_eq!(said.len(), 1, "the interpreter says it once, and asks nothing: {:?}", on_interp.borrow());
+        assert_eq!(said[0].0, "FsRead refused: outside-scope", "{said:?}");
+        assert!(said[0].1.as_deref().is_some_and(|p| p.ends_with("outside.txt")), "{said:?}");
+        assert_eq!(reads(&on_wasm), said, "the same words on both engines, before the scope's refusal");
     }
 
     /// RW 4.72 on the WASM engine (the red-team pass of on-demand routine run 5, F2): a narrowed handle is anchored where

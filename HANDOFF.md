@@ -588,6 +588,19 @@ wins, and you should update the memory to match.
   he/his (stated 2026-10-17).
 - **Development never waits for the laptop** (owner, 2026-10-17): *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* Routine runs and interactive cloud
   sessions continue the work by `docs/CLOUD_ROUTINE.md`; a cloud session's pull request is merged by whoever comes next.
+- **A routine run is ONE milestone, then a clean stop** (owner, 2026-10-26: *"Update the routine instructions so that
+  each run stops at an appropriate major milestone … Do not make the routine run continuously until the usage limit hits.
+  However, do not make it stop merely because some time has passed or a small build or minor task has been completed"*).
+  Housekeeping, one named milestone built to done (tested, committed, pushed, its push run read), the handoff in the
+  sync-log entry, then `docs/CLOUD_ROUTINE.md` step 9. **"Continue cooking … till the limit hits" is his phrase for
+  terminal and interactive cloud sessions, never a routine run's stopping rule** (*"mainly for my regular Claude Code
+  terminal and cloud sessions, not for routine/scheduled task runs"*): those go milestone after milestone, each landed
+  and recorded before the next.
+- **Branches are cleaned as work lands** (owner, 2026-10-26: *"the repository has accumulated too many branches. Audit
+  them and safely clean up stale, redundant, and unnecessary branches while preserving valuable work"*): a `claude/*` or
+  `laptop/*` branch whose tip is in `master`'s history is deleted from `origin` once it has landed, each checked with
+  `git merge-base --is-ancestor` just before; one with a commit `master` lacks is landed, kept, or preserved under
+  `archive/*` first (`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`).
 - **Start every session by syncing with GitHub** (owner, 2026-10-17: *"save this to memory, So that u will check GitHub
   repo whenever u start session"*): `git fetch origin`, read `HEAD..origin/master` and the `origin/claude/*` branches,
   fast-forward before any edit, and read the CI runs of what came in — the on-demand routine (D-V2-146) pushes while the
@@ -715,6 +728,22 @@ wins, and you should update the memory to match.
   after it is released (not Haiku 4.5 meanwhile).
   `docs/CLOUD_ROUTINE.md`, `AGENTS.md`, `CLAUDE.md` and §11.3 were brought up to the cloud docs the same
   evening.
+- **When agents test DeluluLang, the head chef holds the authority** (owner, 2026-10-24: *"While running agents for
+  testing DeluluLang, U will be having delulu authority, Only u should be able to change anything that agents can do,
+  Agent themselves shouldn't able to change access"*). The setup that held: a broker with strict anchored roots, its
+  keys, root certificate and Guard owner code in a head-chef-only directory; one `--multi` lease per test condition (a
+  `--lease` run refuses any local `--grant` by itself); a wrapper that is the agents' only way to run delulu and refuses
+  every authority flag; and a Claude Code PreToolUse hook (in the checkout's untracked `.claude/settings.local.json`)
+  that refuses any subagent call reaching the authority, naming a grant or lease, running delulu directly, or touching
+  accounts, settings or the repository. A subagent's hook input carries `agent_id`; the main session's does not.
+  Falsify the gate with a small agent before trusting it, and judge it by its own log. Residual: same OS account,
+  pattern-based; the boundary against a determined process is a second account (`docs/DEPLOYMENT.md` Tier 2).
+- **Save everything agents do as they go** (owner, 2026-10-24: *"save everything agents are doing to storage. My usage
+  limits will hit faster when running agents. I don't want anything to be lost"*). A timer outside Claude (Task
+  Scheduler) mirrors the agents' workdirs to `D:\nelan\dogfood-campaign\mirror\`, copies their transcripts to
+  `D:\nelan\DeluluLang-agent-transcripts\` (local only: a transcript holds reasoning), and pushes a filtered snapshot
+  to `autosave/dogfood` (no keys, tokens, owner code or test secret; never merged; no CI). Write every brief to a file
+  at launch, and tell each agent to write findings to disk the moment they are confirmed.
 
 ### 11.2 Working rules the project has paid for
 
@@ -768,7 +797,10 @@ wins, and you should update the memory to match.
   `medium` effort. The repository's `effortLevel: xhigh` was meant to raise them, and **since 2026-10-19 so is
   `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
   both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
-  environment variables on a trigger. A cybersecurity-flagged
+  environment variables on a trigger; the owner set the variable in the routine's cloud environment on 2026-10-23.
+  **Read the effort from the run, not a page** (2026-10-26): Claude Code sets `CLAUDE_EFFORT` in each Bash command's
+  environment to the level in effect, and a transcript's every reply carries `"effort":"…"`; `docs/CLOUD_ROUTINE.md`
+  step 0 records both each run. A cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.
 
@@ -1042,6 +1074,14 @@ spells the same thing?**
   period starts when the arming is answered (its record could wait on the chain first — `76f83a2`). A watchdog
   judged by a serial server measures the server too — ask whose time each second of the period is.
 
+- **DEADMAN-DEAF-1 — a stopped daemon read its own deafness as its holders' silence** (on-demand routine run 7, 2026-10-29,
+  D-V2-194, RW 4.87). DEADMAN-BUSY-1 stamped each beat's arrival on a reader thread of its own, and that thread is the
+  daemon's. A daemon stopped for three periods stamped the beats waiting in its socket after their deadline, revoked a
+  monitor that had beaten 73 times, and told it "this monitor sent no beat". Every dead-man instant is now read from a
+  hearing clock that stands still while the daemon was not running. Never soften it back to "judged by when it arrived" in
+  wall time: arrival is stamped by the judge, so the stamp measures the judge too. Search key: for every watchdog, stop
+  EACH party in turn (the holder, the judge, the judge's every thread) and ask whose time each second of the period was.
+
 - **2026-10-14 — MAP-HANDLE-1** (routine run 24, D-V2-132): under the broker daemon or a lease, `Secret.map` ran its function
   over the EMPTY string — a handle carries no bytes, and `reveal()` of one is `""` — so `s.map(f).expose(d)` printed `f("")`
   where embedded custody printed `f(bytes)`, then exposed that local result with no broker gate or record. Found by reading
@@ -1238,6 +1278,51 @@ spells the same thing?**
   - When a type gains a variant, grep for `_ =>` in every walk over it. Better, make those walks exhaustive, so adding a
     variant is a compile error in each.
   - Search key: `_ => {}` in a `match` on `Value`, `Ty`, `TyDesc`, `MsgValue`.
+- **GENERIC-RIGID-1 — the effect row escaped through a generic** (2026-10-24, D-V2-184; found by a Haiku 5.5 test
+  agent holding no authority). A generic's parameters were flexible inference variables inside its own body, so
+  `coerce[A, B](x: A) -> B { x }` made an effectful closure pure, and a function `authority` called pure printed. Inside
+  the body that declares them, `T` and `e` are rigid: the caller picks them, and the body must hold for every pick. Never
+  soften this to "the body may refine a generic". Search key: `make_genv` / `make_body_genv`, `fresh_rigid_type`.
+- **A laundering witness must parse** (2026-10-24). F-3, F-3b and F-4 had two statements on one line (DL0209) since
+  they were written, and met their codes through the parser's recovery. A refusal from a repaired program proves nothing
+  about the program the test names. `rejects_with` now asserts no DL01xx or DL02xx.
+- **RUN-PIN-1 — the supply-chain gate held only where nothing runs** (on-demand routine run 6, 2026-10-25, D-V2-186; HIGH).
+  A dependency that breaks its authority pin, or carries none, was DL1001 under `check`, `build` and `lock`, and `run` ran
+  it on every engine and in the sandbox; `build --target wasm`, `test`, `deploy plan`, `publish`, `add` and `sandbox
+  policy` went ahead too. Their loaders checked types and never called the pin check. Every route that runs, ships or
+  plans a package calls `supply_chain_gate` now. Never soften this to "the pin is a build-time check": a pin is enforced
+  wherever the dependency's code can run. Search key: `resolve_workspace(` without `supply_chain_gate` on the same path.
+- **RW 4.79 — a record says what happened, not what the first judge asked would have allowed** (on-demand routine run 10,
+  2026-10-31, D-V2-195). A capability may hold less than its node, and every gate asked the custody first: under the daemon
+  a write or a request the program's own capability refused left `use allow` in the chain (19 of them across seven calls
+  and three routes), and a Guard rule was asked about a read that could never happen — DL1410 told the agent to request a
+  permit for it. Now a verdict that needs nothing from the custody (the capability's, `prim::capability_refusal`) is made
+  before the custody is asked, and the custody is TOLD it: one `use deny`, `refused_by: capability`. A refusal that needs
+  the custody's answer (the egress client's, an envelope's) still follows it as an overriding `deny`. Never soften this to
+  "the effect re-checks anyway": the chain is what a monitor and an auditor read, and never let a capability refusal go
+  unrecorded either — a monitor's `denies=N/MS` counts it. Search key: `check_at(` reached before `capability_refusal`.
+- **RW 4.67 — a sent secret leaves no copy of its bytes behind** (on-demand routine run 12, 2026-10-31, D-V2-196). Under
+  the daemon a secret's bytes enter the run only to be sent, and the copies on the way to the wire are made by code that is
+  not ours: the copy run 25's red team found, and run 12 read again by scanning the run's memory, was hyper's serialized
+  request, in the arena of reqwest's runtime thread. No call site can clear a buffer it never sees, so the rule is the
+  allocator's: while a `delulu_runtime::scrub::Window` is open, the `delulu` binary zeroes every block it frees, on every
+  thread. Never soften this to "the runtime zeroes its own copies" — that was P17-F's stated limit, and the copy that stayed
+  was not ours. A new path that hands a secret's bytes to code outside the runtime opens a window around it. Search key:
+  `send_secret(` or `reveal()` with no `scrub::Window::open` around the call.
+- **ESTOP-QUEUE-1 — a revocation goes first** (on-demand routine run 14, 2026-10-31, D-V2-198). The daemon is serial,
+  and on a held audit chain each request waits up to 5 s for its record, so an e-stop in the same line as everything else
+  waited out the whole queue: behind four, `grants revoke` answered DL1401 at 15 s ("start it with `delulu broker
+  start`") and landed at ~25 s. A revocation now has a line the handler reads first, and dead-men are judged as of the
+  earliest arrival still waiting. Never put revocations back in the ordinary line, and never judge a dead-man by a
+  revocation's own arrival — a beat that arrived in time waits behind it. A new request kind that only narrows (a stop of
+  any sort) belongs in `ReqBody::is_revocation`. Search key: `is_revocation` and `revocations.try_recv`.
+- **LATE-LET-1 — a closure reads each name as the checker resolved it** (the laptop, 2026-11-01, D-V2-199). A `let` is
+  not recursive and binds a new name, but both engines read a closure's names in the scopes it was made over, where a
+  later `let` bound them. A function `authority` called pure printed, and a `Secret.map` callback printed a plaintext
+  secret with no `Declassify` (C88's shape, R-4 and R-2 again). Never move a `let` back into a scope a closure holds,
+  however tempting one scope per block is (A14), and never copy a closure's scopes at its making: its maker's `var`s are
+  shared by reference. Search key: `define(` into an `Env` that `Expr::Lambda` captured, and a `callables` or `scopes`
+  insert in a `let` without `Cx::bind_after`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1843,6 +1928,90 @@ Added in V2 (2026-09-17 → 2026-09-28):
   given the type written out once (`apply_type`, within its limit) and walks it as it stands. Time a twin, a field read
   and an `==` of the shape, not only the shape.
 
+- **Before refusing a spelling, read every test that writes it** (on-demand routine run 6, B1): `grants delegate --net
+  127.0.0.1` looked like a grant nothing can use, and the first fix refused it. Two suites delegate exactly that, on
+  purpose: such a node drives the custody, the Guard's permits and the audit of a leased send, with nothing leaving the
+  machine. A refusal would have removed a working grant to report a missing one. The fix was a note where the grant is
+  written, and then the missing dimension (D-V2-187, D-V2-188). `grep` the spelling in the tests before deciding what it
+  is for.
+- **A guarantee witnessed through one command is witnessed for that command** (on-demand routine run 6, RUN-PIN-1): the
+  xz scenario's test drove `build` and said the gate holds "BEFORE any code runs"; `run`, the command an author types
+  first, skipped the gate, and so did five more routes. When a guarantee says "before X", list every command that can
+  reach X (here: everything that resolves a workspace and then runs, ships or plans it), and drive the witness through each.
+  The finding came from checking a repair's result by running the repaired package, not by re-reading the diagnostic.
+- **A thread-local setting reaches only the thread that sets it** (the laptop, 2026-10-27, ACTOR-DETERMINISM-1,
+  D-V2-192): `--seed` and `--clock fixed:` were thread-locals that `run` set on the main thread, and every actor runs
+  on a worker thread, so an actor's draws and clock ignored both. Every test of `--seed` drove `main`, and the
+  campaign's actor programs drew nothing at random, so it surfaced only when a program put a `Cap[Rand]` in an actor.
+  When a setting is a `thread_local!`, list every thread that runs program code, the actor workers among them, and
+  test the setting from each.
+- **Count a cost that can be counted; time only what cannot** (the laptop, 2026-10-29, A14, RW 3.24). The interpreter's
+  speed-up is held by a test that counts the allocations one loop step makes. It installs a counting allocator in the test
+  binary and differences runs of 1,000 and 2,000 steps. That count is exact on any machine, so no busy runner can turn it
+  red, and a mutant that brings back one allocation per step fails it. The first run found a cost no profile had shown: every `==` of
+  two `Int`s allocated the vector of its deep-equality walk. A timing test could not have told that from noise.
+
+- **A once-seen red whose message names only the verdict: make the witness print the evidence first, then stop each party
+  in turn** (on-demand routine run 7, RW 7.25). `a_long_chain_does_not_kill_a_healthy_monitor` printed the nodes' states
+  and nothing that could tell a starved monitor from one that stopped on an error or from a daemon that did not run. Load
+  did not reproduce it (6 of 6 green). `SIGSTOP` on the daemon, the one party nobody had stopped, was red at once and
+  every time. `kill -STOP PID` holds a process's window open deterministically, where load only makes it likelier.
+- **A job whose runner died leaves no log, and its annotations say why** (on-demand routine run 9, RW 7.26): #101's Ubuntu
+  test job failed with no failed step, and `get_job_logs` answered 404. Its check run's annotations
+  (`/check-runs/JOB_ID/annotations`) held the runner's last words, *"No space left on device"*. Reading every failed job
+  of 223 runs that way took one script and showed it was the only such death. Then measure before you guess: the guess
+  was a thin margin, and the test jobs' new disk notices (`f5a1d58`) refuted it at once. Ubuntu had 82 GB free before
+  the suite and 67 GB after it (`target/` 2.9 → 18 GB), so that death was the runner's, not the build's. Read those
+  notices first if a job dies that way again.
+- **A test that asserts the order a defect lives in is the defect's record** (on-demand routine run 10). `grants_cli`'s
+  sealed-artifact case asserted that an out-of-scope read was refused *"by the custody, which the host asks first … not by
+  the scope's own check"*, and the WASM F1 test that both engines ASK the custody about a read the scope refuses; RW 4.79
+  moved the order, and both went red. Neither was weakened: each was rewritten to what it protected — the lease's custody
+  still decides what the capability allows (a read inside it, refused by a `guarded` rule), and the two engines still
+  meet the custody alike (they tell it the refusal, in the same words). Read what such a test was FOR before changing it.
+- **A fresh routine VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`. Delete
+  `target/debug/incremental` and the stale test binaries before a mutant batch and before the suite (`scripts/suite.sh`
+  refuses under 10 GB); a batch of fifteen mutants with `CARGO_INCREMENTAL=0` took about 45 minutes and no disk.
+- **A command that exits 0 whatever it finds is not a gate until something counts what it says** (on-demand routine run
+  11). `survey findings` prints `error:` lines and exits 0, and three launch merges in a row read its count by eye.
+  `scripts/launch-gates.sh` counts them (red on a planted broken link) and refuses `ok` when `cargo-deny` is missing (red,
+  exit 127) — a gate that did not run is a failure, never a skip. **And judge a launch's *Breaking* paragraph against 1.x
+  itself**, not against the V2 state just before the change: `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH`.
+  RW 4.79 moved an order 1.x already had (the daemon's custody asked before the capability), so its code move is breaking.
+- **A memory scan's scan point must not allocate** (on-demand routine run 12). A copy freed on the run's own thread is
+  overwritten as soon as that thread allocates again: the first witness scanned while the program waited in a second
+  request, and a mutant that left a copy there (the held secret's own zeroing removed, M968) survived it. Scanned while
+  the program waited on standard input (`console.readline`, which allocates nothing), M968 was red 3 of 3. Scan for a
+  fragment as well as the whole — a freed block's first 16 bytes are the allocator's own — and read only the pages in
+  memory (`/proc/PID/pagemap`): the interpreter's stack reservation made a whole-mapping scan take 34 s in a debug build.
+- **Never undo a mutant with `git stash push` and `git stash drop`** (on-demand routine run 12): it dropped the file's whole
+  diff, the fix with it, and the edit was re-applied from the run's own record. Apply a mutant by an anchored edit and
+  restore the exact text (`scripts/mutants.py`; `MUTANTS_KEEP=DIR` keeps each mutant's `delulu` for by-hand probes), and
+  compare `git diff` with a saved patch after each. And a by-hand run after a stashed red reading runs the binary the old
+  code built: four reds in a row were that binary, not the fix — `cargo build` first.
+- **A new gate is run against every merge that will call it, not only the one it was written on** (on-demand routine
+  run 13). `scripts/launch-gates.sh`'s `criterion-2-cited` first asked criterion 2's row to cite the merged `master`'s
+  own hash; it passed on the code merge it was written for, and would have gone red on the citations merge that follows
+  every such run, whose `master` is a records-only closing commit the row never cites. Found before that merge, by
+  asking which calls the procedure makes; the gate now accepts a citation whose criterion-2 inputs are the base's, and
+  was falsified on both shapes.
+- **A measurement that comes back clean is re-asked in the shape that failed** (on-demand routine run 14). RW 4.53's
+  open item was routine run 16's measurement, and on `0ebbc15` it was clean (a revoke beside 12 sandbox loops: 22 ms
+  median). The red team's F4 named a different shape — the chain HELD, requests queued — and that one still answered
+  DL1401 at 15 s. Closing the row on the clean number would have closed it on the wrong question. And **a witness of an
+  order places every member it is about**: the first form asserted only that the e-stop overtook the queue, and M970 —
+  the quarantine left out of the lane — survived it.
+- **A line a gate reads back is written by a tool, not by hand** (on-demand routine run 15). CHECKLIST-2.0 criterion 2's
+  sentence was typed five times by five runs, and since run 13 `criterion-2-cited` greps it in one exact shape — a
+  typo there is a red gate, and a stale count copied forward a false citation. `scripts/launch-criterion-2.py` measures
+  and writes it, and refuses a tree under 100%. Where a procedure writes text that a check later parses, give the
+  writing to the same kind of program as the reading.
+- **Two engines that agree prove only that they agree** (the laptop, 2026-11-01, LATE-LET-1). Every parity test and the
+  50,000-program differential compare the interpreter with the WASM engine, and both read a name a later `let` bound,
+  so all of them stayed green on a program that escaped its effect row. Assert the VALUE the checker's meaning gives, not
+  only that the engines match. And **a witness exercises the rule it names alone**: M976 survived because the witness's
+  later value was a lambda made in the very scope the mutant stopped holding, which held it anyway.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
@@ -1879,6 +2048,14 @@ git history, past fixes. Record what was *non-obvious*: the reasoning, the trap,
   `/3` found the guarantee held in ~85 attempts and 700 fuzzed frames — and seven real defects AROUND it
   (waiting, reporting, text, pipes). Brief a tester to attack the guarantee and to list every oddity.
   Give it a frozen COPY of the binary outside the repository, so the head chef can keep building.
+- **The agent test campaign of 2026-10-24.** These held: a frozen binary copy; conditions as leases the head chef
+  delegates; a wrapper plus a hook gate; one Sonnet 5.5 builder, one Sonnet 5.5 boundary prober and one Haiku 5.5
+  zero-authority attacker. The Haiku agent found the critical (GENERIC-RIGID-1) in 69 tool calls. What surprised:
+  a sub-agent's Write tool refused its report file, so it must write `REPORT.txt` or the head chef must save its final
+  message. The session's task `.output` files are empty stubs; the transcripts are
+  `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`. The gate passed the wrapper's own path, so an
+  agent could `head` the wrapper; its lease tokens stayed behind the gate. Read each transcript's `model` field to name
+  the model an agent actually ran.
 
 ### 11.8 What building and running DeluluLang V2 taught
 

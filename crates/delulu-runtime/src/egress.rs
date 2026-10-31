@@ -75,6 +75,8 @@ pub const DEFAULT_MAX_BODY: u64 = 8 * 1024 * 1024;
 /// one API for one resource has no business with more than a handful, and every hop is a fresh
 /// resolution and a fresh connection.
 pub const DEFAULT_MAX_REDIRECTS: u32 = 5;
+/// The largest body a request may send (P9-05 (d), D-V2-183) — bounded, as the response is.
+pub const MAX_REQUEST_BODY: usize = 1024 * 1024;
 /// The whole request — every resolution, connection, handshake and body read, across every hop.
 pub const DEFAULT_DEADLINE: Duration = Duration::from_secs(30);
 /// How many egress records a run keeps. Past this the counts still rise but nothing more is stored,
@@ -153,6 +155,10 @@ pub enum Reason {
     TooManyRedirects,
     /// A 3xx answer with no usable `Location`.
     RedirectWithoutLocation,
+    /// A 307 or 308 that would carry the program's body to another origin than the one it named (P9-05 (d), D-V2-183).
+    BodyElsewhere,
+    /// The request's body is larger than [`MAX_REQUEST_BODY`].
+    RequestTooLarge,
     /// The response was larger than the policy allows.
     BodyTooLarge,
     /// The body is not UTF-8, and `http.get` answers a `Str`.
@@ -202,6 +208,8 @@ impl Reason {
             Reason::NoAddress => "no-address",
             Reason::TooManyRedirects => "too-many-redirects",
             Reason::RedirectWithoutLocation => "redirect-without-location",
+            Reason::BodyElsewhere => "body-elsewhere",
+            Reason::RequestTooLarge => "request-too-large",
             Reason::BodyTooLarge => "body-too-large",
             Reason::NotUtf8 => "not-utf8",
             Reason::Status(_) => "status",
@@ -219,7 +227,11 @@ impl Reason {
     /// A sentence for the operator. Host-side only — the program is told [`Reason::answer`].
     pub fn explain(&self) -> String {
         match self {
-            Reason::Scheme => "only `https://` is fetched; there is no plain-HTTP path".into(),
+            // B7 (the agent test campaign): this said "there is no plain-HTTP path" for `HTTPS://`, `https:host`, `//host`,
+            // `ftp://`, a bare host and the empty URL as well, none of them plain HTTP.
+            Reason::Scheme => "the URL does not begin with `https://` (lower case, two slashes, then the host): only \
+                               `https://` is fetched, and there is no plain-HTTP path"
+                .into(),
             Reason::Userinfo => "the URL carries userinfo (`user@host`), which is refused rather than parsed".into(),
             Reason::Malformed(why) => format!("the URL is refused rather than normalized: {why}"),
             Reason::NotAllowlisted => "the host — or, under a path scope, the path — is not in the capability's allowlist".into(),
@@ -229,6 +241,10 @@ impl Reason {
             Reason::NoAddress => "the host name resolved to no address".into(),
             Reason::TooManyRedirects => format!("more than {DEFAULT_MAX_REDIRECTS} redirects"),
             Reason::RedirectWithoutLocation => "a redirect with no usable `Location` header".into(),
+            Reason::BodyElsewhere => {
+                "a redirect would carry the request's body to another origin than the one the program named".into()
+            }
+            Reason::RequestTooLarge => format!("the request's body is larger than {MAX_REQUEST_BODY} bytes"),
             Reason::BodyTooLarge => "the response is larger than the size limit".into(),
             Reason::NotUtf8 => "the response body is not UTF-8".into(),
             Reason::Status(s) => format!("the server answered HTTP status {s}"),
@@ -257,7 +273,9 @@ impl Reason {
             | Reason::HostMismatch
             | Reason::NoClient
             | Reason::Header(_)
-            | Reason::Audience(_) => Answer::Refused,
+            | Reason::Audience(_)
+            | Reason::BodyElsewhere
+            | Reason::RequestTooLarge => Answer::Refused,
             Reason::Timeout => Answer::Timeout,
             Reason::RedirectWithoutLocation => Answer::Other("redirect without a location".into()),
             Reason::BodyTooLarge => Answer::Other("response too large".into()),
@@ -494,6 +512,11 @@ pub struct PinnedRequest<'a> {
     /// The program's headers for THIS hop — checked by [`check_headers`], lower-case names, and empty on
     /// a hop to another origin than the program named.
     pub headers: &'a [(String, String)],
+    /// The hop's method (P9-05 (d), D-V2-183): `GET`, or the program's `POST` — which a 301, 302 or 303 turns
+    /// into a `GET` for the hop after it.
+    pub method: &'a str,
+    /// The body the hop sends: the program's, on a `POST` and on the 307/308 hops after it; none otherwise.
+    pub body: Option<&'a str>,
 }
 
 impl std::fmt::Debug for PinnedRequest<'_> {
@@ -589,6 +612,8 @@ pub struct HopRecord {
     /// The grant NAME of the secret this hop carried (P9-04 (b)/(c)) — never its bytes. `None` on a hop
     /// that carried no secret.
     pub secret: Option<String>,
+    /// The hop's method (P9-05 (d), D-V2-183).
+    pub method: String,
 }
 
 /// One `http.get`, start to finish.
@@ -623,6 +648,10 @@ impl EgressRecord {
                 // The same rule: only on a hop that carried one.
                 if let Some(name) = &h.secret {
                     j["secret"] = serde_json::json!(name);
+                }
+                // And only on a hop that was not a GET (P9-05 (d), D-V2-183).
+                if h.method != "GET" {
+                    j["method"] = serde_json::json!(h.method);
                 }
                 j
             })
@@ -775,8 +804,22 @@ pub fn get_for_program_with_secret(
     allow: &[String],
     special: &[String],
 ) -> Answer {
+    request_for_program("GET", url, headers, None, secret, allow, special)
+}
+
+/// Serve one request for a program by `method`, with its `body` (P9-05 (d), D-V2-183: `http.post`) — [`request`] under
+/// the capability's allowlist, recorded and answered as [`get_for_program_with_secret`] is.
+pub fn request_for_program(
+    method: &str,
+    url: &str,
+    headers: &[(String, String)],
+    body: Option<&str>,
+    secret: Option<&SecretHeader<'_>>,
+    allow: &[String],
+    special: &[String],
+) -> Answer {
     let policy = EgressPolicy::for_capability(allow, special);
-    let (rec, body) = request_with_secret(&policy, url, headers, secret, &SystemResolver, system_transport());
+    let (rec, body) = request(&policy, method, url, headers, body, secret, &SystemResolver, system_transport());
     let answer = match (&rec.outcome, body) {
         (Ok(_), Some(b)) => Answer::Body(b),
         (Err(r), _) => r.answer(),
@@ -933,9 +976,31 @@ pub fn request_with_secret(
     resolver: &dyn Resolver,
     transport: &dyn Transport,
 ) -> (EgressRecord, Option<String>) {
+    request(policy, "GET", url, headers, None, secret, resolver, transport)
+}
+
+/// [`request_with_secret`] by `method`, with the program's `body` (P9-05 (d), D-V2-183). Every hop is judged by its
+/// own method. A 301, 302 or 303 after a request that is not a GET is followed as a GET with no body (as every
+/// browser does); a 307 or 308 keeps the method and the body, and only to the origin the program named — the body
+/// is the program's, as its headers are, and a redirect elsewhere that would carry it is refused.
+#[allow(clippy::too_many_arguments)]
+pub fn request(
+    policy: &EgressPolicy,
+    method: &str,
+    url: &str,
+    headers: &[(String, String)],
+    body: Option<&str>,
+    secret: Option<&SecretHeader<'_>>,
+    resolver: &dyn Resolver,
+    transport: &dyn Transport,
+) -> (EgressRecord, Option<String>) {
     let started = Instant::now();
     let deadline = started + policy.deadline;
     let mut rec = EgressRecord { url: url.to_string(), hops: Vec::new(), outcome: Err(Reason::Protocol) };
+    if body.is_some_and(|b| b.len() > MAX_REQUEST_BODY) {
+        rec.outcome = Err(Reason::RequestTooLarge);
+        return (rec, None);
+    }
     let mut given: Vec<(String, String)> = headers.to_vec();
     if let Some(s) = secret {
         given.push((s.header.to_string(), s.value.to_string()));
@@ -970,12 +1035,17 @@ pub fn request_with_secret(
     }
     let mut current = url.to_string();
     let mut redirects = 0u32;
+    let (mut method, mut body) = (method, body);
     loop {
         let here = parse_target(&current).ok().map(|t| (t.host, t.port));
         let send = match (&origin, &here) {
             (Some(o), Some(h)) => o == h,
             _ => false,
         };
+        if body.is_some() && !send {
+            rec.outcome = Err(Reason::BodyElsewhere);
+            return (rec, None);
+        }
         let carry_secret = send
             && secret
                 .is_some_and(|s| here.as_ref().is_some_and(|(h, p)| s.audience.iter().any(|a| a.host == *h && a.port == *p)));
@@ -985,16 +1055,20 @@ pub fn request_with_secret(
             hop_headers.push(sh.clone());
             secret_name = Some(s.name);
         }
-        match hop(policy, &current, &hop_headers, secret_name, resolver, transport, deadline, &mut rec) {
+        let this = HopRequest { method, url: &current, headers: &hop_headers, body, secret: secret_name };
+        match hop(policy, &this, resolver, transport, deadline, &mut rec) {
             Err(reason) => {
                 rec.outcome = Err(reason);
                 return (rec, None);
             }
-            Ok(HopEnd::Redirect(next)) => {
+            Ok(HopEnd::Redirect(status, next)) => {
                 redirects += 1;
                 if redirects > policy.max_redirects {
                     rec.outcome = Err(Reason::TooManyRedirects);
                     return (rec, None);
+                }
+                if matches!(status, 301..=303) && method != "GET" && method != "HEAD" {
+                    (method, body) = ("GET", None);
                 }
                 current = next;
             }
@@ -1016,8 +1090,18 @@ pub fn request_with_secret(
 }
 
 enum HopEnd {
-    Redirect(String),
+    /// The redirect's status and where it points.
+    Redirect(u16, String),
     Body(u16, Vec<u8>),
+}
+
+/// What one hop asks: its method, URL, headers and body, and the grant name of the secret it carries.
+struct HopRequest<'a> {
+    method: &'a str,
+    url: &'a str,
+    headers: &'a [(String, String)],
+    body: Option<&'a str>,
+    secret: Option<&'a str>,
 }
 
 fn remaining(deadline: Instant) -> Result<Duration, Reason> {
@@ -1030,24 +1114,25 @@ fn remaining(deadline: Instant) -> Result<Duration, Reason> {
 }
 
 /// One hop: the full check, the pinned request, and what it came back with.
-#[allow(clippy::too_many_arguments)]
 fn hop(
     policy: &EgressPolicy,
-    url: &str,
-    headers: &[(String, String)],
-    secret: Option<&str>,
+    req: &HopRequest<'_>,
     resolver: &dyn Resolver,
     transport: &dyn Transport,
     deadline: Instant,
     rec: &mut EgressRecord,
 ) -> Result<HopEnd, Reason> {
+    let HopRequest { method, url, headers, body, secret } = *req;
     let t = parse_target(url)?;
     // P9-05 (a), D-V2-138: the host, and where an entry names a path pattern, this hop's path — a redirect out of the
     // granted path is refused here as one to an ungranted host is; a path a server could read two ways, before DNS.
-    match delulu_broker::netscope::judge_all(&policy.allow, &t.host, t.path()) {
+    // P9-05 (d), D-V2-182/183: and this hop's method — a redirect that turns a POST into a GET is judged as a GET.
+    match delulu_broker::netscope::judge_all(&policy.allow, method, &t.host, t.path()) {
         delulu_broker::netscope::Verdict::Allow => {}
         delulu_broker::netscope::Verdict::Ambiguous(why) => return Err(Reason::Malformed(why)),
-        delulu_broker::netscope::Verdict::OtherHost | delulu_broker::netscope::Verdict::OutsidePath => {
+        delulu_broker::netscope::Verdict::OtherHost
+        | delulu_broker::netscope::Verdict::OutsidePath
+        | delulu_broker::netscope::Verdict::OtherMethod => {
             return Err(Reason::NotAllowlisted);
         }
     }
@@ -1093,8 +1178,9 @@ fn hop(
         status: None,
         headers: headers.iter().map(|(n, _)| n.clone()).collect(),
         secret: secret.map(str::to_string),
+        method: method.to_string(),
     });
-    let req = PinnedRequest { url: &t.url, host: &t.host, port: t.port, addrs: &pinned, headers };
+    let req = PinnedRequest { url: &t.url, host: &t.host, port: t.port, addrs: &pinned, headers, method, body };
     let got = transport.fetch(&req, policy.max_body, remaining(deadline)?)?;
     if let Some(h) = rec.hops.last_mut() {
         h.status = Some(got.status);
@@ -1112,7 +1198,7 @@ fn hop(
     }
     match got.status {
         301 | 302 | 303 | 307 | 308 => match got.location {
-            Some(loc) if !loc.is_empty() => Ok(HopEnd::Redirect(join_location(&t, &loc))),
+            Some(loc) if !loc.is_empty() => Ok(HopEnd::Redirect(got.status, join_location(&t, &loc))),
             _ => Err(Reason::RedirectWithoutLocation),
         },
         200..=299 => Ok(HopEnd::Body(got.status, got.body)),
@@ -1284,9 +1370,14 @@ pub(crate) mod real {
             let client = b.build().map_err(|e| classify(&e))?;
             // The program's headers, already held to `check_headers`. A request header replaces the
             // client's default of the same name (`User-Agent`, `Accept`); `Host` is never among them.
-            let mut rb = client.get(req.url);
+            // P9-05 (d), D-V2-183: the hop's method — one of the names `netscope::METHODS` lists, judged before this.
+            let method = reqwest::Method::from_bytes(req.method.as_bytes()).map_err(|_| Reason::Protocol)?;
+            let mut rb = client.request(method, req.url);
             for (name, value) in req.headers {
                 rb = rb.header(name.as_str(), value.as_str());
+            }
+            if let Some(body) = req.body {
+                rb = rb.body(body.to_string());
             }
             let resp = rb.send().map_err(|e| classify(&e))?;
             let status = resp.status().as_u16();

@@ -178,6 +178,19 @@ fn a_refused_request_says_why_to_the_operator_and_nothing_to_the_program() {
     }
 }
 
+/// B6 (the agent test campaign): the operator's note quotes a refused URL as the program wrote it, a backslash once. It was
+/// `escape_debug`, which doubled every backslash.
+#[test]
+fn a_refused_url_is_quoted_as_written_in_the_operators_note() {
+    let dir = tmp("note-backslash");
+    fetcher(&dir, "example.com", "https://example.com/a\\\\x");
+    let o = delulu(&dir, &["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com"]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(stderr.contains("note: the request to `https://example.com/a\\x` was not delivered"), "{}", out(&o));
+    assert!(stderr.contains("[egress: malformed]"), "{}", out(&o));
+}
+
 /// P9-05 (a), D-V2-138: end to end on loopback, at L0 and from a guest — under `net.special=127.0.0.1/allowed/**` a request
 /// under `/allowed` leaves as TLS (its query is not its path); one for another path, or for a path spelled two ways, is
 /// refused DL0904 at the call and nothing connects.
@@ -219,6 +232,118 @@ fn a_path_scoped_grant_reaches_its_paths_and_no_other() {
             );
             assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}, {label}: nothing connected");
         }
+    }
+}
+
+/// P9-05 (d), D-V2-182: end to end on loopback, at L0 and from a guest — a `net` entry names its methods after its host.
+/// A request (a GET: the one a program makes today) leaves as TLS under an entry that takes GET; under one that names
+/// POST alone it is refused DL0904 at the call, in words about its method, and nothing connects. A program cannot mint
+/// an entry wider in methods than its grant, and an entry naming a port is refused before the run, in words.
+#[test]
+fn a_method_scoped_grant_takes_only_its_methods() {
+    for sandbox in [false, true] {
+        let run = |dir: &Path, grant: &str| {
+            let grant = format!("net.special={grant}");
+            let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", grant.as_str()];
+            if sandbox {
+                args.push("--sandbox");
+            }
+            delulu(dir, &args)
+        };
+        let both = "127.0.0.1:GET,POST/allowed/**";
+        let dir = tmp(if sandbox { "method-in-guest" } else { "method-in-l0" });
+        let (port, seen) = listen(Duration::from_secs(20));
+        fetcher(&dir, both, &format!("https://127.0.0.1:{port}/allowed/x"));
+        let o = run(&dir, both);
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
+
+        let post = "127.0.0.1:POST";
+        let dir = tmp(if sandbox { "method-out-guest" } else { "method-out-l0" });
+        let (port, seen) = listen(Duration::from_secs(3));
+        fetcher(&dir, post, &format!("https://127.0.0.1:{port}/allowed/x"));
+        let o = run(&dir, post);
+        assert!(
+            out(&o).contains("DL0904") && out(&o).contains("outside the methods the grant names"),
+            "sandbox={sandbox}: refused at the call by its method:\n{}",
+            out(&o)
+        );
+        assert!(!String::from_utf8_lossy(&o.stdout).lines().any(|l| l.ends_with("delivered")), "{}", out(&o));
+        assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}: nothing connected");
+
+        // Asking for GET under a grant that names POST alone is asking for more than was granted.
+        let dir = tmp(if sandbox { "method-mint-guest" } else { "method-mint-l0" });
+        fetcher(&dir, "127.0.0.1", "https://127.0.0.1:9/x");
+        let o = run(&dir, post);
+        // A20: named as what it is — the host granted, the entry wider than its grant — not as an ungranted host.
+        assert!(
+            out(&o).contains("`127.0.0.1` asks for more of `127.0.0.1` than this program was granted (`127.0.0.1:POST`)"),
+            "sandbox={sandbox}: the mint is refused:\n{}",
+            out(&o)
+        );
+    }
+    let dir = tmp("method-port");
+    fetcher(&dir, "127.0.0.1", "https://127.0.0.1:9/x");
+    let o = delulu(&dir, &["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1:8443"]);
+    assert_eq!(o.status.code(), Some(2), "{}", out(&o));
+    assert!(out(&o).contains("names no port"), "{}", out(&o));
+}
+
+/// A program that POSTs a body to `url` through `post` (P9-05 (d), D-V2-183).
+fn poster(dir: &Path, hosts: &str, url: &str) {
+    std::fs::write(
+        dir.join("post.delulu"),
+        format!(
+            "module post\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+             let out = root.console()\n    \
+             let h = root.http([\"{hosts}\"])\n    \
+             let hs = Map()\n    \
+             hs.insert(\"Content-Type\", \"application/json\")\n    \
+             match h.post(\"{url}\", hs, \"{{}}\") {{\n        \
+             Ok(body) => out.println(\"delivered\")\n        \
+             Err(e) => out.println(\"not delivered\")\n    \
+             }}\n}}\n"
+        ),
+    )
+    .unwrap();
+}
+
+/// P9-05 (d), D-V2-183: `http.post`, end to end on loopback, at L0 and from a guest — the host performs it. Under an
+/// entry naming POST it leaves as TLS; under one naming no methods (GET alone) it is refused DL0904 at the call, in words
+/// about its method, and nothing connects; and the run report names the hop's method.
+#[test]
+fn a_post_leaves_under_a_grant_that_names_post_and_no_other() {
+    for sandbox in [false, true] {
+        let run = |dir: &Path, grant: &str| {
+            let grant = format!("net.special={grant}");
+            let mut args =
+                vec!["run", "post.delulu", "--grant", "console", "--grant", grant.as_str(), "--report-out", "rep.json"];
+            if sandbox {
+                args.push("--sandbox");
+            }
+            delulu(dir, &args)
+        };
+        let dir = tmp(if sandbox { "post-in-guest" } else { "post-in-l0" });
+        let (port, seen) = listen(Duration::from_secs(20));
+        poster(&dir, "127.0.0.1:POST", &format!("https://127.0.0.1:{port}/items"));
+        let o = run(&dir, "127.0.0.1:POST");
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
+        let rep: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
+        assert_eq!(rep["egress"]["records"][0]["hops"][0]["method"], "POST", "sandbox={sandbox}: {rep}");
+
+        let dir = tmp(if sandbox { "post-out-guest" } else { "post-out-l0" });
+        let (port, seen) = listen(Duration::from_secs(3));
+        poster(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/items"));
+        let o = run(&dir, "127.0.0.1");
+        assert!(
+            out(&o).contains("DL0904") && out(&o).contains("a `POST` to"),
+            "sandbox={sandbox}: refused at the call by its method:\n{}",
+            out(&o)
+        );
+        assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}: nothing connected");
     }
 }
 
@@ -282,6 +407,68 @@ fn a_request_with_headers_leaves_as_tls_at_l0_and_from_a_guest_and_the_report_na
         let o = delulu(&dir, &["schema", "validate", "run-report", "rep.json", "--json"]);
         let check: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON");
         assert_eq!(check["validate"]["valid"], true, "sandbox={sandbox}: {}\n{v}", check["validate"]["errors"]);
+    }
+}
+
+/// `get_with` on the WASM engine (the agent campaign's A21: DL1201 "does not support the method `.get_with`", though
+/// `get`, `post` and `get_with_secret` compiled): the same request leaves — TLS, the headers named in the report, never
+/// a value — from the source on `--engine wasm` and from a built `.dwx` as from the interpreter, with the same trace.
+#[test]
+fn a_request_with_headers_leaves_alike_from_the_wasm_engine() {
+    let mut traces = Vec::new();
+    for engine in ["interp", "wasm", "dwx"] {
+        let dir = tmp(&format!("hdr-{engine}"));
+        let (port, seen) = listen(Duration::from_secs(20));
+        fetcher_with(
+            &dir,
+            "127.0.0.1",
+            &format!("https://127.0.0.1:{port}/probe"),
+            &[("X-Api-Version", "7"), ("Accept", "text/plain")],
+        );
+        let target = if engine == "dwx" {
+            let o = delulu(&dir, &["build", "fetch.delulu", "--target", "wasm", "--out", "fetch.dwx"]);
+            assert_eq!(o.status.code(), Some(0), "build: {}", out(&o));
+            "fetch.dwx"
+        } else {
+            "fetch.delulu"
+        };
+        let mut args = vec![
+            "run",
+            target,
+            "--grant",
+            "console",
+            "--grant",
+            "net.special=127.0.0.1",
+            "--report-out",
+            "rep.json",
+            "--trace-effects",
+            "--trace-out",
+            "trace.txt",
+        ];
+        if engine == "wasm" {
+            args.extend(["--engine", "wasm"]);
+        }
+        let o = delulu(&dir, &args);
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("{engine}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "{engine}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "{engine}:\n{}", out(&o));
+        assert_eq!(String::from_utf8_lossy(&o.stdout), "not delivered\n", "{engine}:\n{}", out(&o));
+        let v = report(&dir);
+        assert_eq!(
+            v["egress"]["records"][0]["hops"][0]["headers"],
+            serde_json::json!(["accept", "x-api-version"]),
+            "{engine}: {v}"
+        );
+        assert!(!v.to_string().contains("text/plain"), "{engine}: no header value in the report: {v}");
+        let trace = std::fs::read_to_string(dir.join("trace.txt")).unwrap_or_default();
+        assert!(trace.contains("\"get_with\"") && !trace.contains("text/plain"), "{engine}: {trace}");
+        // The trace names the URL, and each engine's listener has its own port.
+        traces.push((engine, trace.replace(&format!(":{port}/"), ":PORT/")));
+    }
+    let (_, interp) = &traces[0];
+    assert!(interp.contains("https://127.0.0.1:PORT/probe"), "{interp}");
+    for (engine, trace) in &traces[1..] {
+        assert_eq!(trace, interp, "{engine}'s trace is the interpreter's");
     }
 }
 

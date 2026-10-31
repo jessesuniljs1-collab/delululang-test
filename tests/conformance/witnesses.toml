@@ -499,6 +499,12 @@ test = "couldnt_tell_an_unevaluable_export_is_an_honest_error_never_a_panic_or_s
 kind = "negative"
 
 [[witness]]
+anchor = "ref.diag.DL0908"
+file = "crates/delulu-wasm/tests/fault_parity.rs"
+test = "an_empty_rand_range_is_dl0908_on_both_engines"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.diag.DL1306"
 file = "crates/delulu-runtime/tests/foreign_ffi.rs"
 test = "invalid_utf8_return_is_a_dl1306_fault_not_a_crash"
@@ -948,6 +954,12 @@ kind = "positive"
 anchor = "ref.diag.DL0907"
 file = "crates/delulu/tests/cli.rs"
 test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0908"
+file = "crates/delulu-wasm/tests/fault_parity.rs"
+test = "a_one_wide_rand_range_draws_its_one_value_on_both_engines"
 kind = "positive"
 
 [[witness]]
@@ -2052,6 +2064,59 @@ kind = "positive"
 
 [[witness]]
 anchor = "ref.prim.http.get_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
+kind = "negative"
+
+# P9-05 (d), D-V2-183 (the laptop, 2026-10-23, under the owner's delegation — ENTRENCHED_CHANGE_RECORD.md): a POST with
+# headers and a body, judged by its method. The table's own two witnesses; the egress client's POST, its body kept or
+# dropped by each redirect's status; and the judge that refuses a POST under an entry naming no methods (GET alone).
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post"
+file = "crates/delulu-broker/src/netscope.rs"
+test = "an_entry_judges_its_host_then_its_path_then_its_method"
+kind = "negative"
+
+# And `post_with_secret` (the same decision): the table's two; the egress client's POST carrying its secret and its body
+# inside the audience only; and the secret refused outside its audience before anything is resolved, whatever the method.
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_post_carries_its_secret_and_its_body_only_inside_the_audience"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.post_with_secret"
 file = "crates/delulu-runtime/src/egress/tests.rs"
 test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
 kind = "negative"

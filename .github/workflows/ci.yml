@@ -81,6 +81,22 @@ jobs:
       - name: Fetch every platform's crates (egress_features resolves the whole graph offline)
         run: cargo fetch --locked
 
+      # RUNNER-DISK-1 (RW 7.26): a pull request's Ubuntu test job died of a full disk once in 223 runs
+      # (`41121497877`, 2026-10-30: `No space left on device` in the runner's own log about a minute into
+      # the suite, so after the cache restore) and kept no log to say how full it was. This step and its
+      # twin after the suite read the margin on every run: the workspace disk's free space and the size of
+      # `target/` (the restored cache here; the suite's build there), as a notice. Never fails the job: it
+      # is a measurement.
+      - name: RUNNER-DISK-1 — this runner's disk before the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk before the suite (${{ matrix.os }})::$v"
+
       # `--no-fail-fast`: without it cargo stops at the first failing test BINARY. On the first run
       # (2026-09-14) that made every x86 job report one failure and hide whatever came after it;
       # arm64, which already said `--no-fail-fast`, was the only job that showed the whole picture.
@@ -148,6 +164,16 @@ jobs:
       # the job's LAST step, and an annotation too, because a reader of the log through the API gets
       # only its last 5,000 lines, and the sweep and the fuzz campaign above print more than that
       # (measured by the first cloud routine run).
+      # RUNNER-DISK-1 (RW 7.26): the margin after the suite, beside the reading before it.
+      - name: RUNNER-DISK-1 — this runner's disk after the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk after the suite (${{ matrix.os }})::$v"
       # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's
       # report — read here before any profile requires them. Never fails the job: it is a measurement. It
       # comes before the ping-pong verdict, which stays the job's last step.
@@ -186,8 +212,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Fetch every platform's crates (egress_features resolves the whole graph offline)
         run: cargo fetch --locked
+      # RUNNER-DISK-1 (RW 7.26): the test job's two disk readings, here too.
+      - name: RUNNER-DISK-1 — this runner's disk before the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk before the suite (arm64)::$v"
       - name: Full workspace test suite (aarch64)
         run: cargo test --workspace --no-fail-fast
+      - name: RUNNER-DISK-1 — this runner's disk after the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk after the suite (arm64)::$v"
       # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's
       # report — read here before any profile requires them. Never fails the job: it is a measurement. It
       # comes before the ping-pong verdict, which stays the job's last step.
@@ -297,7 +342,12 @@ jobs:
   # `unsafe` block (see `miri-ffi`), so what Miri checks here is safe code and the dependencies' unsafe
   # beneath it. That is worth running, but not worth 135 runner-minutes and a red cross on every
   # push. It runs nightly (unless NIGHTLY is `off`) and by hand (Run workflow → `everything`, `heavy`
-  # or `miri-slow`), with a 240-minute budget — which no run has yet confirmed is enough.
+  # or `miri-slow`), with a 240-minute budget. The nightly runs of 2026-10-20, -21 and -23 finished
+  # inside it: delulu-broker in 2 h 34, 1 h 34 and 1 h 25 min (one test, path canonicalization's
+  # laws, is about 66 of those minutes), delulu-check in about 1 h 25, delulu-syntax in about 20.
+  # On 2026-10-24 delulu-broker was cancelled at the cap: a new test judged the same requests afresh
+  # for every pair of entries and alone took 2 h 45 min. A test that grows is answered by doing its
+  # work once (that one now judges each entry once), never by raising this budget.
   miri-slow:
     if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'heavy-gates')
     runs-on: ubuntu-24.04
@@ -543,6 +593,13 @@ jobs:
   # line (D-V2-67), and 0315's door shut too: both engines refuse the WebAssembly 3.0 proposals
   # (D-V2-68). Nothing is ignored for them.
   #
+  # And on 2026-10-27 (nightly 40474545633): RUSTSEC-2026-0391, -0398, -0403 and -0410 against zstd
+  # 0.13.3, zstd-safe 7.2.4 and zstd-sys 2.0.16. Only wasmtime's compilation cache brought them in,
+  # and nothing here turns that cache on. wasmtime 48.0.7, the newest of the 48 LTS line, still needs
+  # zstd 0.13, so there was nothing to update to. Closed by building wasmtime without its `cache`
+  # feature, which removes the code itself; `delulu-wasm/tests/wasmtime_features.rs` holds the
+  # feature off in the resolved graph. Nothing is ignored for them.
+  #
   # Two pyo3 entries remain ignored on reachability grounds, and that argument is itself gated by
   # `governance.rs::the_ignored_pyo3_advisories_are_still_unreachable` — because an `ignore` whose
   # reason has quietly stopped being true is worse than no gate at all: the tool prints a green
@@ -611,15 +668,15 @@ jobs:
 
       - uses: actions/setup-python@v6
         with: { python-version: "3.13" }
-      - name: The eleven-dimension authority algebra (Z3, 41 obligations)
+      - name: The twelve-dimension authority algebra (Z3, 58 obligations)
         run: |
           python -m pip install z3-solver
           python docs/design/models/authority_algebra.py
       # PS-B-05: the model's teeth. Each named mutant must end with obligations NOT discharged — not
       # merely a failing exit, which an unknown mutant name (exit 2) would also produce.
-      - name: The authority algebra has teeth (9 Z3 mutants must each fail)
+      - name: The authority algebra has teeth (14 Z3 mutants must each fail)
         run: |
-          for m in budget-meet-max budget-absent-child-passes budget-dropped secret-to-dropped secret-to-meet-union secret-to-keeps-orphans net-star-under-literal net-rest-under-fixed net-meet-star-wins; do
+          for m in budget-meet-max budget-absent-child-passes budget-dropped secret-to-dropped secret-to-meet-union secret-to-keeps-orphans net-star-under-literal net-rest-under-fixed net-meet-star-wins net-method-dropped net-method-meet-union net-special-dropped net-special-meet-union net-special-keeps-orphans; do
             if DELULU_Z3_MUTANT=$m python docs/design/models/authority_algebra.py > z3-mutant.txt; then
               echo "::error::Z3 mutant $m was NOT caught — the model has lost its teeth"; exit 1
             fi

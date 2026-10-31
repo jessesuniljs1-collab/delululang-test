@@ -51,8 +51,9 @@ pub trait Custody {
     /// [`Custody::check`] for a use that names its request path — a network use's URL path, without its query (P9-05,
     /// D-V2-169): a custody that records uses judges it and carries it in the record; one that records nothing (embedded,
     /// whose `prim` check judges the path) has nowhere to carry it, so the default asks `check`.
-    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
-        let _ = url_path;
+    /// `method` is a network use's HTTP method when it is not a GET (P9-05 (d), D-V2-183), judged and recorded beside the path.
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
+        let _ = (url_path, method);
         self.check(op, arg)
     }
 
@@ -152,6 +153,16 @@ pub trait Custody {
         let _ = (host, reason);
     }
 
+    /// Record a use the program's own CAPABILITY refused before this custody was asked (RW 4.79,
+    /// `prim::capability_refusal`): `arg`, `url_path` and `method` are what [`Custody::check_at`] would
+    /// have been asked, and `reason` the capability's machine-readable one. A custody whose chain records a
+    /// use of this class records one `use` `deny` naming `refused_by: capability` — never the `allow` the
+    /// node's grant would have given a call that then could not happen. Additive, never a decision (the
+    /// call is already refused); the **default is a no-op**.
+    fn note_capability_refusal(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>, reason: &str) {
+        let _ = (op, arg, url_path, method, reason);
+    }
+
     /// The run is over (RW 4.51): revoke the grant nodes this custody minted for the run's plugins, so
     /// the tree never offers an operator a live grant nobody holds — as a run's device nodes are revoked
     /// when it ends (10g). Best-effort: the run is already over. The **default is a no-op** — a custody
@@ -213,11 +224,11 @@ impl Custody for PluginUseCustody {
         }
         self.host.borrow_mut().check(op, arg)
     }
-    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
         if let Err(d) = self.gate() {
             return CustodyDecision::Deny(d);
         }
-        self.host.borrow_mut().check_at(op, arg, url_path)
+        self.host.borrow_mut().check_at(op, arg, url_path, method)
     }
     fn expose(&mut self, name: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
         self.gate()?;
@@ -254,6 +265,9 @@ impl Custody for PluginUseCustody {
     }
     fn note_egress_refusal(&mut self, host: &str, reason: &str) {
         self.host.borrow_mut().note_egress_refusal(host, reason)
+    }
+    fn note_capability_refusal(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>, reason: &str) {
+        self.host.borrow_mut().note_capability_refusal(op, arg, url_path, method, reason)
     }
     /// The run's end is the host's to announce, never an export's.
     fn end_of_run(&mut self) {}

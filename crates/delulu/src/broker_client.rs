@@ -25,12 +25,13 @@ use crate::brokerd;
 
 /// The exact fail-closed message every unreachable-broker denial carries (invariant 27).
 fn dl1401(detail: &str) -> CustodyDenial {
+    let detail = crate::cli::broker_unreachable_detail(&detail);
     CustodyDenial::new(
         "DL1401",
         format!(
-            "broker unreachable: {} — start it with `delulu broker start` \
-             (fail closed, invariant 27: effectful ops never fall back to embedded custody)",
-            crate::cli::broker_unreachable_detail(&detail)
+            "broker unreachable: {detail} — {} (fail closed, invariant 27: effectful ops never fall back to embedded \
+             custody)",
+            crate::cli::broker_unreachable_advice(&detail)
         ),
     )
 }
@@ -189,7 +190,7 @@ impl BrokerClientCustody {
     /// One broker round-trip per use, against LIVE tree state + the Guard (spec §4.1, addendum §2.4).
     /// A `warn`-tier / bypassed-guarded allow carries an agent-side note, surfaced once per rule per
     /// run (addendum §2.6/§2.7).
-    fn synchronous_check(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+    fn synchronous_check(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
         let resp = match rpc(
             &self.state_dir,
             ReqBody::Check {
@@ -197,6 +198,7 @@ impl BrokerClientCustody {
                 op: op.wire_name().to_string(),
                 arg: arg.map(str::to_string),
                 url_path: url_path.map(str::to_string),
+                method: method.map(str::to_string),
             },
         ) {
             Ok(r) => r,
@@ -379,14 +381,14 @@ impl Drop for RunNode {
 
 impl Custody for BrokerClientCustody {
     fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
-        self.check_at(op, arg, None)
+        self.check_at(op, arg, None, None)
     }
 
     /// P9-05, D-V2-169: a network use is synchronous, so its path rides its round-trip — the daemon judges it against the
     /// node's grant and names it in the use's record. An epoch-class op names none.
-    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> CustodyDecision {
         match op.class() {
-            OpClass::Synchronous => self.synchronous_check(op, arg, url_path),
+            OpClass::Synchronous => self.synchronous_check(op, arg, url_path, method),
             OpClass::Epoch => {
                 // Validate against the cached snapshot, refreshed at most every epoch_ms (spec §4.1).
                 // Revocation reaches epoch-class ops within ≤ one interval — the honest §4.2 bound,
@@ -401,7 +403,7 @@ impl Custody for BrokerClientCustody {
                 // refreshed above, so the routing decision is at most one epoch stale (the stated
                 // policy-change bound). Ungated epoch ops keep local snapshot validation.
                 if self.op_is_guarded(op) {
-                    return self.synchronous_check(op, arg, url_path);
+                    return self.synchronous_check(op, arg, url_path, method);
                 }
                 let Some((_, snap)) = &self.cache else {
                     return CustodyDecision::Deny(dl1401("epoch snapshot unavailable"));
@@ -617,6 +619,45 @@ impl Custody for BrokerClientCustody {
                 "warning: the broker did not record a refused command of `{}` ({}) — the command was \
                  refused all the same; the audit chain lacks this refusal",
                 delulu_diag::terminal_line(device),
+                delulu_diag::terminal_line(&failure)
+            );
+        }
+    }
+
+    /// RW 4.79: the program's own capability refused this use before the broker was asked — one `CapabilityRefused`
+    /// round-trip, where a use of this class is recorded and nowhere else: every synchronous-class use, and an epoch-class
+    /// one only where a Guard rule makes it round-trip (`check_at`); an ungated read is decided on the cached snapshot and
+    /// recorded by no one. Best-effort, and said once on standard error when the broker could not record it.
+    fn note_capability_refusal(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>, reason: &str) {
+        if op.class() == OpClass::Epoch {
+            if !self.cache_is_fresh() && self.refresh_cache().is_err() {
+                return;
+            }
+            if !self.op_is_guarded(op) {
+                return;
+            }
+        }
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::CapabilityRefused {
+                node: self.node.as_str().to_string(),
+                op: op.wire_name().to_string(),
+                target: arg.map(str::to_string),
+                url_path: url_path.map(str::to_string),
+                method: method.map(str::to_string),
+                reason: reason.to_string(),
+            },
+        );
+        let failure = match resp {
+            Ok(Response::Recorded { .. }) => return,
+            Ok(Response::Error { code, message, .. }) => format!("{code}: {message}"),
+            Ok(other) => format!("unexpected answer {other:?}"),
+            Err(d) => format!("{}: {}", d.code, d.message),
+        };
+        if !std::mem::replace(&mut self.refusal_unrecorded_said, true) {
+            eprintln!(
+                "warning: the broker did not record a use its capability refused ({}) — the use was refused all the \
+                 same; the audit chain lacks this refusal",
                 delulu_diag::terminal_line(&failure)
             );
         }

@@ -225,8 +225,20 @@ pub struct RootMsg {
 }
 
 enum Job {
-    Create { id: u64, actor: String, args: Vec<MsgValue>, cause: SendCause },
-    Send { id: u64, behavior: String, args: Vec<MsgValue>, cause: SendCause },
+    /// `key`: the spawner's [`crate::prim::next_spawn_key`], which the actor's own `Cap[Rand]` stream starts from.
+    Create {
+        id: u64,
+        actor: String,
+        args: Vec<MsgValue>,
+        cause: SendCause,
+        key: u64,
+    },
+    Send {
+        id: u64,
+        behavior: String,
+        args: Vec<MsgValue>,
+        cause: SendCause,
+    },
     Shutdown,
 }
 
@@ -336,7 +348,9 @@ impl ActorHost {
         }
         self.shared.live_actors.fetch_add(1, Ordering::SeqCst);
         self.shared.enqueue();
-        let _ = self.senders[worker].send(Job::Create { id, actor: actor.to_string(), args, cause });
+        // Drawn on the spawner's thread, from its own stream (D-V2-192).
+        let key = crate::prim::next_spawn_key();
+        let _ = self.senders[worker].send(Job::Create { id, actor: actor.to_string(), args, cause, key });
         ActorId { worker, id }
     }
 
@@ -513,6 +527,7 @@ impl ActorSystem {
         let (senders, receivers): (Vec<_>, Vec<_>) = (0..threads).map(|_| mpsc::channel::<Job>()).unzip();
         // Settled once, before any worker exists — see `usable_worker_stack`.
         let stack_bytes = usable_worker_stack();
+        let fixed_clock = crate::prim::fixed_clock_ms();
         let mut handles = Vec::new();
         for (wi, rx) in receivers.into_iter().enumerate() {
             let module = module.clone();
@@ -531,6 +546,7 @@ impl ActorSystem {
                     debug_rcaps: debug_w,
                     max_depth: crate::interp::max_depth_for_stack(stack_bytes),
                     effects: effects.clone(),
+                    fixed_clock,
                 },
                 stack_bytes,
             ));
@@ -618,6 +634,8 @@ struct Cell {
     /// field read/write machinery IS the actor-state machinery.
     state: Value,
     dead: bool,
+    /// The actor's own `Cap[Rand]` stream, installed for each of its turns (ACTOR-DETERMINISM-1, D-V2-192).
+    rand: crate::prim::RandStream,
 }
 
 /// Start one actor worker on a stack big enough for the interpreter's own depth bound to be the
@@ -662,6 +680,8 @@ struct WorkerSetup {
     max_depth: u32,
     /// The run's custody and brokers, attached to this worker's interpreter (ACTOR-CUSTODY-1).
     effects: WorkerEffects,
+    /// The run's `--clock fixed:` — a thread-local the main thread set, which no worker saw (ACTOR-DETERMINISM-1).
+    fixed_clock: Option<i64>,
 }
 
 /// The stack every worker in this system will take, decided **once** by probing.
@@ -686,7 +706,8 @@ fn usable_worker_stack() -> usize {
 }
 
 fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
-    let WorkerSetup { module, shared, senders, trace, debug_rcaps, max_depth, effects } = setup;
+    let WorkerSetup { module, shared, senders, trace, debug_rcaps, max_depth, effects, fixed_clock } = setup;
+    crate::prim::set_fixed_clock_ms(fixed_clock);
     let mut interp = crate::interp::Interp::new(&module).with_max_depth(max_depth).with_actors(ActorHost {
         shared: shared.clone(),
         senders,
@@ -729,7 +750,7 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
     while let Ok(job) = rx.recv() {
         match job {
             Job::Shutdown => break,
-            Job::Create { id, actor, args, cause } => {
+            Job::Create { id, actor, args, cause, key } => {
                 let Some(decl) = interp.actor_decl(&actor).cloned() else {
                     shared.dead_sends.fetch_add(1, Ordering::SeqCst);
                     shared.done();
@@ -743,6 +764,7 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
                 let params: Vec<String> = decl.ctor.params.iter().map(|p| p.name.name.clone()).collect();
                 let argvals: Vec<Value> = args.into_iter().map(|m| interp.msg_to_value(m)).collect();
                 let turn_id = shared.total_turns.fetch_add(1, Ordering::SeqCst);
+                let outer = crate::prim::swap_rand_stream(crate::prim::RandStream::from_key(key));
                 let dead = match interp.run_actor_turn(&decl.ctor.body, "new", &params, argvals, state.clone(), self_ref) {
                     Ok(()) => false,
                     Err(fault) => {
@@ -750,8 +772,9 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
                         true
                     }
                 };
+                let rand = crate::prim::swap_rand_stream(outer);
                 ship(turn_id, &cause);
-                cells.insert(id, Cell { actor, state, dead });
+                cells.insert(id, Cell { actor, state, dead, rand });
                 shared.done();
             }
             Job::Send { id, behavior, args, cause } => {
@@ -767,9 +790,9 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
                     shared.done();
                     continue;
                 }
-                let (actor_name, state) = {
+                let (actor_name, state, stream) = {
                     let c = &cells[&id];
-                    (c.actor.clone(), c.state.clone())
+                    (c.actor.clone(), c.state.clone(), c.rand)
                 };
                 let decl = interp.actor_decl(&actor_name).cloned().expect("cell's actor is declared");
                 let Some(beh) = decl.behaviors.iter().find(|b| b.name.name == behavior) else {
@@ -781,7 +804,13 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
                 let params: Vec<String> = beh.params.iter().map(|p| p.name.name.clone()).collect();
                 let argvals: Vec<Value> = args.into_iter().map(|m| interp.msg_to_value(m)).collect();
                 let turn_id = shared.total_turns.fetch_add(1, Ordering::SeqCst);
-                if let Err(fault) = interp.run_actor_turn(&beh.body, &behavior, &params, argvals, state, self_ref) {
+                let outer = crate::prim::swap_rand_stream(stream);
+                let ran = interp.run_actor_turn(&beh.body, &behavior, &params, argvals, state, self_ref);
+                let stream = crate::prim::swap_rand_stream(outer);
+                if let Some(c) = cells.get_mut(&id) {
+                    c.rand = stream;
+                }
+                if let Err(fault) = ran {
                     actor_died(&shared, &actor_name, &behavior, &fault);
                     if let Some(c) = cells.get_mut(&id) {
                         c.dead = true;
@@ -813,9 +842,12 @@ fn maybe_collect_cycles(interp: &crate::interp::Interp, cells: &HashMap<u64, Cel
 fn actor_died(shared: &Shared, actor: &str, member: &str, fault: &Fault) {
     shared.live_actors.fetch_sub(1, Ordering::SeqCst);
     shared.dead_actors.fetch_add(1, Ordering::SeqCst);
+    // TERMINAL-TEXT-1: a fault can quote the program's own strings (an assertion's values); escaped, as a run's fault is
+    // (RW 6.40: this line printed them raw, so a behaviour's assertion wrote control sequences onto the terminal).
     eprintln!(
         "actor {actor} died in `{member}`: {} [{}] (its later messages will be dropped and counted)",
-        fault.message, fault.code
+        delulu_diag::terminal_line(&fault.message),
+        fault.code
     );
     if shared.abort_on_death {
         shared.died.store(true, Ordering::SeqCst);

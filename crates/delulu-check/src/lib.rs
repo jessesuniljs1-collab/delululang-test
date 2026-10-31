@@ -32,8 +32,8 @@ pub mod unify;
 pub use authority::{authority_report, ScopeInfo};
 pub use check::{CheckResult, FnFacts};
 pub use deps::{
-    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, PackageAuthority, ResolvedPackage,
-    Workspace,
+    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, supply_chain_gate, PackageAuthority,
+    ResolvedPackage, Workspace,
 };
 pub use dir::{deserialize as dir_deserialize, serialize as dir_serialize, verify as dir_verify, Dir, DirError};
 pub use lockfile::{
@@ -1101,6 +1101,43 @@ fn f(p: P) -> Int { p.x }
 ",
         );
         assert!(e.iter().any(|c| c == "DL1603" || c == "DL1604"), "a write after the lift must be refused: {e:?}");
+    }
+
+    /// A1 of the agent test campaign (2026-10-24): the refused write was reported at the write alone. The call that lifted
+    /// the binding to `val` was accepted and nothing pointed at it, and the guide still said such a call is DL1603. The
+    /// DL1604 now names the call, the callee and its parameter, labels the argument, and says what to write instead: a
+    /// `box` parameter reads without keeping. For a record field and for a list method alike.
+    #[test]
+    fn a_write_refused_after_a_lift_names_the_call_that_lifted_it() {
+        for (src, call_at) in [
+            (
+                "module m\nfn len_of(xs: List[Int]) -> Int { xs.len() }\nfn g() -> Int {\n let xs = [1, 2]\n let n = len_of(xs)\n xs.push(4)\n n\n}\n",
+                "len_of(xs)",
+            ),
+            (
+                "module m\ntype P { x: Int }\nfn f(p: P) -> Int { p.x }\nfn g() -> Int {\n var p = P { x: 1 }\n let n = f(p)\n p.x = 5\n n\n}\n",
+                "f(p)",
+            ),
+            // Through a nested field, as an assignment's target and as a method's receiver: the refusal follows the
+            // receiver to the binding at its root.
+            (
+                "module m\ntype Q { x: Int }\ntype P { q: Q }\nfn f(p: P) -> Int { p.q.x }\nfn g() -> Int {\n var p = P { q: Q { x: 1 } }\n let n = f(p)\n p.q.x = 5\n n\n}\n",
+                "f(p)",
+            ),
+            (
+                "module m\ntype P { items: List[Int] }\nfn f(p: P) -> Int { p.items.len() }\nfn g() -> Int {\n var p = P { items: [1] }\n let n = f(p)\n p.items.push(4)\n n\n}\n",
+                "f(p)",
+            ),
+        ] {
+            let c = check(src);
+            let d = c.diagnostics.iter().find(|d| d.code == "DL1604").unwrap_or_else(|| panic!("{:?}", c.diagnostics));
+            let arg_at = src.find(call_at).unwrap() + call_at.find('(').unwrap() + 1;
+            let lift = d.spans.iter().find(|s| s.secondary).unwrap_or_else(|| panic!("no label at the lifting call: {d:?}"));
+            assert_eq!(lift.span.start as usize, arg_at, "the label sits on the argument the call lifted: {d:?}");
+            let callee = call_at.split('(').next().unwrap();
+            assert!(d.message.contains(&format!("`{callee}`")), "the message names the callee: {}", d.message);
+            assert!(d.message.contains("`box`"), "and the parameter a read-only callee can take instead: {}", d.message);
+        }
     }
 
     /// And an AUTHOR-WRITTEN rcap is never lifted. `let xs: ref List[Int]` asked for write access;

@@ -297,6 +297,9 @@ DeluluLang/
 │   ├── mutants.py                  # a mutant set from a JSON spec against one test command: a unique
 │   │                               #   anchor, BUILD-ERROR told from RED, each file restored with a NEW
 │   │                               #   mtime, and a CONTROL run that must be green — routine run 15
+│   ├── estop-measure.py            # the e-stop timed against a broker daemon in RW 4.53's two shapes:
+│   │                               #   beside N loops of chain writers, and behind a queue on a held
+│   │                               #   chain — on-demand run 14 (D-V2-198)
 │   ├── hooks/pre-commit            # refuses a commit whose Survey map does not match the files it
 │   │                               #   COMMITS (the index, exported and checked) — `git config
 │   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering —
@@ -304,6 +307,15 @@ DeluluLang/
 │   ├── hooks/rust-inputs-hash      # one hash of every Rust input in the working tree or the index, git
 │   │                               #   only — what `clippy.sh` stamps and the hook compares
 │   ├── clippy.sh                   # the workspace clippy CI's `lints` runs, stamping what it passed
+│   ├── launch-changelog.py         # a merge of `master` into `launch/2.0.0`: `master`'s new `## Unreleased`
+│   │                               #   sections folded into `## [2.0.0]` as `###` — on-demand run 8
+│   ├── launch-gates.sh             # that merge's gates in one command: the map, clippy, doctor, the
+│   │                               #   document gates, conformance, cargo-deny; counts the findings'
+│   │                               #   errors itself; `LAUNCH-GATES=ok` only when all ran — on-demand run 11;
+│   │                               #   CHECKLIST-2.0 criterion 2 cites the merged hash — run 13
+│   ├── launch-criterion-2.py       # that merge's criterion 2 measured (coverage, the reference, the
+│   │                               #   samples) and written into CHECKLIST-2.0 in the shape the gate
+│   │                               #   reads; refuses a tree under 100% — on-demand run 15
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught
@@ -679,7 +691,9 @@ The two dated disk-cleanup records that used to be listed here are now in
 `docs/maintenance/DISK-CLEANUP-2026-10-17.md` — the laptop's 178 GB Rust build cache after the cloud
 period, two spent build clones, and WSL's disk (57.97 → 12.84 GB): what was deleted, how each was
 checked first, and what was kept. `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md` — the two agent worktrees of 2026-09-17,
-removed on the owner's word after their notes were kept and both checks passed.
+removed on the owner's word after their notes were kept and both checks passed. `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`
+— 84 of `origin`'s 91 branches removed on the owner's word: each name and tip, the check each passed, the three
+superseded ones kept reachable on `archive/superseded-2026-10-26`, and the eight branches kept and why.
 
 ### 5.9 `measurements/` and `rfcs/`
 

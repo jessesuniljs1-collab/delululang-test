@@ -23,14 +23,513 @@ refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; sin
 a `match` that leaves a case uncovered below its top level, or literal arms with no catch-all, is refused (DL0407,
 D-V2-172); `deploy plan` refuses a service whose paths, hosts or secrets the environment profile does not name (DL1909,
 D-V2-176); `delulu check` refuses a type it infers that is too large to write out, over 100,000 parts (DL0211, D-V2-179);
-`authority --within` and `deploy plan` refuse a boundary under which a secret's send or a request's path is refused when the
-program runs (D-V2-180, D-V2-181).
+`authority --within` and `deploy plan` refuse a boundary under which a secret's send, a request's path or a file use's path
+is refused when the program runs (D-V2-180, D-V2-181, D-V2-185); a generic's own type and row parameters are rigid in its
+body (DL0401, D-V2-184); a top-level constant's value is checked and must be pure (RW 4.82); `run` on every engine, `run
+--sandbox`, `build --target wasm`, `test`, `deploy plan`, `publish` and `add` refuse a package whose dependency breaks its
+authority pin or carries none, as `build` does (DL1001, D-V2-186); `run --sandbox` refuses a `--report-out` inside a scope
+the program may write, as the ordinary run does (D-V2-21, RW 4.84); `r.int(lo, hi)` with `hi <= lo` faults with DL0908
+instead of DL0904 (D-V2-190); every `--seed` draws a different sequence than under 1.x, since the seed is mixed first
+(D-V2-191), and an actor's draws now follow `--seed` too (D-V2-192); a program that reads `IoErr::Other`'s text
+receives the kind of failure, such as `invalid filename`, not the operating system's message (D-V2-193); a `module`
+header or an `import` with a keyword in its name is refused as DL0201 at the keyword, where 1.x said DL0209 at the `.`
+or refused the next line's item (RW 6.42); a source file that is not UTF-8 is DL0101 at its first bad byte, exit 1, where
+1.x made it a usage error, exit 2 (RW 6.43); under `--broker daemon`, a call the program's own capability refuses is
+DL0904 before its custody is asked, where 1.x let a Guard rule (DL1410–DL1413) or a revoked or expired lease (DL0801,
+DL1402, DL1403) answer it first (RW 4.79, D-V2-195).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a closure reads each name as it was where the closure was written, 2026-11-01
+
+- **Fixed: a closure no longer reads a name that a `let` binds after the closure was made** (LATE-LET-1, RW 2.23,
+  D-V2-199). A `let` binds a new name for the statements after it, and the checker types a closure's names as they
+  were where the closure is written. Both engines read them when the closure ran, in the scopes it was made over, so a
+  later `let` in one of those scopes was what it read. A closure typed pure could call an effectful function that a
+  later `let` gave its callee's name, and print from a program `delulu authority` called "provably pure". Through
+  `Secret.map` that printed a secret's plaintext with no `Declassify` anywhere. A later `let` of another type made an
+  `Int` addition yield a string. The granted capabilities still bounded every effect: without `--grant console` nothing
+  printed.
+- **Changed, for a program that relied on it:** a program that makes a closure, then a `let` of a name the closure
+  reads (in the same block or one around it), then calls the closure, now reads the earlier binding on both engines,
+  as the checker always said. A closure still shares a `var` it reads or assigns with the code that made it. On the
+  WASM engine some such programs now compile that were refused (DL1201).
+
+### an e-stop goes before the requests waiting at the broker, 2026-10-31
+
+- **Fixed: the operator's e-stop and a monitor's quarantine are handled before every request waiting at the broker
+  daemon** (ESTOP-QUEUE-1, RW 4.53, D-V2-198). The daemon answers one request at a time, and while another writer holds
+  the audit chain each request that records waits up to 5 s for it. A `grants revoke` behind four such requests answered
+  `DL1401 … did not answer within 15s`, told its operator to start a broker that was running, and the revocation landed
+  about 25 s after it was pulled. Now a revocation waits only for the request the daemon is handling: on the same held
+  chain it answered in 9.8 s, revoked, and said the chain could not record it. A request it overtakes is decided against
+  less authority, never more, and a dead-man is still judged as of the earliest request waiting, so a beat that arrived
+  in time keeps it.
+- **Changed: a broker that accepted a request and did not answer it in time is said to be running.** Every DL1401 said
+  "start it with `delulu broker start`", and `broker status`, `stop` and `rotate-key` said "broker not running" (`stop`:
+  "nothing to stop"); now they say it did not answer and point at its `broker.log`, which names each late answer, and
+  `delulu explain E-DL1401` says so. Exit codes, and `broker status --json`'s `{"running": false}`, are unchanged.
+
+### a sent secret leaves no copy of its bytes in the run, 2026-10-31
+
+- **Fixed: once a run has sent a broker-held secret, no copy of its bytes stays in the run's memory** (RW 4.67,
+  D-V2-196). Under `--broker daemon` a secret's bytes enter the program's process only to be sent to an origin its grant
+  names, and the copies made on the way to the wire — the broker's answer, each header, the serialized request — were
+  freed without being cleared: one stayed in the run's heap until the run ended, on the interpreter and on the WASM
+  engine. Now, while a send's bytes are in the process, `delulu` zeroes every block it frees, on every thread, and a scan
+  of the run's memory after the send finds none. What a program can do is unchanged; outside a send, a free costs one
+  atomic load.
+- **Documented: a process of the broker's own user can ask it for a secret's bytes, as it can read them in
+  `secrets.json`** (RW 4.66, D-V2-197). The broker's socket admits exactly whom its state directory admits, and
+  `docs/DEPLOYMENT.md` §5 now says so; a second OS account (Tier 2) is the boundary between them.
+
+### a use its capability refuses is recorded refused, never allowed, 2026-10-31
+
+- **Fixed: the audit chain no longer records `use allow` for a call the program's own capability refuses** (RW 4.79,
+  D-V2-195). A capability may hold less than the node it was minted under — `root.fs_write("./data/sub")` under
+  `fs.write=./data`, one host of the node's, a path or a method fewer — and the broker was asked about the call first,
+  against the node's grant: it recorded `allow`, and the capability then refused the call (DL0904). Under `--broker daemon`
+  each such write or request left an allowed use that never happened, on the interpreter, the WASM engine and a sandboxed
+  guest alike. Now the capability judges first, in the same words, and the broker is not asked; it records one `use`
+  `deny` naming `refused_by: capability`, `code: DL0904`, a `reason` (`outside-scope`, `other-host`, `outside-path`,
+  `other-method`, …) and, for a request, its path and method — never its query. A monitor's `denies=N/MS` counts it. A read
+  is recorded only where a Guard rule makes reads round-trip, as before.
+- **Changed: a call its capability refuses is refused DL0904 under every custody.** Under the daemon a Guard rule could
+  answer it first — DL1410 told an agent to request a permit for a read its own capability could never make, and a `warn`
+  rule warned and recorded `guard_warn` — as could a revoked or expired lease (DL0801, DL1402, DL1403). Those codes now
+  answer the next call the capability allows. Nothing that was refused runs, and nothing that ran is refused.
+
+### a sandboxed run's fault names its place, 2026-10-31
+
+- **Improved: under `--sandbox` the guest's fault names its line and column** (RW 6.39). It printed `guest: error[DL0904]:
+  …` alone, where an ordinary run points at the expression, because the guest was never told the program's name. The
+  host now sends the file's last component with the program, and the guest's fault reads as the ordinary run's, each
+  line marked `guest:` as before. The host's directories are never sent. What the guest may reach is unchanged.
+
+### `list_dir` runs on the WASM engine and in a `.dwx`, 2026-10-31
+
+- **Added: `Cap[FsRead].list_dir(path)` on `--engine wasm` and `build --target wasm`** (the agent test campaign's A7, RW
+  6.46). It was DL1201 *"WASM codegen does not support the method `.list_dir`"*, so a program that walked a directory ran
+  on the interpreter alone. The WASM host lists as the interpreter does, after the same custody and scope checks and at
+  the same pinned path: the same names (in the operating system's order, on both engines), the same `IoErr`s, the same
+  DL0904 past the scope, and the same effect trace, record for record. A module that does not call `list_dir` compiles
+  byte for byte as before.
+
+### a `ref` list refused at a `val` parameter names both ways to pass it, 2026-10-31
+
+- **Improved: DL1603 at an argument names the two ways out** (the agent test campaign's A13, RW 6.45). A list filled
+  through a `ref` helper and handed to `fn total(xs: List[Int])` was *"cannot store `ref` (aliases as `ref`) where `val` is
+  required (argument `xs`)"*, and nothing said what to do; the agent rewrote its program as recursion. The refusal now says
+  the parameter's type names no reference capability, which reads as `val`, and names both remedies: declare the parameter
+  `box` if the function only reads it, or pass a copy (a list's `.concat([])`). A parameter that writes `val` gets no
+  such advice. `delulu explain DL1603` has the case. What is refused is unchanged.
+
+### `delulu authority` names the scopes a program requests, 2026-10-31
+
+- **Changed: the human authority report names a capability's requested scope** (the agent test campaign's A8, RW 6.44).
+  `FsRead   (scope granted at runtime)` became `FsRead   ./data (requested; the grant decides)` for a program whose source
+  says `root.fs_read("./data")`; only `--json` had listed it. A kind that another minting site computes at run time says
+  so: `./data (requested, and one computed at run time; the grant decides)`. A kind whose scope the source never writes
+  keeps `(scope granted at runtime)`. The Atlas's digest prints the same line.
+- **Added: `requested_computed`** on each capability of `delulu authority --json`, true where a minting site of the kind
+  computes its scope (an additive field; the report's schema describes it).
+
+### a source file that is not UTF-8 is refused at its first bad byte, 2026-10-31
+
+- **Improved: a `.delulu` file that is not UTF-8 is DL0101 at its first bad byte, exit 1** (the agent test campaign's
+  C11, RW 6.43). It was a usage error, exit 2, quoting the standard library's *"stream did not contain valid UTF-8"*, with
+  no place; under `--json` its envelope counted an error and listed no diagnostic. Now: *"this file is not UTF-8: 0xE9
+  here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as UTF-8"*, with its line and column, in
+  either channel. `delulu explain DL0101` says so. What is refused is unchanged.
+
+### a keyword in a module's name is refused as a keyword, 2026-10-31
+
+- **Improved: `module t.actor` and `module fn` say that a keyword cannot be part of a module's name** (the agent test
+  campaign's C9, RW 6.42). They were *"expected end of statement"*, at the `.` before the keyword or, for `module fn`, at
+  the next line's item, since the line break after a keyword does not end a statement. The refusal is now DL0201 at the
+  keyword, once, and the item on the next line is still read; an `import` the same. What a module's name may be is
+  unchanged: every name that was accepted still is (`true`, `new`, a dotted name), and every keyword was refused before.
+
+### wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424, 2026-10-31
+
+- **Security: wasmtime 48.0.7 → 48.0.8** (with its Cranelift and Pulley crates, 30 packages, patch releases only). Three
+  wasmtime advisories were published on 2026-10-30: typed functions with `i31` or `nullref` arguments
+  (RUSTSEC-2026-0422), host-created struct types with supertypes (-0423), and borrowed resources passed between components
+  (-0424). None was reachable here: the engine turns off garbage-collected types, function references and the component
+  model (`harden_wasm_features`), and the host creates no such types and calls no such functions. The gate asks for the
+  fixed release all the same, and it is taken.
+
+### an actor's death and a recursion too deep read alike on both engines, 2026-10-31
+
+- **Fixed: the line for an actor that died printed its fault's words raw** (RW 6.40, TERMINAL-TEXT-1). A behaviour's failed
+  assertion quotes its values, so a program could write control sequences onto the operator's terminal through it, and
+  with a carriage return overwrite the line with words of its choosing. They are escaped now, as a run's fault is.
+- **Improved: an actor that dies on the WASM engine is named, as on the interpreter**: *"actor Div died in `go`: division
+  by zero [DL0902] (its later messages will be dropped and counted)"*. It was only counted.
+- **Improved: a recursion too deep (`DL0905`) on the interpreter is placed at the call that went one deeper**, as the WASM
+  engine places it. It named no place.
+
+### a write through an index names a list element, 2026-10-31
+
+- **Fixed: DL1604 for `xs[i] = v` on a `val` list said "cannot write a element"** (RW 6.41). It says *"cannot write a list
+  element through a `val` receiver"* now, as a `push` or a `pop` does. What is refused is unchanged.
+
+### a fault on the WASM engine reads as the interpreter's, at the same place, 2026-10-31
+
+- **Improved: a run's fault on `--engine wasm` names the line and column of the expression that faulted** (the agent test
+  campaign's B5, RW 6.38). It named no place, and its code twice: *"error[DL0904]: WASM engine: WASM trap: DL0904: path
+  `../forbidden/secret.txt` escapes the granted scope"*, where the interpreter pointed at the call. It now reads as the
+  interpreter's: the code once, the same words, the same `-->` line and `runtime fault here`. This holds for a refusal the
+  host makes (under the broker daemon too), a trap in the program's own code, and either inside a called or a generic
+  function; `--json` carries the span. A recursion too deep for the WASM engine's stack is placed at the call that went
+  one deeper. A `.dwx` names its file and says the same words: it has no source to point into.
+- **Changed: an index out of bounds is placed at the whole `xs[i]`** on the interpreter, as a unary or a binary fault is.
+  It underlined `xs` alone.
+- What a program may do, and what either engine refuses, is unchanged. So is the compiled code: a `.dwx` is byte for byte
+  what it was.
+
+### a stopped broker daemon no longer revokes a healthy monitor, 2026-10-29
+
+- **Fixed: a broker daemon that was stopped or not scheduled revoked every monitor whose dead-man it held, and every run
+  under them** (DEADMAN-DEAF-1, D-V2-194). A dead-man judged each beat by when the daemon read it. So beats a healthy
+  monitor sent while the daemon was not running (stopped, swapped out, or not scheduled on a busy host) counted as late,
+  and the monitor was told it "sent no beat". A dead-man now counts only the time the daemon could hear, and a stop is
+  left out of every period. A monitor that is itself stopped or killed is still revoked one period after its last beat.
+- **Added: `broker.log` names each time the daemon did not run for 100 ms or more** while a dead-man is armed.
+
+### a write refused through a written type says the type made it `val`, 2026-10-29
+
+- **Improved: a write refused because a `let`'s written type made it `val` says so, at the type** (the agent test
+  campaign's C6, RW 6.37). `let b: List[Int] = []` then `b.push(2)` was refused *"cannot write a list element (push)
+  through a `val` receiver"*, though the program wrote no `val`: a written type with no capability keyword means `val`,
+  where `let b = []` is `ref`. The same DL1604 now says that `b`'s written type names no reference capability, points at
+  `List[Int]`, and says to write `let b: ref …` or to leave the type out. What is refused is unchanged.
+- **Changed: the hint for a method on a value whose type is not known writes `ref`** (A12's DL0405). It suggested
+  `let m: Map[Str, List[Str]] = Map()`, which makes the map read-only, so following it led to this DL1604. It now
+  suggests `let m: ref Map[Str, List[Str]] = Map()`.
+- **Docs:** `GETTING_STARTED.md` §3 states the rule and §10's table has the symptom; `delulu explain DL1604` says it.
+
+### a `Map` lookup on the WASM engine copies nothing, 2026-10-29
+
+- **Improved: `Map` lookups and updates on `--engine wasm` take a quarter of the time** (the agent test campaign's A5, RW
+  6.36). A word count over 2 MB, 372,300 words into a `Map[Str, Int]`, took 1.28–1.32 s in its counting loop on WASM,
+  against 0.63–0.80 s on the interpreter. It now takes 0.29 s. The engine finds a key by binary search over the map's
+  pairs in the guest's memory. Each probe copied its pair's key out into a new string, and each call copied the map's
+  header, about 14 allocations for a `get` and an `insert`. The keys are now compared where they lie, and the
+  answers are unchanged.
+
+### the WASM engine's call depth is documented, 2026-10-29
+
+- **Docs: how deep a recursion runs on each engine** (the agent test campaign's A4, RW 6.35). The interpreter's
+  bound, 10,000 frames, was documented; the WASM engine's was not. Its bound is the guest's stack, so it depends on each
+  frame's size: a one-parameter recursion ran 16,351 calls deep and was refused by 16,448. `GETTING_STARTED.md` and
+  `docs/for-agents.md` now say so, with the advice to write such a recursion as a loop.
+
+### a name in another script, and a missing expression, are each refused once, 2026-10-29
+
+- **Improved: a name written in another script is refused once, as a name** (the agent test campaign's C12, RW 6.34).
+  `fn 计算(x: Int)` drew DL0101 *"unexpected character"* for each of its letters at each place it was written, then
+  DL0201 *"expected a name"*. It now draws one DL0101 per word: *"`计算` is not a name: identifiers are ASCII letters,
+  digits and `_`"*. Identifiers are still ASCII only. A program with such a name is refused as before.
+- **Improved: where the parser could not read an expression, no second refusal follows at the same place** (C13).
+  The placeholder the parser put there was typed `Int`. So `if { 1 } else { 2 }` and a 200-deep `if` were also refused
+  *"`if` condition must be Bool"*, at the place DL0202 or DL0210 had already named. The placeholder now has an unknown
+  type.
+- **Docs: a mint is pure, and checked at its call** (C15). `GETTING_STARTED.md` said minting is pure, and a reader took that
+  to mean a mint is never refused. It now says that a mint the run was not granted is refused where it is written
+  (DL0703), on an ordinary run and under `--lease` alike.
+
+### a refused network mint names the host it asked for, 2026-10-29
+
+- **Improved: `root.http([...])` for a host granted nothing names that host** (the agent test campaign's B4, RW 6.33).
+  The refusal read "`network host` was not granted to this program — pass `--grant net=HOST`": a placeholder where
+  the request belongs. Under `--lease` it read "does not carry `net=HOST`", so it could not say which host was asked for. It
+  now reads "network access to `evil.example` was not granted to this program — pass `--grant net=evil.example`".
+  Under a lease it names `net=evil.example`, and `net.special=` for a special-use host. This is the same on both engines and under
+  `authority --within`. The code (DL0703) is unchanged.
+
+### `IoErr::Other` says the kind of failure, the same on every OS, 2026-10-29
+
+- **Changed: `IoErr::Other(m)` carries the kind of failure, never the operating system's own message** (D-V2-193, the
+  agent test campaign's B11, RW 6.32). Reading or writing a 300-character file name gave a program *"The filename,
+  directory name, or volume label syntax is incorrect. (os error 123)"* on Windows, in the machine's language, and other
+  words on Linux and macOS. `m` is now the kind of failure, such as `invalid filename` or `is a directory`, on every OS
+  and both engines. The variants are unchanged, and so is when each is chosen.
+
+### a refused path or URL is quoted as written; a scheme refusal says what the URL lacks, 2026-10-29
+
+- **Fixed: a refused path or URL was quoted with every backslash doubled** (the agent test campaign's B6, RW 6.31).
+  A path refused as `DL0904` (on both engines), and the operator's `note: the request to … was not delivered`, quoted
+  it through Rust's debug escaping, so `\\?\C:\x` read `\\\\?\\C:\\x`. Both now quote it as written. Each
+  control character, line break and character that reorders a line is still shown escaped (`\u{1b}`), as everywhere
+  else a terminal is written.
+- **Fixed: a URL refused for its scheme was told "there is no plain-HTTP path"** (B7) whatever it was: `HTTPS://`, `https:host`,
+  `//host`, a bare host, `file:`, `ftp:` or the empty URL. The note now says the URL does not begin with `https://` (lower case,
+  two slashes, then the host). The refusal itself, and what the program is told (`Refused`), are unchanged.
+
+### five refusals name the mistake that was made, 2026-10-29
+
+- **Improved: five refusals now name the mistake that was made** (the agent test campaign's A6, C7, C8, C10 and C16,
+  RW 6.30). Each keeps its code.
+  - `"a" < "b"` is one DL0401: *a `Str` has no order*. It was refused twice, as "arithmetic expects Int or Float", once
+    per side. Any other comparison of the wrong type now says *comparison expects Int or Float*, so `1 < 2 < 3` reads that way too.
+  - `load("x.dpx")` is DL0403 alone, naming `load(host, path, grant)`. The path was also judged as the host and called a
+    forged capability (DL0601).
+  - A function kept in a record field and called as a method (`h.run(1)`) is still DL0405, and now says how a field's function is
+    called: `(h.run)(…)`.
+  - A reserved word is refused for its own reason (DL0106). `tag` and the other five reference capabilities are
+    refused as reference capabilities. `plugin`, `secret` and `cap` are refused so that no declared name can pose as an
+    authority-bearing type. Only `async`, `await`, `trait`, `impl`, `where` and `pure` are still "reserved for a future
+    stage", which every word used to be called. `delulu explain DL0106` lists the three groups.
+  - `const N: Int = 3` is DL0208 saying a module constant is written with `let`. It was a bare "expected an item".
+
+### the interpreter runs loops and calls faster, 2026-10-29
+
+- **Improved: the interpreter takes 1.5× to 2.1× less time on loops, calls and `match`** (A14, RW 3.24). A merge sort of
+  100,000 `Int`s took 8.2 s and now takes 5.0 s; Study C's `loop_sum_1m` took 694 ms and now takes 327 ms. Both were
+  measured on the same Windows laptop, old binary against new, and the programs print the same output as before. The changes:
+  - A variable is found by comparing names, not by hashing its name in every scope it passes through.
+  - Assigning to a variable no longer allocates its name.
+  - A block without `let`, and a `match` arm that binds nothing, no longer get a scope of their own.
+  - A call to one of the module's functions evaluates its arguments straight into the callee's scope.
+  - `Some`, `None`, `Ok` and `Err` share their names.
+  - `==` of two `Int`s, `Float`s, `Bool`s or `Str`s no longer allocates.
+
+  No program's behaviour changes. For heavy computation, `--engine wasm` is still about 100 times faster: the merge
+  sort takes 56 ms there.
+
+### `str()` of a `Float` from `r.float()` runs on WASM, 2026-10-27
+
+
+- **Fixed: `str(r.float())` was refused on `--engine wasm`** with DL1201 *"str() of this type … compile so far"*. The
+  WASM engine prints a `Float` through the interpreter's own formatting. It brought that in only when the program had
+  a float literal, a `float(…)` or `parse_float(…)` call, or a `Float` in a function's signature, so a program whose
+  floats all came from `r.float()` had none. It now asks the checker for any `Float` value. Both engines print
+  alike, and the refusal's text no longer says a `Float` needs the foreign interface.
+
+### a write refused after a call names that call, 2026-10-27
+
+
+- **Improved: DL1604 names the call that made a variable `val`** (A1). Take `let xs = [1, 2]`, then `len_of(xs)`,
+  where the parameter has no capability keyword and so is `val`, then `xs.push(4)`. The call is accepted, and `xs`
+  becomes `val` from then on, because the callee may keep it. The write was refused at the write alone, with nothing
+  pointing at the call. Now the error:
+  - names the callee and its parameter, and labels the argument at the call, *"`xs` became `val` here"*;
+  - says what to write instead: declare the parameter `box` if the function only reads (it then reads a `ref` without
+    keeping it), or write before the call.
+
+  The rule itself is unchanged. `GETTING_STARTED.md` §10 described the older behaviour (a DL1603 at the call) and is
+  corrected, and `delulu explain DL1604` describes the case.
+
+### `--seed` and `--clock fixed:` reach every actor, 2026-10-27
+
+
+- **Fixed: an actor's `Cap[Rand]` and `Cap[Clock]` ignored `--seed` and `--clock fixed:`** (ACTOR-DETERMINISM-1,
+  D-V2-192). Both settings were held per thread, and an actor runs on a worker thread that never saw them. So under
+  `--seed 7`, `main` drew the same numbers on every run but an actor did not, even with `--actors-threads 1`. Under
+  `--clock fixed:1000`, an actor read the wall clock.
+  - Now every actor reads the fixed clock.
+  - Each actor draws from a stream of its own, keyed by who spawned it and when. Its draws are the same on one worker
+    or many, and spawning draws nothing from the program's own sequence.
+- **Documented:** what `--seed` does not fix is the order in which different actors' turns interleave. Messages are
+  ordered per sender only (Stage 7), so the lines several actors print may come in another order on another run (A11).
+
+### every `--seed` draws its own sequence; seeded sequences change, 2026-10-27
+
+
+- **Changed: a seed is mixed (splitmix64) before it starts the random generator, so every seed draws a sequence of its
+  own** (D-V2-191). Before, the generator started at `seed | 1`, which caused two problems:
+  - `--seed 2` and `--seed 3` drew the same numbers, as did every even seed and the odd one after it. A sweep over seeds
+    ran each case about twice.
+  - A small seed drew tiny numbers first. Seed 1's first `r.float()` was `5.9e-11`.
+
+  This covers `run --seed`, `delulu test`, sandboxed runs and the unseeded default, on the interpreter and the WASM
+  engine alike.
+- **Breaking for recorded seeds:** a run recorded under `--seed N` with 1.x draws different numbers under 2.0.0. The
+  same seed still draws the same sequence every run, on both engines.
+
+### an empty `rand.int` range is DL0908, not a scope violation, 2026-10-27
+
+
+- **Changed: `r.int(lo, hi)` with `hi <= lo` faults with the new code `DL0908`, *an argument outside what the operation
+  accepts*, instead of `DL0904`, *capability scope violation*** (A15, D-V2-190). The range names no value to draw, which
+  is the program's own bug, not an authority event. Both engines say why in the same words:
+  *"rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = 5, hi = 5"*.
+  A harness that matched `DL0904` for this fault now sees `DL0908`. `DL0904` still means what it always meant: a path or
+  host outside a grant.
+- **Documented:** `r.int(lo, hi)` draws from `lo` up to but not including `hi`, so `r.int(1, 7)` rolls a die. See
+  `delulu explain DL0908`, `docs/for-agents.md` (*Determinism*) and the book.
+
+### `zstd` leaves the build: wasmtime is built without its compilation cache, 2026-10-27
+
+
+- **Security: RUSTSEC-2026-0391, -0398, -0403 and -0410, published by 2026-10-27, no longer apply: the crates they name
+  are gone from the build.** All four are against `zstd` 0.13.3, `zstd-safe` 7.2.4 and `zstd-sys` 2.0.16. Only
+  wasmtime's compilation cache brought them in: an optional feature that keeps compiled native code in a directory on
+  disk and loads it back. wasmtime 48.0.7 is the newest release of the 48 long-term-support line, and it still needs
+  `zstd` 0.13. DeluluLang never turned the cache on, so this code was compiled in but never ran: wasmtime's `Config::new()`
+  leaves it off, and nothing here calls `Config::cache`. `delulu-wasm` now builds wasmtime with its default features
+  except `cache`, and every other feature resolves as before. 21 packages leave the lockfile, the three `zstd` crates
+  among them; none is added, and no remaining crate changes version.
+
+### `r.float()` and `http.get_with` run on WASM, 2026-10-26
+
+
+- **Added (A21):** `Cap[Rand].float()` compiles to WASM (`--engine wasm`, `build --target wasm`, a contained plugin granted
+  `Rand`). Until now it was DL1201 there. Under `--seed`, a run draws the same floats and ints in the same order on both
+  engines.
+- **Added (A21):** `Cap[Http].get_with(url, headers)` compiles to WASM. The host sends it as the interpreter does, under
+  the same custody, and with the same trace (the URL, never a header's value).
+
+### A10: an empty list filled later with a sum or a record runs on WASM; a WASM refusal names its line, 2026-10-26
+
+
+- **Fixed (A10):** `let out = []`, then `out.push(TNum(1))` with a sum or a record, ran on the interpreter and was refused
+  on `--engine wasm` and `build --target wasm` (DL1201), though the checker knew the list's type. It runs on both now.
+- **Fixed (A10):** a program the WASM backend refuses (DL1201, DL1205) is refused at the expression it cannot compile —
+  `file:line:col` and the source line in the human form, `spans` in `--json` — on `run --engine wasm`,
+  `build --target wasm` and a contained plugin's build. Before, the refusal named no line. The message is unchanged.
+- **Fixed (A16):** an actor field or parameter of a type the WASM backend cannot hold is refused at that type, and the
+  refusal reads as a sentence ("an actor field `Collector.out` of a type outside the Int/actor-reference subset").
+
+### every route that runs a package holds its dependencies to their pins; a sandboxed run's report is the runtime's; DL1001's repair parses, 2026-10-25
+
+- **Fixed (supply chain, D-V2-186, RW 4.85): `delulu run DIR` ran a dependency its authority pin refuses** (RUN-PIN-1).
+  A dependency pinned `effects = []` that writes, or one with no pin, was DL1001 under `check`, `build` and `lock` and
+  ran under `run` — the interpreter, `--sandbox` and `--engine wasm` — and under `build --target wasm` (its `.dwx` too),
+  `test`, `deploy plan`, `publish`, `add` and `sandbox policy`. Every one of them now refuses it with DL1001 (or DL1009
+  for a package beyond its own manifest) before any code runs. `authority`, `why` and the Atlas still report on it.
+  **Breaking** only for a package whose dependencies break their pins: `build` already refused it.
+- **Fixed (D-V2-21, RW 4.84): `run --sandbox` accepted a `--report-out` inside a scope the program may write**, and
+  the guest could write a counterfeit report where the runtime's would go. It is refused before anything runs, as the
+  ordinary run refuses it — for `--grant` scopes, a dry run (`--mode audit`) included, and for a lease's once redeemed.
+- **Fixed (RW 6.16): DL1001's repair `insert_dependency_pin` wrote TOML that does not parse** for a dependency written
+  `lib = { path = "../lib" }` (the form `delulu add` writes): it appended `[dependencies.lib.authority]`, which TOML
+  refuses after an inline table. The pin now goes inside the inline table; its label reads "add an `authority` pin to
+  this dependency".
+- **Changed (RW 6.19, 6.20): two refusals say what is missing.** A method on a value whose type is not known yet named an
+  inference variable (`type 't9 has no method concat`); DL0405 now says the type is not known at that call and where to
+  write it. DL1703 for a test in a file no package encloses spoke of a `delulu.toml` there is none of; it now names
+  `--test-authority`.
+- **Fixed (RW 2.22): `return` ends a function, and a match arm or a branch, on both engines.** A function whose last
+  statement was `return x` was refused DL0401 ("expected `Int`, found `Unit`"); `None => return Err(…)` in a match arm was
+  DL0202 and ten diagnostics of cascade. A block that ends in `return` now takes whatever type its place expects (its value
+  is still held to the function's return type), and `return` may stand where an expression is expected — `delulu fmt`
+  writes it as a block. On `--engine wasm` a branch that returns no longer decides its `match`'s or `if`'s type (it was
+  refused DL1201).
+- **Fixed (RW 6.18): `grants propose` files the reach a special-use egress refusal asks for.** A request the egress
+  client refused because its host is a special-use address leaves no refused call — the program gets `Err` — and
+  `propose` answered "the report records no refusal". It now proposes `net.special=` for the run's node's own entry for
+  that host (or the host alone), filed and approved like any other proposal.
+- **Added (D-V2-188, RW 4.86): a lease can carry a special-use reach.** `grants delegate --net-special HOST` (and
+  `grants certify --net-special HOST`) gives a node the reach `--grant net.special=HOST` gives a run, so a run under the
+  lease may connect to that loopback, private-range or metadata host; before, a leased run reached none. A child holds the
+  reach only where its parent does (DL0802), `grants diff` names it, and a node without one is byte-identical to before.
+  `grants delegate --net` with a special-use host still makes the node, and says it has no special-use reach and which
+  spelling gives one (D-V2-187).
+- **Changed (RW 6.17): a network entry wider than its grant is named as that.** `root.http(["127.0.0.1:GET,POST,PUT"])`
+  under a grant of `127.0.0.1:GET,POST` was refused "`network host` was not granted — pass `--grant net=HOST`"; the
+  refusal now names the entry, the host and its grants, and the entry as the grant to pass. A special-use host's remedy is
+  `net.special=` (a plain `net=` never grants one). The code is DL0703 as before; `--within` and `deploy plan` say the
+  same.
+
+### `authority --within` decides a file use at its call, 2026-10-25
+
+- **Fixed (D-V2-185):** a file use whose path the source writes is decided at its call. A program reading
+  `../forbidden/secret.txt` through a capability for `./allowed` was *within* a boundary that `run` refused with DL0904;
+  it is now *exceeds* there, at that call.
+
+### `% 0` faults alike on both engines; three stale doc passages, 2026-10-24
+
+- **Fixed: `x % 0` under `--engine wasm` reported DL0901 (integer overflow)**; it is DL0902 (division by zero), as
+  on the interpreter (RW 4.83). `INT_MIN % -1` stays DL0901 on both.
+- **Docs:** `for-agents.md` said `--lease` and `--broker` are refused under `--sandbox`; they apply there (RW 4.20),
+  and each use the guest asks of the host is judged by the lease's node. `GETTING_STARTED.md` and `for-agents.md`
+  said a secret-carrying request is "not yet" under `--engine wasm`; it runs there (D-V2-174, and `post_with_secret`
+  since 2026-10-23).
+
+### a top-level constant's value is checked, 2026-10-24
+
+- **Fixed: `let NAME[: T] = value` at module level was never checked** (CONST-UNCHECKED-1, RW 4.82). Its value is
+  now type-checked against its declared type, its names resolved, and it must be pure: a constant is evaluated
+  before `main`, holding no authority, so `let W = spawn Worker()` is refused DL0501 (it performed `Async` that
+  `authority` never named). An unannotated constant has one type at every use. **Breaking** only for a program
+  whose constant was ill-typed, unresolvable or effectful — each failed at run time or did something unreported.
+
+### a generic's own parameters are rigid in its body, 2026-10-24
+
+- **Fixed (soundness): the effect row escaped through a generic function** (GENERIC-RIGID-1, D-V2-184, RW 4.81).
+  Inside its own body a generic's type and row parameters could be decided by the body: `fn forge[T](x: Int) -> T
+  { x }` checked, and `coerce[A, B](x: A) -> B { x }` or `hide[e](f: fn() -> Unit ! e) -> fn() -> Unit { f }` made
+  an effectful closure pure, so a function `authority` listed as pure printed at run time. A generic's parameters
+  are now rigid in its body (and an actor's in its members): the body must hold for every type and row a caller
+  picks. **Breaking** only for a program that relied on the hole: its body is refused DL0401, naming the parameter
+  (`expected T, found Int`).
+
+### a certificate carries every dimension a delegation can, 2026-10-24
+
+- **Fixed: under strict anchored roots, a lease can hold a broker-held secret** (CERT-SECRET-1, RW 4.80). `grants
+  certify` now takes `--secret`, `--secret-to`, `--declassify`, `--foreign-c`, `--foreign-python` and `--budget`, as
+  `grants delegate` does. A root enters a strict broker only through a certificate, so before this no delegation
+  under it could name a secret (DL0802). A certificate names a secret and never carries its value (`--secret
+  NAME=VALUE` is refused); the broker that adopts it holds the bytes (`delulu secrets set`).
+- **Fixed: `toolchain --json` describes `net` and `net.special` with their methods** (`HOST[:METHODS][/PATH]`, D-V2-182).
+
+### `http.post` and `http.post_with_secret` on the WASM engine, 2026-10-23
+
+- **Added: `Cap[Http].post` compiles to WebAssembly** (`--engine wasm`, `build --target wasm`). The host performs it by
+  the interpreter's own `post`, and its gate asks the custody by its method, as the interpreter's does: under
+  `--broker daemon` the chain records the POST's `use` with its `method`. `post_with_secret` compiles too: the guest
+  names the secret's handle and the host sends its bytes, as `get_with_secret`'s are sent.
+
+### `http.post` and `http.post_with_secret`, 2026-10-23
+
+- **Added: `Cap[Http].post(url, headers, body)`, the first request that is not a GET** (P9-05 (d), D-V2-183, RW 2.12).
+  A program mints `root.http(["api.example.com:POST/v1/**"])`, and the operator grants the same line
+  (`--grant net=api.example.com:POST/v1/**`). Under a grant naming no methods (GET alone) the POST is refused at its
+  call (DL0904, in words about its method), and nothing connects. Its headers follow `get_with`'s rules; its body is at
+  most 1 MiB. After a POST, a 301, 302 or 303 is followed as a GET with no body and judged as one. A 307 or 308 keeps
+  the POST and its body, to the URL's own origin only; a redirect elsewhere is refused. The same checks run at L0,
+  from a `--sandbox` guest (the host performs it), and under `--broker daemon` and `--lease`. There the chain's `use`
+  record names the `method`, OCSF exports it as `http_request.http_method`, and a run report's hop names it.
+  `authority --within` decides a POST by its method, and so does `deploy plan`, which uses the same verdict. Not yet on
+  `--engine wasm`.
+- **Added: `Cap[Http].post_with_secret(url, headers, header, secret, body)`**, an authenticated POST. The secret
+  rides in one header as `get_with_secret`'s does: never declassified, sent only to its grant's audience
+  (`--grant secret:NAME@HOST[:PORT]=…`, which `--grants` proposes). Under `--broker daemon` the broker hands over its
+  bytes for that one origin, and the chain records the POST's `use` and the `send`. A capability minted without POST
+  refuses it at the call before the broker is asked for a byte.
+- **Changed: the primitive table's version is 8** (was 7). A `.dpx` whose DIR was checked against version 7 is refused
+  with DL1503 and is rebuilt, as at every earlier bump.
+
+### a `net` grant names its methods, 2026-10-23
+
+- **Added: a `net` entry may name the HTTP methods it allows** (P9-05 (d), D-V2-182, RW 2.12):
+  `--grant net=api.example.com:GET,POST/v1/**`. Methods are named after the host from `GET`, `HEAD`, `POST`, `PUT`,
+  `PATCH` and `DELETE`, each once and in that order. An entry that names none allows **GET alone**, as every entry
+  has until now, so no grant reaches more than it did. A program asks for the same scope in `root.http([...])`, never
+  for a method its grant does not name. Every request is still a GET; under an entry that names POST alone it is
+  refused at its call (DL0904, in words about the method), by the egress client on every hop and by the broker.
+  `--within` and `deploy plan` decide the same way. The method set is ordered like the path patterns and proved in
+  Z3. This is the dimension a primitive other than GET needs before it can exist.
+- **Changed (stricter): a `net` entry naming a port is refused in words** (`net=api.example.com:8443`: "a `net`
+  entry names no port"). Such an entry was accepted before and never matched a request.
+- **Changed: `delulu sandbox policy FILE --format openshell` refuses a method-scoped `net` grant**, as it refuses a
+  path-scoped one: the host alone would grant every method.
+
+### a URL named by a `let` or a constant is read as its literal, 2026-10-23
+
+- **Changed: `authority --grants`, `--within` and `deploy plan` read a request's or a send's URL through a name.** A URL
+  bound once by a `let` (`let u = "https://example.com/admin"`) or by a module constant (`let API: Str = "https://…"`
+  among the module's items) is now decided by its literal, as one written at the call always was. Before, it was taken
+  as computed. Under a path-scoped boundary such a request was *inconclusive*; it is now *within* or *exceeds*, the second
+  named at the request. A sent secret's audience was proposed as `HOST`; now it is the literal's `host:port`. A name
+  that may hold another value at the call still counts as computed: one assigned in a branch, a loop or a closure, or a
+  parameter or local `let` that shadows the constant.
 
 ### ctutils 0.4.5, 2026-10-23
 

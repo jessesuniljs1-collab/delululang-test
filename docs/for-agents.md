@@ -381,9 +381,11 @@ does not (P9-04 (d), D-V2-133).
 `delulu authority FILE --json` names every place the program SENDS a secret (P9-04 (e), D-V2-135) — a
 `secret_destinations` array, present only when it sends one: `{"secret", "to", "at"}` per `http.get_with_secret`
 call, `secret` the grant name when the source shows it (`root.secret("NAME")`, a `let`-bound one, a `Secret.map` of
-it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`).
-Either is `null` when the source does not show it (a computed URL, a secret passed in as a parameter, a name a `for`
-or a match arm rebinds) — never a guess.
+it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`). The
+literal may be written at the call, or bound to a name by a `let` in the body or by a constant of the module
+(`let API: Str = "https://…"` among its items). Either is `null` when the source does not show it (a computed URL, a
+secret passed in as a parameter, a name a `for` or a match arm rebinds, a name assigned in a branch, a loop or a
+closure) — never a guess.
 
 Since 2026-10-23 (RW 2.11, D-V2-180) those sends are part of what the program asks for. `--grants` names a sent secret's
 audience: `secret:API_TOKEN@api.example.com:8443=VALUE`, with `HOST` for a send whose URL the source computes, and
@@ -400,8 +402,10 @@ path-scoped entry *exceeds*, named at the request by the narrowest line that tak
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the
 runtime or the program worded; `proposes` is `false` (exit 1) with a `reason` when there is none — a scope the source
-computes, a refusal a grant does not answer, a program changed since the run. It grants nothing: whoever holds the
-authority decides, and `grants diff` tells them what the proposal adds.
+computes, a refusal a grant does not answer, a program changed since the run. A request the egress client refused
+because its host is a special-use address leaves no refused call (the program got `Err`), and is proposed from the report's
+`egress` record: `net.special=` for the run's node's own entry for that host, or the host alone (A19, D-V2-188). It grants
+nothing: whoever holds the authority decides, and `grants diff` tells them what the proposal adds.
 
 **To ask for it, file it** (D-V2-125): a `run --lease` run prints the node it holds; `delulu grants propose FILE --node g_ID
 --json` files the proposal with the broker as that node's request — `filed.id` is its `pp_` id. Nothing is granted until an
@@ -419,6 +423,11 @@ There are **ten** core effects: `Read`, `Write`, `Net`, `Clock`, `Rand`, `Declas
 sends — an effect only; there is no futures runtime and no `await`), and `Actuate` (commanding a
 physical device). A module may declare more with `effect Name`; those are user effects and are
 reported by name.
+
+`Async` asks for no grant, so **no lease or grant can refuse an actor program**: a lease bounds what a run
+can reach, and spawning an actor reaches nothing outside the run. What bounds how much it computes, actors
+included, is the run's budget, `--limits mem=N,cpu=S,wall=S` (D-V2-189). `delulu authority` lists `Async`
+among a program's effects, so an operator can see an actor program before running it.
 
 The list is closed — `delulu_check::ty::Effect::core_from_name` accepts exactly these ten and
 nothing else, and a `type` or `effect` declaration that shadows one is refused rather than silently
@@ -606,6 +615,19 @@ install anything.
 construction. Byte-identical output across runs is a tested property for `--json`, the atlas, and
 plugin inspection — if you see nondeterminism there, it is a bug.
 
+A `Cap[Rand]` has two methods. `r.int(lo, hi)` draws an `Int` from `lo` up to but **not including** `hi`, so
+`r.int(1, 7)` rolls a die and `r.int(5, 6)` is always 5. A range holding no value, `hi <= lo`, faults with `DL0908`, an
+argument the operation does not accept (D-V2-190). `r.float()` draws a `Float` between 0 and 1. Under `--seed N` both
+draw the same sequence on the interpreter and the WASM engine, and each seed draws a sequence of its own (D-V2-191: since
+2.0.0 the seed is mixed first, so a sequence recorded under 1.x differs).
+
+**Actors.** `--seed` and `--clock fixed:` reach every actor (D-V2-192). Each actor draws from a stream of its own,
+derived from who spawned it and when, so its draws are the same on one worker thread or many; every worker reads the
+fixed clock. What they do not fix is the **order** in which different actors' turns interleave: messages are ordered per
+sender only (Stage 7), so the lines several actors print may come in another order on another run, even on one worker
+(`--actors-threads 1` narrows the orders but does not promise one). Compare such output as a set, or let one actor
+collect the results and print them in an order the program decides.
+
 ## [agents.env] Environment variables
 
 | Variable | Effect |
@@ -653,8 +675,9 @@ A budget is also AUTHORITY (PS-B-05). Whoever delegates to you can hand one down
 a budget inherits it. When you run under `--lease`, the node's budget is what you are held to and your
 default: `--limits` may ask for less and is refused, before `main`, if it asks for more. A delegation
 that asks for a larger budget than its parent holds is DL0802, and its repair is the meet. Under
-`--sandbox`, a flag the sandboxed run does not apply (`--lease` and `--broker` among them) is refused
-rather than ignored; a lease runs without `--sandbox`.
+`--sandbox`, a flag the sandboxed run does not apply is refused rather than ignored. `--lease` and
+`--broker` apply there (REMAINING_WORK 4.20): the guest performs nothing itself, and each use it asks of the
+host is judged by the lease's node first (`guest: error[DL0904]: lease … does not grant …`).
 
 On Windows a `--sandbox` guest also runs as a separate identity (PS-B-03): a per-run AppContainer with
 no network and none of the operator's files. On Linux, where the host allows user namespaces, it runs
@@ -689,14 +712,24 @@ overstate it downstream:
 - **The network client is `GET` over verified HTTPS, host-side, and nothing more.** `http.get` is
   performed by the runtime (for a `--sandbox` guest, by the HOST — the guest has no socket and no
   resolver): allowlisted host, name resolved once and pinned, special-use addresses refused unless the
-  host was granted with `--grant net.special=HOST` (never plain `net=`), every redirect re-checked,
+  host was granted with `--grant net.special=HOST` (never plain `net=`; under a lease, only when its node was delegated
+  `--net-special HOST` — a node delegated plain `--net` with such a host is refused at that connect, which `grants
+  delegate` and `certify` say when the grant is written, D-V2-187, D-V2-188), every redirect re-checked,
   a grant's path pattern held on every hop (`--grant net=api.example.com/v1/**`, P9-05 (a): `*` one
   segment, `**` the rest; the program asks for the same scope, `root.http(["api.example.com/v1/**"])`;
   a path outside it, or one a server could read another way — `..`, `//`, `;`, an escaped `/` — is
-  refused at the call, DL0904, under every custody),
+  refused at the call, DL0904, under every custody), and its methods (`--grant net=api.example.com:GET,POST/v1/**`,
+  P9-05 (d), D-V2-182: named after the host in the order GET, HEAD, POST, PUT, PATCH, DELETE, each once; an entry
+  naming none allows GET alone, the one request a program makes today, so a POST-only entry refuses it, DL0904),
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
+  **A refusal has two shapes, on purpose** (B8 of the agent test campaign, kept 2026-10-31). A request outside what
+  the grant names (its host, its path pattern, its method) ends the run, DL0904 at the call, exit 1: the program asked
+  for more than it was given. A request the egress client refuses for what the URL itself is (its scheme, userinfo, a
+  special-use address, a backslash) is `Err(Refused)` to the program, which decides what follows, so the run may exit
+  0; the operator's note on standard error (`[egress: scheme]`) and the report's `reason` say why. A harness that must
+  know of every refused request reads the report, not the exit code alone.
   `http.get_with(url, headers)` (a `Map[Str, Str]`, P9-04 (a)) sends headers under the same checks: each
   name an HTTP token, each value printable ASCII with no line break, no two names that differ only in
   case, at most 32 — and never `Host`, the framing and connection headers, `Proxy-*` or
@@ -713,7 +746,19 @@ overstate it downstream:
   chain records a `send` with the pair; a delegated node's send is guarded (DL1410) until a person approves
   `declassify:NAME@host:port` — one for another destination does not buy it; a rule or permit on the secret's NAME
   (`declassify:NAME`) covers every send of it, and a seal on it refuses them all (D-V2-137). Not yet in a
-  `--sandbox` guest (DL1401: no secret crosses the channel), or under `--engine wasm`.
+  `--sandbox` guest (DL1401: no secret crosses the channel). Under `--engine wasm` it runs as on the interpreter
+  (D-V2-174; `post_with_secret` since 2026-10-23).
+  `http.post(url, headers, body)` (P9-05 (d), D-V2-183) is the one request that is not a GET: the program mints
+  `root.http(["api.example.com:POST/v1/**"])` and the operator grants the same (`--grant net=api.example.com:POST/v1/**`;
+  `--grants` prints it). Under an entry naming no methods it is refused at the call, DL0904, *"a `POST` to … is outside
+  the methods the grant names"*. Its headers follow `get_with`'s rules, and its body is at most 1 MiB (reason
+  `request-too-large`). A 301, 302 or 303 after it is followed as a GET with no body, judged as a GET; a 307 or 308
+  keeps the POST and its body, only to the URL's own origin (elsewhere: reason `body-elsewhere`). Each hop's report
+  record names its `method` when it is not a GET, and under `--broker daemon`/`--lease` the chain's `use` record does
+  too, beside `url_path` (OCSF `http_request.http_method`). From a `--sandbox` guest the host performs it, and under
+  `--engine wasm` (since 2026-10-23) the WASM host does, its custody asked by the method; `post_with_secret` too. `http.post_with_secret(url, headers, header, secret, body)` is the authenticated POST: the
+  secret as `get_with_secret` sends it (its audience only; under `--broker daemon`/`--lease` the broker's `send`), the
+  body as `post`'s; a capability minted without POST refuses it before the broker is asked for a byte.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image
@@ -757,7 +802,17 @@ overstate it downstream:
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
   DeluluLang is **not competitive with C** on the measured workloads (8.9×–489.5× slower on the
   interpreter, 9.8×–15.7× on the WASM engine, which runs all six — Study C, 2026-10-19), and the report says
-  so in those words. Do not let a harness's marketing copy imply otherwise.
+  so in those words. Do not let a harness's marketing copy imply otherwise. Study C's interpreter figures predate
+  2026-10-29, when A14 took 1.5× to 2.1× off loops and calls (`loop_sum_1m` 694 → 327 ms, old binary against new on one
+  Windows laptop); its next run re-measures the ratios.
+- **Choose the engine by the work.** For computation (sorting, loops over numbers, recursion), use `--engine wasm` or
+  `build --target wasm`. It is about 100× faster: a merge sort of 100,000 `Int`s takes 5.0 s on the interpreter and
+  56 ms on WASM (2026-10-29). Counting 372,300 words into a `Map[Str, Int]` is faster on WASM too: 0.29 s, against
+  0.63–0.80 s interpreted (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
+  list or a record field holding a function. A program WASM cannot compile is refused with `DL1201`, naming its line,
+  and never runs half-compiled. A run that faults reads the same on both engines: its code once, the same words, and
+  the line and column of the expression that faulted (since 2026-10-31); a `.dwx` names its file instead, having no
+  source to point into.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
   (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
   this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a
@@ -776,7 +831,10 @@ overstate it downstream:
   millions deep — `type Chain = Nil | Link(Chain)` in an accumulator loop — used to abort the host
   during teardown *after* the program had finished, with no diagnostic. Value teardown is iterative
   as of 2026-08-10, so depth costs heap rather than native stack. Call depth remains bounded by
-  `DL0905`.
+  `DL0905`: on the interpreter at 10,000 frames; on `--engine wasm` by the guest's stack, so the depth
+  depends on each frame's size (a one-parameter recursion: 16,351 calls ran, 16,448 were refused,
+  2026-10-29). A program that runs on one engine near the other's bound is refused there, so write a
+  recursion that may go thousands deep as a loop.
 
   Stated with its history because it is recent: before 2026-08-04 there was no limit, and a valid
   module nested 100,000 deep did not produce a diagnostic — it overflowed the stack and killed the

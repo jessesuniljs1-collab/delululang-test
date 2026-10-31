@@ -80,6 +80,327 @@ fn what_a_program_printed_before_a_fault_reaches_stdout_on_both_engines() {
     assert!(we.contains("DL0902") && ie.contains("DL0902"), "a division by zero on both:\n{we}\n{ie}");
 }
 
+/// A function whose last statement is `return`, and `return` in a match arm or an `if` used as a value (on-demand routine
+/// run 6, the campaign's A9): refused DL0401 and DL0202 until 2026-10-25; they run now, and print the same on both engines
+/// (the WASM codegen let a returning branch decide a `match`'s or an `if`'s type, and refused the next branch DL1201).
+#[test]
+fn a_function_ending_in_return_runs_alike_on_both_engines() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-return-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("ret.delulu");
+    std::fs::write(
+        &f,
+        "module ret\n\nfn half(x: Int) -> Int {\n    if x < 0 {\n        return 0\n    }\n    return x / 2\n}\n\n\
+         fn f(c: Bool) -> Str {\n    let y = if c { return \"one\" } else { 2 }\n    str(y + 10)\n}\n\n\
+         fn g(o: Option[Str]) -> Result[Str, Int] {\n    let s = match o {\n        None => return Err(7),\n        Some(v) => v\n    }\n    Ok(s + \"!\")\n}\n\n\
+         fn show(r: Result[Str, Int]) -> Str {\n    match r {\n        Ok(s) => s,\n        Err(n) => \"err \" + str(n)\n    }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(str(half(8)))\n    out.println(str(half(-3)))\n    \
+         out.println(f(true))\n    out.println(f(false))\n    out.println(show(g(None)))\n    out.println(show(g(Some(\"late\"))))\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let interp = delulu(&["run", &f, "--grant", "console"]);
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "4\n0\none\n12\nerr 7\nlate!\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
+    let wasm = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+    assert_eq!((wasm.status.code(), stdout(&wasm)), (Some(0), stdout(&interp)), "{}", String::from_utf8_lossy(&wasm.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// An empty list filled later with a sum or a record (the campaign's A10, on-demand routine run 6): `let out = []`, then
+/// `out.push(TNum(1))`, was refused on WASM — DL1201, "an empty list whose element type the backend was not given", with
+/// no line — though the checker had inferred `List[Tok]`; an annotation or a first item ran. It runs now and prints what
+/// the interpreter prints: a sum with payloads, a sum of constructors only returned inside a `Result`, and a record.
+#[test]
+fn an_empty_list_filled_later_with_sums_or_records_runs_alike_on_both_engines() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-empty-sums-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("toks.delulu");
+    std::fs::write(
+        &f,
+        r#"module toks
+
+type Tok = TNum(Int) | TPlus | TEnd
+
+type Dir = North | South
+
+type P {
+  x: Int,
+  name: Str,
+}
+
+fn lex() -> List[Tok] {
+    let out = []
+    out.push(TNum(1))
+    out.push(TPlus)
+    out.push(TNum(2))
+    out.push(TEnd)
+    out
+}
+
+fn dirs(n: Int) -> Result[List[Dir], Str] {
+    let ds = []
+    var i = 0
+    while i < n {
+        if i % 2 == 0 { ds.push(North) } else { ds.push(South) }
+        i = i + 1
+    }
+    Ok(ds)
+}
+
+fn show(t: Tok) -> Str {
+    match t {
+        TNum(n) => str(n),
+        TPlus => "+",
+        TEnd => "."
+    }
+}
+
+fn way(d: Dir) -> Str {
+    match d {
+        North => "north",
+        South => "south"
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    var s = ""
+    for t in lex() { s = s + show(t) }
+    out.println(s)
+    match dirs(3) {
+        Ok(ds) => out.println(str(ds.len()) + " " + way(ds[1])),
+        Err(e) => out.println(e)
+    }
+    let ps = []
+    ps.push(P { x: 3, name: "c" })
+    out.println(ps[0].name + str(ps[0].x))
+}
+"#,
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let interp = delulu(&["run", &f, "--grant", "console"]);
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "1+2.\n3 south\nc3\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
+    let wasm = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+    assert_eq!((wasm.status.code(), stdout(&wasm)), (Some(0), stdout(&interp)), "{}", String::from_utf8_lossy(&wasm.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A construct the WASM backend refuses is refused AT ITS LINE (the campaign's A10, second half): DL1201 named no line
+/// and carried no span, so a program of any size left its author to guess which expression the backend could not
+/// compile, while every checker refusal points at its own. The innermost expression it refused is the span now — the
+/// closure inside the list on line 6, not the list, the `for` around it or `main` — on `run --engine wasm` (human and `--json`) and on
+/// `build --target wasm`, and the message is the one it was.
+#[test]
+fn a_wasm_refusal_names_the_line_it_refuses() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-refusal-line-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("noline.delulu");
+    std::fs::write(
+        &f,
+        "module noline\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    var t = 0\n    for g in [fn(x: Int) -> Int { x }] { t = t + g(1) }\n    out.println(\"done\")\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let interp = delulu(&["run", &f, "--grant", "console"]);
+    assert_eq!(
+        (interp.status.code(), stdout(&interp).as_str()),
+        (Some(0), "done\n"),
+        "{}",
+        String::from_utf8_lossy(&interp.stderr)
+    );
+
+    let run = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+    let err = String::from_utf8_lossy(&run.stderr).to_string();
+    assert_eq!(run.status.code(), Some(1), "{err}");
+    assert!(
+        err.contains("error[DL1201]: WASM codegen does not support this expression form"),
+        "the message is the one it was:\n{err}"
+    );
+    assert!(err.contains("noline.delulu:6:15"), "the refusal names the closure, line 6 column 15:\n{err}");
+
+    let json = delulu(&["run", &f, "--grant", "console", "--engine", "wasm", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&json.stdout).expect("a JSON envelope");
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["code"], "DL1201", "{v}");
+    assert_eq!((d["spans"][0]["start"]["line"].as_u64(), d["spans"][0]["start"]["col"].as_u64()), (Some(6), Some(15)), "{v}");
+
+    let build = delulu(&["build", &f, "--target", "wasm", "--out", &dir.join("noline.dwx").to_string_lossy()]);
+    let err = String::from_utf8_lossy(&build.stderr).to_string();
+    assert_eq!(build.status.code(), Some(1), "{err}");
+    assert!(err.contains("DL1201") && err.contains("noline.delulu:6:15"), "`build --target wasm` names the line too:\n{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// B5 (the agent test campaign): a run's fault on the WASM engine reads as the interpreter's: its code once, the same
+/// words, the same place. It was `error[DL0904]: WASM engine: WASM trap: DL0904: path … escapes the granted scope`, with
+/// no `-->` line. Two faults: a refusal the host records (a path outside the granted scope, in a called function), and
+/// a trap in the guest's own code (a division by zero in another). A `.dwx` has no source to point into: its fault names
+/// the file and says the same words.
+#[test]
+fn a_wasm_fault_reads_as_the_interpreters_at_the_same_place() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-fault-place-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("allowed")).unwrap();
+    std::fs::create_dir_all(dir.join("forbidden")).unwrap();
+    std::fs::write(dir.join("allowed").join("ok.txt"), "hi").unwrap();
+    std::fs::write(dir.join("forbidden").join("secret.txt"), "secret").unwrap();
+    let allowed = dir.join("allowed").to_string_lossy().replace('\\', "/");
+    let read = dir.join("read.delulu");
+    std::fs::write(
+        &read,
+        format!(
+            "module read\n\nfn show(r: Result[Str, IoErr], out: Cap[Console]) ! {{Write}} {{\n    match r {{\n        \
+             Ok(t) => out.println(\"OK:\" + t)\n        Err(e) => out.println(\"ERR:\" + str(e))\n    }}\n}}\n\n\
+             fn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    let rd = root.fs_read(\"{allowed}\")\n    \
+             show(rd.read_text(\"ok.txt\"), out)\n    show(rd.read_text(\"../forbidden/secret.txt\"), out)\n}}\n"
+        ),
+    )
+    .unwrap();
+    let div = dir.join("div.delulu");
+    std::fs::write(
+        &div,
+        "module div\n\nfn share(total: Int, ways: Int) -> Int {\n    let each = total / ways\n    each\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"before\")\n    \
+         out.println(str(share(10, 0)))\n}\n",
+    )
+    .unwrap();
+    let fs_grant = format!("fs.read={allowed}");
+    let fault = |o: &Output| {
+        let err = String::from_utf8_lossy(&o.stderr).to_string();
+        err.find("error[").map(|at| err[at..].to_string()).unwrap_or(err)
+    };
+    for (file, grants, code, at) in [
+        (&read, vec!["--grant", "console", "--grant", fs_grant.as_str()], "DL0904", "read.delulu:14:10"),
+        (&div, vec!["--grant", "console"], "DL0902", "div.delulu:4:16"),
+    ] {
+        let f = file.to_string_lossy().to_string();
+        let mut args = vec!["run", f.as_str()];
+        args.extend(grants.iter().copied());
+        let interp = delulu(&args);
+        args.extend(["--engine", "wasm"]);
+        let wasm = delulu(&args);
+        assert_eq!((interp.status.code(), wasm.status.code()), (Some(1), Some(1)), "{}\n{}", fault(&interp), fault(&wasm));
+        assert_eq!(stdout(&wasm), stdout(&interp), "what each printed before the fault");
+        let (i, w) = (fault(&interp), fault(&wasm));
+        assert!(i.starts_with(&format!("error[{code}]: ")) && i.contains(at), "the interpreter's fault, at {at}:\n{i}");
+        assert_eq!(w, i, "the WASM engine's fault reads as the interpreter's, at the same place");
+    }
+
+    let dwx = dir.join("read.dwx");
+    let built = delulu(&["build", &read.to_string_lossy(), "--target", "wasm", "-o", &dwx.to_string_lossy()]);
+    assert_eq!(built.status.code(), Some(0), "{}", String::from_utf8_lossy(&built.stderr));
+    let ran = delulu(&["run", &dwx.to_string_lossy(), "--grant", "console", "--grant", &fs_grant]);
+    let err = fault(&ran);
+    assert!(
+        err.starts_with("error[DL0904]: `") && err.contains(".dwx`: path `../forbidden/secret.txt` escapes the granted scope"),
+        "a `.dwx` says the interpreter's words, its code once:\n{err}"
+    );
+    assert!(!err.contains("WASM trap"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A7 (the agent test campaign): a program that walks a directory runs on the WASM engine and as a `.dwx`. `list_dir` was
+/// DL1201 *"WASM codegen does not support the method `.list_dir`"* on `--engine wasm` and on `build --target wasm`. Its
+/// output and its effect trace are the interpreter's, record for record.
+#[test]
+fn a_directory_walk_runs_on_wasm_and_as_a_dwx_and_traces_alike() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-list-dir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    std::fs::write(dir.join("data").join("b.txt"), "one\ntwo\n").unwrap();
+    std::fs::write(dir.join("data").join("a.txt"), "x\n").unwrap();
+    let data = dir.join("data").to_string_lossy().replace('\\', "/");
+    let walk = dir.join("walk.delulu");
+    std::fs::write(
+        &walk,
+        format!(
+            "module walk\n\nfn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    let rd = root.fs_read(\"{data}\")\n    \
+             match rd.list_dir(\".\") {{\n        Ok(names) => {{\n            for n in names.sort() {{\n                \
+             match rd.read_text(n) {{\n                    Ok(t) => out.println(n + \": \" + str(t.len())),\n                    \
+             Err(e) => out.println(n + \": \" + str(e)),\n                }}\n            }}\n        }}\n        \
+             Err(e) => out.println(\"cannot list: \" + str(e)),\n    }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    let (f, grant) = (walk.to_string_lossy().to_string(), format!("fs.read={data}"));
+    let traced = |engine: &[&str], out: &str| {
+        let trace = dir.join(out).to_string_lossy().to_string();
+        let mut args = vec!["run", f.as_str(), "--grant", "console", "--grant", grant.as_str()];
+        args.extend_from_slice(engine);
+        args.extend(["--trace-effects", "--trace-out", trace.as_str()]);
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(0), "{engine:?}: {}", String::from_utf8_lossy(&o.stderr));
+        (stdout(&o), std::fs::read_to_string(&trace).expect("a trace"))
+    };
+    let (i_out, i_trace) = traced(&[], "interp.trace");
+    let (w_out, w_trace) = traced(&["--engine", "wasm"], "wasm.trace");
+    assert_eq!(i_out, "a.txt: 2\nb.txt: 8\n");
+    assert_eq!(w_out, i_out, "the WASM engine prints what the interpreter prints");
+    assert!(i_trace.contains("list_dir"), "the listing is traced: {i_trace}");
+    assert_eq!(w_trace, i_trace, "the WASM engine's trace is the interpreter's, record for record");
+    let dwx = dir.join("walk.dwx").to_string_lossy().to_string();
+    let built = delulu(&["build", &f, "--target", "wasm", "-o", &dwx]);
+    assert_eq!(built.status.code(), Some(0), "builds to a .dwx: {}", String::from_utf8_lossy(&built.stderr));
+    let ran = delulu(&["run", &dwx, "--grant", "console", "--grant", &grant]);
+    assert_eq!((ran.status.code(), stdout(&ran)), (Some(0), i_out), "{}", String::from_utf8_lossy(&ran.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.40: an actor that dies is named alike on both engines, and a recursion too deep is placed at the same call. The
+/// WASM engine counted a death (*"actors: 1 died"*) and named nothing; the interpreter's `DL0905` named no place, where
+/// the WASM engine's names the call that went one deeper (B5).
+#[test]
+fn an_actors_death_and_a_recursion_too_deep_read_alike_on_both_engines() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-death-depth-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let actor = dir.join("act.delulu");
+    std::fs::write(
+        &actor,
+        "module act\n\nactor Div {\n    var n: Int\n    new() { self.n = 0 }\n    be go(k: Int) { self.n = 10 / k }\n}\n\n\
+         fn main(root: Root) ! {Write, Async} {\n    let out = root.console()\n    let d = spawn Div()\n    d.go(0)\n    \
+         d.go(1)\n    out.println(\"sent\")\n}\n",
+    )
+    .unwrap();
+    let deep = dir.join("deep.delulu");
+    std::fs::write(
+        &deep,
+        "module deep\n\nfn down(n: Int) -> Int {\n    if n <= 0 { 0 } else { 1 + down(n - 1) }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    root.console().println(str(down(1000000)))\n}\n",
+    )
+    .unwrap();
+    let both = |file: &PathBuf| {
+        let f = file.to_string_lossy().to_string();
+        let interp = delulu(&["run", &f, "--grant", "console"]);
+        let wasm = delulu(&["run", &f, "--grant", "console", "--engine", "wasm"]);
+        (String::from_utf8_lossy(&interp.stderr).to_string(), String::from_utf8_lossy(&wasm.stderr).to_string())
+    };
+    let (i, w) = both(&actor);
+    let died = "actor Div died in `go`: division by zero [DL0902] (its later messages will be dropped and counted)";
+    let dropped = "actors: 1 died; 1 message(s) to dead actors dropped";
+    for (engine, err) in [("interpreter", &i), ("WASM engine", &w)] {
+        assert!(err.lines().any(|l| l == died), "the {engine} names the actor, its behaviour and its fault:\n{err}");
+        assert!(err.lines().any(|l| l == dropped), "the {engine} counts it:\n{err}");
+    }
+    let (i, w) = both(&deep);
+    for (engine, err) in [("interpreter", &i), ("WASM engine", &w)] {
+        assert!(err.starts_with("error[DL0905]: recursion depth exceeded"), "the {engine}:\n{err}");
+        assert!(err.contains("deep.delulu:4:32"), "the {engine} places it at the call that went deeper:\n{err}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn run_engine_wasm_ungranted_console_is_refused() {
     // No console grant → root.console() is refused host-side; the run fails.
@@ -547,7 +868,7 @@ fn http_on_the_wasm_engine_matches_the_interpreter() {
     // A host the grant does not cover is refused at the mint, in the interpreter's words.
     let (i, _, _) = run("mint.delulu", "interp", "net=example.com");
     let (w, _, _) = run("mint.delulu", "wasm", "net=example.com");
-    let words = "`network host` was not granted to this program — pass `--grant net=HOST`";
+    let words = "network access to `evil.example` was not granted to this program — pass `--grant net=evil.example`";
     for e in [err(&i), err(&w)] {
         assert!(e.contains("DL0703") && e.contains(words), "{e}");
     }

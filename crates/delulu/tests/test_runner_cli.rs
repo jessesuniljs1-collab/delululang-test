@@ -267,9 +267,13 @@ fn test_authority_flag_is_a_ceiling_that_can_only_narrow_a_package() {
         (o.status.code(), serde_json::from_str(&out).unwrap_or(Value::Null), out)
     };
 
-    // Outside a package: no flag, no ceiling — the effectful test is DL1703, as before.
-    let (code, _, out) = run(&loose, &["test", "w.delulu", "--json"]);
+    // Outside a package: no flag, no ceiling — the effectful test is DL1703, as before. A22 (the agent test campaign): its
+    // words name no package and no `delulu.toml` (there is neither), and give the flag that sets a ceiling here.
+    let (code, v, out) = run(&loose, &["test", "w.delulu", "--json"]);
     assert_eq!(code, Some(1), "{out}");
+    let said = v["diagnostics"].to_string();
+    assert!(said.contains("no package encloses this file") && said.contains("--test-authority 'effects ="), "{out}");
+    assert!(!said.contains("delulu.toml") && !said.contains("the package [test-authority]"), "{out}");
     // The flag is the only ceiling: the test runs, holding exactly its declared row.
     let (code, v, out) = run(&loose, &["test", "w.delulu", "--test-authority", "effects = [\"Write\", \"Clock\"]", "--json"]);
     assert_eq!(code, Some(0), "{out}");

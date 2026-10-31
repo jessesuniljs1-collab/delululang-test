@@ -24,7 +24,48 @@ every limit here.
 **Interactive cloud sessions too (the owner, 2026-10-17):** *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* An interactive cloud session on this repository that the
 owner opens without a narrower request follows this file exactly as a routine run does — steps 1–8 — except that it can push
 only its own `claude/…` branch: it pushes there, opens one pull request into `master`, and records itself in
-`docs/CLOUD_SYNC_LOG.md` in that pull request; whoever comes next reads the branch's CI and merges it (step 1).
+`docs/CLOUD_SYNC_LOG.md` in that pull request; whoever comes next reads the branch's CI and merges it (step 1). **Its
+stopping rule is not a routine run's** (the next section): it goes on as long as the owner's words for that session say.
+
+## A routine run is one milestone, then a clean stop (the owner, 2026-10-26)
+
+The owner, 2026-10-26: *"Currently, the routine/scheduled task keeps working continuously instead of stopping after
+completing a major build or fix, committing the work to GitHub, and recording everything properly for the next session.
+This can lead to unfinished or uncommitted work and an incomplete handoff. … Do not make the routine run continuously
+until the usage limit hits. However, do not make it stop merely because some time has passed or a small build or minor
+task has been completed. It should work toward a meaningful milestone before stopping."* On-demand run 6 (2026-10-25) is
+the case: it closed eleven items in 2 h 27 min, then the weekly limit cut it off mid-slice — A10's fix committed on its
+session branch only, its suite still running, nothing recorded, and the A10 probe it had just started unread.
+
+So every routine run has this shape:
+
+1. **Housekeeping** (steps 0–3): sync, health, the previous run verified, waiting branches landed, a red `master` made
+   green. It is not the run's milestone unless it took real work (a red `master` whose cause had to be found is one).
+2. **Name ONE milestone before building it** (step 4): one line in the scratchpad — what it is and what *done* means
+   for it — which becomes the first line of the sync-log entry's *What*. A milestone is a substantial, coherent unit that
+   moves the work order: a defect class closed end to end (witnessed red, fixed, mutants, suite, runners); a feature or
+   phase slice built, tested and documented; a decision taken with its evidence and records; a related group of smaller
+   items closed together (three to six papercuts of one subsystem from the campaign ledger, say); `launch/2.0.0` brought
+   current with its `everything` run read. One records edit, one trivial papercut, or reading CI alone is not a
+   milestone: when such a thing is done and the inbox holds more, go on until the named milestone is done.
+3. **Build it to done** (steps 5–7): every change through the inner loop, each verified slice committed and pushed as
+   soon as it is green — a usage limit can still end a run early, and a pushed checkpoint is never lost work — and the
+   push run read.
+4. **Hand off** (step 6): the sync-log entry says what the milestone delivered, the state of everything still in flight
+   (each CI run by id, read, unread or pending), and *Open / next* in order, written so the next session can start from it
+   cold; the other records as step 6 lists them.
+5. **Stop** (step 9). Budget left over is not a reason to start a second milestone: the next run takes it.
+
+**Not the clock.** A run does not stop because time has passed. If the milestone proves bigger than one run (a redesign
+appears halfway), cut it at the last verified sub-slice: land what is green, make the rest the first *Open / next* item
+with where it stands, and stop — a clean handoff, not a failure.
+
+**Only routine runs stop this way.** The owner's *"Continue cooking and improving DeluluLang … till the limit hits"* is
+for his terminal sessions and interactive cloud sessions (the owner, 2026-10-26: *"mainly for my regular Claude Code
+terminal and cloud sessions, not for routine/scheduled task runs"*). There a session goes from milestone to milestone
+until the limit, landing and recording each before it starts the next. A routine run never takes that phrase as its
+stopping rule, wherever a file quotes it; only a **Run now** direction from the owner that says in words to go past the
+milestone changes it, for that run.
 
 **What this was (2026-09-28 → 2026-10-16).** From 2026-09-28 the owner is away until **2026-10-16** and asked for development to
 continue without him: *"I want the development of delululang to be continued in my absentia. No need to
@@ -93,8 +134,33 @@ starting Claude Code with its own `--settings` file. The owner then set `CLAUDE_
 routine's cloud environment ("Default", `env_012Mxeiw6zvfyxPy9ZEEFf3p`; interactive cloud sessions in that environment
 get it too). **The first run after that date says in its sync-log entry which effort the session showed.** If it is
 still `medium`, the platform sets it, and the entry says so. The same log said "No setup script configured", so each
-run installs the toolchain on its first `cargo` call; the owner may add one (`rustup toolchain install 1.96.1 --profile
-minimal -c clippy -c rustfmt`, then `cargo fetch --locked`).
+run installed the toolchain on its first `cargo` call. **The owner added one the same day** (12:02 IST, the Default
+environment's setup script):
+
+```bash
+#!/bin/bash
+rustup toolchain install 1.96.1 --profile minimal -c clippy -c rustfmt || true
+for d in "$PWD" /home/user/delululang-test; do
+  if [ -f "$d/Cargo.toml" ]; then (cd "$d" && cargo fetch --locked) || true; break; fi
+done
+exit 0
+```
+
+Per the cloud environment's documentation (read 2026-10-23), a setup script that exits non-zero stops the session from
+starting, so every step ends in `|| true` and the script in `exit 0`. Its result is cached once the session has run for
+about five minutes, and it runs again when the script changes or after about seven days. A run's log shows whether it
+ran. The first run after 2026-10-23 records that in its sync-log entry, with the effort. **On-demand run 6 (2026-10-25), the
+first:** the session's environment held `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh`, and the setup script had
+run — the 1.96.1 toolchain installed at 09:37:57 UTC, before the session's first command, and 356 `.crate`
+archives fetched, Windows' among them.
+**2026-10-26 — what `CLAUDE_EFFORT` means.** The owner still saw *medium*. Claude Code itself sets `CLAUDE_EFFORT` in
+every Bash command's environment to *"the effort level in effect when the subprocess starts"* (the environment-variable
+reference, read 2026-10-26), and run 6 read `CLAUDE_EFFORT=xhigh`. The routine's stored configuration has no effort field
+(`session_request.config` lists every field, empty ones included, and none is an effort), so the routine API cannot set
+one. Every lever a repository and an owner hold is already set. The owner, 2026-10-26: *"Leave it for now. Only
+anthropic can do something about it I guess."* So it is left, and step 0 only records the level from the run itself —
+`CLAUDE_EFFORT` and the `effort` field the transcript writes with every reply — at no cost. A **Run now** with
+`CHECK ONLY` does just that.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
@@ -133,8 +199,14 @@ it). **The closing entry exists since run 19 (2026-10-12)**: the section *The cl
 `docs/CLOUD_SYNC_LOG.md`, begun early because a weekly limit can end the period's last runs. Every run before
 2026-10-16 keeps it current IN PLACE as part of its close (step 6) — its "as of" line, the defects and decisions
 it adds, the open list; a run on or after that date only refreshes it, pushes, and stops.
-Otherwise note the start time: **stop starting new work about three hours after it**, and always leave
-the tree committed and pushed — the VM is discarded when the run ends, and anything uncommitted is lost.
+Note the start time for the record. **Since 2026-10-26 the clock does not end a run — its milestone does** (the
+section above; until then this step said to stop starting new work about three hours in). Always leave the tree
+committed and pushed — the VM is discarded when the run ends, and anything uncommitted is lost.
+**Read the effort in effect, from the run itself** (2026-10-26): `echo "CLAUDE_EFFORT=$CLAUDE_EFFORT"; grep -oh
+'"effort":"[a-z]*"' ~/.claude/projects/*/*.jsonl | sort | uniq -c`. Claude Code sets `CLAUDE_EFFORT` in every Bash
+command's environment to the effort level in effect (the environment-variable reference, read 2026-10-26), and the
+session's transcript records the level each reply was sent at. Write both into the sync-log entry; anything but `xhigh`
+is the run's first finding.
 
 **1. Orient.** Read `HANDOFF.md` §0, the newest entries of `docs/CLOUD_SYNC_LOG.md` (their "Open / next"
 lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE_STATUS.md`.
@@ -194,7 +266,8 @@ another OS, and then takes about seven minutes itself (run 5).
   annotation (D-V2-47) — record each OS's verdict; the step before it prints that runner's sandbox
   properties (PS-E-01, D-V2-57) — record those too (a `tail_lines` of about 45 reaches both on a RED run;
   on a green one the cache save follows them, so ask for about 3,000 lines — saved to a file — and grep
-  `##[notice]`, run 4). **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
+  `##[notice]`, run 4). **A failed job with no failed step died with its runner** (on-demand run 9: a full disk): its log
+  answers 404, and its check run's annotations (below) carry the runner's own last words. **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
   VM** — `curl -s https://api.github.com/repos/jessesuniljs1-collab/delululang-test/check-runs/JOB_ID/annotations`
   returns each test job's verdict and properties as JSON, no log at all (a job's id is its check run's); and
   `curl -s ".../actions/runs?per_page=15"` (add `&event=schedule` for the nightly) and `.../actions/runs/ID/jobs` list
@@ -222,11 +295,30 @@ another OS, and then takes about seven minutes itself (run 5).
    fresh-history push, the tag, `RELEASES=on`, publishing) — each named in *Open / next* as the laptop's. When nothing a
    VM can do is left, go on to items 4–7 below.
    **Keeping `launch/2.0.0` current is a VM's work too** (on-demand run 1, release procedure step 1): `git worktree add
-   ../launch-wt launch/2.0.0` with its own `CARGO_TARGET_DIR` (the build is 2.0.0's); `git merge --no-ff origin/master`; move
-   `master`'s `## Unreleased` CHANGELOG sections into the `## [2.0.0]` section as `###` entries; keep both sides of the
-   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
-   rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document gates there; commit, push the branch, and dispatch `ci.yml`
-   (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
+   ../launch-wt launch/2.0.0` with its own target (the worktree's default `target/`: the pre-commit hook looks for the
+   Survey's binary there, so an exported `CARGO_TARGET_DIR` elsewhere fails it); `git merge --no-ff origin/master`; fold
+   `master`'s new `## Unreleased` CHANGELOG sections into `## [2.0.0]` as `###` entries with `python3 -I
+   scripts/launch-changelog.py` (on-demand run 8 — it refuses an order it cannot fold), then judge the 2.0.0 *Breaking*
+   paragraph against each section it lists, by hand — a section that moves a surface `STABILITY.md` §1 holds stable (a
+   refused program's code, a command's exit code for an outcome, a JSON field's type or meaning, syntax that parsed) is
+   breaking, though the program stays refused (on-demand run 9: C9's DL0209 → DL0201, C11's exit 2 → 1); keep both sides of the
+   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*`
+   (`git checkout --theirs docs/survey/`); re-measure CHECKLIST-2.0's criterion 2 and write it — `python3 -I
+   scripts/launch-criterion-2.py 'on-demand routine run N'` runs the three, refuses a tree under 100%, and writes the line
+   in the one shape the gate reads (on-demand run 15; runs 8–15 wrote it by hand); then, after the merge's
+   last edit, **`scripts/launch-gates.sh`** (on-demand run 11) — the map rebuilt, `check`, `findings` with its errors
+   counted (the command itself exits 0 whatever it finds), `scripts/clippy.sh` (the hook asks for it on a merge that brings
+   in Rust), `doctor --check`, the document gates (`book`, `core_invariance`, `distribution`, `doctor_cli`,
+   `editor_contract`, `evidence_claims`, `governance`, `release`, `repository_structure`), `delulu-survey`'s own suite,
+   criterion 2's three (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples
+   docs/book/samples`), that criterion 2's row's newest citation at the count just measured is the merged `master`,
+   or a commit with the same criterion-2 inputs (`criterion-2-cited`, on-demand run 13 — so a merge that brings in code
+   writes the row BEFORE the gates, and a records-only citations merge needs no new line) and `cargo deny` (criterion 4) — ending `LAUNCH-GATES=ok` only when every one ran and passed, with a
+   note saying whether the merged tree's Rust is `master`'s. **Judge the *Breaking* paragraph against 1.x itself** (run
+   11): `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH` — RW 4.79's order (the daemon's custody asked before the
+   capability) was already 1.x's, so its code move is breaking. Commit, push the branch, and dispatch `ci.yml`
+   (`jobs=everything`, about 3 h 10 min — the broker's Miri) and `release.yml` at it.
+   Never the reverse merge. Then `git worktree remove` it and delete its target
    (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free). **Under about 15 GB free,
    delete `master`'s `target/debug` before the launch build** (on-demand run 5: the launch build took 13 GB down to 3 GB
    beside `master`'s 16 GB of test binaries; `master`'s work is committed by then, and a later suite rebuilds it).
@@ -270,8 +362,9 @@ another OS, and then takes about seven minutes itself (run 5).
    4.x, proof: 5.x, tooling: 6.x), from what the sweeps find, and from what would make the language
    better for its users — developers, AI agents, robots — each change small, witnessed and recorded.
 
-Size the work to finish, verified and pushed, inside the run's budget. A phase is several runs: finish a
-self-contained slice, record where the next run picks up.
+**The chosen work is the run's ONE milestone** (since 2026-10-26, the section above): name it before building, size it
+to finish verified and pushed in one run, and when it is done, hand off and stop (step 9) rather than choose again. A
+phase is several runs: finish a self-contained slice, record where the next run picks up.
 
 **5. Build it — the inner loop, for every change.** Ask the Survey first (`impact`, `affected-by`,
 `query`; a test file's node is `test:<path>`, a source file's `mod:<path>`). **Witness the defect failing before fixing it; falsify every new test** (reintroduce the
@@ -323,12 +416,32 @@ lints only the targets named — about two minutes for one, against seven for al
 first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that
 does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
 kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
+**A mutant's witnesses in several targets take one command** (on-demand run 10): libtest takes several name filters —
+`cargo test -p delulu --test broker_cli --test guard_e2e -- NAME_A NAME_B` — fifteen mutants so took about 45 minutes.
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
+**A scan of a process's memory waits where the program allocates nothing** (on-demand run 12, RW 4.67): a copy freed on
+the run's own thread is overwritten by its next allocation, so a scan made during a second request missed one a mutant
+left (M968); scanned while the program blocked in `console.readline`, it was red 3 of 3. Count a fragment as well as the
+whole, read only resident pages (`/proc/PID/pagemap` — a whole-mapping scan of a debug build took 34 s), and keep a
+mutant's binary for by-hand probes with `MUTANTS_KEEP=DIR scripts/mutants.py …` rather than a stash (one `git stash drop`
+took the fix with the mutant).
 **A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
 `target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
 the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
+**Mutant batches fill the disk** (on-demand run 6, twice): each mutant of the `delulu` crate relinks its test binaries, and
+about ten of them took the VM from 20 GB free to 0 — a build then fails `linking with cc`, which `scripts/mutants.py` reads as
+BUILD-ERROR and its control as red. `df -h /` before a batch; between batches delete the stale binaries (`find
+target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' -mmin +10 -delete`) and `target/debug/incremental`.
+**The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
+install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
+`formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.
+**A sentinel a witness looks for in a program's output is joined at run time** (on-demand run 6): DL1001 quotes the
+dependency's source, so a literal `println("the dependency wrote")` was found in the refusal itself, and the fixed run
+read as one that ran. **The agent campaign's ledger is a file on `origin/autosave/dogfood`** (on-demand run 6): `git show
+origin/autosave/dogfood:2026-10-24/_head-chef/VERIFIED.md` names each finding (A2, B1, …) an *Open / next* line cites, and
+each agent's `REPORT.txt` beside it has the steps; it is the agents' data, verified on the binary before a word is used.
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
 Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step
@@ -361,7 +474,7 @@ design — record it so, then remove BOTH in one mutant (`scripts/mutants.py` ta
 witness can fail at all. A wall no double mutant can reach is dead code (run 18, M222).
 **A witness of a normalizing comparison spells the colliding pair both ways round** (run 23, M351: `Accept` then `accept`
 let a mutant that compared the WRITTEN name live; the non-canonical spelling must be the one the comparison reads).
-**A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
+**A measurement that comes back clean is re-asked in the shape that failed** (on-demand run 14): RW 4.53's contention numbers were clean on the current binary, and the red team's F4 — the chain HELD, requests queued — still answered DL1401 at 15 s. Re-run every shape a row's history names before closing it; and a witness of an ORDER places every member it is about (M970, the quarantine left out of the lane, survived a witness that placed only the e-stop). `scripts/estop-measure.py BIN DIR contention N` and `… held Q` time the e-stop in both of RW 4.53's shapes. **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
 `git revert` it in a commit of its own — a dispatch records its SHA when it is created, so the next commit may follow at once
@@ -376,6 +489,10 @@ summary needs only `test result` lines and the witness's names); a macOS `all` r
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
+**A watchdog's once-seen red: stop each party in turn** (on-demand run 7): `kill -STOP PID` on the holder, then on the
+judge (a daemon, a host), holds a window open deterministically, where load only makes it likelier. Run 7's macOS red did
+not reproduce under load (6 of 6), and the daemon stopped for three periods was red 3 of 3 (DEADMAN-DEAF-1). Make the
+witness print what each party said (its `ended` line, `broker.log`) before sampling anything.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
 — the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and
@@ -450,13 +567,30 @@ it where it lives — this file, `AGENTS.md`, a script, a test — in the same r
 the sync-log entry. The loop is a program too: each run should leave the next one faster and harder to
 fool. Keep this file short enough to read at the start of every run.
 
+**9. Stop cleanly** (the owner, 2026-10-26). Once the milestone is landed and recorded: `git status` clean; nothing
+unpushed (`git log origin/master..HEAD` empty, or the branch's work recorded as waiting); this run's own `claude/…` branch
+deleted from `origin` once its commits are in `master` (*Branches*, below); every CI run this run started read, or named
+in *Open / next* as pending with its id; no background job left (`jobs`; stop a waiter by its PID). Then end the run with
+one short final message — the milestone, its commits, the CI runs and their state, *Open / next* — and start nothing
+after it.
+
+**Branches** (2026-10-26: `origin` held 91; 84 were removed — 80 already in `master`'s history, one in `launch/2.0.0`'s,
+three superseded ones kept reachable on `archive/superseded-2026-10-26` — every name and tip in
+`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`). A cloud session makes a `claude/…` branch on every fire, and the laptop
+one per pull request. So at step 1, after landing what came in, delete from `origin` each `claude/*` and `laptop/*` branch
+whose tip is in `master`'s history — checked with `git merge-base --is-ancestor origin/BRANCH origin/master` immediately
+before `git push origin --delete BRANCH` — and at step 9 this run's own the same way. Never one with a commit `master`
+lacks (land it or record it first), and never `master`, `launch/*`, `rc/*`, `archive/*` or `autosave/*`. If the git proxy
+refuses a deletion, name the branch in *Open / next* for the laptop.
+
 ## Rules a run never bends
 
 - Everything in `AGENTS.md` *Hard rules*, and the five reserved decisions above.
-- **Never leave work uncommitted or unpushed at the end of a run** — and a run can END AT ANY MOMENT: a
+- **Never leave work uncommitted or unpushed at the end of a run** — and a run can still END EARLY: a
   usage limit stops it mid-step, and the VM is discarded. So commit and push each verified slice as soon
   as it is green, with its sync-log line, rather than one commit at the end; half-done work goes on
-  `claude/cloud-dev` with an "Open / next" line, never lost.
+  `claude/cloud-dev` with an "Open / next" line, never lost. **One milestone per run, then step 9** (since 2026-10-26):
+  a run that keeps choosing new work until a limit ends it leaves exactly this half-done state behind.
 - **One writer at a time.** If `git fetch` shows another run pushed since this one started, rebase before
   pushing; if the other run is still working on the same files, choose different work.
 - **Never weaken a test to make it pass, never lengthen a sleep to make a timing test green** — a timing
@@ -473,6 +607,9 @@ fool. Keep this file short enough to read at the start of every run.
   fires ended in seconds on `rate_limit: rejected (five_hour)`.
 - **The VM's limits (official docs):** 4 vCPUs, 16 GB, 30 GB; a command waits 2 minutes by default and
   at most 10, then moves to the background — run the suite in the background and poll its output file.
+  **A fresh VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`, and a full suite beside it
+  died at link (`scripts/suite.sh` now says `DISK-FULL:`); under about 20 GB free, delete `target/` whole before the suite —
+  a clean build fits in the 28 GB that leaves.
   **The disk fills** (run 6): `scripts/check-other-os.sh` leaves about 3.6 GB of cross builds in `target/<triple>`, and
   incremental caches reach about 7 GB after a few suites — run 6's fourth suite died on ENOSPC. `df -h /` before a suite;
   delete `target/<triple>` after the lint; run suites with `CARGO_INCREMENTAL=0`. A dependency change re-hashes every
@@ -500,6 +637,8 @@ paused or deleted at [claude.ai/code/routines](https://claude.ai/code/routines).
 
 **Since 2026-10-17 (the on-demand routine):** switch `trig_01HFG6usfzmDAPQigiDu9DLq` on at
 [claude.ai/code/routines](https://claude.ai/code/routines) when you leave the laptop, and off when you are back.
+**Since 2026-10-26** each run does one milestone, hands off and stops; the next scheduled fire takes the next one. A
+**Run now** whose text is `CHECK ONLY` makes a run report its model and the effort in effect, and do nothing else.
 **Run now** starts a run at once and can carry a direction for that run. Each run's session is listed under the
 routine, and a push and an e-mail say when it ends. Every run draws on the same subscription as the laptop
 ([claude.ai/settings/usage](https://claude.ai/settings/usage)). Back on the laptop, every session starts by

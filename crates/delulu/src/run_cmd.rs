@@ -83,9 +83,11 @@ pub(crate) fn load_package_flattened(
     }
     let program = delulu_check::deps::check_workspace(&ws);
 
-    // The authoritative gate.
+    // The authoritative gate, the supply chain's included (RUN-PIN-1): code runs here, so a dependency its pin refuses,
+    // or a package beyond its own manifest, is refused here as `build` refuses it.
     let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
     diags.extend(program.diagnostics.iter().cloned());
+    diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
     if errors(&diags) > 0 {
         print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
         return Err(1);
@@ -158,7 +160,8 @@ pub(crate) fn flattened_package(dir: &str) -> Option<String> {
         return None;
     }
     let program = delulu_check::deps::check_workspace(&ws);
-    if errors(&ws.diagnostics) + errors(&program.diagnostics) > 0 {
+    let gate = delulu_check::deps::supply_chain_gate(&ws, &program);
+    if errors(&ws.diagnostics) + errors(&program.diagnostics) + errors(&gate) > 0 {
         return None;
     }
     let entry = program.entry_module.clone().or_else(|| ws.root_entry_module())?;
@@ -340,7 +343,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         }
         Err(e) => {
             let msg = e.message();
-            let d = Diagnostic::error(wasm_fault_code(&msg), format!("`{file}`: {msg}"));
+            let code = wasm_fault_code(&msg);
+            let d = Diagnostic::error(code, format!("`{file}`: {}", wasm_fault_words(&msg, code)));
             print_diagnostics("run", &[d], &map, None, opts.json);
             1
         }
@@ -531,6 +535,20 @@ pub(crate) fn refuse_runtime_paths_in_write_scopes(opts: &Opts, write_roots: &[s
     None
 }
 
+/// D-V2-21 before anything else, on every route that runs a program (the sandboxed one too — A18): the scopes the
+/// command line's `--grant` flags would let the program write, each read as `Grants::add` reads it. A lease's scopes are
+/// known only once it is redeemed, and each route checks them again then.
+pub(crate) fn refuse_runtime_paths_in_command_line_scopes(opts: &Opts) -> Option<i32> {
+    if opts.report_out.is_none() && opts.trace_out.is_none() {
+        return None;
+    }
+    let mut g = Grants::default();
+    for spec in &opts.grants {
+        let _ = g.add(spec);
+    }
+    refuse_runtime_paths_in_write_scopes(opts, &g.build_root().fs_write)
+}
+
 /// Write a runtime-owned file without following a symbolic link at its final component.
 pub(crate) fn write_nofollow(path: &str, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write as _;
@@ -572,7 +590,8 @@ pub(crate) fn print_egress_notes(log: &delulu_runtime::egress::EgressLog) {
             eprintln!(
                 // `get` and `get_with` alike (P9-04 (a)): the request is named by its URL.
                 "note: the request to `{}` was not delivered: {} [egress: {}]",
-                r.url.escape_debug(),
+                // B6: as written, its control characters escaped and its backslashes not doubled.
+                delulu_diag::terminal_line(&r.url),
                 reason.explain(),
                 reason.code()
             );
@@ -928,10 +947,11 @@ pub(crate) fn redeem_lease(
         1
     };
     let unreachable_msg = |e: &dyn std::fmt::Display| {
+        let detail = crate::cli::broker_unreachable_detail(e);
         format!(
-            "broker unreachable: {} — start it with `delulu broker start` \
-             (fail closed, invariant 27: a lease run never falls back to embedded custody)",
-            crate::cli::broker_unreachable_detail(e)
+            "broker unreachable: {detail} — {} (fail closed, invariant 27: a lease run never falls back to embedded \
+             custody)",
+            crate::cli::broker_unreachable_advice(&detail)
         )
     };
     let peer = format!("pid:{}", std::process::id());
@@ -1074,14 +1094,8 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     }
     // The grants named on the command line are refused here, before anything else; a lease's or a
     // manifest's are refused again once known (`cmd_run_inner`).
-    if opts.report_out.is_some() || opts.trace_out.is_some() {
-        let mut g = Grants::default();
-        for spec in &opts.grants {
-            let _ = g.add(spec);
-        }
-        if let Some(code) = refuse_runtime_paths_in_write_scopes(&opts, &g.build_root().fs_write) {
-            return code;
-        }
+    if let Some(code) = refuse_runtime_paths_in_command_line_scopes(&opts) {
+        return code;
     }
     // PS-B-01 (D-V2-25): the main program's budgets, decided before anything runs — a budget that
     // cannot be meant (zero, or a dimension nobody enforces) is refused here, not discovered later.
@@ -1403,11 +1417,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         if foreign_process && program_binds_foreign && !opts.json {
             eprintln!("note: --foreign-isolation process is not yet applied on the WASM engine (foreign runs in-process); use the interpreter engine for worker isolation");
         }
-        let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
+        let (wasm, sites) = match delulu_wasm::compile_checked_sited(&checked.module, &checked.result) {
             Ok(w) => w,
             Err(e) => {
-                let d =
-                    Diagnostic::error(e.code(), format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
+                let d = wasm_refusal(&e, "omit `--engine wasm` to run it on the interpreter");
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 return 1;
             }
@@ -1474,8 +1487,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 0
             }
             Err(e) => {
+                // B5: in the interpreter's words, at the place it names (the innermost frame the site map knows).
                 let msg = e.message();
-                let d = Diagnostic::error(wasm_fault_code(&msg), format!("WASM engine: {msg}"));
+                let code = wasm_fault_code(&msg);
+                let mut d = Diagnostic::error(code, wasm_fault_words(&msg, code));
+                if let Some(span) = sites.locate(e.frames()) {
+                    d = d.with_span(span, "runtime fault here");
+                }
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 1
             }

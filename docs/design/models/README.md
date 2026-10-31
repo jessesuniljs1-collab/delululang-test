@@ -126,7 +126,7 @@ which TLC reports as `null` rather than as an error you would notice. The parent
 
 ---
 
-## `authority_algebra.py` — the eleven-dimension order, proved in Z3
+## `authority_algebra.py` — the twelve-dimension order, proved in Z3
 
 ```sh
 pip install z3-solver
@@ -134,12 +134,14 @@ python docs/design/models/authority_algebra.py
 ```
 
 Symbolic verification of what `attenuation_check` actually computes (`authority.rs`): the
-conjunction of seven exact-set dimensions (the effect set among them; `secret_to`, each secret's
-audience, since P9-04 (d), D-V2-133), two path dimensions, the device dimension and — since PS-B-05 —
+conjunction of eight exact-set dimensions (the effect set among them; `secret_to`, each secret's
+audience, since P9-04 (d), D-V2-133; `net_special`, the special-use reach, since RW 4.86, D-V2-188), two path dimensions, the device dimension and — since PS-B-05 —
 the budget dimension — and since P9-05 (b) (D-V2-139) the `net` dimension's path patterns, whose order is proved
-sound and whose meet exact in §2d. **41 obligations, all discharged**, `RESULT: every obligation discharged`; nine
-mutants CI requires to fail (`DELULU_Z3_MUTANT`), three of them the path order's (`net-star-under-literal`,
-`net-rest-under-fixed`, `net-meet-star-wins`).
+sound and whose meet exact in §2d — and since P9-05 (d) (D-V2-182) its entries' methods, in §2e — and since RW 4.86 the
+special-use reach within `net`, in §2f. **58 obligations, all discharged**, `RESULT: every obligation discharged`;
+fourteen mutants CI requires to fail (`DELULU_Z3_MUTANT`), three of them the path order's (`net-star-under-literal`,
+`net-rest-under-fixed`, `net-meet-star-wins`), two the methods' (`net-method-dropped`, `net-method-meet-union`) and three
+the special-use reach's (`net-special-dropped`, `net-special-meet-union`, `net-special-keeps-orphans`).
 
 Until PS-B-05 the full conjunction here modelled seven set dimensions while the obligation said "all
 nine dimensions at once"; the code has eight. The laws are uniform in that number, so nothing proved
@@ -151,7 +153,8 @@ was false, but the sentence claimed a dimension the model did not carry. It now 
 | Device (`device_scope.rs::within`/`::meet`) | reflexive, transitive, meet is a lower bound, meet is the **GLB**, antisymmetric on its fields |
 | Budget (`budget_scope.rs::within`/`::meet`, PS-B-05) | reflexive, transitive, antisymmetric on the value, meet is a lower bound, meet is the **GLB**, idempotent, commutative, associative — over unbounded integers, with absence as the top |
 | Secret audiences (`authority.rs` `secret_to` beside `secrets`, P9-04 (d)) | a pair lives only beside its secret's name: canonicalization is well-formed, never widens, is idempotent, keeps a well-formed authority, is monotone; the meet keeps well-formedness and is ⊑ both |
-| **The full conjunction** | reflexive, transitive, **meet ⊑ both operands — the no-widening law, all eleven dimensions at once**, meet is the GLB, **no budget under a budgeted parent is never ⊑**, and **a `secret_to` pair the parent lacks is never ⊑** |
+| Special-use reach (`authority.rs` `net_special` within `net`, RW 4.86) | an entry lives only within `net`: canonicalization is well-formed, never widens, is idempotent, keeps a well-formed authority, is monotone; the meet keeps well-formedness and is ⊑ both |
+| **The full conjunction** | reflexive, transitive, **meet ⊑ both operands — the no-widening law, all twelve dimensions at once**, meet is the GLB, **no budget under a budgeted parent is never ⊑**, **a `secret_to` pair the parent lacks is never ⊑**, and **a special-use reach the parent lacks is never ⊑** |
 
 The last obligation is there because the four product laws hold for ANY product of lattices:
 deleting the budget from the model's conjunction left all four discharged (measured, PS-B-05). The

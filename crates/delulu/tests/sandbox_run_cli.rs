@@ -480,12 +480,13 @@ fn a_package_runs_sandboxed_as_it_runs_plainly_and_its_manifest_binds_both() {
     assert_eq!(refused.status.code(), Some(1), "{}", out(&refused));
     assert!(out(&refused).contains("DL0703"), "{}", out(&refused));
 
-    // The manifest binds the sandboxed run: a package declaring no effects runs under neither.
+    // The manifest binds the sandboxed run: a package declaring no effects runs under neither. A package is refused by
+    // the supply-chain gate, DL1009 as `build` refuses it (D-V2-186); a single file, below, by DL0701.
     std::fs::write(pkg.join("delulu.toml"), manifest("")).unwrap();
     for args in [vec!["run", p, "--grant", "console"], vec!["run", p, "--sandbox", "--grant", "console"]] {
         let o = delulu(&args);
         assert_eq!(o.status.code(), Some(1), "`{}`: {}", args.join(" "), out(&o));
-        assert!(out(&o).contains("DL0701"), "`{}`: {}", args.join(" "), out(&o));
+        assert!(out(&o).contains("DL1009"), "`{}`: {}", args.join(" "), out(&o));
         assert!(o.stdout.is_empty(), "nothing ran: {}", out(&o));
     }
 
@@ -1030,5 +1031,27 @@ fn a_refusal_on_the_channel_is_its_own_audit_record_and_a_clean_run_writes_none(
     // The chain still verifies with the new record kind in it.
     let v = run(&["audit", "verify"]);
     assert_eq!(v.status.code(), Some(0), "the chain must still verify:\n{}", out(&v));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.39 (seen 2026-10-31 while closing B5): a sandboxed guest's fault named no place — `guest: error[DL0902]: …` alone,
+/// where an ordinary run points at the expression — because the guest was never told the program's name. It is now sent
+/// the file's last component, and the guest's fault reads as the ordinary run's, each line marked as the guest's. The
+/// host's directories are never sent: the program is named here by its absolute path, and no guest line carries it.
+#[test]
+fn a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories() {
+    let dir = tmp("place");
+    let file = dir.join("share.delulu");
+    std::fs::write(&file, "module share\n\nfn main(root: Root) {\n    let parts = 0\n    let each = 10 / parts\n}\n").unwrap();
+    let f = file.to_string_lossy().to_string();
+    let o = delulu(&["run", &f, "--sandbox"]);
+    let err = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let guest: Vec<&str> = err.lines().filter(|l| l.starts_with("guest:")).collect();
+    assert!(guest.iter().any(|l| l.starts_with("guest: error[DL0902]")), "the guest's fault: {err}");
+    assert!(guest.iter().any(|l| l.contains("--> share.delulu:5:16")), "at its place: {err}");
+    assert!(guest.iter().any(|l| l.contains("runtime fault here")), "{err}");
+    let parent = dir.file_name().unwrap().to_string_lossy().to_string();
+    assert!(!guest.iter().any(|l| l.contains(&parent)), "no guest line names the host's directory `{parent}`: {err}");
     let _ = std::fs::remove_dir_all(&dir);
 }

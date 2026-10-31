@@ -17,10 +17,14 @@ usage: scripts/mutants.py SPEC.json [NAME ...]
              A mutant with `edits` makes several (every anchor checked before any file is written) — for a check
              built as two walls, where only removing BOTH shows the witness can fail at all (routine run 24).
   NAME …   : run only these mutants (default: all, in the file's order)
+  MUTANTS_KEEP=DIR (environment): after each mutant's command, copy the `delulu` binary it built (MUTANTS_KEEP_BIN,
+             default target/debug/delulu) to DIR/delulu-NAME, so a survivor can be probed by hand against the mutated
+             code — never undo a mutant with `git stash` to build one (on-demand routine run 12: a `git stash drop` took
+             the fix with the mutant).
 Exit 0 when every mutant is RED and the control is green; 1 otherwise (a SURVIVED or BUILD-ERROR is a question about the
 witness or the mutant — routine run 11: read what the mutated code returns before recording a survivor).
 """
-import json, os, re, subprocess, sys
+import json, os, re, shutil, subprocess, sys
 
 
 def no_fail_fast(cmd):
@@ -78,6 +82,10 @@ def main():
             open(path, 'wb').write(text.encode('utf-8'))
         try:
             code, built, totals, failed = run(m.get('test', spec['test']))
+            keep = os.environ.get('MUTANTS_KEEP')
+            if keep and built:
+                os.makedirs(keep, exist_ok=True)
+                shutil.copy2(os.environ.get('MUTANTS_KEEP_BIN', 'target/debug/delulu'), os.path.join(keep, f'delulu-{name}'))
         finally:
             for path, original in originals.items():
                 open(path, 'wb').write(original)

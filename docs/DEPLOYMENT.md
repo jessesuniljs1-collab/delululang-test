@@ -74,6 +74,11 @@ the anchor private key it cannot mint a certificate, and unsigned issuance is re
 without the flag, downgrading you to Tier 0. It cannot do so *quietly* — every start records its
 effective mode in the hash-chained audit log — but it can do it.
 
+A certificate carries every dimension a delegation can name (since 2026-10-24): `--secret NAME` and
+`--secret-to NAME@HOST[:PORT]` for a broker-held secret and where it may be sent, `--declassify`, `--foreign-c`,
+`--foreign-python` and `--budget`. It names a secret and never carries its value: store the value on the delulu host
+with `delulu secrets set NAME VALUE` before `broker start`.
+
 > **Scopes in a certificate must be ABSOLUTE.** A relative path names a location only the signing
 > machine's working directory could mean; `certify` refuses it and tells you the absolute form.
 
@@ -489,14 +494,17 @@ The monitor reads only the audit chain and acts only as `g_M`: the broker lets a
 descendant, so it can stop the runs delegated under `g_M` and nothing else. A quarantine revokes the offending run's node —
 its devices park and it is ended — and the revocation's record carries the rule and the records that fired it. The rules:
 `envelope` (any envelope refusal), `special-use` (any fetch refused for reaching a loopback, private, link-local or metadata
-address — the egress client refuses it and records why) and `denies=N/MS` (N refusals within MS milliseconds). Two
+address — the egress client refuses it and records why) and `denies=N/MS` (N refusals within MS milliseconds — a use the program's own capability refused among them, recorded
+`refused_by: capability`, RW 4.79). Two
 limits, said plainly: `g_M` *holds* the runs' authority (a parent bounds its child), and what keeps the monitor from using
 it is that it performs nothing but a revoke and, as everywhere, the OS account it runs as — run it as an account the
 agent cannot reach (Tier 2). And it is a slower second line: each run's own heartbeat and TTL stay the real-time stop.
 
 **If the monitor dies, its runs stop** (`--on-monitor-death quarantine`, the default; D-V2-106). The monitor arms a dead-man on
 `g_M` in the broker and beats it every poll; if the beats stop for `--death-after MS` (by default the larger of 2 s and eight
-polls), the broker revokes `g_M` — every run under it — and records that it was the monitor's silence. Killing, stopping or
+polls), the broker revokes `g_M` — every run under it — and records that it was the monitor's silence. The period counts only
+time the broker could hear: a broker that was itself stopped or not scheduled does not count that time as the monitor's
+silence, and `broker.log` names it (D-V2-194); a run's own dead-man (below) is judged the same way. Killing, stopping or
 hanging the monitor therefore quarantines its runs, and so does Ctrl-C: end a watch with `--for MS` (it disarms, recorded) or by
 revoking `g_M`. `--on-monitor-death continue` lets the runs outlive their monitor. A beat carries a key only the monitor holds; on
 Linux the monitor's memory is closed to other processes of the same user, and on macOS and Windows that rests on the OS account,
@@ -528,7 +536,11 @@ shows as live only what a running holder holds. A `--lease` run's own node is th
 
 These are known, documented, and not fixable by configuration:
 
-- **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does.
+- **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does. Such a process reaches the broker's socket
+  and its state directory alike, and `secrets.json` there holds each secret's bytes in plaintext — so it can also ask the
+  broker for the bytes of a secret a node may only send (`SendSecret`), though the node holds no `Declassify`. The
+  socket's door is the directory's: whoever can ask could already read (RW 4.66, D-V2-197). A sandboxed guest is the one such
+  process that reaches neither: it opens no socket, and the state directory is refused to it.
 - **A concurrent writer into a granted directory — closed as a race, kept as advice.** Filesystem
   containment used to be a check-then-open, so a second writer could swap a checked file for a symlink
   in between (`CONTAIN-TOCTOU-1`). Since V2 P5c (2026-09-27, FS-RACE-1) every file effect opens the

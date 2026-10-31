@@ -4712,3 +4712,717 @@ request at its call ("only `https://` is fetched"), and the plan had been approv
 refused it with a misleading reason ("names `http`": `prim::host_of` strips only `https://`). The fixture exists to
 perform `Net`, and now requests `https://example.com`; its five tests assert what they did.
 
+
+## D-V2-182 — P9-05 (d), first slice: a `net` entry names its methods — `HOST[:METHODS][/PATTERN]`, one spelling for each set, none named = GET alone; ordered by subset and met by intersection everywhere the entry is read — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**Context.** RW 2.12: a `net` grant could not limit the methods a program may use on a host. That was moot while
+`http` could only GET, and it stops being moot with the first primitive that makes another request: added to today's
+grammar, such a primitive would let every `net=HOST` grant ever written POST, PUT or DELETE there. That would widen
+what existing grants mean, which the semver-authority law forbids. So the dimension comes first, with no primitive
+yet that needs it (D-V2-55, `V2_OPENSHELL_STUDY.md` §4.12).
+
+**Decision.**
+1. **The grammar.** `net=HOST[:METHODS][/PATTERN]`, METHODS names from `GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+   `DELETE`, separated by `,`. Each set has one spelling: each name once, in that order, and never `GET` alone. An
+   entry naming no methods allows **GET alone**, the one request a program has made, so no grant reaches more than it
+   did. After an IPv6 literal the methods follow its `]`. The design's `:GET,POST/repos/**` spelling is kept.
+2. **A suffix that is not methods stays in the host** (`netscope::read`). `h.com:8443` reads as before, a host
+   string no request names, so the broker's host check matches it no more than it did. Every grant parser refuses it
+   through `check_entry`, in words: "a `net` entry names no port".
+3. **The order and the meet.** `entry_within`: the same host string, the child's methods a subset of the parent's,
+   then the paths as D-V2-139. `entry_meet`: the methods intersected (none in common: no meet), then the paths. The
+   canonical form (an antichain) is unchanged; a single spelling per set keeps equivalent sets identical.
+4. **The judge.** `judge(entry, method, host, path)`: the host, then the path, then the method.
+   `Verdict::OtherMethod` ranks after `OutsidePath`, since "this path is granted, not by this method" is the more
+   telling refusal. Every caller asks with `GET` until a primitive makes another request: the runtime's first check
+   (DL0904, worded about the method), every egress hop, the broker's use check (a new `Denial::NetMethod`, DL0904,
+   no new code) and `--within`. Under `--within`, a computed URL is *within* only when every boundary entry takes
+   GET on every path. The OpenShell export refuses a method scope, as it refuses a path scope: the host alone would
+   grant every method there.
+5. **Hardened on the way.** An entry naming no host takes no request, not even one whose URL names no host
+   (`host_matches("", "")` was true; such a URL is refused earlier, so this was latent).
+6. **Not yet:** the primitive, the method in the broker's op and record, OCSF's `http_request.http_method`, a
+   redirect's method (a 303 turns a POST into a GET), and the static half (`authority --json` `requests`' method,
+   `--grants` proposing it).
+
+**Evidence.** `netscope` tests: the grammar (11 refused spellings, each in its words; a malformed suffix read as a
+host), the judge, and the order and the meet EXACT with methods over a bounded domain. The canonical-form universe
+gained two method entries, and the `--within` agreement test generates three. `egress_cli`
+`a_method_scoped_grant_takes_only_its_methods` runs at L0 and from a guest. It failed on the previous code ("host
+… is not in the granted allowlist": the methods were read as part of the host). `sandbox_openshell_cli` failed on
+the previous code too (exit 0, a document printed). Mutants N1 to N6 were red in the unit tests: methods out of the
+order, out of the judge, unparsed, a union meet, a malformed suffix dropped, the default allowing every method.
+N1, N2, N3 and N5 were also red end to end. Z3 §2e: 9 obligations proved (50 in all). Its mutants
+`net-method-dropped` and `net-method-meet-union` each leave obligations undischarged, and CI requires both.
+
+## D-V2-183 — P9-05 (d), second slice: `Cap[Http].post(url, headers, body)` and `post_with_secret`, the first requests that are not a GET — judged by its method at every check, its method carried to the broker and its record, a redirect's method by its status — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**Context.** RW 2.11 gave an agent a way to call an authenticated API, but only by GET, and most APIs take their writes
+by POST. D-V2-182 made the method dimension first, so that a POST could not widen any grant written before it: an
+entry naming no methods allows GET alone.
+
+**Decision.**
+1. **The primitive.** `post(url: Str, headers: Map[Str, Str], body: Str) -> Result[Str, NetErr] ! {Net}`. The URL stays
+   argument one, as `get_with`'s, so every check that reads a request's URL reads it there. The headers are held to
+   `get_with`'s rules, and the body is at most 1 MiB (`MAX_REQUEST_BODY`, refused before anything is resolved).
+   `PRIM_TABLE_VERSION` goes from 7 to 8 (additive). Conformance anchor `ref.prim.http.post` with four witnesses
+   (`ENTRENCHED_CHANGE_RECORD.md`).
+   **And `post_with_secret(url, headers, header, secret, body)`**: a POST carrying one `Secret[Str]` in one header,
+   held to `get_with_secret`'s rules. It is never declassified and is sent only to its grant's audience; under the
+   daemon the broker is asked for the bytes for the one origin (`broker_secret_send`, which now judges the request's
+   own method first, so a capability without POST refuses it before a byte is asked). Anchor
+   `ref.prim.http.post_with_secret`, four witnesses.
+2. **Judged by its method everywhere a GET is judged by its path:**
+   - the runtime's first check (DL0904: "a `POST` to … is outside the methods the grant names for it");
+   - every egress hop, by that hop's own method;
+   - the broker's use check under a daemon or lease: the custody's `check_at` carries the method, and the IPC's
+     `Check` gains an optional `method`, absent for a GET, so a GET's frame and record are as before;
+   - `--within`, by the request's method.
+
+   A program asks for `root.http(["HOST:POST"])`, and `--grants` names that line.
+3. **The record.** A use that is not a GET names its `method` beside `url_path`, allowed or refused. OCSF maps it to
+   `http_request.http_method`, which was always `GET` before. A run report's egress hop names its `method` when it
+   is not a GET.
+4. **Redirects.** After a request that is not a GET, a 301, 302 or 303 is followed as a GET with no body, as browsers
+   do, and judged as a GET, so a grant naming POST alone refuses it. A 307 or 308 keeps the method and the body, but
+   only to the origin the program named. The body is the program's data, as its headers are, so a redirect that would
+   carry it elsewhere is refused (`Reason::BodyElsewhere`).
+5. **One implementation for L0 and every guest:** a sandboxed guest's `post` is performed by the host, in the same
+   `prim` arm.
+6. **Not yet:** `post` on the WASM engine (its custody check passes no method, and the compiler does not emit
+   `post`); and PUT, PATCH, DELETE. `deploy plan` decides with
+   `--within`'s verdict (D-V2-176), so it judges a POST by its method too. No test of `deploy plan` with a POST was
+   written in this slice.
+
+**Evidence.** Unit tests on the egress client (`a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status`:
+the body sent, refused under GET alone before anything is resolved, 301, 302 and 303 as GET without a body, 307 and 308
+kept, kept only to the same origin, the size limit, a GET's record unchanged). Over real TLS
+(`a_post_arrives_over_tls_with_its_body`): the request line `POST /items`, its `Content-Length`, its body whole. The
+broker (`a_net_use_is_judged_by_its_method_and_a_post_is_recorded_as_one`) and OCSF (`audit_ocsf_cli`) were also
+tested. End to end at L0 and from a guest: `egress_cli` `a_post_leaves_under_a_grant_that_names_post_and_no_other`
+(TLS out under `:POST`; DL0904 in words about the method under a host-only grant, nothing connects; the report's hop
+names POST). `within_cli` `a_post_is_decided_by_its_method_against_the_boundary` covers the mint and a request decided
+by its method. Mutants: see V2_LOG.
+
+## D-V2-184 — A generic's own type and row parameters are rigid inside its body (GENERIC-RIGID-1); a laundering witness must parse — TAKEN (head chef, 2026-10-24, under the owner's delegation)
+
+**Context.** The owner commissioned agents to build and run DeluluLang programs under conditions the head chef holds
+(2026-10-24). The zero-authority agent (Haiku 5.5) found the effect row escapable through a generic. The checker gave a
+function's generics fresh inference variables for its own body (`make_genv`, "fresh inference variables for this
+checking pass"), so the body could decide them: `T := Int`, `e := {}`. A caller then instantiated them again. So
+`coerce[A, B](x: A) -> B { x }` laundered an effectful closure into a pure type, and a pure function printed. The head
+chef reproduced it against the current binary: `check` exit 0 with "`main` declares effect `Write` it never performs",
+and the run printed under a console grant. It is the P16 class, the effect row escaping, through a door the laundering
+suite never tried.
+
+**Decision.**
+1. **Rigid variables.** `InferCtx` marks a variable rigid (`fresh_rigid_type`, `fresh_rigid_row_var`). Unification never
+   binds a rigid variable. A flexible variable meeting one is bound to it. A rigid type meeting any other type, or a
+   different rigid one, is a mismatch. A rigid row tail is never closed. A flexible tail meeting it is bound to the rigid
+   tail plus the effects it lacks, and only when it holds no effect the rigid side does not.
+2. **Where.** `check_fn` gives the body rigid generics, and so does `check_actor` for its members' bodies. Call sites
+   (`instantiate_fn`) and `spawn` still instantiate flexible ones: the caller picks, and the body holds for every pick.
+3. **Messages** name the parameter the author wrote (`expected T, found Int`; `fn() -> Unit !{e}`). `TypeNames` gains
+   default `type_var_name` and `row_var_name`, and the checker supplies the rigid generics' names.
+4. **The laundering suite** (`crates/delulu-check/tests/laundering.rs`, entrenched) gains five witnesses. Its
+   `rejects_with` refuses a witness that does not lex or parse (any DL01xx or DL02xx). F-3, F-3b and F-4 had written two
+   statements on one line (DL0209) since they were written, and passed through the parser's recovery. Each is repaired,
+   and each is still refused with its own code. Recorded in `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Why this hardens, and redefines nothing.** A generic signature promises its result for every `T` and `e` a caller
+picks, and every call site already instantiated them so. Only the body was checked against one choice of its own. No
+program the rule always meant to accept is refused: `delulu-check` and the conformance suite pass unchanged, and so
+does the stdlib's `Promise[T, e]`. A program that relied on the hole is refused DL0401 (no new code).
+
+**Evidence.** `laundering` 17 passed (12 before). Mutants red: the type guard dropped (three witnesses), the closed-row
+guard dropped, actor generics flexible. Agent C's programs (`p2_09`…`p2_13`, `p3_01`…`p3_03`) are refused DL0401.
+Suites on the laptop: `delulu-check` (all targets), `delulu-conform` and `delulu-wasm` with 0 failures; `delulu`'s `core_invariance` 53, `cli` 19, `examples_run` 1 and `cli_contract` 6 passed. The full suite on three OSes is the pull request's CI run.
+
+## D-V2-185 — `--within` decides a file use at its call, where the source writes its path (B9) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B9, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; confirmed by the head chef on
+the current binary).** `rd.read_text("../forbidden/secret.txt")` on a capability minted for `./allowed` was *within* a
+boundary of `console` and `fs.read=./allowed`, and `run` with exactly those grants refused it (DL0904). `--within` judged
+each file capability at its mint only; the use's path, checked by `prim::resolve_in_anchor` at the call, was never read.
+It is the class D-V2-180 and D-V2-181 closed for secret sends and request paths: a verdict that skips a use-time check.
+
+**Decision.** A use whose path the source writes (`read_text`, `list_dir` and `narrow` on `Cap[FsRead]`, `write_text`
+and `append_text` on `Cap[FsWrite]`, by the checker's type at the call) is decided at its call:
+- **The source shows the capability's mint** (`root.fs_read("DIR")` through a `let`, with `narrow`s of literals; any
+  rebinding forgets it, SEND-REBIND-1's walk): the runtime mints and narrows it and asks `resolve_in_anchor`. A use it
+  refuses is *exceeds*, refused whatever the boundary grants, as a URL the egress client will not read is (D-V2-181).
+  The finding is labelled with the capability's mint line, since no grant lets a capability's use leave its directory.
+- **The source does not show the capability** (a parameter, a field): a relative path that never climbs above where it
+  starts is *within*; a spelling every call refuses (D-NE-29) is *exceeds*; any other path is *inconclusive*.
+- **A computed path** is decided by its capability's mint, as a computed URL is (D-V2-181). **The limit, recorded:** such
+  a use can still be refused at its call (DL0904) under a *within* verdict. It asks for nothing beyond its capability,
+  and the verdict does not judge a name the source does not show.
+
+`--grants` is unchanged. Witness: `within_cli` `a_file_use_is_decided_by_its_path_against_its_capability`, holding each
+verdict on a written path to what `run` does with the same grants. It was red before the fix, and four mutants turn it
+red: a refused use answered within, every path taken as staying below, narrowings skipped, and hostile spellings unchecked.
+
+## D-V2-186 — The supply-chain gate (DL1009, DL1001) holds on every route that runs, ships or plans a package; reports keep answering (RUN-PIN-1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (RUN-PIN-1, on-demand routine run 6, found while verifying the agent campaign's A2 on the binary).** A
+dependency pinned `effects = []` that writes, or one that carries no pin, is DL1001 under `delulu check`, `build` and
+`lock`. `delulu run app` ran it, on the interpreter, in the sandbox and on the WASM engine; `build --target wasm` wrote a
+`.dwx` that ran it; `test` ran the package's tests; `deploy plan` planned it and `sandbox policy` previewed its run. Only
+`build_workspace` and `cmd_lock` called `check_self_authority` and `check_pins`; every other loader checked types alone.
+The specification, the book and `provenance.rs` all say the gate refuses "before any code runs", and its witness drove
+`build` alone.
+
+**Decision.** One function, `delulu_check::deps::supply_chain_gate` — every package within its own manifest (DL1009) and
+every dependency within its consumer's pin (DL1001) — and every route that **runs** a package's code (`run` on every
+engine, `run --sandbox`, `test`), **ships** it (`build`, `build --target wasm`, `lock`, `publish`), **plans or previews**
+it (`deploy plan`, `sandbox policy`) or **accepts** it as a dependency (`add`, which computes the authority it pins) calls
+it and refuses on its errors. The routes that only **report** — `authority`, `why`, the Atlas — keep answering for such a
+package: they run nothing, and an operator needs to read what a package does to decide its pin. No new code: the refusal is
+DL1001 or DL1009, as `build` says it.
+
+**Why.** A pin is the consumer's ceiling on a dependency, and the commonest command, `run`, is the one an author types
+first; a gate that `build` keeps and `run` skips protects only those who build first. The reports are left alone because
+refusing them would hide the answer the pin is decided from.
+
+Witness: `provenance` `no_route_runs_or_ships_a_package_whose_dependency_breaks_its_pin` (seven routes, a broken pin and
+a missing one, and a control that goes through all seven); red on the old code; M806–M810 red.
+
+**What it moved in three existing tests (the full suite, 2,544 passed and these 3 failed).** Two `deploy_cli` fixtures
+were packages `build` refuses: each read a secret its own manifest never declares (DL1009), and `deploy plan` now refuses
+to plan them. They declare the secret now, and every assertion about the profile stands. `sandbox_run_cli`'s package
+whose manifest declares no effects was refused DL0701 by `run`'s manifest gate; the supply-chain gate now refuses it
+first, with DL1009, as `build` does, and the test asserts that code. A single file beside a manifest has no package
+check, and is still refused DL0701.
+
+## D-V2-187 — A special-use host in a delegation is named where it is written, and the node is still made; the `net.special` dimension on a node is the next slice (B1) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Finding (B1, the agent test campaign of 2026-10-24, the least-authority agent, Sonnet 5.5; re-run by on-demand routine
+run 6).** `grants delegate --net 127.0.0.1` was accepted without a word, and every run under the lease was then refused at
+the connect (`special-use`). A broker node has no `net.special` dimension (`grants_from_lease` gives a leased run an empty
+`net_special`, PS-B-02), so no lease reaches a special-use address, whatever its `net` says.
+
+**Decision.** `grants delegate` and `grants certify` — the two places a node's `net` is written — print a note for an entry
+whose host is a special-use address or name (`netclass::special_use_class` of `netscope::host_of`, so a path or a method
+list is no way round it): the node cannot carry `net.special`, a run under it is refused at that connect, and `--grant
+net.special=HOST` on the run reaches it. The node is still made. **Refusing it was weighed and rejected:** such a node
+drives every decision before the connect — the custody, the Guard's permits per destination, the audit — and
+`broker_cli` and `federation_cli` use exactly that to witness a leased send with nothing leaving the machine; a refusal
+would remove a working grant to report a missing one. **The real fix is the dimension**, sized here for the next slice:
+`Scopes::net_special`, a set of `net` entries ordered by `netscope`'s own order and met by `set_meet`, well-formed only
+within `net` (as `secret_to` lives only beside its secret), emitted in JSON only when non-empty (no existing hash, chain
+or certificate moves); `--net-special` on `delegate` and `certify`; the certificate, `AuthoritySpec`, `NodeInfo`,
+`authority_spec_from_grants` and `grants_from_lease`; the Z3 model's dimension; and the proposal flow, whose filing says
+a special-use reach is never filed while a `net.special=HOST` line passes its check (code reading, unwitnessed). With the
+dimension, a plain `--net` special-use host can be refused as `--grant net=` refuses one (D-NE-28).
+
+Witness: `broker_cli` `a_special_use_host_is_named_where_a_delegation_is_written_not_first_at_a_connect` (four
+spellings, both verbs, a control); M811–M814 red.
+
+## D-V2-188 — A node carries a special-use reach: `net.special` joins the authority order as its twelfth dimension (RW 4.86, B1's fix) — TAKEN (head chef, 2026-10-25, under the owner's delegation)
+
+**Why.** A run is granted a special-use host only by `--grant net.special=HOST` (D-NE-28), and a node had no such
+dimension, so no lease could hand that reach on: an agent under a delegation could not reach a loopback test service or
+a private-range host its operator meant it to (B1; D-V2-187 named the gap where the grant is written, the same run).
+
+**Decision.** `Scopes::net_special`, a set of `net` entries in `net`'s grammar:
+- **Order and meet** are `net`'s own (`netscope::set_within`, `set_meet`): a child reaches a special-use host only where its
+  parent does, for the same host, methods and path or fewer.
+- **Within `net`**: an entry is kept only within some `net` entry — the runtime mints a capability by `net` first and asks
+  this set after — so `Scopes::canonicalized` drops an orphan, as it drops a `secret_to` pair beside no secret.
+- **Written only when non-empty** (`"net.special"` in the canonical JSON), so every existing node's hash, every chain record
+  and every certificate is byte-identical; a peer that predates the field reads "no reach" (`serde(default)`), the narrow
+  direction.
+- **Spelled** `--net-special HOST` on `grants delegate` and `grants certify`, which puts the host in `net` too, as
+  `--grant net.special=` puts it in both for a run. Plain `--net` with a special-use host still makes the node, with the
+  note of D-V2-187 (now naming `--net-special`): the tests that use such a node as a never-connecting stand-in keep their
+  meaning.
+- **Carried** by the certificate, the wire (`AuthoritySpec`, `NodeInfo`), the daemon's conversions, a `--broker daemon`
+  run's root (`authority_spec_from_grants`), a lease's run (`grants_from_lease`), proposals' join and `grants diff` (a
+  reach NEW holds and OLD lacks is a scope expansion of its own).
+- **Proved** in the Z3 model: §2f's seven obligations and the full conjunction's tenth set dimension with its own teeth
+  obligation (58 obligations); three new mutants, all caught.
+
+**Not witnessed by a mutant (code reading):** `authority_spec_of`'s field (it serves plugin attenuation and proposals'
+`asks`, neither of which carries a reach in any test) and `authority_spec_from_grants`'s (a `--broker daemon` run's root;
+its own egress already reads the run's grants).
+
+Witnesses: `broker_cli` `a_lease_reaches_a_special_use_host_only_when_its_node_names_one` (a loopback listener connected
+under `--net-special`, untouched under `--net`; DL0802 for a child claiming the reach; `grants diff`); the broker's
+`a_special_use_reach_lives_within_net_and_attenuates_like_it` and the certificate's every-dimension round trip. M818–M824
+red.
+
+## D-V2-189 — `Async` is not authority: a lease bounds what a run reaches, and its budget bounds what it computes (A17) — TAKEN (head chef, 2026-10-26, under the owner's delegation)
+
+**Finding (A17, the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, low/medium).** A lease whose conditions
+read *"Write only: the console"* ran an actor program, because `spawn` and behaviour sends (the effect `Async`) are not
+gated by a lease. The agent's own check: an actor "bomb" under that lease (each behaviour spawns two more actors, to a
+depth of 40), run with `--limits mem=268435456,cpu=20,wall=30`, was stopped after 2 s at 258.1 MiB by the memory budget,
+exit 1, and its report says `stopped_by: memory`. The ledger asked for a decision.
+
+**Decision: kept as it is, and said where an operator will read it.** `Async` names nothing outside the run: no file,
+host, device, secret or foreign library. No capability carries it, and no lease dimension could. Spawning an actor is
+computation inside the run, as a loop is, and computation is bounded by the run's budget (`--limits mem,cpu,wall`), which
+covers every actor the run starts. A lease that says "the console only" reaches the console only, actors or not. Gating
+`Async` by a lease would make it authority over nothing. It would also be a new dimension of the authority order, which
+is redefining Authority rather than hardening it.
+- `delulu authority` already lists `Async` among a program's effects (checked on the builder's `actors/primes.delulu`:
+  *effects: Async, Write*), so an operator who wants no actors sees it before running the program.
+- `docs/for-agents.md` (*The effect kinds*) now says all of this.
+- Nothing in the runtime changes.
+
+## D-V2-190 — An empty `rand.int` range is DL0908, an argument outside what the operation accepts, not DL0904 (A15) — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (A15, the agent test campaign of 2026-10-24, the builder, Sonnet 5.5, low).** `r.int(lo, hi)` draws from `lo` up
+to but not including `hi`, and nothing said so: 6,000 draws of `r.int(1, 6)` never produced 6. `r.int(5, 5)` aborted the
+run as `error[DL0904]: rand.int requires lo < hi`. `delulu explain DL0904` says *"An operation reached outside its
+capability's SCOPE — a path outside the granted prefix, a host not on the granted list"*. A bad argument is not that.
+Checked again on 2026-10-27 at `d2752cf`: both engines faulted DL0904 with that text. Both also recorded
+`int.refused` with it in the effect trace. One test drew from an empty range: `refusal_trace_parity` (RW 4.64), which
+pinned DL0904 as the code the two engines' traces must agree on. It checked that the engines agree, not that the code
+was right.
+
+**Decision: a new code, DL0908, "an argument outside what the operation accepts".** It is a runtime fault, beside
+DL0901–DL0905.
+- **Why not keep DL0904.** It is the capability-scope code, the one an operator, a monitor or an agent reads as an
+  authority event. `STABILITY.md` §1 makes a code's identity add-only. Filing a bad argument under it was a misfiling
+  that blurs that identity, not part of it. 2.0.0 is a major release, and moving a fault to its proper code is
+  allowed there in any case.
+- **Why not an existing code.** DL0901–DL0903 name overflow, division and indexing. DL0907 is the compiler-bug class,
+  and an empty range is the program's own value, not a broken static guarantee.
+- **Why not draw something anyway.** An empty range names no value. Returning `lo`, or swapping the bounds, would turn
+  a bug into data that flows onward, which is what DL0901 refuses for arithmetic.
+
+**The fault itself.** Both engines report the same text, from one function (`delulu_runtime::prim::rand_int_range_fault`):
+*"rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = 5, hi = 5"*. The
+effect trace keeps its `int.refused` record, now naming DL0908. By RW 4.62 that record means *"it did not happen, and
+why"*, whether the custody, the broker or the effect itself stopped the operation, and its detail carries the code.
+
+**Documented:**
+- the half-open range in `delulu explain DL0908`, `docs/for-agents.md` *Determinism*, and the book's determinism
+  paragraph;
+- `ref.rule.runtime.faults-are-diagnostics` (`crates/delulu-conform/src/rules.rs`) gains DL0908 in its statement and its
+  `enforced_by`.
+
+**Entrenched files:** `crates/delulu-conform/src/rules.rs` and `tests/conformance/witnesses.toml` (two rows, for the
+anchor `ref.diag.DL0908`). Both are recorded in `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Evidence:**
+- `refusal_trace_parity`'s `an_operation_its_effect_refuses_is_traced_the_same_by_both_engines` now expects DL0908. It
+  went red on the change (*left: "DL0908", right: "DL0904"*), and it still asserts the two traces are byte-identical and
+  end in `int.refused`.
+- `fault_parity`'s `an_empty_rand_range_is_dl0908_on_both_engines` covers `(5, 5)`, `(6, 5)`, `(0, Int::MIN)` and
+  `(Int::MAX, Int::MIN)`. It was red before the change (`WASM trap: DL0904: rand.int requires lo < hi`) and green after.
+- `a_one_wide_rand_range_draws_its_one_value_on_both_engines`: `r.int(5, 6)` is 5 under three seeds, the engines alike.
+- Mutants, each red with the control green:
+  - M855: the interpreter keeps DL0904.
+  - M856: the WASM host keeps DL0904.
+  - M857: the interpreter's guard is `hi < lo`.
+  - M858: the WASM host's guard is `hi < lo`.
+
+  M857 and M858 panic the host with *"attempt to calculate the remainder with a divisor of zero"*, so the guard is
+  load-bearing.
+
+## D-V2-191 — `--seed` is mixed (splitmix64) before it starts the generator, so every seed draws its own sequence; every seeded sequence changes in 2.0.0 — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (seen on the way in A21's change, 2026-10-25; V2_LOG *Seen on the way, not changed*).** Both engines started
+their xorshift64 generator at `(seed == 0 ? 0x9E3779B9 : seed) | 1`. Witnessed on the interpreter at `ac2920e`:
+- **Seed pairs collided.** `--seed 2` and `--seed 3` drew the same sequence, as did 4 and 5, and every even seed and
+  the odd one after it. Seeds 0, `2654435768` and `2654435769` drew one sequence between them. Half of all seeds were
+  duplicates, so a sweep over seeds 0..N ran each case about twice.
+- **A small seed drew tiny numbers first.** Its state has few bits set, and xorshift needs steps to spread them. Seed 1's
+  first `r.float()` was `5.9e-11`, and every seed from 1 to 64 drew a first float below 0.01 (their mean `1.9e-9`).
+
+`different_seeds_diverge` compared seeds 1 and 2, which never collided (1 | 1 = 1, 2 | 1 = 3).
+
+**Decision: mix the seed with splitmix64 before it becomes the state, on both engines and in every path.** This covers
+`--seed`, `delulu test`'s per-test seeds, the sandboxed guest's, and the unseeded wall-clock default.
+- splitmix64 is a bijection on `u64`, so distinct seeds start in distinct states.
+- **The one exception.** xorshift stays at zero forever, and exactly one seed mixes to zero:
+  `0x61C8864680B583EB`, which is `2^64 - 0x9E3779B97F4A7C15`. That seed starts at the constant instead, where
+  `0xCD36DA00563C5EF6` also starts. 2^64 seeds into 2^64 − 1 nonzero states must share at least one state, and this is
+  the only shared pair. Both seeds were found by inverting splitmix64.
+- One function, `delulu_runtime::prim::rng_state_from_seed`, is called by the interpreter and by the WASM host, so the
+  engines cannot start differently.
+
+**Why now: it changes every seeded sequence.** A run recorded under `--seed N` with 1.x draws different numbers under
+2.0.0. Nothing in this repository stores a seed for replay. The device simulator reports its seed, and no test or
+`.delulu` program pins a seeded value; the tests compare the two engines, or a run with itself. `STABILITY.md` promises
+nothing about seeded sequences. 2.0.0 is a major release, and after it this change would have to wait for 3.0. The
+generator itself (xorshift64), and the mapping of a draw to `r.int` and `r.float`, are unchanged.
+
+**Evidence:**
+- `prim.rs` `determinism_tests`, each red before the change (the first three):
+  - `neighbouring_seeds_draw_different_sequences`: seeds 0–63, `0x9E3779B8`, `0x9E3779B9`, `u64::MAX - 1` and
+    `u64::MAX` draw distinct sequences. Before: *"seeds 2 and 3 draw the same sequence"*.
+  - `a_small_seeds_first_draw_is_spread_over_the_range`: the first draws of seeds 1–64 average between 0.3 and 0.7,
+    with at most 4 below 0.01. Before: a mean of `1.9e-9`.
+  - `the_seed_that_mixes_to_zero_still_draws`.
+- `delulu-wasm` `neighbouring_seeds_draw_differently_on_both_engines`: seeds 0–7 are distinct, and alike on both
+  engines. Before, red with *"seeds 2 and 3 draw the same sequence"*.
+- Mutants, each red with the control green:
+  - M859, no zero-state guard: the zero-state test fails.
+  - M860, the WASM host keeps `| 1`: the two engines part under seed 0.
+
+## D-V2-192 — `--seed` and `--clock fixed:` reach every actor: each actor draws from a stream of its own, keyed by its spawner; the interleaving of actors stays unordered (ACTOR-DETERMINISM-1, A11) — TAKEN (head chef, 2026-10-27, under the owner's delegation)
+
+**Finding (the laptop, 2026-10-27, while looking at A11).** The generator and the fixed clock are thread-locals in
+`prim.rs`, and `run` sets them on the main thread, where `main` runs. An actor's turns run on a worker thread, which
+never saw either setting. Witnessed with `--seed 7`:
+- `main` drew 220748 on every run, but an actor holding the same `Cap[Rand]` drew 395444, 186614 and 634774 on three
+  runs with `--actors-threads 1`, and other values with 4.
+- Under `--clock fixed:1000`, `main` read 1000 and an actor read the wall clock (`1793119167378`).
+
+Spec §6.2 says *"`--seed <u64>` fixes `Cap[Rand]`; `--clock fixed:<ms>` fixes `Cap[Clock]`"*, with no exception for
+actors, and `docs/for-agents.md` says `--seed N --clock fixed:MS` *"fixes randomness and time"*. A11 of the agent test
+campaign (three runs of an 8-worker prime counter under `--seed 7` printed their lines in three orders) had looked like
+an ordering question. Its programs drew nothing at random, so this defect stayed out of sight.
+
+**Decision.**
+- **The clock.** The actor system reads the run's fixed clock when it starts, and every worker adopts it.
+- **The generator.** Each actor has a `Cap[Rand]` stream of its own (`prim::RandStream`), carried in its cell and
+  installed on the worker for each of its turns (`swap_rand_stream`). A stream starts from a key that its spawner
+  derives when spawning (`next_spawn_key`): the spawner's own key and how many actors it has spawned, mixed by
+  splitmix64. `main`'s key is the run's seed (`set_rand_seed`), or the wall clock when there is none. An actor's turns
+  run one at a time, so its draws depend only on its key and its own messages, not on which worker runs it or how many
+  workers there are.
+- Drawing a spawn key draws nothing from anyone's `Cap[Rand]`, so a program's own sequence of draws is unchanged by
+  spawning.
+- **What stays unordered.** The interleaving of different actors' turns. Stage 7 promises ordering per sender only
+  (*"no global order"*), and that is kept. Even one worker does not promise a single order, because `main` keeps
+  sending while the worker runs. `docs/for-agents.md` and the actors guide now say so, which closes A11.
+
+**Evidence.**
+- `actors_cli` `seed_and_fixed_clock_reach_every_actor_on_any_number_of_workers` drives the binary. Two actors each
+  spawn a child, one of them takes two turns, and a third reads the clock. It checks:
+  - the sorted lines are identical across two runs on one worker and one on four, and differ under another seed;
+  - an actor reads `clock 1000`;
+  - the actor's second turn draws on from its first.
+
+  It was red before the change (*"an actor reads the fixed clock: … clock 1793119228350"*), passed 15 of 15 runs after
+  it, and the program's sorted output hashed alike on 1, 4 and 8 workers.
+- Mutants, each red with the control green:
+  - M861: a worker never adopts the fixed clock.
+  - M862: a behaviour's turn runs on the worker's own generator.
+  - M863: a spawn key ignores its spawner's key.
+  - M864: `--seed` never sets `main`'s key.
+  - M865: a turn's stream is not saved for the next.
+
+## D-V2-193 — `IoErr::Other(m)` carries the kind of failure in the same words on every OS, never the operating system's own message (B11) — TAKEN (head chef, 2026-10-29, under the owner's delegation)
+
+**Question.** A file operation the OS refuses for a reason that has no variant of its own (`NotFound`, `Denied`) is
+`Other(m)`. What is `m`?
+
+**What it was.** Both engines put the OS's own message in `m`. The agent test campaign's least-authority agent (B11,
+2026-10-24) read a 300-character name on Windows and its program received *"The filename, directory name, or volume
+label syntax is incorrect. (os error 123)"*. The same program receives other words on Linux and macOS, and on Windows
+the words are in the machine's language. So:
+- a program that prints or branches on `m` behaves differently by machine;
+- the text tells the program which OS and which language its host runs, which nothing granted it;
+- it was the one refusal text a program received raw. Every other refusal is opaque (`Refused`) or a named variant.
+  For the host's own messages the project already refuses to show raw OS text (C27, D33: `unreadable_paths`,
+  `sandbox_run_cli`).
+
+**Decision.**
+- `m` is the error's kind in Rust's words: `std::io::ErrorKind`'s `Display`, such as `invalid filename`,
+  `is a directory` or `uncategorized error`.
+- `prim::io_other_text` is the one place it is made, and the interpreter and both WASM host sites (read, write) call
+  it.
+- The variants, and when each is chosen, are unchanged. `m` was never specified, by the Stage 1 specification or by
+  the reference, so no promise changes.
+- A kind is less than the OS said: the error number and its sentence are gone. The program never had a use for them that did
+  not tie it to one machine.
+
+**Evidence.**
+- `fault_parity::an_os_refusal_reaches_the_program_in_the_same_words_everywhere` reads and writes a 300-character name
+  under a granted directory, on both engines. It was red before the change, receiving the OS's sentence, and expects
+  `invalid filename` twice.
+- Mutants M894 (the interpreter), M895 (the WASM read) and M896 (the WASM write) bring back `e.to_string()`, and each
+  is killed.
+- The pull request's run checks the same words on Linux and macOS, where a name past 255 bytes is `ENAMETOOLONG`.
+
+## D-V2-194 — DEADMAN-DEAF-1: a dead-man counts its holder's silence only while the daemon could hear it — every dead-man instant is read from a hearing clock that stands still while the daemon was not running — TAKEN (head chef, 2026-10-29, under the owner's delegation)
+
+**Question.** D-V2-127 decided that a dead-man counts its holder's silence, never the daemon's, and stamped each
+request's arrival on a reader thread of its own. What does a dead-man count while the whole daemon is not running?
+
+**What it was.** The silence, in wall time. The reader threads are the daemon's, so a daemon that was stopped (`SIGSTOP`,
+a debugger), swapped out, or not scheduled on a busy host stamped the beats that had waited in its socket when it ran
+again, after their deadline. The serve loop, woken by its own timeout, could also judge before any reader thread had run.
+A stop of three periods revoked a healthy monitor that had beaten 73 times, and the run under it, and told the monitor it
+"sent no beat" (`monitor_cli` `a_stopped_daemon_is_not_its_monitors_silence`, red 3 of 3). It was found while
+root-causing a once-seen macOS red (RW 7.25) whose message held no evidence.
+
+**Decision.**
+- The daemon keeps a hearing clock: monotonic time that stands still while the daemon could not hear. Every instant a
+  dead-man is judged by reads it: the arming, the first period's start, a beat's and a disarm's arrival, the serve loop's
+  wait for its next request, and the as-of its firing is judged by.
+- While a dead-man is armed a thread of the daemon looks at the time every 10 ms (`HEARING_TICK`). A gap between two
+  looks past 50 ms (`HEARING_SLACK`) is deaf time, and the clock leaves it out. Until the thread looks again, the time
+  since its last look past the slack is left out too, so a judgment made the moment the daemon resumes (before the
+  thread has run) already leaves the pause out. The clock is continuous and never runs faster than the wall.
+- The clock listens from just before an arming is decided, and sleeps once no dead-man is armed, so an idle daemon still
+  never wakes. Starting to listen counts nothing before it as deaf.
+- `broker.log` names every gap of 100 ms (`deadman::MIN_PERIOD`) or more: *"this daemon did not run for N ms"*. That
+  line is the evidence that tells a daemon's stop from a holder's silence in a red run.
+
+**Not changed.**
+- D-V2-106's rules: a beat that arrived after its deadline rescues nothing, and a stream of requests cannot hold an
+  unbeaten dead-man off. Both now hold in hearing time.
+- D-V2-127's rules: a beat and a disarm are judged by their arrival, and a beat's next period starts when it is answered.
+- A holder that is itself stopped or dead is revoked one period of hearing after its last beat
+  (`a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes`, unchanged, and the new witness's killed monitor).
+- `broker.log`'s late-answer lines keep the wall clock, since they measure what a client waited.
+
+**What it gives up, bounded.**
+- While the daemon cannot hear, no dead-man fires. Nothing under its custody proceeds either, because every use under
+  the daemon's custody asks the daemon.
+- A truly dead holder's firing is delayed by the time the daemon was stopped past the slack, never more.
+- On a host that starves the whole daemon, the clock runs slow by what the hearing thread waited past its slack.
+- Not covered: one reader thread starved while the rest of the daemon runs. That is D-V2-127's window of microseconds
+  between a request read whole and its stamp, unchanged.
+
+**Evidence.**
+- The witness above: green with the fix, its daemon's log naming the stop, and its killed monitor still revoked about
+  500 ms later.
+- `brokerd` `hearing_tests` (4 tests, one over 200 generated histories) and
+  `an_arming_is_answered_with_the_hearing_clock_listening`.
+- Mutants M908 to M915 are each red, M914 by the handler test written for it. The runners: macOS `40958776212`, Windows
+  `40958779882`, with every `delulu` test target.
+
+## D-V2-195 — RW 4.79: a use the program's own capability refuses is judged before its custody is asked, and the chain records it refused (`refused_by: capability`), never allowed — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Question.** A capability may hold less than its node: a directory narrowed under the node's, one host of the node's, a
+path or a method fewer. Every gate that asks a custody (the interpreter's, a sandboxed guest's host's, the WASM host's)
+asked it first, against the node's grant, and the effect then judged the capability. What should the chain say about a
+call the capability refuses, and who answers it first?
+
+**What it was.** Measured on `658daf1` by on-demand routine run 10, under `--broker daemon`: each of seven such calls —
+`write_text`, `append_text`, `get`, `get_with`, `post`, `get_with_secret`, `post_with_secret` — left a `use allow` in the
+chain on every route that ran it, then faulted DL0904: nineteen allowed uses that never happened (three routes for five calls, two for the two that carry a broker-held secret, which a guest's channel cannot). A write neither the
+capability nor the node allows left the custody's own `deny`. Under a lease with a Guard rule on reads, a read beside its
+capability's directory was asked of the Guard: a `guarded` rule refused it DL1410 and told the agent to request a permit
+for a read its capability can never make, and a `warn` rule printed its warning and recorded `guard_warn` `allow`.
+
+**Options.**
+- (a) Judge the capability first and record nothing (the row's first sketch). Rejected: the write neither allows is
+  recorded `deny` today, and an out-of-band monitor's `denies=N/MS` rule (P8-04, D-V2-100) counts it — a program probing
+  `../../` would leave the chain.
+- (b) Keep the custody first and append an overriding `deny` after its `allow`, as RW 4.46 (egress) and P8-04 (an
+  envelope) do. Rejected: those refusals are made after the custody by a party that needs what it answered (where the
+  name resolved, the command's magnitudes); a capability's verdict needs nothing from the custody, so the `allow` would
+  record a decision that was never needed, and a Guard would still be asked about a use that cannot happen.
+- (c) **Chosen:** the capability first, on every gate, and the custody TOLD its refusal.
+
+**Decision.**
+- `prim::capability_refusal` is the effect's own rule — `resolve_in_anchor` for a file, `url_verdict` for a request — in
+  the effect's own words, judged before the custody and performing nothing. The gate refuses the call with it and does
+  not ask the custody; a guest's handle carries no scope and is judged by the host that holds the capability. A URL that
+  is not `https://` is still answered `Refused`, a value, with no use asked (HTTP-SCHEME-1).
+- The custody is told: `Custody::note_capability_refusal` (a no-op by default; embedded custody keeps no chain). Under
+  the daemon the broker records one `use` `deny` at the argument the use would have been asked about, naming
+  `refused_by: capability`, `code: DL0904`, a machine-readable `reason` (`outside-scope`, `hostile-path`, `other-host`,
+  `outside-path`, `other-method`, `ambiguous-path`) and, for a network use, its `url_path` and a method other than GET, as
+  the broker's own record of a use names them. Never the request's words: a URL's query is in no record (D-V2-169).
+- Recorded exactly where a use of its class is: every synchronous-class use (a write, a request), and an epoch-class use
+  (a read) only where a Guard rule makes it round-trip. An ungated read its capability refuses is recorded by no one, as
+  an ungated read is.
+- The wire: `CapabilityRefused`, an additive `broker/1` request. A record lost to a held chain lock is answered DL1401,
+  never `Recorded` (RW 4.61's rule), and the client says once on standard error that the chain lacks it; an op the broker
+  does not know is refused in words, nothing recorded.
+- The WASM host asks it between ARTIFACT-CLAIM-1's declared-effects ceiling and the custody, so an artifact's undeclared
+  effect is refused DL1202 first, as before.
+- The effect keeps its own check after the custody. A link swapped in after the capability's judgment is refused at the
+  open (FS-RACE-1, RW 4.72) — `a_narrowed_directory_swapped_for_a_link_reads_nothing_outside` still swaps it.
+
+**Not changed.** What runs and what is refused: every call refused before is refused now, and none refused now ran before.
+The custody's own judgment of a use the capability allows, the Guard's, and their records. The trace (the dispatch, then
+`<op>.refused`, RW 4.62), byte for byte on both engines. Authority and the Guard mean what they meant: this hardens the
+chain's account of them.
+
+**What moves, for the 2.0.0 *Breaking* judgment.** A call its capability refuses is refused DL0904 under every custody.
+Under the daemon, a Guard rule's DL1410–DL1413, or a revoked or expired node's DL0801/DL1402/DL1403, could answer such a
+call first; now the capability's DL0904 does, and the custody's code answers the next call the capability allows. The
+chain's record of such a call is `deny` with `refused_by: capability` (was `allow`, `guard_warn` or `guard_block`).
+STABILITY.md §1 promises a refused program's code for the typing, effect and authority rules of `docs/reference`, which
+name no order between a capability and its custody; the move is named in CHANGELOG all the same, for the merge into
+`launch/2.0.0` to judge.
+
+**Evidence.** `broker_cli` `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed` (eight calls and an
+ungated read, on the interpreter, the WASM engine and a sandboxed guest) and `guard_e2e`
+`a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard` (both tiers, both engines), each read
+red on `658daf1` first; the broker's and the daemon's unit tests; mutants M946–M960 (V2_LOG, on-demand routine run 10).
+
+## D-V2-196 — RW 4.67: while a secret's bytes are in the process for a send, the `delulu` binary's allocator zeroes every block it frees, so a sent secret leaves no copy behind — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** Under the daemon a secret's bytes enter the program process only to be sent: the broker hands them to the
+egress client for one origin (D-V2-134). Routine run 25's red team (F4) found one copy of the plaintext in the run's heap
+after the send, until exit. On-demand routine run 12 read it again on `9553ab7` by scanning the run's memory through
+`/proc` while it waited after the send: one copy, `…on: hunter2-…` — the serialized request's `authorization` header — in
+the arena of reqwest's runtime thread, on the interpreter and on the WASM engine alike. The copies are made by code that
+is not ours (the custody's answer as it is read and parsed, `reveal`'s copy, each header the egress client builds,
+reqwest's `HeaderValue`, hyper's head buffer) and each buffer is freed as it stands. No call site can clear a buffer it
+never sees; zeroing our own copies alone would have left hyper's.
+
+**Decision.**
+1. **A window, and the allocator's rule.** `delulu_runtime::scrub::Window` counts, process-wide, the sends whose bytes
+   are in this process. While one is open, the `delulu` binary's global allocator (`ceiling::CeilingAware`) zeroes every
+   block before it frees it — on every thread, because the request is made on reqwest's — and moves a block that grows
+   by `alloc`, a copy and that same `dealloc`, never by the system's `realloc`, which may free the old block as it stands.
+   Outside a window the cost is one atomic load per free.
+2. **Two windows cover a send.** One while the custody is asked for the bytes (`interp::broker_secret_send`, both
+   engines: the answer is read and decoded into buffers freed as it goes); one around every request that carries a
+   secret (`prim`'s request arm, under any custody), which closes only after the request's client has been dropped and
+   its runtime thread joined. Between the two the bytes live in one `SecretVal`, which zeroes its own buffer as it is
+   dropped (P17-F).
+3. **What it is not.** The rule is the `delulu` binary's: a program embedding `delulu-runtime` under another allocator
+   gets no scrubbing. It clears what is freed, not what is held — the embedded custody holds every secret's bytes in the
+   process for the whole run by design, and there the window clears only the send's own copies. A sandboxed guest is
+   never handed a secret (DL1401), so its host's send is not a case.
+4. **Not taken:** zeroing only our own copies (hyper's head buffer is out of reach — it is the copy run 25 found); a
+   zero-on-every-free allocator (a memset on every free of every program for a residue that exists only during a send);
+   the broker making the request itself (the serial daemon would wait on the network — RW 4.53 — and D-V2-197 says what
+   it would not buy).
+
+**Evidence.** `broker_cli` `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`, over real TLS
+(a server presenting a certificate only `SSL_CERT_FILE` vouches for) under `--broker daemon`, on the interpreter (scanned
+while the program waits on standard input, which allocates nothing) and the WASM engine (scanned in a held second
+request): red on `9553ab7` — `[([], Ok(10), Ok(1)), (["--engine", "wasm"], Ok(13), Ok(1))]`, one copy each beside the
+control's count — and green with the fix; two controls in it (the server saw the secret arrive; the scan finds the
+program's own path). Four concurrent copies of the test binary green. By hand with a 46- to 8,186-byte secret: the
+unscrubbed binary left up to six partial copies, the fixed one none. Mutants: see V2_LOG (on-demand routine run 12).
+
+## D-V2-197 — RW 4.66: a raw `SendSecret` from a caller of the broker's own user stays answered — the socket admits exactly whom the state directory admits, and the directory holds every secret in plaintext — DECIDED, a residual named in `docs/DEPLOYMENT.md` §5 — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** Routine run 25's red team (F3): a raw `SendSecret` naming a node returns the bytes to any caller of the
+socket, though the node holds no `Declassify` and `Expose` would refuse it; the broker cannot tell the run's egress
+client from another process of the operator's user. The row proposed binding a send to the run that redeemed the node
+(the peer credential of the connection), or handing the egress client a one-use sealed token instead of the bytes.
+
+**What was measured** (on-demand routine run 12, Linux): the socket lives in the state directory, which the broker
+makes `0700` (`broker_transport.rs`), beside `broker.key` (`0600`) and `secrets.json` (`0600`), whose JSON holds each
+secret's bytes in plaintext (`{"API_TOKEN": "hunter2-…"}`, read back with `cat` as the same user). On Windows the pipe
+admits only the broker's own user (an owner-only DACL, then the client's SID compared), the user whose directory it is.
+So every caller that can send `SendSecret` can read every secret, and the broker's key, without asking anything.
+
+**Decision.** No change to the broker's answer; RW 4.66 is closed as a decided residual of the same-user boundary,
+which Tiers 0 and 1 do not contain and Tier 2 does (`docs/DEPLOYMENT.md` §5 now says so in these words).
+- **The peer binding is not taken.** A caller that can reach the socket can read the lease token the run was handed (it
+  is on the run's command line, `--lease TOKEN`) and redeem it itself, and so be the peer the binding names; it can read `secrets.json` in any case. A check that protects
+  nothing the caller cannot take another way would read as a boundary that is not there.
+- **The sealed token is not taken.** Something in the program process must put the bytes on the wire; only the broker
+  making the request itself would keep them out of it — a redesign of the serial daemon around network waits (RW 4.53)
+  that would still leave the same caller its `cat`.
+- **The one same-user process that cannot read the directory cannot reach the socket either:** a sandboxed guest opens
+  no new socket (seccomp, GUEST-SOCKET-1, D-V2-61), is refused the state directory and every network but its channel on macOS
+  (Seatbelt, T14), and on Windows runs as a per-run AppContainer with no network and none of the operator's files
+  (PS-B-03, T14). What separates a program's account from the custody is a
+  second account (Tier 2): it reaches neither the socket nor the directory.
+- **Revisit** if the secret store is ever sealed against its own user (a key the user's processes cannot read): then
+  the socket would be the weaker door, and the binding worth building.
+
+## D-V2-198 — ESTOP-QUEUE-1 (RW 4.53): a revocation — the operator's e-stop, a monitor's quarantine — is handled before every request waiting at the broker daemon, and dead-men are judged as of the earliest arrival still waiting — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** The daemon is serial: one handler touches custody, in the order whole requests are handed to it (RW 4.40).
+A request that records takes the audit chain's append lock and waits for it up to 5 s while another writer — a sandboxed
+run's host, a CLI command — holds it (RW 4.48; one wait per request since RW 4.58's rest). Routine run 18's red team (F4)
+saw an e-stop behind four queued requests answer `did not answer within 15s` while the revoke landed at ~25 s; RW 4.53
+recorded it and the chain-length half was fixed by D-V2-159 and D-V2-160. On-demand routine run 14 re-measured on
+`0ebbc15`: beside 12 sandbox loops the revoke took 22 ms median, 49 ms max (control 29 / 50 ms) — the contention is gone —
+but with the chain HELD, F4's shape still held: `grants revoke` behind four queued mints answered DL1401 at 15.18 s with
+"start it with `delulu broker start`", and the node was revoked about 25 s after the pull. Devices park themselves after
+1 s of broker silence (DEADMAN-1), so the machine fails safe; the operator was told the e-stop failed, wrongly, and why.
+
+**Decision.**
+1. **A revocation goes first.** `ReqBody::is_revocation` (`Revoke`, `Quarantine`). A reader thread hands a revocation to
+   the serve loop on its own bounded line and then a wake on the ordinary line (`try_send`: a full line needs none — the
+   handler is not waiting, and reads the revocation line before its next request). The handler stays serial and alone in
+   touching custody; it reads the revocation line first. A revocation now waits for the request being handled and no
+   other: on the same held chain the e-stop answered in 9.81 s, `ok: revoked`, its record said lost (RW 4.58).
+2. **Overtaking only narrows.** A request a revocation overtakes is decided after it, against less authority: a mint or
+   delegation under the revoked node is refused instead of minted and revoked; a use under it is denied; a refusal record
+   needs only that its node exists (`record_*_refusal`), so none is lost; a `Shutdown` that arrived first no longer
+   swallows the e-stop.
+3. **Dead-men are judged as of the EARLIEST arrival still waiting** — the requests already handed over sit in a bounded
+   `waiting` line, in order — never as of a revocation's own arrival when it goes first: a beat that arrived in time and
+   waits behind a held request keeps its dead-man (DEADMAN-BUSY-1, D-V2-127, kept).
+4. **A broker that accepted a request and did not answer it in time is said to be running.** Every DL1401 site
+   (`grants`, `guard`, a lease run, the daemon custody) and `broker status`, `stop`, `rotate-key` point at `broker.log`,
+   which names each late answer (RW 7.17), instead of "start it" / "not running" / "nothing to stop". No new code; exit
+   codes and `broker status --json` unchanged.
+5. **Not taken:** a second handler for revocations (custody has one writer by design); not waiting for a revocation's
+   record on a held chain (RW 4.58 keeps the record whenever the chain frees within its wait — and a device parks after
+   1 s of silence anyway); remembering a held chain across requests so later ones fail at once (it would refuse
+   synchronous operations a short contention would have recorded).
+
+**Residual.** On a held chain each request, a revocation included, still waits its own 5 s, so several revocations at
+once are answered one after another; a continuous stream of revocations is served before everything else and holds
+dead-men to the earliest waiting arrival while it lasts — a stream only a process of the broker's own user can send
+(RW 4.4). Behind more than 64 waiting requests a reader's hand-over still waits for room, as before.
+
+**Evidence.** `brokerd` unit tests: `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`
+(the chain held while four mints queue, then a revoke and a quarantine; the chain's own seqs say the order — red on
+`0ebbc15`: mints at 4–7, the revoke at 8, the quarantine at 9),
+`a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man`,
+`a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Mutants M969 (revocations
+in the ordinary line: the old behaviour), M970 (the quarantine left out), M971 (dead-men judged by the revocation's own
+arrival), M972 (no wake: an idle daemon left eight tests' revocations unanswered), M973/M973a/M973b (the words): all red,
+control green. By hand (`f4.py`, F4's shape): 15.18 s DL1401 before, 9.81 s revoked after. The code is `294ddfa`.
+
+## D-V2-199 — LATE-LET-1 (RW 2.23): a `let` binds where no closure made before it can see, on both engines — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** The checker resolves each name a closure (a lambda, or on the WASM engine a function value it inlines) reads
+where the closure is written, and a `let` is not recursive: `let f = fn(n: Int) -> Int { f(n - 1) }` is DL0301, *"unknown
+name `f`"*. Both engines read a closure's names when it runs, in the scopes it was made over:
+- the interpreter's closure holds its maker's `Env` (an `Rc` of the scope chain), and a `let` defined its name in the
+  block's scope, rebinding in place a name already there;
+- the WASM engine inlines a function value where it is called and lets its body read the frames `0..scopes_at` it was
+  defined over, by index (WASM-HYGIENE-1), and a `let` inserted into the innermost of them.
+So a `let` made after a closure, in a scope the closure was made over, was what the closure read. Found 2026-11-01 by the
+laptop while reading the interpreter's scopes for RW 3.24, during the weekly verification sweep. Each shape below
+checked clean:
+- `let g = fn() -> Int { 0 }; let h = fn() -> Int { g() }; let g = fn() -> Int ! {Write} { out.println(…); 1 }; h()`
+  in a function with an empty row: `delulu authority` said *"(none — provably pure)"*, and `run --grant console`
+  printed on both engines. The same held from an inner block through a `var`, and past a parameter of the same name.
+- With a `Secret.map` callback in `h`'s place, the interpreter printed `plaintext: hunter2` from a program with no
+  `Declassify`. This is C88's shape: R-4 and R-2 reopened (`SOUNDNESS_AUDIT.md`). The WASM engine refuses
+  `Secret.map` (DL1205).
+- `let x = 1; let f = fn() -> Int { x }; let x = "two"; f() + 40` gave `two40` on the interpreter, and the WASM engine
+  refused the `+` as DL1201.
+The capability check held throughout (no `--grant console`, DL0703). The engines agreed with each other in every case, so
+no parity test and no run of the 50,000-program differential could see it.
+
+**Decision.**
+1. **The interpreter.** A scope a closure is made over is *held*: `Scope::hold` marks it and every scope above it,
+   stopping at one already held (whose ancestors were held with it), when `Expr::Lambda` makes a closure. A `let` whose
+   block scope is held after its value is evaluated binds in a new child scope, and the block's later statements run in
+   that scope (`exec_stmt` takes the block's `&mut Env`). The value is evaluated first because a `let` is not recursive:
+   a closure made in its own value reads the name the `let` hides (`let y = [fn() -> Int { y }]`).
+2. **The WASM engine.** `Cx::held` records how many scope and callable frames the function values defined in the body
+   see, at most (`Cx::callable` raises it). `Cx::bind_after`, called by each of a `let`'s three forms before it binds,
+   opens a new frame pair when a function value sees the innermost one. `compile_block_inner` truncates both stacks to
+   the frames it found, and restores `held`, because a function value defined in a block ends with it.
+3. **The meaning is the checker's**, which is lexical scope. A program that made a closure, then a `let` of a name the
+   closure reads, then called it, now reads the earlier binding on both engines. A closure still shares a `var` with its
+   maker, by reference (`var count = 0; let inc = fn() -> Int { count = count + 1 … }` counts 1, 2 and leaves 2, as
+   before).
+4. **Not taken:** copying the scope at the closure's making, which would break that sharing of `var`s on both engines; a
+   new scope for every `let`, which would bring back the allocation A14 removed from every block; refusing a `let` that
+   shadows a name a closure reads, which would change the language and refuse ordinary shadowing.
+5. `SOUNDNESS_AUDIT.md` §D gains a box saying its claim was negated a second time, through the runtime's name resolution
+   rather than the checker (entrenched, `ENTRENCHED_CHANGE_RECORD.md`).
+
+**Residual.** The holding is conservative: once a closure is made in a scope, the first `let` after it there, and in each
+scope above it, opens one scope more (one allocation), though the closure may never read that name. The WASM engine's
+extra frames exist only while compiling. A `var` that a closure shares is reached by assignment as before, which is the
+meaning the checker gives it.
+
+**Evidence.** `late_let_cli` (3 tests, the real binary on the interpreter: the effects, the secret, the values), red before
+(`LEAK: a swapped callee`, `LEAK: through a var`, `LEAK: past a parameter`; `plaintext: hunter2`; `two40` and a list
+added to an `Int`). `loop_parity` `a_function_value_never_reads_a_name_bound_after_it` holds both engines to `41 two 23
+321001`; red before: the WASM engine refused the program (DL1201), and the interpreter gave `two40 two 33 900001`.
+Mutants: M974 (no hold at a lambda), M975 (a held scope bound into), M976 (`hold` marks its own scope alone), M977 (held
+asked before the value), M978 (`bind_after` does nothing), M979 (a function value holds nothing) and M980 (a block closes
+one frame) were all red, and the control green. M976 survived the first form of the witness, whose later value was itself
+a lambda made in the outer scope and held it directly; the witness now makes that value in another function. The
+suites: `delulu-runtime` and `delulu-wasm` whole; `examples_run`, `core_invariance`, `conformance`, `for_loop_cli`,
+`actors_cli`, `actors_cycles_cli`, `deep_values_cli`, `wasm_cli`, `book`, `stdlib_p3`; `delulu-check`'s `laundering`.

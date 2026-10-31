@@ -46,6 +46,9 @@ struct Sent {
     addrs: Vec<SocketAddr>,
     /// The headers it was asked to send, as given.
     headers: Vec<(String, String)>,
+    /// Its method and body (P9-05 (d), D-V2-183).
+    method: String,
+    body: Option<String>,
 }
 
 /// A transport that plays a script of answers and records what it was asked to send.
@@ -69,6 +72,8 @@ impl Transport for FakeTransport {
             port: req.port,
             addrs: req.addrs.to_vec(),
             headers: req.headers.to_vec(),
+            method: req.method.to_string(),
+            body: req.body.map(str::to_string),
         });
         self.script.borrow_mut().pop_front().unwrap_or(Err(Reason::Connect))
     }
@@ -96,6 +101,31 @@ fn only_https_is_fetched() {
     for url in ["http://example.com/", "HTTPS://example.com/", "ftp://example.com/", "example.com", "//example.com/"] {
         assert_eq!(parse_target(url), Err(Reason::Scheme), "`{url}`");
     }
+}
+
+/// B7 (the agent test campaign): every URL refused for its scheme was told "there is no plain-HTTP path" — an upper-case
+/// `HTTPS://`, a missing `//`, a bare host, `file:`, `ftp:` and the empty URL too. The sentence now says what each of
+/// them lacks, and still says that plain HTTP has no path.
+#[test]
+fn a_scheme_refusal_says_what_the_url_lacks() {
+    for url in [
+        "HTTPS://127.0.0.1/api/x",
+        "https:127.0.0.1/api/x",
+        "//127.0.0.1/api/x",
+        "127.0.0.1/api/x",
+        "file:///C:/x",
+        "ftp://127.0.0.1/",
+        "",
+    ] {
+        let reason = parse_target(url).expect_err(url);
+        assert_eq!(reason, Reason::Scheme, "`{url}`");
+        assert!(
+            reason.explain().starts_with("the URL does not begin with `https://` (lower case"),
+            "`{url}`: {}",
+            reason.explain()
+        );
+    }
+    assert!(Reason::Scheme.explain().ends_with("there is no plain-HTTP path"));
 }
 
 /// C86's shape, refused before it can be parsed wrongly: everything before the last `@` is userinfo.
@@ -354,6 +384,72 @@ fn every_redirect_hop_is_checked_like_a_first_request() {
     }
 }
 
+/// P9-05 (d), D-V2-183: a POST sends its method and body, judged by its method on every hop. A 301, 302 or 303 after it
+/// is followed as a GET with no body (judged as a GET, so a grant naming POST alone refuses it); a 307 or 308 keeps the
+/// method and the body, to the origin the program named only. A body over the limit is refused before anything is sent.
+#[test]
+fn a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its_status() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let post = |allow: &[&str], t: &FakeTransport| {
+        request(&policy(allow, &[]), "POST", "https://a.example.com/x", &[], Some("{\"k\":1}"), None, &r, t)
+    };
+    let sent = |t: &FakeTransport| -> Vec<(String, String, Option<String>)> {
+        t.sent.borrow().iter().map(|s| (s.method.clone(), s.url.clone(), s.body.clone())).collect()
+    };
+    let body = Some("{\"k\":1}".to_string());
+
+    let t = FakeTransport::answering(vec![ok("made")]);
+    let (rec, got) = post(&["a.example.com:POST"], &t);
+    assert_eq!(got.as_deref(), Some("made"), "{:?}", rec.outcome);
+    assert_eq!(sent(&t), [("POST".to_string(), "https://a.example.com/x".to_string(), body.clone())]);
+    assert_eq!(rec.to_json()["hops"][0]["method"], "POST", "the record names a POST");
+
+    // Under an entry that names no methods — GET alone — the POST is refused before anything is resolved.
+    let t = FakeTransport::answering(vec![ok("never")]);
+    let asked = r.asked.borrow().len();
+    let (rec, got) = post(&["a.example.com"], &t);
+    assert_eq!((got, rec.outcome.clone()), (None, Err(Reason::NotAllowlisted)));
+    assert!(t.sent.borrow().is_empty() && r.asked.borrow().len() == asked, "nothing resolved, nothing sent");
+
+    // 303: followed as a GET with no body — refused under an entry naming POST alone, taken where GET is granted too.
+    let t = FakeTransport::answering(vec![redirect(303, "/done"), ok("seen")]);
+    let (rec, got) = post(&["a.example.com:POST"], &t);
+    assert_eq!((got, rec.outcome.clone()), (None, Err(Reason::NotAllowlisted)), "the GET after a 303 is judged as one");
+    let t = FakeTransport::answering(vec![redirect(303, "/done"), ok("seen")]);
+    let (_, got) = post(&["a.example.com:GET,POST"], &t);
+    assert_eq!(got.as_deref(), Some("seen"));
+    assert_eq!(sent(&t)[1], ("GET".to_string(), "https://a.example.com/done".to_string(), None), "no body after a 303");
+    for status in [301, 302] {
+        let t = FakeTransport::answering(vec![redirect(status, "/done"), ok("seen")]);
+        let _ = post(&["a.example.com:GET,POST"], &t);
+        assert_eq!(sent(&t)[1].0, "GET", "{status}");
+        assert_eq!(sent(&t)[1].2, None, "{status}");
+    }
+
+    // 307 and 308: the method and the body again, to the same origin; to another, refused before it is sent.
+    for status in [307, 308] {
+        let t = FakeTransport::answering(vec![redirect(status, "/again"), ok("kept")]);
+        let (_, got) = post(&["a.example.com:POST"], &t);
+        assert_eq!(got.as_deref(), Some("kept"), "{status}");
+        assert_eq!(sent(&t)[1], ("POST".to_string(), "https://a.example.com/again".to_string(), body.clone()), "{status}");
+        let t = FakeTransport::answering(vec![redirect(status, "https://b.example.com/x"), ok("never")]);
+        let (rec, got) = post(&["a.example.com:POST", "b.example.com:POST"], &t);
+        assert_eq!((got, rec.outcome.clone()), (None, Err(Reason::BodyElsewhere)), "{status}");
+        assert_eq!(t.sent.borrow().len(), 1, "{status}: the body is never sent elsewhere");
+    }
+
+    let big = "x".repeat(MAX_REQUEST_BODY + 1);
+    let t = FakeTransport::answering(vec![ok("never")]);
+    let (rec, got) =
+        request(&policy(&["a.example.com:POST"], &[]), "POST", "https://a.example.com/x", &[], Some(&big), None, &r, &t);
+    assert_eq!((got, rec.outcome), (None, Err(Reason::RequestTooLarge)));
+    assert!(t.sent.borrow().is_empty());
+    // A GET's record is what it always was: no `method`.
+    let t = FakeTransport::answering(vec![ok("plain")]);
+    let (rec, _) = get_with(&policy(&["a.example.com"], &[]), "https://a.example.com/", &r, &t);
+    assert!(rec.to_json()["hops"][0].get("method").is_none());
+}
+
 /// P9-05 (a), D-V2-138: a path-scoped entry is judged on every hop — a redirect out of the granted path is refused as a
 /// redirect to an ungranted host is, and a path a server could read two ways is refused before anything is resolved. The
 /// query is not the path; a host granted whole reaches every path.
@@ -559,6 +655,35 @@ fn aud(members: &[&str]) -> Vec<Audience> {
 /// the program addressed one origin. Back at the origin it is carried again. Each hop's record names the secret
 /// it carried, never its bytes.
 #[test]
+fn a_post_carries_its_secret_and_its_body_only_inside_the_audience() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let to = aud(&["a.example.com"]);
+    let secret = SecretHeader { header: "Authorization", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
+    let p = policy(&["a.example.com:POST", "b.example.com:POST"], &[]);
+    let post = |url: &str, t: &FakeTransport| request(&p, "POST", url, &[], Some("{}"), Some(&secret), &r, t);
+    // P9-05 (d), D-V2-183: `post_with_secret` — the secret in its header and the body, on a POST to the audience.
+    let t = FakeTransport::answering(vec![ok("made")]);
+    let (rec, body) = post("https://a.example.com/items", &t);
+    assert_eq!(body.as_deref(), Some("made"), "{:?}", rec.outcome);
+    let sent = t.sent.borrow();
+    assert_eq!((sent[0].method.as_str(), sent[0].body.as_deref()), ("POST", Some("{}")));
+    assert_eq!(sent[0].headers, hs(&[("authorization", SECRET_BYTES)]));
+    assert_eq!((rec.hops[0].secret.as_deref(), rec.hops[0].method.as_str()), (Some("API_TOKEN"), "POST"));
+    drop(sent);
+    // Outside the audience: refused before anything is resolved, the method notwithstanding.
+    let t = FakeTransport::answering(vec![ok("never")]);
+    let (rec, body) = post("https://b.example.com/items", &t);
+    assert_eq!(body, None);
+    assert_eq!(rec.outcome.unwrap_err().code(), "audience");
+    assert!(t.sent.borrow().is_empty());
+    // A 307 to another origin would carry the body (and the request) there: refused, the secret sent once, to the audience.
+    let t = FakeTransport::answering(vec![redirect(307, "https://b.example.com/x"), ok("never")]);
+    let (rec, _) = post("https://a.example.com/items", &t);
+    assert_eq!(rec.outcome, Err(Reason::BodyElsewhere));
+    assert_eq!(t.sent.borrow().len(), 1);
+}
+
+#[test]
 fn a_secret_goes_only_to_its_audience_on_the_origins_hops() {
     let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
     let allow = ["a.example.com", "b.example.com"];
@@ -597,7 +722,15 @@ fn a_secret_goes_only_to_its_audience_on_the_origins_hops() {
     assert!(json.contains("\"secret\":\"API_TOKEN\"") && json.contains("\"authorization\""), "{json}");
     assert!(!json.contains(SECRET_BYTES), "the record never holds the secret's bytes: {json}");
     assert!(!format!("{secret:?}").contains(SECRET_BYTES), "nor does the carrier's own Debug");
-    let pinned = PinnedRequest { url: "https://a.example.com/", host: "a.example.com", port: 443, addrs: &[], headers: &with };
+    let pinned = PinnedRequest {
+        url: "https://a.example.com/",
+        host: "a.example.com",
+        port: 443,
+        addrs: &[],
+        headers: &with,
+        method: "GET",
+        body: None,
+    };
     let shown = format!("{pinned:?}");
     assert!(shown.contains("authorization") && !shown.contains(SECRET_BYTES), "nor a pinned request's: {shown}");
 }
@@ -897,6 +1030,8 @@ mod real_transport {
         path: String,
         /// The request's whole head, as it arrived (P9-04 (a): the headers a program sent).
         head: String,
+        /// Its body, read to its `Content-Length` (P9-05 (d), D-V2-183).
+        body: String,
         /// The handshake never produced a request — the client refused the certificate, or never sent.
         no_request: bool,
     }
@@ -951,6 +1086,20 @@ mod real_transport {
                         Ok(n) => head.extend_from_slice(&chunk[..n]),
                     }
                 }
+                // A body: what came after the head, then the rest of its `Content-Length`.
+                let split = head.windows(4).position(|w| w == b"\r\n\r\n").map_or(head.len(), |i| i + 4);
+                let mut body = head.split_off(split);
+                let length = String::from_utf8_lossy(&head).lines().find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case("content-length").then(|| v.trim().parse::<usize>().ok()).flatten()
+                });
+                while body.len() < length.unwrap_or(0) {
+                    match tls.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => body.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                let body = String::from_utf8_lossy(&body).to_string();
                 let text = String::from_utf8_lossy(&head).to_string();
                 let sni = tls.conn.server_name().map(str::to_string);
                 if text.is_empty() {
@@ -961,7 +1110,7 @@ mod real_transport {
                         k.eq_ignore_ascii_case("host").then(|| v.trim().to_string())
                     });
                     let path = text.split_whitespace().nth(1).unwrap_or("").to_string();
-                    log.lock().unwrap().push(Seen { sni, host, path: path.clone(), head: text.clone(), no_request: false });
+                    log.lock().unwrap().push(Seen { sni, host, path: path.clone(), head: text.clone(), body, no_request: false });
                     let _ = tls.write_all(&respond(&path));
                     let _ = tls.flush();
                     tls.conn.send_close_notify();
@@ -1028,6 +1177,29 @@ mod real_transport {
         assert_eq!(rec.hops[0].headers, ["x-api-version", "user-agent", "accept"]);
     }
 
+    /// P9-05 (d), D-V2-183, end to end over real TLS: a POST arrives as a POST, with the program's body whole and its
+    /// length, and its headers as written.
+    #[test]
+    fn a_post_arrives_over_tls_with_its_body() {
+        let s = serve(&["pinned.test"], |_| http("201 Created", "made"), Duration::from_secs(5));
+        let r = FakeResolver::with(&[("pinned.test", &["127.0.0.1"])]);
+        let t = ReqwestTransport::with_roots(s.roots.clone());
+        let url = format!("https://pinned.test:{}/items", s.port);
+        let given = hs(&[("Content-Type", "application/json")]);
+        let sent = "{\"name\":\"tea\",\"qty\":2}";
+        let p = policy(&["pinned.test:POST"], &["pinned.test:POST"]);
+        let (rec, body) = request(&p, "POST", &url, &given, Some(sent), None, &r, &t);
+        assert_eq!(body.as_deref(), Some("made"), "{:?}", rec.outcome);
+        let seen = s.seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 1, "{seen:?}");
+        assert!(seen[0].head.starts_with("POST /items HTTP/1.1\r\n"), "{:?}", seen[0].head);
+        let lines: Vec<String> = seen[0].head.lines().map(|l| l.to_ascii_lowercase()).collect();
+        assert!(lines.contains(&format!("content-length: {}", sent.len())), "{lines:?}");
+        assert!(lines.contains(&"content-type: application/json".to_string()), "{lines:?}");
+        assert_eq!(seen[0].body, sent, "the body arrives whole");
+        assert_eq!(rec.hops[0].method, "POST");
+    }
+
     /// Verification is ON in the configuration a release uses: the platform's trust store refuses a
     /// certificate nobody issued. If this ever delivers a body, certificate checking has been turned
     /// off, and nothing else in the suite would say so.
@@ -1080,7 +1252,15 @@ mod real_transport {
         let t = ReqwestTransport::with_roots(s.roots.clone());
         let addrs = [SocketAddr::new(ip("127.0.0.1"), s.port)];
         let url = format!("https://localhost:{}/", s.port);
-        let req = PinnedRequest { url: &url, host: "pinned.test", port: s.port, addrs: &addrs, headers: &[] };
+        let req = PinnedRequest {
+            url: &url,
+            host: "pinned.test",
+            port: s.port,
+            addrs: &addrs,
+            headers: &[],
+            method: "GET",
+            body: None,
+        };
         let got = t.fetch(&req, 1024, Duration::from_secs(5));
         assert_eq!(got, Err(Reason::Connect), "an unpinned host is not resolved");
         std::thread::sleep(Duration::from_millis(200));

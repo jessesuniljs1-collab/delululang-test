@@ -431,6 +431,45 @@ fn a_scope_that_was_never_granted_is_still_refused_inside_the_sandbox() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// D-V2-21 inside the sandbox (the agent test campaign's A18): the run report is the runtime's alone, so a `--report-out`
+/// inside a scope the program is granted to write is refused before anything runs — on this route as on the ordinary one,
+/// whose refusal `json_contract`'s `run_report_is_the_documented_envelope` holds. Until 2026-10-25 a sandboxed run skipped
+/// the check, ran, and the guest wrote a counterfeit report where the runtime's would go. A dry run says what the run would
+/// do, so it refuses too. The control: the same run with the report outside every write scope writes it.
+#[test]
+fn the_report_is_refused_inside_a_write_scope_inside_the_sandbox_too() {
+    let dir = tmp("report");
+    let scope = dir.join("out").display().to_string().replace('\\', "/");
+    let src = dir.join("p.delulu");
+    std::fs::write(
+        &src,
+        format!(
+            "module g\n\nfn main(root: Root) ! {{Write}} {{\n    \
+             let w = root.fs_write(\"{scope}\")\n    \
+             let _ = w.write_text(\"r.json\", \"{{\\\"sandbox\\\":{{\\\"level\\\":4}}}}\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let src = src.to_str().unwrap();
+    let grant = format!("fs.write={scope}");
+    for report in [format!("{scope}/r.json"), format!("{scope}/../out/r.json")] {
+        for mode in [&[][..], &["--mode", "audit"][..]] {
+            let mut args = vec!["run", src, "--sandbox", "--grant", grant.as_str(), "--json", "--report-out", report.as_str()];
+            args.extend_from_slice(mode);
+            let o = delulu(&args);
+            assert_eq!(o.status.code(), Some(2), "`{}`: {}", args.join(" "), out(&o));
+            assert!(String::from_utf8_lossy(&o.stderr).contains("D-V2-21"), "{}", out(&o));
+            assert!(std::fs::read_dir(dir.join("out")).unwrap().next().is_none(), "nothing ran, nothing written: {}", out(&o));
+        }
+    }
+    let report = dir.join("r.json");
+    let o = delulu(&["run", src, "--sandbox", "--grant", &grant, "--json", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "the control: {}", out(&o));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(v["outcome"]["ran"], true, "the runtime wrote its own report: {v}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A state directory of this test binary's own, so a run never touches the developer's real one.
 fn isolated_state() -> std::path::PathBuf {
     static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();

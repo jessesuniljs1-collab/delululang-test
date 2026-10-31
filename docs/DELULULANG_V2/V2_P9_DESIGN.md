@@ -286,3 +286,22 @@ skip branch, §11.2).
   pattern) in the broker's `⊑`, the runtime's mint and `grants diff`; the meet every entry's meet; the canonical form an
   antichain; Z3 §2d (41 obligations, three more CI mutants) and an exhaustive Rust check. Not taken: the path in the
   broker's op and record (OCSF reads `target` as the hostname) — its own slice. Next: (c)'s static half.
+  **Step (d)'s first slice built 2026-10-23 (D-V2-182), on the laptop: the methods as an order, before any primitive
+  uses one.** `net=HOST[:METHODS][/PATTERN]`, each set spelled one way (names from GET, HEAD, POST, PUT, PATCH, DELETE,
+  each once, in that order; never `:GET` alone); an entry naming none allows GET alone, so no grant written before
+  reaches more. The order and the meet in `netscope` (methods ⊆ and ∩), exact by enumeration with methods; Z3 §2e (9
+  obligations, 50 in all, two more CI mutants). Every check asks with `GET` — the first check (DL0904 in words about
+  the method), every egress hop, the broker's use check (`Denial::NetMethod`), `--within` — and the OpenShell export
+  refuses a method scope. Next: the first non-GET primitive (its conformance anchors, the method in the broker's op and
+  record, OCSF's `http_request.http_method`, a redirect's method — a 303 makes a GET), then the static half.
+  **Step (d)'s second slice built 2026-10-23 (D-V2-183): `Cap[Http].post(url, headers, body)`.** Judged by its method
+  at the first check, on every egress hop (a 301/302/303 after it a GET with no body; a 307/308 keeping the body, to the
+  origin the program named only), by the broker (the custody's `check_at` and the IPC's `Check` carry the method,
+  absent for a GET) and by `--within`. The use's record names `method`, OCSF's `http_request.http_method`, and a run
+  report's hop names it. And `post_with_secret`, the authenticated POST (the secret to its audience only, the broker's
+  `send` under the daemon). Conformance anchors `ref.prim.http.post` and `ref.prim.http.post_with_secret`,
+  `PRIM_TABLE_VERSION` 8. Next: both on the WASM engine.
+  **And `post` on the WASM engine, the same day:** the import `delulu:cap.http_post(cap, url, headers, desc, body, …)`,
+  performed by the interpreter's own `post`; the host's gate asks the custody by its method (`custody_allows_by`).
+  And `post_with_secret` (`delulu:cap.http_post_with_secret`, through one host helper with `get_with_secret`). Next: PUT,
+  PATCH and DELETE, each a primitive of its own when a program needs one.

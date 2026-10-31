@@ -65,6 +65,9 @@ pub enum CompileError {
     /// A construct that would place SECRET contents in guest linear memory — DL1205. Refused so the
     /// program runs on the interpreter, where secret bytes never cross into a guest (§4.4, spec §9.8).
     SecretInGuest(String),
+    /// One of the above, at the innermost expression or statement that refused it (the campaign's A10: a refusal named no
+    /// line, so the author of a long program had to guess which expression the backend could not compile).
+    At(delulu_diag::Span, Box<CompileError>),
 }
 
 impl CompileError {
@@ -74,6 +77,7 @@ impl CompileError {
             CompileError::SecretInGuest(what) => {
                 format!("secret contents cannot enter WASM guest memory ({what}); it runs on the interpreter")
             }
+            CompileError::At(_, inner) => inner.message(),
         }
     }
 
@@ -82,6 +86,33 @@ impl CompileError {
         match self {
             CompileError::Unsupported(_) => "DL1201",
             CompileError::SecretInGuest(_) => "DL1205",
+            CompileError::At(_, inner) => inner.code(),
+        }
+    }
+
+    /// Where the refusal is: the innermost expression or statement the backend refused, or `None` for one that belongs to
+    /// no single node (the module's data, an actor's layout).
+    pub fn span(&self) -> Option<delulu_diag::Span> {
+        match self {
+            CompileError::At(span, _) => Some(*span),
+            _ => None,
+        }
+    }
+
+    /// Place the refusal at `span` unless a node inside it was already named: the innermost one wins.
+    fn at(self, span: delulu_diag::Span) -> Self {
+        match self {
+            CompileError::At(..) => self,
+            e => CompileError::At(span, Box::new(e)),
+        }
+    }
+
+    /// Rewrite an `Unsupported` refusal's text, wherever it is placed.
+    fn map_unsupported(self, f: impl FnOnce(String) -> String) -> Self {
+        match self {
+            CompileError::Unsupported(m) => CompileError::Unsupported(f(m)),
+            CompileError::At(span, inner) => CompileError::At(span, Box::new(inner.map_unsupported(f))),
+            other => other,
         }
     }
 }
@@ -338,6 +369,9 @@ struct EnumEnv {
     /// RW 3.4: the module's non-generic record types, by declaration order, and their names.
     records: Vec<RecordDesc>,
     records_by_name: HashMap<String, u32>,
+    /// The checker's name for each `TypeDefId` (`compile_checked`; empty through `compile_module`): how a sum or a record
+    /// the checker inferred is named here (A10: `let out = []`, filled by `out.push(TNum(1))` later).
+    checked_names: Vec<String>,
 }
 
 /// A record type the backend lays out: its fields in declaration order, each a slot's type (`field_ty`) — or `None` when
@@ -600,6 +634,7 @@ fn build_enum_env(module: &Module) -> EnumEnv {
         actors_by_name,
         records: Vec::new(),
         records_by_name,
+        checked_names: Vec::new(),
     };
     // Prelude descriptors.
     let str_payload = vec![Scalar::Str];
@@ -708,11 +743,15 @@ struct Imports {
     clock_now_ms: u32,
     root_rand: u32,
     rand_int: u32,
+    rand_float: u32,
     root_fs_read: u32,
     fs_read_text: u32,
     /// `delulu:cap.fs_narrow` — `Cap[FsRead].narrow(sub)`, a narrower handle minted host-side by the interpreter's own
     /// `resolve_in_scope`.
     fs_narrow: u32,
+    /// `delulu:cap.fs_list_dir` — `Cap[FsRead].list_dir(path)` (A7), performed host-side as the interpreter performs it;
+    /// imported only by a module that calls it.
+    fs_list_dir: u32,
     /// `delulu:cap.root_fs_write` and `fs_write_text` — `root.fs_write(p)` and `write_text`/`append_text`, performed
     /// host-side in the interpreter's order (RW 3.4).
     root_fs_write: u32,
@@ -725,6 +764,15 @@ struct Imports {
     /// the interpreter's own rule and keeps, and `Cap[Http].get_with_secret`, which sends it from the host (D-V2-174).
     root_secret: u32,
     http_get_with_secret: u32,
+    /// `delulu:cap.http_post` — `Cap[Http].post(url, headers, body)`, performed host-side by the interpreter's own `post`
+    /// (P9-05 (d), D-V2-183).
+    http_post: u32,
+    /// `delulu:cap.http_get_with` — `Cap[Http].get_with(url, headers)`, a GET with headers, performed host-side by the
+    /// interpreter's own `get_with` (the agent campaign's A21).
+    http_get_with: u32,
+    /// `delulu:cap.http_post_with_secret` — `Cap[Http].post_with_secret(url, headers, header, secret, body)`, a POST
+    /// carrying a secret's handle, sent from the host as `get_with_secret`'s is (P9-05 (d), D-V2-183).
+    http_post_with_secret: u32,
     /// `delulu:cap.secret_verify` — `Secret.verify(other)`, compared host-side by the interpreter's own `secret_verify`.
     secret_verify: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
@@ -1085,12 +1133,18 @@ fn module_calls_builtin(env: &EnumEnv, module: &Module, name: &str) -> bool {
 /// Does any function whose body is compiled make or take a `Float` — a literal, `float(…)`, `parse_float(…)`, or a
 /// `Float` written in its signature? Only these bring a `Float` into a compiled body, so only such a module carries the
 /// `delulu:float` interface, and every other module is unchanged.
-fn module_uses_floats(env: &EnumEnv, module: &Module) -> bool {
+fn module_uses_floats(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
     let hit = |e: &Expr| match e {
         Expr::Lit { kind: LitKind::Float(_), .. } => true,
-        Expr::Call { callee, .. } => matches!(&**callee, Expr::Var { path, .. }
-            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")),
-        _ => false,
+        Expr::Call { callee, .. }
+            if matches!(&**callee, Expr::Var { path, .. }
+            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")) =>
+        {
+            true
+        }
+        // Any expression the checker typed `Float`: one made by a method (`r.float()`) wrote none of the above, and its
+        // `str` was refused DL1201 (2026-10-27).
+        e => matches!(node_types.get(&e.id()), Some(delulu_check::Type::Float)),
     };
     let signed = |f: &FnDecl| f.params.iter().any(|p| mentions_float(&p.ty)) || f.ret.as_ref().is_some_and(mentions_float);
     module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && signed(f)))
@@ -1211,23 +1265,31 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 /// grammar has no method type-argument syntax, so — exactly as the interpreter does — codegen recovers
 /// which lib each bind site resolves to from `foreign_binds` (keyed by the call's `NodeId`).
 pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, String>) -> Result<Vec<u8>, CompileError> {
-    compile_module_typed(module, foreign_binds, &HashMap::new())
+    compile_module_typed(module, foreign_binds, &HashMap::new(), &[]).map(|(wasm, _)| wasm)
 }
 
 /// Compile with everything the checker knows that the syntax does not say: the foreign bind sites, and the type it
 /// inferred for each node — so an empty list whose element type no `let` writes (`let out = []`, filled by
 /// `out.push(i)` later) has the type the checker gave it (RW 3.4). What the command line compiles with.
 pub fn compile_checked(module: &Module, checked: &delulu_check::CheckResult) -> Result<Vec<u8>, CompileError> {
-    compile_module_typed(module, &checked.foreign_binds, &checked.node_types)
+    compile_checked_sited(module, checked).map(|(wasm, _)| wasm)
+}
+
+/// [`compile_checked`], and where in the module each statement's and expression's code lies: what names the place of a
+/// fault the run reports (B5). What `delulu run --engine wasm` compiles with.
+pub fn compile_checked_sited(module: &Module, checked: &delulu_check::CheckResult) -> Result<(Vec<u8>, SiteMap), CompileError> {
+    compile_module_typed(module, &checked.foreign_binds, &checked.node_types, &checked.type_names)
 }
 
 fn compile_module_typed(
     module: &Module,
     foreign_binds: &HashMap<NodeId, String>,
     node_types: &HashMap<NodeId, delulu_check::Type>,
-) -> Result<Vec<u8>, CompileError> {
+    type_names: &[String],
+) -> Result<(Vec<u8>, SiteMap), CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
-    let env = build_enum_env(module);
+    let mut env = build_enum_env(module);
+    env.checked_names = type_names.to_vec();
 
     // Generic user functions are not compiled as top-level exports; they are inlined (monomorphised)
     // at each call site (Phase 3r). Collect them by name for the inliner.
@@ -1268,7 +1330,11 @@ fn compile_module_typed(
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
+    // A21: `r.float()` imports `rand_float` only where it is called, so a module drawing only `int`s keeps its imports.
+    let needs_rand_float = needs_rand && module_calls_method(&env, module, &["float"]);
     let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text", "narrow"]);
+    // A7: `list_dir` imports `fs_list_dir` only where it is called, so every other module keeps its imports.
+    let needs_list_dir = module_calls_method(&env, module, &["list_dir"]);
     // Stage 4 phase 4g: a program needs the `delulu:foreign` imports when it binds/loads a foreign lib.
     let needs_foreign = module_calls_method(&env, module, &["foreign", "foreign_load"]);
 
@@ -1283,15 +1349,20 @@ fn compile_module_typed(
         clock_now_ms: u32::MAX,
         root_rand: u32::MAX,
         rand_int: u32::MAX,
+        rand_float: u32::MAX,
         root_fs_read: u32::MAX,
         fs_read_text: u32::MAX,
         fs_narrow: u32::MAX,
+        fs_list_dir: u32::MAX,
         root_fs_write: u32::MAX,
         fs_write_text: u32::MAX,
         root_http: u32::MAX,
         http_get: u32::MAX,
         root_secret: u32::MAX,
         http_get_with_secret: u32::MAX,
+        http_post: u32::MAX,
+        http_get_with: u32::MAX,
+        http_post_with_secret: u32::MAX,
         secret_verify: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
@@ -1334,11 +1405,19 @@ fn compile_module_typed(
         imp.rand_int = n_imports + 1;
         n_imports += 2;
     }
+    if needs_rand_float {
+        imp.rand_float = n_imports;
+        n_imports += 1;
+    }
     if needs_fs {
         imp.root_fs_read = n_imports;
         imp.fs_read_text = n_imports + 1;
         imp.fs_narrow = n_imports + 2;
         n_imports += 3;
+    }
+    if needs_list_dir {
+        imp.fs_list_dir = n_imports;
+        n_imports += 1;
     }
     let needs_fs_write = module_calls_method(&env, module, &["fs_write", "write_text", "append_text"]);
     if needs_fs_write {
@@ -1363,6 +1442,23 @@ fn compile_module_typed(
     let needs_secret_send = needs_http && needs_secret && module_calls_method(&env, module, &["get_with_secret"]);
     if needs_secret_send {
         imp.http_get_with_secret = n_imports;
+        n_imports += 1;
+    }
+    // P9-05 (d), D-V2-183: `post` where a `Cap[Http]` is minted — `post` is no other receiver's method.
+    let needs_post = needs_http && module_calls_method(&env, module, &["post"]);
+    if needs_post {
+        imp.http_post = n_imports;
+        n_imports += 1;
+    }
+    // A21: `get_with` where a `Cap[Http]` is minted — `get_with` is no other receiver's method.
+    let needs_get_with = needs_http && module_calls_method(&env, module, &["get_with"]);
+    if needs_get_with {
+        imp.http_get_with = n_imports;
+        n_imports += 1;
+    }
+    let needs_post_secret = needs_http && needs_secret && module_calls_method(&env, module, &["post_with_secret"]);
+    if needs_post_secret {
+        imp.http_post_with_secret = n_imports;
         n_imports += 1;
     }
     // A function taking two secrets compiles wherever it is written, so a module may verify what it never mints.
@@ -1413,7 +1509,7 @@ fn compile_module_typed(
     }
     // A module that makes or takes a `Float` carries `delulu:float`: `str` of one (unless the foreign interface already
     // brought `float_to_str`), and `%`.
-    let needs_floats = module_uses_floats(&env, module);
+    let needs_floats = module_uses_floats(&env, module, node_types);
     let needs_float_str = needs_floats && !needs_foreign;
     if needs_float_str {
         imp.float_to_str = n_imports;
@@ -1537,6 +1633,12 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I64, ValType::I64, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]); // rand_int(cap, lo, hi, file, start, end) -> i64
         next_type += 2;
     }
+    let mut rand_float_ty = 0;
+    if needs_rand_float {
+        rand_float_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::F64]); // rand_float(cap, file, start, end) -> f64
+        next_type += 1;
+    }
     let mut fs_root_ty = 0;
     let mut fs_read_ty = 0;
     if needs_fs {
@@ -1545,6 +1647,12 @@ fn compile_module_typed(
         fs_read_ty = next_type + 1;
         types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I32]); // fs_read_text(cap, path, file, start, end) -> result_ptr
         next_type += 2;
+    }
+    let mut fs_list_ty = 0;
+    if needs_list_dir {
+        fs_list_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I32]); // fs_list_dir(cap, path, file, start, end) -> result_ptr
+        next_type += 1;
     }
     let (mut fs_write_root_ty, mut fs_write_ty) = (0, 0);
     if needs_fs_write {
@@ -1573,6 +1681,27 @@ fn compile_module_typed(
         secret_send_ty = next_type;
         // http_get_with_secret(cap, url, headers, desc, header, secret, file, start, end) -> result_ptr
         types.ty().function([ValType::I32; 9], [ValType::I32]);
+        next_type += 1;
+    }
+    let mut http_post_ty = 0;
+    if needs_post {
+        http_post_ty = next_type;
+        // http_post(cap, url, headers, desc, body, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 8], [ValType::I32]);
+        next_type += 1;
+    }
+    let mut http_get_with_ty = 0;
+    if needs_get_with {
+        http_get_with_ty = next_type;
+        // http_get_with(cap, url, headers, desc, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 7], [ValType::I32]);
+        next_type += 1;
+    }
+    let mut http_post_secret_ty = 0;
+    if needs_post_secret {
+        http_post_secret_ty = next_type;
+        // http_post_with_secret(cap, url, headers, desc, header, secret, body, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 10], [ValType::I32]);
         next_type += 1;
     }
     let mut secret_verify_ty = 0;
@@ -1721,21 +1850,24 @@ fn compile_module_typed(
     // Stage 7 phase 7h: the subset gate runs EARLY — one out-of-subset actor field or
     // member parameter refuses the WHOLE module (honest DL1201 interpreter fallback)
     // before any function body compiles, so no partial artifact and no late panic path.
+    // Each refusal is placed at the type it cannot hold (the campaign's A16: it named the field and no line).
     for (_, decl, params, _, _) in &member_plans {
         for fld in &decl.fields {
             if actor_boundary_ty(&env, &fld.ty).is_none() {
                 return Err(CompileError::Unsupported(format!(
-                    "actor field `{}.{}` is outside the Int/actor-reference subset",
+                    "an actor field `{}.{}` of a type outside the Int/actor-reference subset",
                     decl.name.name, fld.name.name
-                )));
+                ))
+                .at(fld.ty.span()));
             }
         }
         for p in params.iter() {
             if actor_boundary_ty(&env, &p.ty).is_none() {
                 return Err(CompileError::Unsupported(format!(
-                    "actor member parameter `{}` is outside the Int/actor-reference subset",
+                    "an actor parameter `{}` of a type outside the Int/actor-reference subset",
                     p.name.name
-                )));
+                ))
+                .at(p.ty.span()));
             }
         }
     }
@@ -1762,11 +1894,17 @@ fn compile_module_typed(
         imports.import("delulu:cap", "root_rand", EntityType::Function(rand_root_ty));
         imports.import("delulu:cap", "rand_int", EntityType::Function(rand_int_ty));
     }
+    if needs_rand_float {
+        imports.import("delulu:cap", "rand_float", EntityType::Function(rand_float_ty));
+    }
     if needs_fs {
         imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
         imports.import("delulu:cap", "fs_read_text", EntityType::Function(fs_read_ty));
         // fs_narrow(cap, path) -> cap
         imports.import("delulu:cap", "fs_narrow", EntityType::Function(fs_root_ty));
+    }
+    if needs_list_dir {
+        imports.import("delulu:cap", "fs_list_dir", EntityType::Function(fs_list_ty));
     }
     if needs_fs_write {
         imports.import("delulu:cap", "root_fs_write", EntityType::Function(fs_write_root_ty));
@@ -1781,6 +1919,15 @@ fn compile_module_typed(
     }
     if needs_secret_send {
         imports.import("delulu:cap", "http_get_with_secret", EntityType::Function(secret_send_ty));
+    }
+    if needs_post {
+        imports.import("delulu:cap", "http_post", EntityType::Function(http_post_ty));
+    }
+    if needs_get_with {
+        imports.import("delulu:cap", "http_get_with", EntityType::Function(http_get_with_ty));
+    }
+    if needs_post_secret {
+        imports.import("delulu:cap", "http_post_with_secret", EntityType::Function(http_post_secret_ty));
     }
     if needs_secret_verify {
         imports.import("delulu:cap", "secret_verify", EntityType::Function(secret_verify_ty));
@@ -1902,8 +2049,9 @@ fn compile_module_typed(
     code.function(&int_to_str_fn(alloc));
     code.function(&alloc_fn(HEAP_GLOBAL));
     code.function(&str_len_fn());
-    for f in &fns {
-        code.function(&compile_fn(
+    let mut sites = SiteMap::default();
+    for (i, f) in fns.iter().enumerate() {
+        let (body, at) = compile_fn(
             f,
             &env,
             &generics,
@@ -1917,10 +2065,12 @@ fn compile_module_typed(
             foreign_binds,
             node_types,
             &descs,
-        )?);
+        )?;
+        code.function(&body);
+        sites.funcs.insert(user_base + i as u32, at);
     }
-    for (actor_idx, decl, params, body, _) in &member_plans {
-        code.function(&compile_actor_member(
+    for (j, (actor_idx, decl, params, body, _)) in member_plans.iter().enumerate() {
+        let (body, at) = compile_actor_member(
             *actor_idx,
             decl,
             params,
@@ -1937,7 +2087,9 @@ fn compile_module_typed(
             foreign_binds,
             node_types,
             &descs,
-        )?);
+        )?;
+        code.function(&body);
+        sites.funcs.insert(actor_base + j as u32, at);
     }
     if needs_lists {
         code.function(&list_new_fn(alloc));
@@ -1986,7 +2138,7 @@ fn compile_module_typed(
     m.section(&exports);
     m.section(&code);
     m.section(&datas);
-    Ok(m.finish())
+    Ok((m.finish(), sites))
 }
 
 fn result_valtypes(ret: Ty) -> Vec<ValType> {
@@ -2190,6 +2342,9 @@ struct Cx<'a> {
     inline_floor: usize,
     /// The frames the body being compiled cannot see — empty in a function's own body (WASM-HYGIENE-1).
     hidden: Vec<Hidden>,
+    /// LATE-LET-1: how many scope and callable frames the function values defined in this body see, at most. A `let` into
+    /// a frame one of them sees binds in a new frame ([`Cx::bind_after`]).
+    held: std::cell::Cell<(usize, usize)>,
     /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
     imp: Imports,
     /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
@@ -2210,6 +2365,11 @@ struct Cx<'a> {
     /// The function's declared return type — the expected type for `return`/`?` (Phase 3o).
     ret: Ty,
     instrs: Vec<Instruction<'static>>,
+    /// Where each run of `instrs` came from (B5, [`SiteMap`]): from each index on, the innermost statement or expression
+    /// being compiled, until the next mark.
+    sites: Sites,
+    /// The statements and expressions being compiled, the innermost last.
+    site_stack: Vec<delulu_diag::Span>,
 }
 
 impl<'a> Cx<'a> {
@@ -2225,14 +2385,28 @@ impl<'a> Cx<'a> {
         let seen = |i: usize| !self.hidden.iter().any(|h| (h.callables.0..h.callables.1).contains(&i));
         self.callables.iter().enumerate().rev().filter(|(i, _)| seen(*i)).find_map(|(_, s)| s.get(name).cloned())
     }
-    /// A function value defined here: it will see what this body sees (WASM-HYGIENE-1).
+    /// A function value defined here: it will see what this body sees (WASM-HYGIENE-1), and no binding made after it
+    /// (LATE-LET-1).
     fn callable(&self, params: &[Param], body: &Block) -> Callable {
+        let (scopes, callables) = self.held.get();
+        self.held.set((scopes.max(self.scopes.len()), callables.max(self.callables.len())));
         Callable {
             params: params.to_vec(),
             body: body.clone(),
             hidden: self.hidden.clone(),
             scopes_at: self.scopes.len(),
             callables_at: self.callables.len(),
+        }
+    }
+    /// LATE-LET-1: before a `let` binds, a new frame if a function value defined here sees the innermost one. It is
+    /// inlined where it is called, and its body reads the frames it was defined over by index — so a `let` in one of
+    /// them, made after it, was what the inlined body found (a pure callee's name given an effectful function), where
+    /// the checker resolved the name where the function value was written. The block's end closes the new frame.
+    fn bind_after(&mut self) {
+        let (scopes, callables) = self.held.get();
+        if scopes >= self.scopes.len() || callables >= self.callables.len() {
+            self.scopes.push(HashMap::new());
+            self.callables.push(HashMap::new());
         }
     }
     fn alloc_local(&mut self, ty: Ty) -> Result<u32, CompileError> {
@@ -2249,6 +2423,70 @@ impl<'a> Cx<'a> {
         }
         self.instrs.push(i);
     }
+    /// The code emitted from here on is `span`'s, until [`Cx::leave_site`].
+    fn enter_site(&mut self, span: delulu_diag::Span) {
+        self.site_stack.push(span);
+        self.mark_site(Some(span));
+    }
+    /// The code emitted from here on is the enclosing statement's or expression's again.
+    fn leave_site(&mut self) {
+        self.site_stack.pop();
+        self.mark_site(self.site_stack.last().copied());
+    }
+    fn mark_site(&mut self, span: Option<delulu_diag::Span>) {
+        let at = self.instrs.len() as u32;
+        match self.sites.last_mut() {
+            Some(last) if last.0 == at => last.1 = span,
+            _ => self.sites.push((at, span)),
+        }
+    }
+}
+
+/// Where each stretch of a module's code came from (B5 of the agent test campaign): for each function compiled from
+/// source, the byte offsets in its body — counted as wasmtime counts them, from the body's start — at which the innermost
+/// statement or expression being compiled changes, each with that span (`None` where there was none). Read against a
+/// fault's frames by [`SiteMap::locate`], it names the place the interpreter names. It is not part of the module: a `.dwx`
+/// carries none, and its code hash is unchanged.
+/// One body's sites: from each byte offset on (ascending), the span its code came from ([`SiteMap`]).
+type Sites = Vec<(u32, Option<delulu_diag::Span>)>;
+
+#[derive(Clone, Debug, Default)]
+pub struct SiteMap {
+    funcs: HashMap<u32, Sites>,
+}
+
+impl SiteMap {
+    /// The span of the innermost frame that has one. `frames` are innermost first, each a function's index in the module
+    /// and the offset in its body of the instruction it was at — the trapping one, or the call it made. A helper the
+    /// compiler wrote (`__alloc`, a checked add) has no sites, so its caller's frame answers.
+    pub fn locate(&self, frames: &[(u32, u32)]) -> Option<delulu_diag::Span> {
+        frames.iter().find_map(|&(func, at)| {
+            let sites = self.funcs.get(&func)?;
+            let i = sites.partition_point(|&(off, _)| off <= at).checked_sub(1)?;
+            sites[i].1
+        })
+    }
+}
+
+/// A compiled body's function, and where in it each site begins ([`SiteMap`]).
+fn finish_body(cx: Cx) -> (Function, Sites) {
+    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
+    let mut sites: Sites = Vec::new();
+    let mut marks = cx.sites.iter().peekable();
+    for (i, ins) in cx.instrs.iter().enumerate() {
+        while let Some(&&(at, span)) = marks.peek() {
+            if at as usize > i {
+                break;
+            }
+            if sites.last().map(|s| s.1) != Some(span) {
+                sites.push((func.byte_len() as u32, span));
+            }
+            marks.next();
+        }
+        func.instruction(ins);
+    }
+    func.instruction(&Instruction::End);
+    (func, sites)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2266,7 +2504,7 @@ fn compile_fn<'a>(
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
     descs: &'a RefCell<Descs>,
-) -> Result<Function, CompileError> {
+) -> Result<(Function, Sites), CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -2291,6 +2529,7 @@ fn compile_fn<'a>(
         depth: 0,
         loops: Vec::new(),
         inline_floor: 0,
+        held: std::cell::Cell::new((0, 0)),
         hidden: Vec::new(),
         imp,
         foreign_binds,
@@ -2301,16 +2540,13 @@ fn compile_fn<'a>(
         actor: None,
         ret,
         instrs: Vec::new(),
+        sites: Vec::new(),
+        site_stack: Vec::new(),
     };
     // Compile the body expecting the declared return type (expected-type-directed, so variant
     // constructions in tail position know their full `Result`/`Option` type — Phase 3o).
     compile_block_as(&f.body, &mut cx, ret)?;
-    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
-    for ins in &cx.instrs {
-        func.instruction(ins);
-    }
-    func.instruction(&Instruction::End);
-    Ok(func)
+    Ok(finish_body(cx))
 }
 
 /// Compile one actor member (the ctor or a behaviour) to a wasm function (Stage 7 phase 7h).
@@ -2336,15 +2572,16 @@ fn compile_actor_member<'a>(
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
     descs: &'a RefCell<Descs>,
-) -> Result<Function, CompileError> {
+) -> Result<(Function, Sites), CompileError> {
     // Field layout: name → (slot index, lowered type). Only `Int`/actor-ref fields are in-subset.
     let mut fields: HashMap<String, (u32, Ty)> = HashMap::new();
     for (i, fld) in decl.fields.iter().enumerate() {
         let fty = actor_boundary_ty(env, &fld.ty).ok_or_else(|| {
             CompileError::Unsupported(format!(
-                "an actor field `{}` of a type outside the Int/actor-reference subset",
-                fld.name.name
+                "an actor field `{}.{}` of a type outside the Int/actor-reference subset",
+                decl.name.name, fld.name.name
             ))
+            .at(fld.ty.span())
         })?;
         fields.insert(fld.name.name.clone(), (i as u32, fty));
     }
@@ -2356,6 +2593,7 @@ fn compile_actor_member<'a>(
                 "an actor parameter `{}` of a type outside the Int/actor-reference subset",
                 p.name.name
             ))
+            .at(p.ty.span())
         })?;
         scope.insert(p.name.name.clone(), (i as u32 + 1, pty));
     }
@@ -2379,6 +2617,7 @@ fn compile_actor_member<'a>(
         depth: 0,
         loops: Vec::new(),
         inline_floor: 0,
+        held: std::cell::Cell::new((0, 0)),
         hidden: Vec::new(),
         imp,
         foreign_binds,
@@ -2389,16 +2628,13 @@ fn compile_actor_member<'a>(
         actor: Some(ActorCtx { self_slot: 0, actor_idx, fields }),
         ret: Ty::Unit,
         instrs: Vec::new(),
+        sites: Vec::new(),
+        site_stack: Vec::new(),
     };
     // A behaviour/ctor body yields Unit (invariant 34 — a behaviour returns nothing at the send
     // site; the ctor returns nothing).
     compile_block_as(body, &mut cx, Ty::Unit)?;
-    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
-    for ins in &cx.instrs {
-        func.instruction(ins);
-    }
-    func.instruction(&Instruction::End);
-    Ok(func)
+    Ok(finish_body(cx))
 }
 
 /// The lowered type of an actor field / behaviour-ctor parameter, restricted to the phase-7h
@@ -2426,33 +2662,53 @@ fn compile_block_as(b: &Block, cx: &mut Cx, expected: Ty) -> Result<(), CompileE
 /// match arm is that block's, and the `f` outside it is the outer one again once it ends (WASM-HYGIENE-2 — the binding
 /// had gone into the function's own frame, so an inner `f` replaced the outer for the rest of the function).
 fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    // The frames the block found, to return to at its end: a `let` may have opened more (LATE-LET-1). A function value
+    // defined in the block ends with it, so what the ones defined before it see is what stays held.
+    let base = (cx.scopes.len(), cx.callables.len());
+    let held = cx.held.get();
     cx.scopes.push(HashMap::new());
     cx.callables.push(HashMap::new());
-    let mut result = Ty::Unit;
+    let mut result = Ok(Ty::Unit);
     let n = b.stmts.len();
     for (i, stmt) in b.stmts.iter().enumerate() {
         let is_last = i + 1 == n;
-        let r = compile_stmt(stmt, cx, is_last, expected);
-        match r {
-            Ok(ty) => result = ty,
-            Err(e) => {
-                cx.callables.pop();
-                cx.scopes.pop();
-                return Err(e);
-            }
+        result = compile_stmt(stmt, cx, is_last, expected);
+        if result.is_err() {
+            break;
         }
     }
-    cx.callables.pop();
-    cx.scopes.pop();
-    Ok(result)
+    cx.callables.truncate(base.1);
+    cx.scopes.truncate(base.0);
+    cx.held.set(held);
+    result
 }
 
+/// Compile one statement; a refusal no expression inside it placed is placed at the statement (A10).
 fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    let span = match stmt {
+        Stmt::Let { span, .. }
+        | Stmt::Assign { span, .. }
+        | Stmt::While { span, .. }
+        | Stmt::For { span, .. }
+        | Stmt::Break { span }
+        | Stmt::Continue { span }
+        | Stmt::Return { span, .. } => *span,
+        Stmt::Expr(e) => e.span(),
+    };
+    cx.enter_site(span);
+    let r = compile_stmt_unplaced(stmt, cx, is_last, expected).map_err(|e| e.at(span));
+    cx.leave_site();
+    r
+}
+
+fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
     match stmt {
         Stmt::Let { name, ty, value, .. } => {
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
             if let Expr::Lambda { params, body, .. } = value {
                 let c = cx.callable(params, body);
+                // A `let` is not recursive: the function value does not see its own name (LATE-LET-1).
+                cx.bind_after();
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
@@ -2460,6 +2716,7 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
             if let Expr::Var { path, .. } = value {
                 if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() {
                     if let Ok(c) = resolve_callable(value, cx) {
+                        cx.bind_after();
                         cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                         return Ok(Ty::Unit);
                     }
@@ -2477,6 +2734,7 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
             };
             let idx = cx.alloc_local(ty)?;
             cx.emit(Instruction::LocalSet(idx));
+            cx.bind_after();
             cx.scopes.last_mut().unwrap().insert(name.name.clone(), (idx, ty));
             Ok(Ty::Unit)
         }
@@ -3017,6 +3275,13 @@ fn ctor_shape(e: &Expr) -> Option<(&str, &[Expr])> {
 /// forms that need the expected type (variant construction, and the control-flow that carries it to
 /// a tail) are special-cased; everything else synthesises and is checked against `expected`.
 fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
+    cx.enter_site(e.span());
+    let r = compile_expr_as_here(e, cx, expected);
+    cx.leave_site();
+    r
+}
+
+fn compile_expr_as_here(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
     // A constructor of the expected variant type (`Ok`/`Some`/`None` or a user enum's ctor).
     if let Some((name, args)) = ctor_shape(e) {
         if let Some(ctors) = cx.env.ctors_of(expected) {
@@ -3248,8 +3513,12 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
         cx.emit(Instruction::I32Eq);
         ifs.push(cx.instrs.len());
         cx.emit(Instruction::If(BlockType::Empty));
-        let got = compile_arm(&arms[arm_idx(t)?], &ctors[t].1, sp, sty, cx, result_ty)?;
-        result_ty.get_or_insert(got);
+        let arm = &arms[arm_idx(t)?];
+        let got = compile_arm(arm, &ctors[t].1, sp, sty, cx, result_ty)?;
+        // An arm that ends in `return` leaves the function: its type says nothing about the match's.
+        if !ends_in_return(&arm.body) {
+            result_ty.get_or_insert(got);
+        }
         cx.emit(Instruction::Else);
     }
     let got = compile_arm(&arms[arm_idx(ntags - 1)?], &ctors[ntags - 1].1, sp, sty, cx, result_ty)?;
@@ -3261,6 +3530,12 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
         cx.emit(Instruction::End);
     }
     Ok(result_ty)
+}
+
+/// Does `e` end in `return` — a block whose last statement leaves the function (`None => return Err(…)` parses as one)?
+/// Such a branch produces no value, so the type it compiles to is not the type of the `match` or `if` it is a branch of.
+fn ends_in_return(e: &Expr) -> bool {
+    matches!(e, Expr::Block(b) if matches!(b.stmts.last(), Some(Stmt::Return { .. })))
 }
 
 /// Does `p` test something inside a constructor — a constructor or a literal among its fields (`Some(Red)`, `Ok(0)`)?
@@ -3301,7 +3576,10 @@ fn compile_match_ordered(arms: &[Arm], sp: u32, sty: Ty, cx: &mut Cx, expected: 
             None => compile_expr(&arm.body, cx),
         });
         cx.scopes.pop();
-        result_ty.get_or_insert(r?);
+        let got = r?;
+        if !ends_in_return(&arm.body) {
+            result_ty.get_or_insert(got);
+        }
         cx.emit(Instruction::Br(cx.depth - done));
         cx.emit(Instruction::End);
     }
@@ -3554,7 +3832,16 @@ fn inline_body(
     r
 }
 
+/// Compile one expression; a refusal no node inside it placed is placed here, so the innermost refused expression is the
+/// one a DL1201 names (A10).
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    cx.enter_site(e.span());
+    let r = compile_expr_unplaced(e, cx).map_err(|err| err.at(e.span()));
+    cx.leave_site();
+    r
+}
+
+fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     match e {
         Expr::Lit { kind, .. } => match kind {
             LitKind::Int(n) => {
@@ -3649,7 +3936,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
         // An empty list's element type, when no `let` writes it, is the one the checker inferred (`let out = []`, then
         // `out.push(i)`); a list with items says its own.
         Expr::List { items, id, .. } => {
-            let inferred = if items.is_empty() { cx.node_types.get(id).and_then(list_scalar) } else { None };
+            let inferred = if items.is_empty() { cx.node_types.get(id).and_then(|t| list_scalar(cx.env, t)) } else { None };
             compile_list_literal(items, cx, inferred)
         }
         Expr::Index { recv, index, .. } => compile_index(recv, index, cx),
@@ -3666,12 +3953,18 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             let at = cx.instrs.len();
             cx.emit(Instruction::If(BlockType::Empty));
             let tt = compile_block(then_, cx)?;
+            // A then-branch that ends in `return` leaves the function, so the else-branch says the `if`'s type.
+            if matches!(then_.stmts.last(), Some(Stmt::Return { .. })) {
+                cx.emit(Instruction::Else);
+                let et = compile_expr(else_, cx)?;
+                cx.instrs[at] = Instruction::If(block_type(et));
+                cx.emit(Instruction::End);
+                return Ok(et);
+            }
             cx.instrs[at] = Instruction::If(block_type(tt));
             cx.emit(Instruction::Else);
-            compile_expr_as(else_, cx, tt).map_err(|e| match e {
-                CompileError::Unsupported(m) => CompileError::Unsupported(format!("`if` branches of differing types: {m}")),
-                other => other,
-            })?;
+            compile_expr_as(else_, cx, tt)
+                .map_err(|e| e.map_unsupported(|m| format!("`if` branches of differing types: {m}")))?;
             cx.emit(Instruction::End);
             Ok(tt)
         }
@@ -3748,6 +4041,15 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.rand_int));
                 return Ok(Ty::I64);
             }
+            // A21: Cap[Rand].float() -> host import returning a Float in [0, 1], drawn from the stream `int` draws from.
+            if name.name == "float" && args.is_empty() {
+                if compile_expr(recv, cx)? != Ty::Rand {
+                    return Err(CompileError::Unsupported("float() on a non-Rand receiver".into()));
+                }
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.rand_float));
+                return Ok(Ty::F64);
+            }
             // Phase 3p: Root.fs_read(path) -> host import minting a scoped FsRead handle.
             if name.name == "fs_read" && args.len() == 1 {
                 if compile_expr(recv, cx)? != Ty::Root {
@@ -3774,6 +4076,23 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.fs_read_text));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(io_err)));
+            }
+            // A7: `Cap[FsRead].list_dir(path)` -> host import returning `Result[List[Str], IoErr]`, the interpreter's names in
+            // the interpreter's order. It was refused DL1201, so a program that walked a directory could not be a `.dwx`.
+            if name.name == "list_dir" && args.len() == 1 && cx.imp.fs_list_dir != u32::MAX {
+                if compile_expr(recv, cx)? != Ty::FsRead {
+                    return Err(CompileError::Unsupported("list_dir() on a non-FsRead receiver".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("list_dir with a non-Str path".into()));
+                }
+                let io_err = cx
+                    .env
+                    .id("IoErr")
+                    .ok_or_else(|| CompileError::Unsupported("list_dir without the IoErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.fs_list_dir));
+                return Ok(Ty::Result(boxed(Ty::List(Scalar::Str)), Scalar::Enum(io_err)));
             }
             // `Cap[FsRead].narrow(sub)` -> a narrower `Cap[FsRead]`, minted host-side under the interpreter's own rule; pure, as
             // there — not traced.
@@ -3985,6 +4304,83 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.http_get_with_secret));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
             }
+            // `Cap[Http].post_with_secret(url, headers, header, secret, body)` -> `Result[Str, NetErr]` (P9-05 (d), D-V2-183):
+            // `get_with_secret`'s arguments and then the body, sent from the host by the interpreter's own method.
+            if recv_ty == Ty::Http && name.name == "post_with_secret" && args.len() == 5 {
+                if cx.imp.http_post_with_secret == u32::MAX {
+                    return Err(CompileError::Unsupported("`post_with_secret` in a module that mints no secret".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http post of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                if compile_expr(&args[2], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a header name that is not a Str".into()));
+                }
+                if compile_expr(&args[3], cx)? != Ty::Secret {
+                    return Err(CompileError::Unsupported("`post_with_secret` of a value that is not a Secret[Str]".into()));
+                }
+                if compile_expr(&args[4], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a request body that is not a Str".into()));
+                }
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http post without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_post_with_secret));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
+            // `Cap[Http].post(url, headers, body)` -> `Result[Str, NetErr]` (P9-05 (d), D-V2-183): performed host-side by the
+            // interpreter's own `post`, judged there by its method.
+            if recv_ty == Ty::Http && name.name == "post" && args.len() == 3 {
+                if cx.imp.http_post == u32::MAX {
+                    return Err(CompileError::Unsupported("`post` on a Cap[Http] in a module that mints none".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http post of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                if compile_expr(&args[2], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a request body that is not a Str".into()));
+                }
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http post without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_post));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
+            // `Cap[Http].get_with(url, headers)` -> `Result[Str, NetErr]` (A21): `post`'s URL and headers, by GET, no body.
+            if recv_ty == Ty::Http && name.name == "get_with" && args.len() == 2 {
+                if cx.imp.http_get_with == u32::MAX {
+                    return Err(CompileError::Unsupported("`get_with` on a Cap[Http] in a module that mints none".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http get of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http get without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_get_with));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
             // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).
             if recv_ty == Ty::Str && name.name == "len" && args.is_empty() {
                 cx.emit(Instruction::Call(cx.str_len_fn));
@@ -4102,7 +4498,8 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         Ok(Ty::Str)
                     }
                     _ => Err(CompileError::Unsupported(
-                        "str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)".into(),
+                        "str() of this type (Int, Str, Float, Bool, lists, maps, options, results, sums and records compile)"
+                            .into(),
                     )),
                 };
             }
@@ -4334,14 +4731,21 @@ fn compile_list_literal(items: &[Expr], cx: &mut Cx, want: Option<Scalar>) -> Re
 }
 
 /// The element type of a `List` the checker inferred, where the backend holds it: an `Int`, `Bool`, `Float` or `Str`.
-fn list_scalar(t: &delulu_check::Type) -> Option<Scalar> {
+fn list_scalar(env: &EnumEnv, t: &delulu_check::Type) -> Option<Scalar> {
     use delulu_check::Type;
     match t {
-        Type::List(e) => match **e {
+        Type::List(e) => match &**e {
             Type::Int => Some(Scalar::I64),
             Type::Bool => Some(Scalar::I32),
             Type::Float => Some(Scalar::F64),
             Type::Str => Some(Scalar::Str),
+            // A sum or a record the checker names, as `wasm_ty` reads the same name from an annotation (A10).
+            Type::Sum(d, args) if args.is_empty() => {
+                env.checked_names.get(d.0 as usize).and_then(|n| env.id(n)).and_then(|i| list_element(Ty::Enum(i)))
+            }
+            Type::Record(d, args) if args.is_empty() => {
+                env.checked_names.get(d.0 as usize).and_then(|n| env.record_id(n)).and_then(|i| list_element(Ty::Record(i)))
+            }
             _ => None,
         },
         _ => None,
@@ -5383,17 +5787,14 @@ fn ovf_mul_fn() -> Function {
 }
 
 /// `a % b`, trapping on `b == 0` and on `INT_MIN % -1` (matching `checked_rem`; core `i64.rem_s`
-/// would return 0 for the latter rather than trap).
+/// would return 0 for the latter rather than trap). `b == 0` is left to `i64.rem_s` itself, which traps
+/// `IntegerDivisionByZero` — DL0902, as the interpreter says. An `unreachable` there was read as overflow
+/// (DL0901), so `7 % 0` faulted with a different code on each engine (A3, the agent test campaign, 2026-10-24).
 fn chk_rem_fn() -> Function {
     use Instruction::*;
     build(
         &[],
         &[
-            LocalGet(1),
-            I64Eqz,
-            If(BlockType::Empty),
-            Unreachable,
-            End,
             LocalGet(0),
             I64Const(i64::MIN),
             I64Eq,
@@ -5886,6 +6287,28 @@ fn alloc_fn(heap_global: u32) -> Function {
         LocalGet(1),
     ]);
     build(&[(2, ValType::I32)], &code)
+}
+
+#[cfg(test)]
+mod placed_refusal_tests {
+    use super::*;
+
+    /// A refusal keeps the innermost place it was given, and a rewrite of its text (the `if` arm's
+    /// "`if` branches of differing types: …") reaches through the place without losing it (A10).
+    #[test]
+    fn the_innermost_place_wins_and_a_rewrite_keeps_it() {
+        let inner = delulu_diag::Span::new(0, 40, 45);
+        let outer = delulu_diag::Span::new(0, 10, 90);
+        let e = CompileError::Unsupported("this expression form".into()).at(inner).at(outer);
+        assert_eq!(e.span(), Some(inner));
+        assert_eq!((e.code(), e.message()), ("DL1201", "WASM codegen does not support this expression form".to_string()));
+        let e = e.map_unsupported(|m| format!("`if` branches of differing types: {m}"));
+        assert_eq!(e.span(), Some(inner));
+        assert_eq!(e.message(), "WASM codegen does not support `if` branches of differing types: this expression form");
+        let s = CompileError::SecretInGuest("a secret".into()).at(outer);
+        assert_eq!((s.code(), s.span()), ("DL1205", Some(outer)));
+        assert_eq!(CompileError::Unsupported("x".into()).span(), None);
+    }
 }
 
 #[cfg(test)]

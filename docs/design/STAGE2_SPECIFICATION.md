@@ -123,15 +123,9 @@ net      = []
 secrets  = []
 
 [dependencies]
-mathkit = { path = "../mathkit" }
-webby   = { git = "https://github.com/x/webby", rev = "9f2c41d" }   # rev/tag mandatory; branch forbidden
-
-[dependencies.webby.authority]   # AUTHORITY PIN: consumer's ceiling for this dependency
-effects = ["Net"]
-net     = ["api.example.com"]
-
-[dependencies.mathkit.authority]
-effects = []                     # pinned pure — the strongest supply-chain statement possible
+# AUTHORITY PIN (`authority`): the consumer's ceiling for each dependency
+mathkit = { path = "../mathkit", authority = { effects = [] } }   # pinned pure — the strongest supply-chain statement possible
+webby   = { git = "https://github.com/x/webby", rev = "9f2c41d", authority = { effects = ["Net"], net = ["api.example.com"] } }   # rev/tag mandatory; branch forbidden
 ```
 
 Normative rules:
@@ -478,7 +472,8 @@ Implementation-forced deviations, recorded for honesty:
   manifests that omit it).
 - A dependency that carries a pin must use TOML **table form** (`[dependencies.<name>]` with an
   `authority` sub-table, or an inline `authority = { … }`); the illustrative §3.2 snippet mixing
-  `x = { … }` with a following `[dependencies.x.authority]` is not valid TOML.
+  `x = { … }` with a following `[dependencies.x.authority]` is not valid TOML (the snippet shows the inline form since
+  2026-10-25, when DL1001's own repair was found writing the same invalid combination — RW 6.16).
 - **Git-dependency resolution is deferred, not faked**: unpinned git deps are DL1007; a pinned
   git dep is refused with a clear "resolution deferred" message rather than pretend-verified.
 

@@ -849,20 +849,32 @@ impl Interp {
     // ----- statements and blocks ------------------------------------------
 
     fn exec_block_value(&self, block: &Block, parent: &Env) -> R<Value> {
-        let env = Scope::child(parent);
+        // A14: a block binds names in its own scope only by `let`. Without one its scope would stay empty, and every
+        // read, write and capture passes through an empty scope to its parent — so the block runs in the parent's.
+        let mut env =
+            if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) { Scope::child(parent) } else { Rc::clone(parent) };
         let mut value = Value::Unit;
         let n = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = i + 1 == n;
-            value = self.exec_stmt(stmt, &env, is_last)?;
+            value = self.exec_stmt(stmt, &mut env, is_last)?;
         }
         Ok(value)
     }
 
-    fn exec_stmt(&self, stmt: &Stmt, env: &Env, is_last: bool) -> R<Value> {
+    /// `env` is the block's scope; a `let` may open a new one for the statements after it (LATE-LET-1).
+    fn exec_stmt(&self, stmt: &Stmt, env: &mut Env, is_last: bool) -> R<Value> {
         match stmt {
             Stmt::Let { name, value, .. } => {
                 let v = self.eval_expr(value, env)?;
+                // LATE-LET-1: a closure made over this scope — earlier in the block, or in this `let`'s own value — reads
+                // the names the checker resolved where it was written, and this one is not among them: it binds in a
+                // scope of its own, which the statements after it run in. Bound here, a closure typed pure called the
+                // effectful function a later `let` gave its callee's name, and a `Secret.map` callback printed the
+                // plaintext, from a program `authority` called provably pure.
+                if env.is_held() {
+                    *env = Scope::child(env);
+                }
                 env.define(&name.name, v);
                 Ok(Value::Unit)
             }
@@ -1014,16 +1026,20 @@ impl Interp {
                 self.note_alloc(&v); // 10d
                 Ok(v)
             }
-            Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env),
+            Expr::Call { callee, args, span, .. } => {
+                self.eval_call(callee, args, *span, env).map_err(|e| depth_at_call(e, *span))
+            }
             Expr::Method { recv, name, args, span, id } => self.eval_method(recv, name, args, *span, *id, env),
             Expr::Field { recv, name, .. } => {
                 let r = self.eval_expr(recv, env)?;
                 self.field(r, &name.name, name.span)
             }
-            Expr::Index { recv, index, .. } => {
+            Expr::Index { recv, index, span, .. } => {
                 let r = self.eval_expr(recv, env)?;
                 let i = self.eval_expr(index, env)?;
-                self.index(r, i, recv.span())
+                // The whole `xs[i]`, as a unary or binary fault is placed: it was `xs` alone, which hid the index that was
+                // out of bounds (B5, where the WASM engine's first place for it was compared with this one).
+                self.index(r, i, *span)
             }
             Expr::Unary { op, operand, span, .. } => {
                 let v = self.eval_expr(operand, env)?;
@@ -1039,6 +1055,8 @@ impl Interp {
             },
             Expr::Match { scrutinee, arms, span, .. } => self.eval_match(scrutinee, arms, *span, env),
             Expr::Lambda { params, body, .. } => {
+                // LATE-LET-1: from now on a `let` in this scope, or any above it, binds where this closure cannot see.
+                env.hold();
                 let v = Value::Closure(Rc::new(Closure {
                     params: params.iter().map(|p| p.name.name.clone()).collect(),
                     body: body.clone(),
@@ -1139,6 +1157,31 @@ impl Interp {
     }
 
     fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
+        // A14: a call by name to one of the module's functions — what the order below reaches when no local closure has
+        // the name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
+        // callee's scope. Whether a local closure has the name cannot change while the arguments run: an argument
+        // binds nothing in this scope, and a binding keeps its type.
+        if let Expr::Var { path, .. } = callee {
+            if let [seg] = path.segs.as_slice() {
+                let name = seg.name.as_str();
+                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && !matches!(env.get(name), Some(Value::Closure(_))) {
+                    let home = self.home();
+                    if let Some(f) = home.funcs.get(name) {
+                        let callee_env = Scope::child(&home.globals);
+                        for (i, a) in args.iter().enumerate() {
+                            let v = self.eval_expr(a, env)?;
+                            if let Some(p) = f.params.get(i) {
+                                callee_env.define(&p.name.name, v);
+                            }
+                        }
+                        self.enter()?;
+                        let result = self.exec_block_value(&f.body, &callee_env);
+                        self.leave();
+                        return self.finish_call(result);
+                    }
+                }
+            }
+        }
         // Evaluate arguments left to right.
         let mut argvals = Vec::with_capacity(args.len());
         for a in args {
@@ -1343,7 +1386,17 @@ impl Interp {
         let mut fetch_allowed: Option<String> = None;
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             let url_path = custody_path_for(op, &argvals);
-            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path) {
+            let method = custody_method_for(op, &name.name);
+            // RW 4.79: the program's own capability first — it may hold less than its node, and a use it refuses cannot
+            // happen, so its custody is not asked to allow it; the custody is told the refusal, and its chain says so.
+            if let Some(refused) = capability_refusal_for(&recvv, &name.name, &argvals, span) {
+                self.custody.borrow_mut().note_capability_refusal(op, arg.as_deref(), url_path, method, refused.reason);
+                if let Some(t) = &dispatched {
+                    self.trace_refusal(t, &name.name, refused.fault.code, &refused.fault.message, span);
+                }
+                return Err(Escape::Fault(refused.fault));
+            }
+            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path, method) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
                 // means the program asked for something it never held; this one can also mean an
@@ -1486,10 +1539,10 @@ impl Interp {
             // origin the request names, after everything that can be judged without them.
             Value::Cap(c)
                 if c.kind == ResourceKind::Http
-                    && name.name == "get_with_secret"
+                    && (name.name == "get_with_secret" || name.name == "post_with_secret")
                     && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) =>
             {
-                self.send_broker_secret(c, &argvals, span)
+                self.send_broker_secret(c, &name.name, &argvals, span)
             }
             // PS-A-01: the seam. `LocalSink` calls `prim::call_cap_method` — the same call this line
             // made before — so the local path is unchanged; a guest sends it to the host instead.
@@ -2170,12 +2223,12 @@ impl Interp {
     /// bytes for that ONE origin (`Custody::send_secret`: the node's `secret_to`, the Guard on the pair, a `send` record),
     /// and the request is made with a secret that holds them and whose audience is that origin alone — so a redirect to
     /// another origin, even one the grant names, drops it. The bytes reach the egress client; no program value holds them.
-    fn send_broker_secret(&self, c: &CapVal, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
-        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, argvals, span)?;
+    fn send_broker_secret(&self, c: &CapVal, method: &str, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, method, argvals, span)?;
         match send {
-            SecretSend::AsGiven => self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None),
+            SecretSend::AsGiven => self.effects.cap_method_pinned(c, method, argvals, span, None),
             SecretSend::Answered(v) => Ok(v),
-            SecretSend::Held(args) => self.effects.cap_method_pinned(c, "get_with_secret", &args, span, None),
+            SecretSend::Held(args) => self.effects.cap_method_pinned(c, method, &args, span, None),
         }
     }
 
@@ -2195,7 +2248,9 @@ impl Interp {
     fn eval_match(&self, scrutinee: &Expr, arms: &[Arm], span: delulu_diag::Span, env: &Env) -> R<Value> {
         let value = self.eval_expr(scrutinee, env)?;
         for arm in arms {
-            let arm_env = Scope::child(env);
+            // A14: an arm whose pattern names nothing binds nothing, so it needs no scope of its own (as a block
+            // without `let` needs none).
+            let arm_env = if binds(&arm.pattern) { Scope::child(env) } else { env.clone() };
             if self.match_pattern(&arm.pattern, &value, &arm_env) {
                 return self.eval_expr(&arm.body, &arm_env);
             }
@@ -2374,6 +2429,15 @@ impl Interp {
     }
 }
 
+/// Whether matching `pat` can bind a name ([`Interp::match_pattern`] defines one only at a `Bind`).
+fn binds(pat: &Pattern) -> bool {
+    match pat {
+        Pattern::Bind(_) => true,
+        Pattern::Variant { fields, .. } => fields.iter().any(binds),
+        Pattern::Wildcard(_) | Pattern::Lit(..) => false,
+    }
+}
+
 /// What [`Interp::trace_dispatch`] recorded for one operation (RW 4.62): enough to record its refusal after it.
 struct Dispatched {
     effect: &'static str,
@@ -2392,7 +2456,12 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
         // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
         // and the trace is printed and stored (P9-04 (a), D-V2-128).
-        ("Http", "get") | ("Http", "get_with") | ("Http", "get_with_secret") => args.first().map(|v| v.display()),
+        // `post`'s body is never shown either: the program's data, as a header's value is (P9-05 (d), D-V2-183).
+        ("Http", "get")
+        | ("Http", "get_with")
+        | ("Http", "get_with_secret")
+        | ("Http", "post")
+        | ("Http", "post_with_secret") => args.first().map(|v| v.display()),
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2432,7 +2501,11 @@ pub(crate) fn custody_op_for(
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
         (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => Some((CustodyOp::FsRead, fs_arg(c))),
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => Some((CustodyOp::FsWrite, fs_arg(c))),
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
+        (ResourceKind::Http, "get")
+        | (ResourceKind::Http, "get_with")
+        | (ResourceKind::Http, "get_with_secret")
+        | (ResourceKind::Http, "post")
+        | (ResourceKind::Http, "post_with_secret") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no
@@ -2503,6 +2576,7 @@ pub enum SecretSend {
 pub fn broker_secret_send(
     custody: &mut dyn Custody,
     c: &CapVal,
+    method: &str,
     argvals: &[Value],
     span: delulu_diag::Span,
 ) -> Result<SecretSend, Fault> {
@@ -2510,7 +2584,10 @@ pub fn broker_secret_send(
         return Ok(SecretSend::AsGiven);
     };
     let url = prim::str_arg(argvals, 0, span)?;
-    if !url.starts_with("https://") || !prim::url_allowed(&url, allow) {
+    // By the request's own method (P9-05 (d), D-V2-183): a POST its capability does not take is refused by the effect, in
+    // its words, before the broker is asked for a byte.
+    let allowed = prim::url_verdict(&url, prim::http_method_of(method), allow) == delulu_broker::netscope::Verdict::Allow;
+    if !url.starts_with("https://") || !allowed {
         return Ok(SecretSend::AsGiven);
     }
     let headers = prim::headers_arg(argvals, "get_with_secret", span)?;
@@ -2527,8 +2604,13 @@ pub fn broker_secret_send(
         Err(reason) => return Ok(SecretSend::Answered(prim::answer_value(crate::egress::refuse_unsent(&url, reason)))),
     };
     let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+    // RW 4.67: the custody's answer is read and parsed into buffers this process frees as it goes, so every block freed
+    // while it is asked for is zeroed (`crate::scrub`). The bytes then live in one `SecretVal`, which zeroes them as it is
+    // dropped, and the request that sends them opens its own window (`prim`).
+    let scrub = crate::scrub::Window::open();
     let bytes =
         custody.send_secret(handle, &origin.to_string(), Some(&span_str)).map_err(|d| Fault::at(d.code, d.message, span))?;
+    drop(scrub);
     let name = s.audience().map(|a| a.name.clone()).unwrap_or_else(|| handle.to_string());
     let held = SecretVal::bound(bytes, Some(Rc::new(crate::value::SecretAudience { name, to: vec![origin] })));
     let mut args = argvals.to_vec();
@@ -2536,9 +2618,32 @@ pub fn broker_secret_send(
     Ok(SecretSend::Held(args))
 }
 
+/// RW 4.79: what the receiver's own capability says of this call before its custody is asked ([`prim::capability_refusal`]).
+/// `None` for a receiver that is no capability, and for a guest's host handle, which carries no scope to judge: the host
+/// that holds the capability judges it (`channel.rs`).
+pub(crate) fn capability_refusal_for(
+    recvv: &Value,
+    method: &str,
+    argvals: &[Value],
+    span: delulu_diag::Span,
+) -> Option<prim::CapabilityRefusal> {
+    let Value::Cap(c) = recvv else { return None };
+    prim::capability_refusal(c, method, argvals, span)
+}
+
 pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {
     match (op, argvals.first()) {
         (CustodyOp::Net, Some(Value::Str(url))) => Some(prim::request_path(url)),
+        _ => None,
+    }
+}
+
+/// The HTTP method a network use names for its custody to judge and record (P9-05 (d), D-V2-183): `POST` for `post`,
+/// `None` for a GET — the request every use was before, whose round-trip and record stay as they were.
+pub(crate) fn custody_method_for(op: CustodyOp, method: &str) -> Option<&'static str> {
+    match (op, prim::http_method_of(method)) {
+        (CustodyOp::Net, "GET") => None,
+        (CustodyOp::Net, verb) => Some(verb),
         _ => None,
     }
 }
@@ -2590,6 +2695,17 @@ fn fs_scope_arg(scope: &CapScope, argvals: &[Value]) -> Option<String> {
 /// places. Design rule 1: one function referenced by both sides.
 fn host_of(url: &str) -> String {
     prim::host_of(url).to_string()
+}
+
+/// A call too deep (DL0905) is placed at the call that went one deeper (RW 6.40): `enter` knows no span, and the first
+/// call expression the fault leaves through is that call. The WASM engine places it there too, by the guest's frames.
+fn depth_at_call(mut e: Escape, span: delulu_diag::Span) -> Escape {
+    if let Escape::Fault(f) = &mut e {
+        if f.code == "DL0905" && f.span.is_none() {
+            f.span = Some(span);
+        }
+    }
+    e
 }
 
 fn unwrap_fault(e: Escape) -> Fault {

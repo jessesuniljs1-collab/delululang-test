@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use delulu_atlas::{Atlas, BuildInput, ModuleView, PackageView};
 use delulu_check::lockfile::api_row_hash;
 use delulu_check::{
-    authority_report, authority_widened, check_pins, check_program, check_self_authority, check_source, check_workspace,
-    compute_lockfile, enforce_semver_law, load_package, program_authority, resolve_workspace, verify_locked, Checked, Effect,
-    Lockfile, Program, Row, Workspace,
+    authority_report, authority_widened, check_program, check_source, check_workspace, compute_lockfile, enforce_semver_law,
+    load_package, program_authority, resolve_workspace, supply_chain_gate, verify_locked, Checked, Effect, Lockfile, Program,
+    Row, Workspace,
 };
 use delulu_diag::{
     color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role, SourceMap, Theme,
@@ -1093,6 +1093,8 @@ pub(crate) fn own_words(args: &[String]) -> &[String] {
 
 pub fn run(args: &[String]) -> i32 {
     let wants_json = own_words(args).iter().any(|a| a == "--json");
+    let command = args.iter().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
+    let _ = INVOCATION.set((command, wants_json));
     let code = run_inner(args);
     if wants_json && code != 0 && !JSON_EMITTED.load(std::sync::atomic::Ordering::Relaxed) {
         // No DL code is invented here. The registry is a stable contract and a usage error is not a
@@ -1530,12 +1532,14 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `--measure-launcher FILE` binds the statement to that file's BLAKE3, refused for any other launcher)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--net-special H].. [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device DEV:dim=lo..hi,..].. [--ttl 1h] [--budget mem=N,cpu=S] [--multi] [--owner CODE]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (prints a lease token; a budget left unnamed is the parent's, and a `run --lease` is held to it;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a secret is sent only to the origins its `--secret-to` names — none is nowhere)\n\
-     \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H].. [--net-special H]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. [--budget mem=N,cpu=S] --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (every dimension `delegate` names: under strict anchored roots a root enters only this way)\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..\n\
      \x20 delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —\n\
@@ -1914,6 +1918,9 @@ struct TestCeiling {
     /// Given with `--test-authority` (D-NE-17) rather than read from a manifest: a refusal names
     /// the ceiling that actually applied.
     from_flag: bool,
+    /// No package encloses the file and no flag was given (A22): the ceiling is empty because nothing set one, and a
+    /// refusal says that and names the flag, not a `delulu.toml` that does not exist.
+    no_package: bool,
 }
 
 /// Why `row` is wider than `ceiling`, or `None` when it fits (D-NE-17). An effect must be one the
@@ -1937,7 +1944,7 @@ fn test_ceiling_excess(row: &TestCeiling, ceiling: &TestCeiling) -> Option<Strin
 }
 
 fn test_ceiling(dir: &std::path::Path) -> TestCeiling {
-    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false, no_package: false };
     let Ok(text) = std::fs::read_to_string(dir.join("delulu.toml")) else { return ceiling };
     let mut in_section = false;
     for raw in text.lines() {
@@ -2058,19 +2065,26 @@ fn run_module_tests(
 
         // DL1703: the test's declared row must fit the package ceiling.
         if let Some(excess) = declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e)) {
+            // A22 (the agent test campaign): a file no package encloses has no `delulu.toml` to widen; its ceiling is the
+            // flag's or none, and the refusal says so.
+            let (whose, label) = if ceiling.from_flag {
+                ("the --test-authority ceiling", "narrow the row, or widen --test-authority — a real review decision".to_string())
+            } else if ceiling.no_package {
+                (
+                    "no package encloses this file, so its tests hold no effect unless --test-authority names one; the ceiling",
+                    format!("narrow the row, or pass --test-authority 'effects = [\"{excess}\"]' — a real review decision"),
+                )
+            } else {
+                (
+                    "the package [test-authority] ceiling",
+                    "narrow the row, or widen delulu.toml's [test-authority] — a real review decision".to_string(),
+                )
+            };
             let d = Diagnostic::error(
                 "DL1703",
-                format!(
-                    "test \"{}\" declares effect `{excess}` but {} allows only {:?}",
-                    t.name,
-                    if ceiling.from_flag { "the --test-authority ceiling" } else { "the package [test-authority] ceiling" },
-                    ceiling.effects
-                ),
+                format!("test \"{}\" declares effect `{excess}` but {whose} allows only {:?}", t.name, ceiling.effects),
             )
-            .with_span(
-                delulu_diag::Span::new(id, name_span.start, name_span.end),
-                "narrow the row, or widen delulu.toml's [test-authority] — a real review decision",
-            );
+            .with_span(delulu_diag::Span::new(id, name_span.start, name_span.end), label);
             if st.json {
                 st.diags_json.extend(diagnostics_json(std::slice::from_ref(&d), map));
             } else {
@@ -2289,7 +2303,7 @@ fn cmd_test(rest: &[String]) -> i32 {
         }
     }
     let ceiling = test_ceiling(std::path::Path::new("."));
-    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false, no_package: true };
 
     // D-NE-17 (the owner, 2026-09-18): `--test-authority <row>` is a test ceiling given on the
     // command line, in the manifest's own `[test-authority]` syntax. Inside a package it may only
@@ -2300,7 +2314,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     let flag_ceiling = if authority_rows.is_empty() {
         None
     } else {
-        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true };
+        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true, no_package: false };
         for row in &authority_rows {
             if let Err(e) = test_authority_line(row, &mut c) {
                 eprintln!("error: bad --test-authority: {e}");
@@ -2395,7 +2409,11 @@ fn cmd_test(rest: &[String]) -> i32 {
         let label = dir.display().to_string();
         let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
         if !ws.modules.is_empty() {
-            diags.extend(delulu_check::deps::check_workspace(&ws).diagnostics);
+            // A package's tests run its dependencies' code, so the supply-chain gate holds here as it does for `run`
+            // (RUN-PIN-1).
+            let program = delulu_check::deps::check_workspace(&ws);
+            diags.extend(program.diagnostics.iter().cloned());
+            diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
         }
         if errors(&diags) > 0 {
             if st.json {
@@ -2931,6 +2949,25 @@ pub(crate) fn guard_pattern_for_broker(class: &str, pattern: &str) -> String {
     }
 }
 
+/// What an operator does about a broker that could not be reached, by what [`broker_unreachable_detail`] found
+/// (ESTOP-QUEUE-1): one that ACCEPTED the request and did not answer in time is running — told to start a broker, the
+/// operator of a busy daemon was sent after one that was never missing. Its `broker.log` names each answer that left
+/// late and what it waited for (RW 7.17).
+pub(crate) fn broker_unreachable_advice(detail: &str) -> &'static str {
+    if broker_accepted_and_was_silent(detail) {
+        "it is running but did not answer in time: `broker.log` in its state directory names each late answer and what \
+         it waited for"
+    } else {
+        "start it with `delulu broker start`"
+    }
+}
+
+/// Whether [`broker_unreachable_detail`] found a broker that accepted the request and did not answer in time
+/// ([`crate::brokerd::request_timed`]'s words) — one that is running, not one that is missing.
+pub(crate) fn broker_accepted_and_was_silent(detail: &str) -> bool {
+    detail.contains("accepted the request but did not answer within")
+}
+
 /// Why the broker could not be reached, in words — never the OS's raw error text. `grants inspect`
 /// with no broker printed `No such file or directory (os error 2)` on Linux and macOS (caught by
 /// `tests/unreadable_paths.rs` on the first CI run after the raw-OS-error class was swept; Windows'
@@ -3077,10 +3114,51 @@ pub(crate) fn load_into(map: &mut SourceMap, file: &str) -> Result<(u32, String)
                 );
                 return Err(2);
             }
+            if e.kind() == std::io::ErrorKind::InvalidData {
+                if let Some(code) = refuse_non_utf8(map, file) {
+                    return Err(code);
+                }
+            }
             eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             Err(2)
         }
     }
+}
+
+/// A source file that is not UTF-8 (C11 of the agent test campaign): DL0101 at its first byte that begins no UTF-8
+/// character, exit 1, in the command's own channel (`--json` included). It was a usage error, exit 2, quoting the standard
+/// library's *"stream did not contain valid UTF-8"*: no place, and an envelope with no diagnostic. The map holds the file
+/// with each such byte shown as `�`, so the line renders; nothing is run or checked from it. `None` if the bytes cannot be
+/// read again or turn out to be UTF-8 after all, and the caller says what it said before.
+fn refuse_non_utf8(map: &mut SourceMap, file: &str) -> Option<i32> {
+    let bytes = std::fs::read(file).ok()?;
+    let bad = std::str::from_utf8(&bytes).err()?;
+    let at = bad.valid_up_to();
+    let len = bad.error_len().unwrap_or(bytes.len() - at);
+    let shown: Vec<String> = bytes[at..at + len].iter().map(|b| format!("0x{b:02X}")).collect();
+    let id = map.add_file(file.to_string(), String::from_utf8_lossy(&bytes).into_owned());
+    // `from_utf8_lossy` keeps every byte before the first bad one and writes one U+FFFD (3 bytes) for it.
+    let span = delulu_diag::Span::new(id, at as u32, at as u32 + 3);
+    let d = Diagnostic::error(
+        "DL0101",
+        format!(
+            "this file is not UTF-8: {} here begin{} no UTF-8 character — DeluluLang source is UTF-8; save the file as UTF-8",
+            shown.join(" "),
+            if len == 1 { "s" } else { "" }
+        ),
+    )
+    .with_span(span, "not UTF-8");
+    let (command, json) = invocation();
+    print_diagnostics(&command, &[d], map, None, json);
+    Some(1)
+}
+
+/// The command and whether `--json` was asked, as [`run`] read them: for a refusal made before a command has its options
+/// in hand (a source file that is not UTF-8), so that it still answers in the command's own channel.
+static INVOCATION: std::sync::OnceLock<(String, bool)> = std::sync::OnceLock::new();
+
+fn invocation() -> (String, bool) {
+    INVOCATION.get().cloned().unwrap_or_default()
 }
 
 /// `authority <file>.dwx`: report the artifact's own embedded `delulu:authority` manifest.
@@ -3448,8 +3526,8 @@ fn cmd_authority(rest: &[String]) -> i32 {
     }
     let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
     if asks_within {
-        let requests = crate::within::request_sites(&checked.module, &checked.result.node_types);
-        return authority_within(&map, &[&checked.module], requests, report, &opts);
+        let uses = crate::within::use_sites(&checked.module, &checked.result.node_types);
+        return authority_within(&map, &[&checked.module], uses, report, &opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -3471,7 +3549,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
 fn authority_within(
     map: &SourceMap,
     modules: &[&delulu_syntax::ast::Module],
-    requests: Vec<crate::within::RequestSite>,
+    uses: crate::within::UseSites,
     mut report: Json,
     opts: &Opts,
 ) -> i32 {
@@ -3499,7 +3577,8 @@ fn authority_within(
         }
     }
     let mut walk = requested_scopes(modules);
-    walk.requests = requests;
+    walk.requests = uses.requests;
+    walk.files = uses.files;
     let (reqs, unsupported) = requirements(&report, &walk);
     let v = crate::within::verdict(&reqs, &unsupported, &boundary);
     let code = if v.outcome == crate::within::Outcome::Within { 0 } else { 1 };
@@ -3648,6 +3727,8 @@ pub(crate) struct ScopeWalk {
     /// Each request, by the checker's type at its call (`within::request_sites`), set only by a caller that decides a verdict
     /// and holds the types — empty for `--grants`, whose line for a request is its mint's (D-V2-181).
     pub(crate) requests: Vec<crate::within::RequestSite>,
+    /// Each file use whose path the source writes (D-V2-185), set as `requests` is.
+    pub(crate) files: Vec<crate::within::FileUseSite>,
 }
 
 /// One capability-minting call (P9-03): where it is, the kind it mints, the literal scopes it writes, and whether it asks for
@@ -3859,6 +3940,7 @@ pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> Scope
         sites: Vec::new(),
         sends: crate::within::secret_sends(modules),
         requests: Vec::new(),
+        files: Vec::new(),
     };
     for m in modules {
         for item in &m.items {
@@ -3920,8 +4002,12 @@ pub(crate) enum Ask {
     SecretSend { to: Option<String> },
     /// A request, by its URL literal (`None`: computed), judged at its call against its capability's `net` entries, its
     /// path too where an entry names a pattern (P9-05 (a); D-V2-181). Decided by a verdict; the line an operator types for
-    /// it is its mint's.
-    Request { url: Option<String> },
+    /// it is its mint's. By its HTTP `method` (P9-05 (d), D-V2-183: `post` a POST, every other request a GET).
+    Request { url: Option<String>, method: &'static str },
+    /// A file use whose path the source writes, judged at its call against its capability's directory (D-V2-185): through
+    /// the capability's mint where the source shows it (`cap`), by the path alone where it does not. Decided by a verdict;
+    /// the line an operator types for it is its mint's.
+    FileUse { call: &'static str, path: String, cap: Option<crate::within::FsHeld> },
     /// A Python import: a module the program imports, or a pattern its manifest allows.
     PythonImport { name: String, pattern: bool },
     /// Python, with no import the source or the manifest names.
@@ -4124,11 +4210,26 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     }
     // Each request, when the caller set them (D-V2-181): named by the narrowest `net` line that takes it.
     for site in &walk.requests {
+        // A POST is named with its method; a GET needs none (an entry naming no methods allows GET alone).
+        let methods = if site.method == "GET" { String::new() } else { format!(":{}", site.method) };
         let grant = match site.url.as_deref() {
-            Some(u) => format!("net={}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u)),
-            None => "net=HOST/PATH".to_string(),
+            Some(u) => {
+                format!("net={}{methods}{}", delulu_runtime::prim::host_of(u), delulu_runtime::prim::request_path(u))
+            }
+            None => format!("net=HOST{methods}/PATH"),
         };
-        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone() }, at: Some(site.at) });
+        out.push(Requirement { grant, ask: Ask::Request { url: site.url.clone(), method: site.method }, at: Some(site.at) });
+    }
+    // Each file use whose path the source writes, when the caller set them (D-V2-185): named by its capability's mint where
+    // the source shows it — no grant lets a capability's own use leave its directory, so no wider line is proposed.
+    for site in &walk.files {
+        let key = if site.kind == "fs_read" { "fs.read" } else { "fs.write" };
+        let grant = match &site.cap {
+            Some(c) => format!("{key}={}", c.root),
+            None => format!("{key}=PATH"),
+        };
+        let ask = Ask::FileUse { call: site.call, path: site.path.clone(), cap: site.cap.clone() };
+        out.push(Requirement { grant, ask, at: Some(site.at) });
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
     // and the list named no secret at all.
@@ -4211,6 +4312,9 @@ fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
             let v = walk.found.get(&kind).cloned().unwrap_or_default();
             if let Some(obj) = c.as_object_mut() {
                 obj.insert("requested_scopes".into(), json!(v));
+                // A8: whether a minting site of this kind computes its scope, so a reader of the literals is told
+                // they may not be all the program asks for (SCOPE-HIDDEN-1's kinds, per capability).
+                obj.insert("requested_computed".into(), json!(walk.hidden.contains(&kind)));
             }
         }
     }
@@ -4543,8 +4647,7 @@ fn render_authority(report: &Json) -> String {
         let _ = writeln!(out, "  capabilities:");
         for c in &caps {
             let kind = c["kind"].as_str().unwrap_or("?");
-            let scopes = strs(&c["scopes"]);
-            let scope_str = if scopes.is_empty() { "(scope granted at runtime)".to_string() } else { scopes.join(", ") };
+            let scope_str = delulu_atlas::scope_words(c);
             let _ = writeln!(out, "    - {kind:<8} {scope_str}");
         }
     }
@@ -4813,6 +4916,16 @@ fn build_wasm_package(dir: &str, opts: &Opts) -> i32 {
     emit_dwx(dir, &map, &checked, std::path::Path::new(dir), out, opts)
 }
 
+/// The diagnostic for a program the WASM backend refuses: its code and message, what the command can do instead
+/// (`then`), and the innermost expression or statement it refused (the campaign's A10: the refusal named no line).
+pub(crate) fn wasm_refusal(e: &delulu_wasm::CompileError, then: &str) -> Diagnostic {
+    let d = Diagnostic::error(e.code(), format!("{} — {then}", e.message()));
+    match e.span() {
+        Some(span) => d.with_span(span, "the WASM backend cannot compile this"),
+        None => d,
+    }
+}
+
 /// Compile a checked program's `main` and write its `.dwx` — to `--out`, or else `default_out` — with the authority
 /// embedded: the checker's answer, the scopes and Python allowlist of the manifest in `manifest_dir`.
 fn emit_dwx(
@@ -4834,10 +4947,7 @@ fn emit_dwx(
     let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
         Ok(w) => w,
         Err(e) => {
-            let d = Diagnostic::error(
-                e.code(),
-                format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()),
-            );
+            let d = wasm_refusal(&e, "this program can't be built to a `.dwx` yet (run it on the interpreter)");
             print_diagnostics("build", &[d], map, None, opts.json);
             return 1;
         }
@@ -5042,8 +5152,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
         delulu_check::PluginClass::Contained => match delulu_wasm::compile_checked(&checked.module, &checked.result) {
             Ok(w) => (None, Some(w)),
             Err(e) => {
-                let d =
-                    Diagnostic::error(e.code(), format!("{} — this program can't be built into a contained plugin", e.message()));
+                let d = wasm_refusal(&e, "this program can't be built into a contained plugin");
                 print_diagnostics("plugin", &[d], &map, None, opts.json);
                 return 1;
             }
@@ -5302,8 +5411,7 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     let mut diags: Vec<Diagnostic> = Vec::new();
     diags.extend(ws.diagnostics.iter().cloned());
     diags.extend(program.diagnostics.iter().cloned());
-    diags.extend(check_self_authority(&ws, &program));
-    diags.extend(check_pins(&ws, &program));
+    diags.extend(supply_chain_gate(&ws, &program));
 
     if locked {
         match std::fs::read_to_string(std::path::Path::new(dir).join("delulu.lock")) {
@@ -5592,8 +5700,7 @@ fn cmd_lock(rest: &[String]) -> i32 {
     let mut diags: Vec<Diagnostic> = Vec::new();
     diags.extend(ws.diagnostics.iter().cloned());
     diags.extend(program.diagnostics.iter().cloned());
-    diags.extend(check_self_authority(&ws, &program));
-    diags.extend(check_pins(&ws, &program));
+    diags.extend(supply_chain_gate(&ws, &program));
     if !ws.git_deferred.is_empty() {
         diags.push(Diagnostic::error(
             "DL1007",
@@ -5659,7 +5766,9 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let (program, name, map, modules, units) = if path.join("delulu.toml").is_file() {
         let ws = resolve_workspace(dir);
         let program = check_workspace(&ws);
-        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 {
+        // `deploy plan`, `publish` and `add` plan or advertise a package as it would run: the supply-chain gate too
+        // (RUN-PIN-1).
+        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 || errors(&supply_chain_gate(&ws, &program)) > 0 {
             return None;
         }
         let name = program
@@ -5685,7 +5794,9 @@ pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
     let refs: Vec<&delulu_syntax::ast::Module> = modules.iter().collect();
     let unit_refs: Vec<&str> = units.iter().map(String::as_str).collect();
     let mut walk = requested_scopes(&refs);
-    walk.requests = package_request_sites(&program, &refs, &unit_refs);
+    let uses = package_use_sites(&program, &refs, &unit_refs);
+    walk.requests = uses.requests;
+    walk.files = uses.files;
     let (requirements, unsupported) = requirements(&report, &walk);
     Some(CheckedPackage { report, requirements, unsupported, map })
 }
@@ -5752,21 +5863,22 @@ fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
     emit_authority(&program, &name, dir, &pkg.source_map, (&modules, &units), opts)
 }
 
-/// A package's requests, each module's by its own node types, keyed by its unit as the check keyed them (node ids are per
-/// module) — what `--within` and `deploy plan` decide each request by (D-V2-181).
-fn package_request_sites(
+/// A package's requests and file uses, each module's by its own node types, keyed by its unit as the check keyed them (node
+/// ids are per module) — what `--within` and `deploy plan` decide each use by (D-V2-181, D-V2-185).
+fn package_use_sites(
     program: &delulu_check::Program,
     modules: &[&delulu_syntax::ast::Module],
     units: &[&str],
-) -> Vec<crate::within::RequestSite> {
-    modules
-        .iter()
-        .zip(units)
-        .flat_map(|(m, unit)| match program.node_types.get(*unit) {
-            Some(types) => crate::within::request_sites(m, types),
-            None => Vec::new(),
-        })
-        .collect()
+) -> crate::within::UseSites {
+    let mut all = crate::within::UseSites::default();
+    for (m, unit) in modules.iter().zip(units) {
+        if let Some(types) = program.node_types.get(*unit) {
+            let uses = crate::within::use_sites(m, types);
+            all.requests.extend(uses.requests);
+            all.files.extend(uses.files);
+        }
+    }
+    all
 }
 
 /// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
@@ -5801,7 +5913,7 @@ fn emit_authority(
     }
     // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
     if !opts.within.is_empty() || opts.within_file.is_some() {
-        return authority_within(map, modules, package_request_sites(program, modules, units), report, opts);
+        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -6371,6 +6483,17 @@ pub(crate) fn wasm_fault_code(msg: &str) -> &'static str {
         .unwrap_or("DL0904")
 }
 
+/// What a WASM run's error says, in the interpreter's words where it is the program's fault (B5 of the agent test
+/// campaign): a trap's detail without the `WASM trap: ` around it, and without its own code where the diagnostic names
+/// that code already — `error[DL0904]: path … escapes the granted scope`, not `error[DL0904]: WASM engine: WASM trap:
+/// DL0904: path …`. An error of the engine itself (a module it could not load) still says it is the engine's.
+pub(crate) fn wasm_fault_words(msg: &str, code: &str) -> String {
+    match msg.strip_prefix("WASM trap: ") {
+        Some(detail) => detail.strip_prefix(code).and_then(|d| d.strip_prefix(": ")).unwrap_or(detail).to_string(),
+        None => format!("WASM engine: {msg}"),
+    }
+}
+
 /// Map this run's grants to the root-node authority the daemon issues (Stage 5 phase 5f: the
 /// `--grant` flags in daemon mode are sugar for issue-then-run at the root, spec §3.2). Paths are
 /// the SAME absolute, lexically-normalized strings the embedded `RootVal` carries, so the broker's
@@ -6551,6 +6674,13 @@ pub(crate) fn authority_spec_from_grants(grants: &Grants, program: &str) -> crat
         // (`run_cmd`), which is the only caller that knows what the run is held to.
         budget: None,
         secret_to,
+        // RW 4.86 (D-V2-188): a `net.special=` grant's reach travels with its host, where it was dropped.
+        net_special: {
+            let mut v = grants.net_special.clone();
+            v.sort();
+            v.dedup();
+            v
+        },
         holder_kind: "process".to_string(),
         holder_desc: program.to_string(),
         ttl_millis: None,
@@ -6571,11 +6701,9 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         fs_read: info.fs_read.clone(),
         fs_write: info.fs_write.clone(),
         net: info.net.clone(),
-        // PS-B-02: the broker's node has no `net.special` dimension, so a lease cannot say which of its
-        // hosts may reach a special-use address — and a leased run therefore reaches none. Fail
-        // closed and say so: the egress client refuses such a connection with `special-use`, and the
-        // dimension joining the grant tree is recorded as open work in `V2_LOG.md` (PS-B).
-        net_special: Vec::new(),
+        // RW 4.86 (D-V2-188): the node's own special-use reach, which `grants delegate --net-special` writes. Until
+        // 2026-10-25 a node had no such dimension, and a leased run reached no special-use address at all.
+        net_special: info.net_special.clone(),
         clock: has("Clock"),
         rand: has("Rand"),
         declassify: has("Declassify"),
@@ -6807,12 +6935,13 @@ fn grants_answer(answer: std::io::Result<crate::broker_ipc::Response>, json: boo
         }
         Ok(resp) => Ok(resp),
         Err(e) => {
+            let detail = broker_unreachable_detail(&e);
             let d = Diagnostic::error(
                 "DL1401",
                 format!(
-                    "broker unreachable: {} — start it with `delulu broker start` \
-                     (fail closed, invariant 27: `grants` verbs never fall back to local state)",
-                    broker_unreachable_detail(&e)
+                    "broker unreachable: {detail} — {} (fail closed, invariant 27: `grants` verbs never fall back to local \
+                     state)",
+                    broker_unreachable_advice(&detail)
                 ),
             );
             print_diagnostics("grants", &[d], &map, None, json);
@@ -7319,6 +7448,29 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         }
     };
     let d = &report["diagnostics"][0];
+    // A19 (the agent test campaign, D-V2-188): a request the egress client refused for a special-use address is refused
+    // with no diagnostic — the program is handed `Err` and may go on — and the report says so in `egress`. A grant answers
+    // it (`net.special=`, which a node carries since RW 4.86), so it is proposed like a refused call's requirement.
+    if d["code"].as_str().is_none() {
+        let refused = report["egress"]["records"].as_array().and_then(|rs| {
+            rs.iter().find(|r| r["delivered"] == false && r["reason"] == "special-use").and_then(|r| {
+                let url = r["url"].as_str()?;
+                delulu_runtime::egress::parse_target(url).ok().map(|t| (url.to_string(), t.host, r["explain"].clone()))
+            })
+        });
+        if let Some((url, host, explain)) = refused {
+            let lines = match special_use_asks(node.as_deref(), &host, state_dir, json) {
+                Ok(l) => l,
+                Err(code) => return code,
+            };
+            let refusal = json!({ "code": "special-use", "message": explain, "url": url, "at": Json::Null });
+            let reason = format!(
+                "the request to `{url}` was refused because `{host}` is a special-use address, which only a `net.special=` grant \
+                 reaches"
+            );
+            return answer(refusal, None, None, &lines, &reason);
+        }
+    }
     let Some(code) = d["code"].as_str() else {
         return answer(Json::Null, None, None, &[], "the report records no refusal — the run was not refused at a call");
     };
@@ -7416,6 +7568,30 @@ enum Filing {
     NotFiled(String),
 }
 
+/// A19 (D-V2-188): what a special-use egress refusal asks for — `net.special=` for each `net` entry the run's node grants
+/// for that host, read from the broker (the entries the program's capability was minted within, now with the reach), or
+/// the host alone where no node is named or the node names none for it.
+fn special_use_asks(node: Option<&str>, host: &str, state_dir: &std::path::Path, json: bool) -> Result<Vec<String>, i32> {
+    let mut lines = Vec::new();
+    if let Some(n) = node {
+        match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Inspect { node: n.to_string() }, json)? {
+            crate::broker_ipc::Response::Inspected { node: info } => {
+                for e in info.net.iter().filter(|e| delulu_broker::netscope::host_of(e) == host) {
+                    lines.push(format!("net.special={e}"));
+                }
+            }
+            other => {
+                eprintln!("error: unexpected inspect response for `{n}`: {other:?}");
+                return Err(2);
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push(format!("net.special={host}"));
+    }
+    Ok(lines)
+}
+
 /// File `lines` with the broker as `node`'s proposal (P9-03 step 3, D-V2-125): each line is converted as a lease's grant is
 /// (`authority_spec_from_grants`), and one with no form in a node — a sensor, a compute device, a plugin, a special-use
 /// reach — is not filed, said, since an approval could not carry it. The claim (program, call, place, code) is data.
@@ -7444,7 +7620,7 @@ fn file_proposal(
         };
         if !carried {
             return Ok(Filing::NotFiled(format!(
-                "`{line}` has no form in a lease node (a node carries no sensor, compute, plugin or special-use reach), so \
+                "`{line}` has no form in a lease node (a node carries no sensor, compute or plugin reach), so \
                  an approval could not carry it — the operator grants it on the run itself, `--grant {line}`"
             )));
         }
@@ -7836,15 +8012,79 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     0
 }
 
-/// `delulu grants certify --subject HEX --effects E,.. [--device D].. --ttl 1h [--key F]
-/// [--parent-cert F] [--out F]`
+/// B1 (D-V2-187, D-V2-188): the note `grants delegate` and `grants certify` print for a `--net` entry whose host is a
+/// special-use address or name. Plain `--net` gives a node no special-use reach, as plain `--grant net=` gives a run none
+/// (D-NE-28): a run under it has its uses decided by the custody and the Guard, and the egress client then refuses the
+/// connect. Such a node is made — it still drives every decision before the connect — and the operator is told so, and
+/// given the spelling that reaches the host, here rather than at the first refused connect.
+fn special_use_net_note(entry: &str, what: &str) -> Option<String> {
+    let host = delulu_broker::netscope::host_of(entry);
+    let class = delulu_runtime::netclass::special_use_class(host)?;
+    Some(format!(
+        "note: `{host}` (`--net {entry}`) is a special-use address ({class}), and plain `--net` gives {what} no \
+         special-use reach, so a run under it is refused when it connects there (`special-use`). To reach it, name it \
+         with `--net-special {entry}`, as a run is granted one with `--grant net.special={entry}`"
+    ))
+}
+
+/// `--secret NAME` as `grants delegate` and `grants certify` read it: a grant NAMES a secret the broker holds and never
+/// carries its value. `NAME=VALUE` was accepted once and stored as a name no program could ever mint (agent pass 2).
+fn secret_name_flag(v: &str, who: &str) -> Result<(), String> {
+    match v.split_once('=') {
+        None => Ok(()),
+        Some((name, _)) => Err(format!(
+            "error: `--secret {v}`: {who} names a secret the broker already holds — `--secret {name}`. Store its value \
+             first with `delulu secrets set {name} VALUE`."
+        )),
+    }
+}
+
+/// `--secret-to NAME@HOST[:PORT]` as `grants delegate` and `grants certify` read it (P9-04 (d), D-V2-133): each audience
+/// member is read by the egress client's own parser (`parse_audience` — the spelling a request's origin is compared in at
+/// send time) and kept in its canonical form, so the broker's exact-set `⊑` compares one spelling. A pair for a secret
+/// `secrets` does not name would grant reach to nothing: refused in words, never dropped.
+fn secret_audiences(secrets: &[String], pairs: &[String], who: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::with_capacity(pairs.len());
+    for pair in pairs {
+        let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
+            return Err(format!(
+                "error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to"
+            ));
+        };
+        if !secrets.iter().any(|s| s == name) {
+            return Err(format!(
+                "error: `--secret-to {pair}` names the secret `{name}`, which {who} does not — add `--secret {name}` (an \
+                 audience is where a delegated secret may go)"
+            ));
+        }
+        match delulu_runtime::egress::parse_audience(member) {
+            Ok(a) => out.push(format!("{name}@{a}")),
+            Err(e) => return Err(format!("error: bad --secret-to `{pair}`: {e}")),
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// `delulu grants certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H].. [--secret N]..
+/// [--secret-to N@HOST[:PORT]].. [--declassify N].. [--foreign-c L].. [--foreign-python P].. [--device D]..
+/// [--budget mem=N,cpu=S] --ttl 1h [--key F] [--parent-cert F] [--out F]`
 ///
 /// Mint one grant certificate. **Offline by design** — no daemon, no tree, no network. The ground
 /// segment can run this on an air-gapped machine and hand the result to a spacecraft over whatever
 /// link exists.
+///
+/// It writes every dimension `grants delegate` can (CERT-SECRET-1, 2026-10-24): under strict anchored roots a root enters
+/// only by adopting a certificate (DL1421), so a dimension `certify` could not write was one no lease on that broker could
+/// ever hold — a broker-held secret among them.
 fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
     let mut effects: Vec<String> = Vec::new();
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
+    let mut net_special: Vec<String> = Vec::new();
+    let (mut secrets, mut secret_to, mut declassify) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut foreign_c, mut foreign_python) = (Vec::new(), Vec::new());
+    let mut budget: Option<String> = None;
     let mut device: Vec<String> = Vec::new();
     let (mut subject, mut ttl, mut key, mut parent_cert, mut out) = (None, None, None, None, None);
     // RFC 0001 F4: how long the holder may run WITHOUT a contact receipt. Absent = the
@@ -7869,7 +8109,38 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
                 eprintln!("error: `--net {v}` is refused: {why}");
                 return 2;
             }
+            if let Some(note) = special_use_net_note(&v, "this certificate") {
+                eprintln!("{note}");
+            }
             net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--net-special") {
+            // RW 4.86 (D-V2-188): `net.special=`'s reach for a certificate's root — the host in `net` too, as the run's
+            // grant puts it in both.
+            if let Err(why) = delulu_broker::netscope::check_entry(&v) {
+                eprintln!("error: `--net-special {v}` is refused: {why}");
+                return 2;
+            }
+            net.push(v.clone());
+            net_special.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret") {
+            if let Err(why) = secret_name_flag(&v, "a certificate") {
+                eprintln!("{why}");
+                return 2;
+            }
+            secrets.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret-to") {
+            secret_to.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--declassify") {
+            declassify.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-c") {
+            foreign_c.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-python") {
+            foreign_python.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--budget") {
+            if budget.replace(v).is_some() {
+                eprintln!("error: `--budget` is given twice; a certificate has one budget");
+                return 2;
+            }
         } else if let Some(v) = flag_value(args, &mut i, "--subject") {
             subject = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
@@ -8008,6 +8279,21 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             }
         }
     }
+    let secret_to = match secret_audiences(&secrets, &secret_to, "this certificate") {
+        Ok(v) => v,
+        Err(why) => {
+            eprintln!("{why}");
+            return 2;
+        }
+    };
+    let budget = match budget.as_deref().map(delulu_broker::BudgetScope::parse) {
+        None => None,
+        Some(Ok(b)) => Some(b),
+        Some(Err(e)) => {
+            eprintln!("error: bad --budget: {e}\n  form: mem=BYTES,cpu=SECONDS (both named, both above zero)");
+            return 2;
+        }
+    };
     let now = now_millis();
     let authority = delulu_broker::Authority::new(
         effects.iter().filter_map(|e| Effect::core_from_name(e)),
@@ -8015,8 +8301,14 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             fs_read: fs_read.into_iter().collect(),
             fs_write: fs_write.into_iter().collect(),
             net: net.into_iter().collect(),
+            secrets: secrets.into_iter().collect(),
+            secret_to: secret_to.into_iter().collect(),
+            declassify: declassify.into_iter().collect(),
+            foreign_c: foreign_c.into_iter().collect(),
+            foreign_python: foreign_python.into_iter().collect(),
             device: device_canon.into_iter().map(|d| (d.device.clone(), d)).collect(),
-            ..Default::default()
+            budget,
+            net_special: net_special.into_iter().collect(),
         },
     );
     // Catch a widening at MINT time rather than letting the holder discover it at use time. The
@@ -8346,6 +8638,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     let mut budget: Option<String> = None;
     // P9-04 (d), D-V2-133: where each delegated secret may be sent — `NAME@HOST[:PORT]`, canonicalized below.
     let mut secret_to: Vec<String> = Vec::new();
+    let mut net_special: Vec<String> = Vec::new();
     let mut ttl: Option<String> = None;
     let mut parent: Option<String> = None;
     let mut multi = false;
@@ -8375,16 +8668,21 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 eprintln!("error: `--net {v}` is refused: {why}");
                 return 2;
             }
+            if let Some(note) = special_use_net_note(&v, "this delegation") {
+                eprintln!("{note}");
+            }
             net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--net-special") {
+            // RW 4.86 (D-V2-188): the reach `--grant net.special=` gives a run, delegated — the host in `net` too.
+            if let Err(why) = delulu_broker::netscope::check_entry(&v) {
+                eprintln!("error: `--net-special {v}` is refused: {why}");
+                return 2;
+            }
+            net.push(v.clone());
+            net_special.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
-            // A delegation NAMES a secret the broker holds; it never carries the value. `NAME=VALUE`
-            // was accepted and stored as a name no program could ever mint (agent pass 2).
-            if v.contains('=') {
-                let name = v.split('=').next().unwrap_or_default();
-                eprintln!(
-                    "error: `--secret {v}`: a delegation names a secret the broker already holds — \
-                     `--secret {name}`. Store its value first with `delulu secrets set {name} VALUE`."
-                );
+            if let Err(why) = secret_name_flag(&v, "a delegation") {
+                eprintln!("{why}");
                 return 2;
             }
             secrets.push(v);
@@ -8462,31 +8760,12 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // request's origin is compared in at send time) and sent in its canonical form, so the broker's exact-set `⊑`
     // compares one spelling. A pair for a secret this delegation does not name would grant reach to nothing: refused
     // in words here, and dropped by the broker's canonicalization if it ever arrived.
-    let secret_to = {
-        let mut out = Vec::with_capacity(secret_to.len());
-        for pair in &secret_to {
-            let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
-                eprintln!("error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to");
-                return 2;
-            };
-            if !secrets.iter().any(|s| s == name) {
-                eprintln!(
-                    "error: `--secret-to {pair}` names the secret `{name}`, which this delegation does not — add `--secret {name}` \
-                     (an audience is where a delegated secret may go)"
-                );
-                return 2;
-            }
-            match delulu_runtime::egress::parse_audience(member) {
-                Ok(a) => out.push(format!("{name}@{a}")),
-                Err(e) => {
-                    eprintln!("error: bad --secret-to `{pair}`: {e}");
-                    return 2;
-                }
-            }
+    let secret_to = match secret_audiences(&secrets, &secret_to, "this delegation") {
+        Ok(v) => v,
+        Err(why) => {
+            eprintln!("{why}");
+            return 2;
         }
-        out.sort();
-        out.dedup();
-        out
     };
     // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
     // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-
@@ -8535,6 +8814,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 device: device.clone(),
                 budget: budget.clone(),
                 secret_to: secret_to.clone(),
+                net_special: net_special.clone(),
                 // Provenance honesty (DISC-1): this root is minted by whatever process invoked the
                 // CLI — the broker cannot verify a human typed it, so it must not be recorded as
                 // `human`. `holder` is DATA (never switched on, KIND_IS_DATA); this only affects what
@@ -8566,6 +8846,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         device,
         budget,
         secret_to,
+        net_special,
         holder_kind: "delegate".to_string(),
         holder_desc,
         ttl_millis,
@@ -8635,12 +8916,13 @@ fn guard_rpc(
         }
         Ok(resp) => Ok(resp),
         Err(e) => {
+            let detail = broker_unreachable_detail(&e);
             let d = Diagnostic::error(
                 "DL1401",
                 format!(
-                    "broker unreachable: {} — start it with `delulu broker start` \
-                     (fail closed, invariant 27: `guard` verbs never fall back to local state)",
-                    broker_unreachable_detail(&e)
+                    "broker unreachable: {detail} — {} (fail closed, invariant 27: `guard` verbs never fall back to local \
+                     state)",
+                    broker_unreachable_advice(&detail)
                 ),
             );
             print_diagnostics("guard", &[d], &map, None, json);

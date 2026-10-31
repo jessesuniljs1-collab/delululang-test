@@ -1586,6 +1586,65 @@ fn a_sent_secret_is_asked_for_and_decided_with_its_audience() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// P9-05 (d), D-V2-183: `http.post` is a request by POST. The program mints `example.com:POST`; `--grants` names that
+/// line. `--within` decides the mint and the request by their methods: a boundary naming no methods for the host (GET
+/// alone) *exceeds* at the mint, and so does one whose entries take the path by other methods only. A boundary naming
+/// POST is *within*.
+#[test]
+fn a_post_is_decided_by_its_method_against_the_boundary() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-post-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("post.delulu");
+    std::fs::write(
+        &f,
+        "module post\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"example.com:POST\"])\n    match h.post(\"https://example.com/hooks\", Map(), \"{}\") {\n        \
+         Ok(body) => out.println(\"sent\")\n        Err(e) => out.println(\"no\")\n    }\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    assert_eq!(required(&f), ["console", "net=example.com:POST"]);
+    let grants = |net: &str| vec!["console".to_string(), format!("net={net}")];
+    let (code, v) = within(&f, &grants("example.com"));
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "GET alone: {v:#}");
+    let (code, v) = within(&f, &grants("example.com:GET"));
+    assert_eq!(code, 2, "`:GET` is refused as a spelling: {v:#}");
+    assert_eq!(within(&f, &grants("example.com:POST")).1["result"], "within");
+    assert_eq!(within(&f, &grants("example.com:GET,POST/hooks")).1["result"], "exceeds", "the mint names every path");
+
+    // The request itself, by its method: a POST to `/admin`, where the boundary takes that path by GET alone.
+    let g = dir.join("admin.delulu");
+    std::fs::write(
+        &g,
+        "module admin\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"example.com:POST/api/**\"])\n    \
+         let r = h.post(\"https://example.com/admin\", Map(), \"{}\")\n}\n",
+    )
+    .unwrap();
+    let g = g.to_string_lossy().to_string();
+    let boundary = vec!["net=example.com:POST/api/**".to_string(), "net=example.com/admin".to_string()];
+    let (code, v) = within(&g, &boundary);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("is a `POST`"), "decided by its method: {v:#}");
+
+    // `post_with_secret`: the secret's send is asked for with its audience, as `get_with_secret`'s is.
+    let s = dir.join("send.delulu");
+    std::fs::write(
+        &s,
+        "module send\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"api.example.com:POST\"])\n    \
+         let tok = root.secret(\"A\")\n    \
+         let r = h.post_with_secret(\"https://api.example.com/v1\", Map(), \"Authorization\", tok, \"{}\")\n}\n",
+    )
+    .unwrap();
+    let s = s.to_string_lossy().to_string();
+    assert_eq!(required(&s), ["net=api.example.com:POST", "secret:A@api.example.com:443=VALUE"]);
+    let ok = vec!["net=api.example.com:POST".to_string(), "secret:A@api.example.com:443=v".to_string()];
+    assert_eq!(within(&s, &ok).1["result"], "within");
+    let get_only = vec!["net=api.example.com".to_string(), "secret:A@api.example.com:443=v".to_string()];
+    assert_eq!(within(&s, &get_only).1["result"], "exceeds");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// D-V2-181: a request is judged at its call by its path where its capability's entry names a pattern (P9-05 (a)), and
 /// `--within` decided only the mint: a program minting `example.com/api/**` and requesting `https://example.com/admin`
 /// was *within* a boundary of `net=example.com/api/**`, though the run refuses the request whatever it minted. Each request
@@ -1667,6 +1726,87 @@ fn a_request_is_decided_by_its_path_against_the_boundary() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A URL written once and named (`let u = "https://…"` in a body, or a module's constant, `let U: Str = "https://…"` among
+/// its items) is the literal it was bound to, as the run reads it. The walk read a URL only where the call wrote it out, so
+/// such a request under a path-scoped boundary was *inconclusive*, even when it named a path outside the boundary, and a
+/// sent secret's audience was proposed as `HOST`. A name that may hold another value at the call is still computed: one
+/// assigned in a branch, a parameter or a local `let` shadowing the constant.
+#[test]
+fn a_url_named_by_a_let_or_a_constant_is_decided_by_its_literal() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-url-let-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = |name: &str, top: &str, prelude: &str, url: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n{top}\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+                 let h = root.http([\"example.com/api/**\"])\n{prelude}    match h.get({url}) {{\n        \
+                 Ok(body) => out.println(\"got\")\n        Err(e) => out.println(\"no\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let scoped = vec!["console".to_string(), "net=example.com/api/**".to_string()];
+    let decided = |f: &str, want: (i32, &str)| {
+        let (code, v) = within(f, &scoped);
+        assert_eq!((code, v["result"].as_str()), (want.0, Some(want.1)), "{f}: {v:#}");
+        v
+    };
+
+    let v = decided(&program("let_out", "", "    let u = \"https://example.com/admin\"\n", "u"), (1, "exceeds"));
+    assert_eq!(
+        (v["counterexample"]["grant"].as_str(), v["counterexample"]["at"]["line"].as_u64()),
+        (Some("net=example.com/admin"), Some(7)),
+        "named at the request's call: {v:#}"
+    );
+    decided(&program("let_in", "", "    let u = \"https://example.com/api/v1\"\n", "u"), (0, "within"));
+    let top = "\nlet ADMIN: Str = \"https://example.com/admin\"\n";
+    decided(&program("const_out", top, "", "ADMIN"), (1, "exceeds"));
+    let top_in = "\nlet ITEMS: Str = \"https://example.com/api/items\"\n";
+    decided(&program("const_in", top_in, "", "ITEMS"), (0, "within"));
+
+    // A name that may hold another value at the call.
+    let branch = "    var u = \"https://example.com/api/v1\"\n    if 1 > 0 {\n        u = \"https://example.com/admin\"\n    }\n";
+    decided(&program("let_branch", "", branch, "u"), (1, "inconclusive"));
+    decided(
+        &program("const_shadowed", top_in, "    let ITEMS = \"https://example.com/\" + \"admin\"\n", "ITEMS"),
+        (1, "inconclusive"),
+    );
+    let param = dir.join("const_param.delulu");
+    std::fs::write(
+        &param,
+        format!(
+            "module const_param\n{top_in}\nfn fetch(h: Cap[Http], ITEMS: Str) -> Int ! {{Net}} {{\n    match h.get(ITEMS) {{\n        \
+             Ok(body) => 1\n        Err(e) => 0\n    }}\n}}\n\nfn main(root: Root) ! {{Net}} {{\n    \
+             let h = root.http([\"example.com/api/**\"])\n    let n = fetch(h, \"https://example.com/\" + \"admin\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let param = param.to_string_lossy().to_string();
+    let (code, v) = within(&param, &["net=example.com/api/**".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "a parameter shadows the constant: {v:#}");
+
+    // A sent secret's audience is proposed from the literal its URL names.
+    let send = dir.join("send.delulu");
+    std::fs::write(
+        &send,
+        "module send\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"api.example.com\"])\n    \
+         let tok = root.secret(\"A\")\n    let u = \"https://api.example.com:8443/v1\"\n    \
+         let ok = match h.get_with_secret(u, Map(), \"Authorization\", tok) {\n        Ok(b) => true\n        Err(e) => false\n    }\n}\n",
+    )
+    .unwrap();
+    let send = send.to_string_lossy().to_string();
+    assert_eq!(required(&send), ["net=api.example.com", "secret:A@api.example.com:8443=VALUE"]);
+    let (code, v) = within(&send, &["net=api.example.com".to_string(), "secret:A@api.example.com:8443=v".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (0, Some("within")), "{v:#}");
+    let (code, v) = within(&send, &["net=api.example.com".to_string(), "secret:A@api.example.com:443=v".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "the port is the literal's: {v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// SEND-REBIND-1 (D-V2-180's walk): a secret the program sends is attributed to the name it was bound to only where nothing
 /// may have bound it again. The walk restored each block's bindings at its end, which also undid an assignment made inside it,
 /// so after `if c { tok = root.secret("B") }`, in a loop that assigns after it sends, and in a closure called after
@@ -1736,5 +1876,152 @@ fn a_secret_reassigned_in_a_branch_a_loop_or_a_closure_is_not_attributed_to_its_
         required(&straight),
         ["net=api.example.com", "secret:A=VALUE", "secret:B@api.example.com:443=VALUE", "secret:C@api.example.com:443=VALUE"]
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// B9 (the agent test campaign of 2026-10-24, the least-authority agent; D-V2-185): a file use is decided at its call against
+/// its capability's directory (`prim::resolve_in_anchor`), and `--within` decided only the mint. `rd.read_text("../forbidden/
+/// secret.txt")` on a capability minted for `allowed` was *within* a boundary of `fs.read=…/allowed`, while `run` with exactly
+/// those grants refuses it (DL0904). A use whose capability the source shows minted from a literal (through a `let`, and a
+/// `narrow` of a literal) is now decided by the runtime's own containment, at its call: *exceeds* where the run refuses it,
+/// whatever the boundary. A use whose capability the source does not show (a parameter) is *within* only for a relative path
+/// that never climbs above where it starts, and *inconclusive* otherwise. A computed path is decided by its capability's mint,
+/// as a computed URL is (D-V2-181). Each verdict on a path the source writes is held to what `run` does with the same grants.
+#[test]
+fn a_file_use_is_decided_by_its_path_against_its_capability() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-file-use-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["allowed/sub", "forbidden", "out"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::write(dir.join("allowed/ok.txt"), "hi").unwrap();
+    std::fs::write(dir.join("allowed/sub/s.txt"), "sub").unwrap();
+    std::fs::write(dir.join("forbidden/secret.txt"), "SECRET").unwrap();
+    let r = dir.to_string_lossy().replace('\\', "/");
+    let program = |name: &str, top: &str, prelude: &str, call: &str| {
+        let f = dir.join(format!("{name}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {name}\n{top}\nfn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    \
+                 let rd = root.fs_read(\"{r}/allowed\")\n    let w = root.fs_write(\"{r}/out\")\n{prelude}    match {call} {{\n        \
+                 Ok(v) => out.println(\"DONE\")\n        Err(e) => out.println(\"ERR\")\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let boundary = |read: &str| vec!["console".to_string(), format!("fs.read={r}/{read}"), format!("fs.write={r}/out")];
+    // The verdict, and what `run` does with the same grants: the two must agree.
+    let decided = |f: &str, read: &str, want: &str, line: Option<u64>| {
+        let b = boundary(read);
+        let (code, v) = within(f, &b);
+        assert_eq!((code, v["result"].as_str()), (if want == "within" { 0 } else { 1 }, Some(want)), "{f}: {v:#}");
+        if let Some(line) = line {
+            assert_eq!(v["counterexample"]["at"]["line"].as_u64(), Some(line), "at the use's call: {v:#}");
+        }
+        let mut args: Vec<&str> = vec!["run", f];
+        for g in &b {
+            args.push("--grant");
+            args.push(g);
+        }
+        let o = delulu(&args);
+        let ran = out(&o);
+        match want {
+            "exceeds" => assert!(ran.contains("DL0904") && !ran.contains("DONE"), "the run refuses it: {ran}"),
+            "within" => assert!(o.status.success() && ran.contains("DONE"), "the run performs it: {ran}"),
+            _ => {}
+        }
+        v
+    };
+    // `main` opens on line 3 and binds `out`, `rd` and `w` on lines 4–6: a prelude is line 7, the use after it line 8.
+    let escape = program("escape", "", "", "rd.read_text(\"../forbidden/secret.txt\")");
+    let mut req = required(&escape);
+    req.sort();
+    assert_eq!(req, ["console", &format!("fs.read={r}/allowed"), &format!("fs.write={r}/out")], "the line to type is the mint's");
+    let v = decided(&escape, "allowed", "exceeds", Some(7));
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("escapes the granted scope"), "{v:#}");
+    assert_eq!(v["counterexample"]["grant"].as_str(), Some(format!("fs.read={r}/allowed").as_str()), "its capability's line");
+    decided(&escape, "", "exceeds", Some(7));
+    decided(&program("back_in", "", "", "rd.read_text(\"../allowed/ok.txt\")"), "allowed", "within", None);
+    let sub = "    let sub = rd.narrow(\"sub\")\n";
+    decided(&program("narrowed_up", "", sub, "sub.read_text(\"../ok.txt\")"), "allowed", "exceeds", Some(8));
+    decided(&program("narrowed_in", "", sub, "sub.read_text(\"s.txt\")"), "allowed", "within", None);
+    decided(&program("narrowed_back", "", sub, "sub.read_text(\"../sub/s.txt\")"), "allowed", "within", None);
+    let up = "    let up = rd.narrow(\"../forbidden\")\n";
+    decided(&program("narrow_out", "", up, "up.read_text(\"secret.txt\")"), "allowed", "exceeds", Some(7));
+    decided(&program("write_out", "", "", "w.write_text(\"../escaped.txt\", \"x\")"), "allowed", "exceeds", Some(7));
+    assert!(!dir.join("escaped.txt").exists(), "nothing was written outside");
+    decided(&program("write_in", "", "", "w.write_text(\"in.txt\", \"x\")"), "allowed", "within", None);
+    // A computed path asks for nothing beyond its capability, and the verdict does not judge what the source does not show:
+    // within, while the run's containment refuses the name it computes (the limit, recorded with D-V2-185).
+    let computed = program("computed", "", "", "rd.read_text(\"../forbidden/\" + \"secret.txt\")");
+    assert_eq!(within(&computed, &boundary("allowed")).1["result"], "within");
+    let ran = out(&delulu(&[
+        "run",
+        &computed,
+        "--grant",
+        "console",
+        "--grant",
+        &format!("fs.read={r}/allowed"),
+        "--grant",
+        &format!("fs.write={r}/out"),
+    ]));
+    assert!(ran.contains("DL0904"), "{ran}");
+
+    // A capability the source does not show: a parameter.
+    let load =
+        |path: &str| format!("\nfn fetch(d: Cap[FsRead]) -> Result[Str, IoErr] ! {{Read}} {{\n    d.read_text(\"{path}\")\n}}\n");
+    let v = decided(&program("param_up", &load("../forbidden/secret.txt"), "", "fetch(rd)"), "allowed", "inconclusive", Some(4));
+    assert!(v["counterexample"]["reason"].as_str().unwrap().contains("climbs above"), "{v:#}");
+    decided(&program("param_in", &load("sub/s.txt"), "", "fetch(rd)"), "allowed", "within", None);
+    if cfg!(windows) {
+        // A spelling refused at every call, whatever the capability (D-NE-29).
+        let v = decided(&program("param_device", &load("CON"), "", "fetch(rd)"), "allowed", "exceeds", Some(4));
+        assert!(v["counterexample"]["reason"].as_str().unwrap().contains("reserved device name"), "{v:#}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A20 (the agent test campaign's builder, Sonnet 5.5): a program minting `root.http(["127.0.0.1:GET,POST,PUT"])` under
+/// `net.special=127.0.0.1:GET,POST` was told "`network host` was not granted to this program — pass `--grant net=HOST`" by
+/// `--within` and by `run` alike: the host IS granted, only `PUT` is short, and `net=` never grants a special-use host
+/// (D-NE-28). Both now name the entry, the grant it exceeds and `net.special=`. A host granted nothing is named too, with
+/// the grant that covers the entry (B4: it was "`network host`" and `net.special=HOST`).
+#[test]
+fn a_network_entry_wider_than_its_grant_is_named_with_the_grant_it_exceeds() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-net-short-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("client.delulu");
+    std::fs::write(
+        &f,
+        "module client\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"127.0.0.1:GET,POST,PUT\"])\n    out.println(\"minted\")\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let says = |grant: &str| -> (String, String) {
+        let (code, v) = within(&f, &["console".to_string(), grant.to_string()]);
+        assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{grant}: {v:#}");
+        let reason = v["counterexample"]["reason"].as_str().unwrap_or_default().to_string();
+        let o = delulu(&["run", &f, "--grant", "console", "--grant", grant]);
+        assert_eq!(o.status.code(), Some(1), "{grant}: {}", out(&o));
+        assert!(!out(&o).contains("minted"), "{grant}: nothing minted: {}", out(&o));
+        (reason, out(&o))
+    };
+    for said in <[String; 2]>::from(says("net.special=127.0.0.1:GET,POST")) {
+        assert!(said.contains("`127.0.0.1:GET,POST,PUT` asks for more of `127.0.0.1`"), "the short entry: {said}");
+        assert!(said.contains("`127.0.0.1:GET,POST`"), "the grant it exceeds: {said}");
+        assert!(said.contains("--grant net.special=127.0.0.1:GET,POST,PUT"), "the spelling that grants it: {said}");
+        assert!(!said.contains("`network host` was not granted"), "not called ungranted: {said}");
+    }
+    for said in <[String; 2]>::from(says("net.special=10.0.0.9")) {
+        assert!(
+            said.contains("network access to `127.0.0.1:GET,POST,PUT` was not granted")
+                && said.contains("--grant net.special=127.0.0.1:GET,POST,PUT"),
+            "{said}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

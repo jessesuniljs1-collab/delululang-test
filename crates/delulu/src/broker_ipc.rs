@@ -78,6 +78,11 @@ pub struct AuthoritySpec {
     /// bottom, sent nowhere — and not written when empty, so a request naming none is byte-identical to one sent before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secret_to: Vec<String>,
+    /// RW 4.86 (D-V2-188): the `net` entries whose holder may reach a special-use address
+    /// (`delulu_broker::Scopes::net_special`). `#[serde(default)]` so a peer that predates it decodes as "no special-use
+    /// reach" — the narrow direction; not written when empty, so every frame without one is what it was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_special: Vec<String>,
     pub holder_kind: String,
     pub holder_desc: String,
     /// Absolute epoch-millis TTL deadline, or `None` for no expiry.
@@ -122,6 +127,9 @@ pub struct NodeInfo {
     /// `grants list --json` for a node whose secrets name no audience is what it was before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secret_to: Vec<String>,
+    /// RW 4.86: the node's special-use reach. See [`AuthoritySpec::net_special`]. Not written when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_special: Vec<String>,
 }
 
 /// One guard rule on the wire (Stage 5 chunk 6): `class:pattern → tier`. Fixed-field struct →
@@ -193,6 +201,7 @@ impl NodeInfo {
             device: self.device.clone(),
             budget: self.budget.clone(),
             secret_to: self.secret_to.clone(),
+            net_special: self.net_special.clone(),
             holder_kind: String::new(),
             holder_desc: String::new(),
             ttl_millis: None,
@@ -249,6 +258,9 @@ pub enum ReqBody {
         arg: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         url_path: Option<String>,
+        /// The request's HTTP method when it is not a GET (P9-05 (d), D-V2-183) — absent from a GET's frame, as before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        method: Option<String>,
     },
     /// P8-04 (routine run 15): a device command the run's ENVELOPE refused after `Check` allowed the
     /// use — recorded as a `use` `deny` citing `overrides_seq`, the `allow` it overrides. Records,
@@ -257,6 +269,17 @@ pub enum ReqBody {
     /// RW 4.46 (D-V2-112): a fetch the run's egress client refused after the broker allowed the use of its
     /// host — recorded as a `deny` citing that `allow`. `reason` is the egress client's machine-readable one.
     EgressRefused { node: String, host: String, reason: String, overrides_seq: Option<u64> },
+    /// RW 4.79: a use the run's own CAPABILITY refused before the broker was asked — recorded as a `use` `deny` naming
+    /// `refused_by: capability` at `target` (what `Check` would have been asked), with a network use's `url_path` and
+    /// non-GET `method`. `reason` is the capability's machine-readable one. Records, never decides. Answered `Recorded`.
+    CapabilityRefused {
+        node: String,
+        op: String,
+        target: Option<String>,
+        url_path: Option<String>,
+        method: Option<String>,
+        reason: String,
+    },
     /// P8-04's `break-glass` rule (D-V2-116): a break-glass run's use, bound to the node its lease redeemed — recorded as
     /// `break-glass-run` `allow` on `node`, citing the ticket's fingerprint, before a line of the program runs. Answered
     /// `Recorded`; a use whose record was lost does not happen (the run does not run).
@@ -344,6 +367,13 @@ impl Request {
 
 impl ReqBody {
     /// The request's name and nothing it carries, for the broker log: a request's fields can be a token or a beat's key.
+    /// ESTOP-QUEUE-1 (RW 4.53): a REVOCATION — the operator's e-stop (`grants revoke`) or a monitor's quarantine. The
+    /// daemon handles one before every request that waits ahead of it: a revocation only narrows, so a request it
+    /// overtakes is decided against less authority, never more.
+    pub fn is_revocation(&self) -> bool {
+        matches!(self, ReqBody::Revoke { .. } | ReqBody::Quarantine { .. })
+    }
+
     pub fn kind(&self) -> &'static str {
         match self {
             ReqBody::Status => "Status",
@@ -363,6 +393,7 @@ impl ReqBody {
             ReqBody::Check { .. } => "Check",
             ReqBody::DeviceRefused { .. } => "DeviceRefused",
             ReqBody::EgressRefused { .. } => "EgressRefused",
+            ReqBody::CapabilityRefused { .. } => "CapabilityRefused",
             ReqBody::BreakGlassRun { .. } => "BreakGlassRun",
             ReqBody::NodeState { .. } => "NodeState",
             ReqBody::Expose { .. } => "Expose",
@@ -619,6 +650,7 @@ mod tests {
             op: "FsWrite".into(),
             arg: Some("/tmp/x".into()),
             url_path: None,
+            method: None,
         });
         let mut buf = Vec::new();
         write_frame(&mut buf, &req).unwrap();

@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use delulu_check::check_source;
 use delulu_runtime::{set_capture, set_rand_seed, take_capture, Grants, Interp, Value};
-use delulu_wasm::{compile_and_run_int, compile_module, run_main, HostConfig};
+use delulu_wasm::{compile_and_run_int, compile_checked_sited, compile_module, run_main, HostConfig};
 
 /// The DL code the interpreter faults with (or "OK" if it does not fault).
 fn interp_fault_code(src: &str) -> String {
@@ -44,6 +44,11 @@ fn wasm_fault_detail(src: &str) -> String {
 const DIVZERO: &str = "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(7 / 0)) }\n";
 const OVERFLOW: &str =
     "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(9223372036854775807 + 1)) }\n";
+// `%` (2026-10-24, A3 of the agent test campaign): the WASM helper trapped `% 0` with `unreachable`, which the host can
+// only read as overflow, so `7 % 0` was DL0902 on the interpreter and DL0901 on WASM. `INT_MIN % -1` is the overflow.
+const REMZERO: &str = "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(7 % 0)) }\n";
+const REMOVERFLOW: &str =
+    "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str((0 - 9223372036854775807 - 1) % (0 - 1))) }\n";
 const RECUR: &str =
     "module m\nfn cd(n: Int) -> Int { if n <= 0 { 0 } else { 1 + cd(n - 1) } }\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(cd(1000000))) }\n";
 
@@ -68,7 +73,7 @@ fn the_two_engines_agree_on_arithmetic_fault_codes() {
     // Divide-by-zero and overflow fault without deep recursion, so both engines run directly here.
     // (Recursion is exercised WASM-side below; the interpreter's DL0905 has its own Stage-9 test
     // and would need a large stack to reach — see C21 and `on_a_big_stack`.)
-    for (src, code) in [(DIVZERO, "DL0902"), (OVERFLOW, "DL0901")] {
+    for (src, code) in [(DIVZERO, "DL0902"), (OVERFLOW, "DL0901"), (REMZERO, "DL0902"), (REMOVERFLOW, "DL0901")] {
         assert_eq!(interp_fault_code(src), code, "the interpreter must fault with {code}");
         let wasm = wasm_fault_detail(src);
         assert!(wasm.contains(code), "the WASM engine must report {code} for the same fault (parity, invariant 15), got: {wasm}");
@@ -205,6 +210,50 @@ fn main(root: Root) ! {Write, Rand} {
     }
 }
 
+/// `main` drawing once from `r.int(lo, hi)`, the bounds written as given.
+fn one_draw(lo: &str, hi: &str) -> String {
+    format!(
+        "module m\n\nfn main(root: Root) ! {{Write, Rand}} {{\n  let out = root.console()\n  let r = root.rand()\n  out.println(str(r.int({lo}, {hi})))\n}}\n"
+    )
+}
+
+fn rand_granted(seed: u64) -> (HostConfig, Grants) {
+    (
+        HostConfig { console: true, rand: true, rand_seed: Some(seed), ..HostConfig::default() },
+        Grants { console: true, rand: true, ..Default::default() },
+    )
+}
+
+/// A15 (the agent test campaign, 2026-10-24): `r.int(lo, hi)` draws from `lo` up to but not including `hi`, so a range
+/// with `hi <= lo` holds no value. Both engines faulted as DL0904, "capability scope violation" — the code an operator
+/// reads as a path or host outside a grant — though nothing reached outside one. It is DL0908, an argument outside what
+/// the operation accepts, with the same text on both engines (D-V2-190).
+#[test]
+fn an_empty_rand_range_is_dl0908_on_both_engines() {
+    let min = "0 - 9223372036854775807 - 1";
+    for (lo, hi) in [("5", "5"), ("6", "5"), ("0", min), ("9223372036854775807", min)] {
+        let (cfg, g) = rand_granted(7);
+        let (w, i) = run_both(&one_draw(lo, hi), cfg, g, Some(7));
+        let (w, i) = (w.expect_err("the WASM engine faults"), i.expect_err("the interpreter faults"));
+        for (engine, text) in [("WASM", &w), ("interpreter", &i)] {
+            assert!(text.contains("DL0908"), "{engine}: r.int({lo}, {hi}) is DL0908: {text}");
+            assert!(!text.contains("DL0904"), "{engine}: and not a scope violation: {text}");
+            assert!(text.contains("up to but not including"), "{engine}: the text says the range is half-open: {text}");
+        }
+    }
+}
+
+/// The other side of A15: the narrowest range, `r.int(5, 6)`, holds exactly one value and draws it on both engines.
+#[test]
+fn a_one_wide_rand_range_draws_its_one_value_on_both_engines() {
+    for seed in [1u64, 7, 0xDEAD_BEEF] {
+        let (cfg, g) = rand_granted(seed);
+        let (w, i) = run_both(&one_draw("5", "6"), cfg, g, Some(seed));
+        assert_eq!(w, i, "two-engine parity under seed {seed}");
+        assert_eq!(w.as_deref().map(str::trim), Ok("5"), "under seed {seed}");
+    }
+}
+
 /// A refused host call returns a placeholder and the guest runs on; matching on the refused read's result then
 /// trapped as an access out of bounds, and that trap was reported instead of the refusal.
 #[test]
@@ -253,6 +302,51 @@ fn main(root: Root) ! {{Write, Read}} {{
     assert!(w.contains("DL0703"), "the WASM engine names the ungranted read: {w}");
 }
 
+/// B6 (the agent test campaign): the WASM engine quotes a refused path as the interpreter does — as written, a
+/// backslash once, a control character escaped. Both quoted it through `escape_debug`, which doubled every backslash.
+#[test]
+fn a_refused_path_is_quoted_as_written_on_the_wasm_engine() {
+    let src = "module m\nfn main(root: Root) ! {Write, Read} {\n  let fs = root.fs_read(\"a\\\\b\\u{0}c\")\n  \
+               root.console().println(\"not reached\")\n}\n";
+    let (cfg, g) = console();
+    let (w, i) = run_both(src, cfg, g, None);
+    let (w, i) = (w.expect_err("refused on WASM"), i.expect_err("refused on the interpreter"));
+    assert!(i.contains("DL0904"), "the interpreter: {i}");
+    assert!(w.contains("DL0904: path `a\\b\\u{0}c` is refused: "), "the WASM engine: {w}");
+}
+
+/// B11 (the agent test campaign): a file operation the operating system refuses for a reason with no variant of its own
+/// is `Other(m)`, and `m` was the OS's own message — on Windows *"The filename, directory name, or volume label syntax is
+/// incorrect. (os error 123)"*, in the machine's language, and other words on Linux and macOS. `m` is now the kind of
+/// failure, in the same words on every OS and both engines; nothing of the machine's own text reaches the program.
+#[test]
+fn an_os_refusal_reaches_the_program_in_the_same_words_everywhere() {
+    let dir = std::env::temp_dir().join(format!("delulu-b11-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let root = dir.to_string_lossy().replace('\\', "/");
+    let long = "a".repeat(300);
+    let src = format!(
+        "module m\nfn main(root: Root) ! {{Write, Read}} {{\n  let out = root.console()\n  let fs = root.fs_read(\"{root}\")\n  \
+         let w = root.fs_write(\"{root}\")\n  \
+         match fs.read_text(\"{long}\") {{\n    Ok(s) => out.println(\"read\"),\n    Err(e) => match e {{\n      \
+         NotFound => out.println(\"NotFound\"),\n      Denied => out.println(\"Denied\"),\n      Other(m) => out.println(m),\n    }},\n  }}\n  \
+         match w.write_text(\"{long}\", \"x\") {{\n    Ok(u) => out.println(\"wrote\"),\n    Err(e) => match e {{\n      \
+         NotFound => out.println(\"NotFound\"),\n      Denied => out.println(\"Denied\"),\n      Other(m) => out.println(m),\n    }},\n  }}\n}}\n"
+    );
+    let cfg = HostConfig {
+        console: true,
+        fs_read_roots: vec![dir.clone()],
+        fs_write_roots: vec![dir.clone()],
+        ..HostConfig::default()
+    };
+    let g = Grants { console: true, fs_read: vec![root.clone()], fs_write: vec![root.clone()], ..Default::default() };
+    let (w, i) = run_both(&src, cfg, g, None);
+    let _ = std::fs::remove_dir_all(&dir);
+    let both = Ok("invalid filename\ninvalid filename\n".to_string());
+    assert_eq!(i, both, "the interpreter, reading and writing");
+    assert_eq!(w, both, "the WASM engine, reading and writing");
+}
+
 /// RW 6.15: an ungranted mint is refused in the same words on both engines, its remedy included — the `--grant` that
 /// covers it on an ordinary run, the delegation under `--lease` (a lease run refuses a local `--grant`, and both engines
 /// named one). The WASM engine's console, clock and rand refusals named no remedy at all before.
@@ -265,7 +359,8 @@ fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
             ("root.rand()", "rand"),
             ("root.fs_read(\"./nowhere\")", "fs.read=./nowhere"),
             ("root.fs_write(\"./nowhere\")", "fs.write=./nowhere"),
-            ("root.http([\"example.com\"])", "net=HOST"),
+            // B4: the entry asked for, never the placeholder `net=HOST`.
+            ("root.http([\"example.com\"])", "net=example.com"),
         ] {
             let src = format!("module m\nfn main(root: Root) {{\n  let c = {mint}\n}}\n");
             let checked = check_source(0, &src);
@@ -293,4 +388,106 @@ fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
             }
         }
     }
+}
+
+/// B5 (the agent test campaign): a WASM fault is placed where the interpreter places it. The WASM engine's fault carried no
+/// place, so `delulu run --engine wasm` printed it with no `--> file:line` where the interpreter pointed at the expression.
+/// The compiler's site map, read against the guest's frames, now names the same span for a trap in the guest's own code,
+/// a trap in a helper the compiler wrote (the checked `+`, `%`), a host call's refusal, an index out of bounds, and each
+/// of them inside a called function or a generic one the compiler inlined.
+#[test]
+fn a_wasm_fault_is_placed_where_the_interpreter_places_it() {
+    let console = || (HostConfig { console: true, ..HostConfig::default() }, Grants { console: true, ..Default::default() });
+    let nothing = || (HostConfig::default(), Grants::default());
+    let shapes: Vec<(&str, String, (HostConfig, Grants))> = vec![
+        ("a division in the guest", DIVZERO.to_string(), console()),
+        ("the checked add, a helper", OVERFLOW.to_string(), console()),
+        ("the checked remainder, a helper", REMZERO.to_string(), console()),
+        (
+            "a division in a called function",
+            "module m\nfn d(x: Int) -> Int {\n  let y = x + 1\n  100 / (y - 1)\n}\nfn main(root: Root) ! {Write} {\n  \
+             let o = root.console()\n  o.println(\"before\")\n  o.println(str(d(0)))\n}\n"
+                .to_string(),
+            console(),
+        ),
+        (
+            "an index out of bounds",
+            "module m\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  let xs = [1, 2]\n  \
+             o.println(str(xs[1] + xs[5]))\n}\n"
+                .to_string(),
+            console(),
+        ),
+        (
+            "an index out of bounds in an inlined generic",
+            "module m\nfn at[T](xs: List[T], i: Int) -> T { xs[i] }\nfn main(root: Root) ! {Write} {\n  \
+             let o = root.console()\n  o.println(str(at([1, 2], 7)))\n}\n"
+                .to_string(),
+            console(),
+        ),
+        (
+            "an ungranted console, a host refusal",
+            "module m\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  o.println(\"x\")\n}\n".to_string(),
+            nothing(),
+        ),
+        (
+            "a refused path, a host refusal in a called function",
+            "module m\nfn open(root: Root) -> Bool ! {Read} {\n  let fs = root.fs_read(\"a\\\\b\\u{0}c\")\n  true\n}\n\
+             fn main(root: Root) ! {Write, Read} {\n  let o = root.console()\n  o.println(str(open(root)))\n}\n"
+                .to_string(),
+            console(),
+        ),
+    ];
+    for (what, src, (cfg, g)) in shapes {
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{what} should check clean:\n{src}\n{:?}", checked.diagnostics);
+        let (wasm, sites) = compile_checked_sited(&checked.module, &checked.result)
+            .unwrap_or_else(|e| panic!("{what} should compile to WASM: {e:?}\n{src}"));
+        let w = run_main(&wasm, &cfg).expect_err(what);
+        set_capture(true);
+        let i = Interp::new(&checked.module).run_main(Value::Root(Rc::new(g.build_root()))).expect_err(what);
+        let _ = take_capture();
+        let placed = |s: Option<delulu_diag::Span>| s.map(|s| &src[s.start as usize..s.end as usize]);
+        let interp_at = placed(i.span);
+        assert!(interp_at.is_some(), "{what}: the interpreter places its fault ({} {})", i.code, i.message);
+        assert_eq!(
+            placed(sites.locate(w.frames())),
+            interp_at,
+            "{what}: the WASM fault is placed where the interpreter's is ({}; frames {:?})",
+            w.message(),
+            w.frames()
+        );
+    }
+}
+
+/// B5: a recursion that runs out of guest stack is placed at the call that went one deeper, a call with no argument
+/// included (its code is emitted before any expression inside it ends, so only the mark made on entering it names it).
+/// The interpreter's DL0905 names no place, so the place is held to the call's text.
+#[test]
+fn a_recursion_too_deep_is_placed_at_the_call_that_went_deeper() {
+    let src = "module m\nfn deeper() -> Int { 1 + deeper() }\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  \
+               o.println(str(deeper()))\n}\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let (wasm, sites) = compile_checked_sited(&checked.module, &checked.result).expect("compiles to WASM");
+    let w = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() }).expect_err("too deep");
+    assert!(w.message().contains("DL0905"), "{}", w.message());
+    let at = sites.locate(w.frames()).map(|s| (s.start, &src[s.start as usize..s.end as usize]));
+    let inner = src.find("1 + deeper()").expect("the call") as u32 + 4;
+    assert_eq!(at, Some((inner, "deeper()")), "placed at the recursive call (frames {:?})", w.frames());
+}
+
+/// B5: a refusal that a check records itself, a custody's denial or an effect an artifact does not declare
+/// (ARTIFACT-CLAIM-1), is placed too, at the call it refused. The checks are asked through the host call's caller, which
+/// records where the guest was when one said no.
+#[test]
+fn a_refusal_a_check_records_is_placed_at_the_call_it_refused() {
+    let src = "module m\nfn main(root: Root) ! {Write} {\n  let o = root.console()\n  o.println(\"x\")\n}\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let (wasm, sites) = compile_checked_sited(&checked.module, &checked.result).expect("compiles to WASM");
+    let cfg = HostConfig { console: true, declared_effects: Some(Default::default()), ..HostConfig::default() };
+    let w = run_main(&wasm, &cfg).expect_err("an effect the manifest does not declare is refused");
+    assert!(w.message().contains("DL1202"), "{}", w.message());
+    let at = sites.locate(w.frames()).map(|s| &src[s.start as usize..s.end as usize]);
+    assert_eq!(at, Some("o.println(\"x\")"), "placed at the write it refused (frames {:?})", w.frames());
 }
