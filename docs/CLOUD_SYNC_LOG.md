@@ -6534,3 +6534,31 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
     macOS 93 → 89 GiB.
   - `witness.yml` at `4cdad8a`, every test of `broker_cli`, `guard_e2e` and `grants_cli`: macOS `41176123350` success,
     Windows `41176125665` success.
+  - `92ffb1a`'s push runs (the fix and these records): CI `41177377312` **14 jobs success, 2 skipped** (22 min) —
+    `actors_pingpong` MEASURED on arm64 (2.85x where the machine gave 3.95x, against a bar of 1.48x: passed), NOT MEASURED
+    on macOS (3 hardware threads), Ubuntu and Windows (busy or SMT); disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+    macOS 93 → 89 GiB, arm64 104 → 91 GB. `ocsf` `41177377173` success.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/suite.sh` says `DISK-FULL:` when the disk filled (this run's first suite died at link and
+  read as one more `EXIT=101`) and which flags it passes itself; `docs/CLOUD_ROUTINE.md` names a fresh VM's 13 GB beside
+  the setup snapshot's 16 GB `target/` (delete it whole before a suite under ~20 GB free) and a mutant's witnesses in
+  several targets by one command (libtest's several name filters).
+- **Redo on the laptop:** delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-dfkzl9` from `origin` (both in
+  `master`'s history; this session's harness refused `git push --delete`, as runs 7's, 8's and 9's did).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.79 — a record says what happened; judge what needs nothing from the
+  custody first, and tell it), §11.5 (a test asserting the order a defect lives in; a fresh VM's disk), and
+  `docs/assistant-memory/a-record-says-what-happened.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `92ffb1a`'s runs are read above).
+  2. Bring `launch/2.0.0` current with `master` (step 4.3): fold RW 4.79's CHANGELOG section and judge its *Changed* line
+     — a call its capability refuses is DL0904 under every custody, where a Guard rule (DL1410–DL1413) or a revoked or
+     expired lease (DL0801, DL1402, DL1403) could answer first under the daemon — against STABILITY.md §1 for the 2.0.0
+     *Breaking* paragraph; dispatch its `everything` run and release dry run, read them, cite them.
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  5. The work order's items 5–7: RW 4.66 and RW 4.67 (routine run 25's red team, F3 and F4; LOW) are the open
+     containment rows a Linux VM can verify.
+  6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-dfkzl9` from `origin`.
+  7. *[laptop]* the launch, only on the owner's word.

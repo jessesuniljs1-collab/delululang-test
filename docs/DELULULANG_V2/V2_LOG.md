@@ -10651,6 +10651,10 @@ round-trip, as a read is.
   `broker_cli`, `guard_e2e` and `grants_cli`): macOS `41176123350` success (19, 5 and 5 passed), Windows `41176125665`
   success (18, 5 and 5 passed; the only orphan the runner terminated was MSVC's `vctip`).
 - The Survey 1569 nodes, 17766 edges after the code, check ok, findings 0 errors and 15 warnings.
+- `master` fast-forwarded to `92ffb1a` (the fix `4cdad8a` and these records): its push run `41177377312` **14 jobs success,
+  2 skipped** — `actors_pingpong` MEASURED on arm64 (2.85x against 1.48x, passed), NOT MEASURED on the other three;
+  `ocsf` `41177377173` success. The records' Survey 1570 nodes, 17811 edges, findings 0 errors; `doctor --check` 26
+  checks; the document gates and the Survey's own suite (73) passed.
 
 **Loop engineering.** `scripts/suite.sh` names a full disk (`DISK-FULL:`) where it was one more `EXIT=101`, and says it
 passes `--workspace --no-fail-fast -j 4` itself (a second `--no-fail-fast` stops cargo before a test runs — this run's first
