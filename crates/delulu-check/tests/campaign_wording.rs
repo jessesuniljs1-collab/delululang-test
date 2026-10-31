@@ -129,3 +129,73 @@ fn a_write_refused_through_a_written_type_names_the_type() {
     let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").expect("DL1604");
     assert!(m.contains("written type") && !m.contains("became `val`"), "{m}");
 }
+
+/// C9 (the agent test campaign): a keyword in a module's name was *"expected end of statement"*: at the `.` before it
+/// (`module t.actor`), or, for a first part, at the next line's item (`module fn`), since the line break after a keyword
+/// does not end a statement. It is refused as a keyword, once, at the keyword, and the next line's item is still read; an
+/// `import` the same. What read before still reads: `true`, a contextual word, a dotted name.
+#[test]
+fn a_keyword_in_a_module_name_is_refused_as_a_keyword() {
+    for (head, word) in
+        [("module t.actor", "actor"), ("module fn", "fn"), ("module a.type.b", "type"), ("module m\nimport a.actor", "actor")]
+    {
+        let src = format!("{head}\n\nfn main() {{ }}\n");
+        let checked = check_source(0, &src);
+        let errors: Vec<_> = checked.diagnostics.iter().filter(|d| d.is_error()).collect();
+        assert_eq!(errors.len(), 1, "{head}: one refusal: {errors:?}");
+        let message = format!("`{word}` is a keyword and cannot be part of a module's name");
+        assert_eq!((errors[0].code, errors[0].message.as_str()), ("DL0201", message.as_str()), "{head}");
+        let at = errors[0].spans[0].span;
+        assert_eq!(&src[at.start as usize..at.end as usize], word, "{head}: placed at the keyword");
+        let main = |it: &delulu_syntax::ast::Item| matches!(it, delulu_syntax::ast::Item::Fn(f) if f.name.name == "main");
+        assert!(checked.module.items.iter().any(main), "{head}: the next line's `fn main` is still read");
+    }
+    for ok in ["module true", "module new", "module a.new", "module ok.fine"] {
+        let d = diags(&format!("{ok}\n\nfn main() {{ }}\n"));
+        assert!(d.is_empty(), "{ok} reads as it did: {d:?}");
+    }
+}
+
+/// RW 6.41 (seen while closing B5): a write through an index on a `val` list was *"cannot write a element through a `val`
+/// receiver"*. It names a list element now, as the other writes to a list do, and every DL1604 reads as a sentence.
+#[test]
+fn a_write_through_an_index_names_a_list_element() {
+    let d = diags("module m\nfn main() {\n    let xs: val List[Int] = [1, 2]\n    xs[0] = 3\n}\n");
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").expect("DL1604 at the write");
+    assert!(m.starts_with("cannot write a list element through a `val` receiver"), "{m}");
+    for (src, what) in [
+        ("let xs: val List[Int] = [1, 2]\n    xs[0] = 3", "an index"),
+        ("let xs: val List[Int] = [1, 2]\n    xs.push(3)", "a push"),
+        ("let m: val Map[Str, Int] = Map()\n    m.insert(\"a\", 1)", "an insert"),
+    ] {
+        let d = diags(&format!("module m\nfn main() {{\n    {src}\n}}\n"));
+        let (_, m) = d.iter().find(|(c, _)| *c == "DL1604").unwrap_or_else(|| panic!("{what}: {d:?}"));
+        assert!(!m.contains(" a e") && !m.contains(" a a") && !m.contains(" a i"), "{what}: an article before a vowel: {m}");
+    }
+}
+
+/// A13 (the agent test campaign): a list filled through a `ref` helper and then handed to a parameter with no capability
+/// keyword was DL1603 *"cannot store `ref` (aliases as `ref`) where `val` is required (argument `xs`)"*, and nothing said
+/// how to hand it over; the agent rewrote the program as recursion. Both ways out are named now: declare the parameter
+/// `box` if the function only reads it, or pass a copy. Each is then accepted. A parameter that writes `val` gets no such
+/// advice: the author chose it.
+#[test]
+fn a_ref_list_refused_at_a_val_parameter_names_both_ways_to_pass_it() {
+    let program = |param: &str, arg: &str| {
+        format!(
+            "module m\nfn fill(acc: ref List[Int]) {{\n    acc.push(1)\n}}\nfn total({param}) -> Int {{\n    var t = 0\n    \
+             for x in xs {{ t = t + x }}\n    t\n}}\nfn main() {{\n    let acc = []\n    fill(acc)\n    let n = total({arg})\n}}\n"
+        )
+    };
+    let d = diags(&program("xs: List[Int]", "acc"));
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1603").expect("DL1603 at the argument");
+    assert!(m.starts_with("cannot store `ref` (aliases as `ref`) where `val` is required (argument `xs`)"), "{m}");
+    assert!(m.contains("declare the parameter `box`") && m.contains(".concat([])"), "both ways out: {m}");
+    for (param, arg) in [("xs: box List[Int]", "acc"), ("xs: List[Int]", "acc.concat([])")] {
+        let d = diags(&program(param, arg));
+        assert!(!d.iter().any(|(c, _)| *c == "DL1603"), "{param} / {arg} is accepted: {d:?}");
+    }
+    let d = diags(&program("xs: val List[Int]", "acc"));
+    let (_, m) = d.iter().find(|(c, _)| *c == "DL1603").expect("DL1603");
+    assert!(!m.contains("box"), "a `val` the author wrote gets no advice to change it: {m}");
+}

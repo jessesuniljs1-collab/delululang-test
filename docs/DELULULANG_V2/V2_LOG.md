@@ -10240,3 +10240,279 @@ check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; 
 **Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 names the script, the document gates by name, criterion 2's
 three commands and the everything run's length, and says the launch worktree keeps its default `target/`: the pre-commit
 hook looks for the Survey's binary there, so a `CARGO_TARGET_DIR` exported elsewhere fails it.
+
+## 2026-10-31 — the laptop: a fault on the WASM engine reads as the interpreter's, at its place (B5, RW 6.38)
+
+**Read first.** On-demand routine runs 7 and 8 had pushed while this session was away. Run 7 closed the macOS red of
+2026-10-29 as DEADMAN-DEAF-1 (D-V2-194, `1f5206c`, `dcfbb18`) and landed #92. Run 8 brought `launch/2.0.0` current at
+`2667105`: its `everything` run `41011808360` was 18 of 18 success and its release dry run `41011811502` success. The
+records merge that followed is `5009a89`. `master` `54ab0c1`'s push run `41023213852`: 14 jobs success, 2 skipped. The
+nightly `41033994313` on it: 18 of 18 success, the broker's Miri 3 h 11 min (09:31:00 to 12:41:50 UTC), under its 4 h
+cap. The laptop's redo from both runs is done: `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` are deleted from
+`origin` (each in `master`'s history; `claude/peaceful-carson-8vcj5y` was already gone).
+
+**What the agent found** (B5, the least-authority agent, Sonnet 5.5, 2026-10-24), reproduced with the agent's own
+program on the binary at `54ab0c1`: a refused read on `--engine wasm` printed *"error[DL0904]: WASM engine: WASM trap:
+DL0904: path `../forbidden/secret.txt` escapes the granted scope"*, with no `-->` line. The interpreter printed the
+same refusal once, at `fsr.delulu:14:10`, under the call. Every runtime fault on the WASM engine was unplaced: the
+engine's error carried a detail string and nothing else.
+
+**The change.**
+- `codegen.rs`: the compiler keeps a `SiteMap` beside the module. Entering a statement or an expression marks the next
+  instruction as its; leaving it marks the next as the enclosing one's again. When a body is serialized, each mark
+  becomes a byte offset in the body, counted as wasmtime counts a frame's offset. `compile_checked_sited` returns it;
+  `compile_checked` drops it. Nothing is added to the module.
+- `host.rs`: `WasmError::Trap` carries the guest's frames, innermost first (each function's index and its offset). A
+  refused host call records them when it refuses: the 99 places that set `refused` go through `Refuse::refuse` (or
+  `refuse_first`, where the first refusal stands), and the custody and declared-effect checks are asked through the
+  caller, which records them when a check says no. A trap carries its own backtrace. The engine that runs `main` states
+  wasmtime's defaults it now relies on (20 frames, the address map).
+- The CLI (`run_cmd.rs`, `cli.rs`): `delulu run --engine wasm` reads the innermost frame the map knows and places the
+  fault there, `runtime fault here`, as the interpreter does. The words are the interpreter's: no `WASM engine: WASM
+  trap:`, the code once. A `.dwx` has no source: its fault names the file, in the same words.
+- `interp.rs`: an index out of bounds is placed at the whole `xs[i]`, as a unary or a binary fault is. It was `recv.span()`,
+  `xs` alone, since Stage 1. Comparing the engines found it: the WASM engine's first place for it was `xs[5]`.
+
+**Gates.**
+- `fault_parity` `a_wasm_fault_is_placed_where_the_interpreter_places_it`: eight shapes, each held to the interpreter's
+  own span (a division in the guest, the checked add and remainder in helpers the compiler wrote, a division in a called
+  function, an index out of bounds directly and in an inlined generic, an ungranted console, a refused path in a called
+  function). `a_recursion_too_deep_is_placed_at_the_call_that_went_deeper` (a call with no argument, whose place only
+  the mark made on entering it names). `a_refusal_a_check_records_is_placed_at_the_call_it_refused` (an effect a
+  manifest does not declare, through the custody check).
+- `wasm_cli` `a_wasm_fault_reads_as_the_interpreters_at_the_same_place`: a host refusal and a guest trap read byte for
+  byte as the interpreter's from `error[` on, and a `.dwx` says the same words. Red on the old source, with B5's exact
+  text.
+- `broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now also asks that each refusal names its
+  call, embedded and under the daemon, on the interpreter and the WASM engine: the agent's own shape, a broker's refusal.
+- Mutants, each killed: M916 (entering records no mark: survived the eight shapes, since an operation follows its
+  operands, and is killed by the recursion test), M917 (leaving does not restore), M918 (a refusal records no frames),
+  M919 (a check's refusal is not placed; also killed against the daemon test), M920 (the outermost frame read first),
+  M921 (a trap's backtrace ignored), M922 (the index back at `xs`), M923 (the old words), M924 (no place attached).
+- `cargo test -p delulu-wasm -p delulu-runtime` passed (every target); `core_invariance` passed, the snapshot unchanged;
+  `wasm_cli` 21 passed. 11 `.dwx` builds (the examples, the book's samples, B5's programs) were byte-identical with the
+  old binary and the new.
+
+**Found on the way, recorded open.** RW 6.39: a sandboxed guest's fault names no place on the terminal (the guest is
+not sent the program's name; the report places the host's refusal). RW 6.40: an actor that dies on the WASM engine is
+counted but not named, and the interpreter's `DL0905` names no place. RW 6.41: DL1604 says "cannot write a element".
+
+## 2026-10-31 — the laptop: a write through an index names a list element (RW 6.41)
+
+Seen while closing B5: `xs[0] = 3` on a `val` list was DL1604 *"cannot write a element through a `val` receiver"*.
+`rcap_check.rs` gives the sentence a noun, and the index write's noun was "element", where a `push` or a `pop` says "list
+element (push)". An index assigns into a list alone, so the noun is "list element" now. Nothing quoted the old words
+(`crates/*/tests`, the core snapshot and the documents searched).
+
+**Gates.** `campaign_wording` `a_write_through_an_index_names_a_list_element`: red before with the old sentence; it also
+asks an index, a push and an insert for an article before a vowel. `cargo test -p delulu-check` (every target) and
+`core_invariance` passed, the snapshot unchanged.
+
+## 2026-10-31 — the laptop: an actor's death and a recursion too deep read alike on both engines (RW 6.40)
+
+Two gaps seen while closing B5, and a third found while closing the first.
+- **An actor that died on the WASM engine was counted, not named.** `call_actor_export` dropped the trap
+  (`Err(_trap) => Ok(false)`). It now keeps the turn's words (the refusal, or the cleaned trap) and `poison` prints the
+  interpreter's line: *"actor Div died in `go`: division by zero [DL0902] (its later messages will be dropped and
+  counted)"*. The cooperative scheduler prints it when the actor dies, so the line keeps its place among the output.
+- **The interpreter's `DL0905` named no place.** `enter` raises it with no span; a `DL0905` that leaves a call expression
+  unplaced now takes that call's span, so the innermost call, the one that went one deeper, names it. That is where the
+  WASM engine places it (by the guest's frames, B5). One branch on a call's error path; none on its success.
+- **TERMINAL-TEXT-1 in one more place.** The interpreter's actor-death line printed the fault's message raw. A failed
+  assertion in a behaviour quotes its values, so a program could write ESC, BEL and a carriage return onto the operator's
+  terminal, and with the return overwrite the line with words of its choosing (`sandbox: forged` in the test). The line
+  escapes them now (`delulu_diag::terminal_line`), as a run's fault does; the WASM line does too.
+
+**Gates.** `wasm_cli` `an_actors_death_and_a_recursion_too_deep_read_alike_on_both_engines`: the same death line and count
+on both engines, and the same `DL0905` place; red on the old source (the WASM engine named nothing). `terminal_text_cli`
+`an_actors_death_quotes_its_fault_escaped`: red before (ESC, BEL, ESC, CR reached the terminal). Mutants M925 (the WASM
+line not printed), M926 (`depth_at_call` does nothing), M927 (the raw message again), each killed. `cargo test -p
+delulu-wasm -p delulu-runtime` (every target), `actors_cli`, `cli_contract` and `core_invariance` passed, the snapshot
+unchanged.
+
+## 2026-10-31 — the laptop: wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424
+
+**What turned it red.** #93's run `41112572896` passed every test job on Linux, macOS, Windows and arm64, and failed
+`supply-chain` alone: `cargo deny check advisories` named three wasmtime advisories published on 2026-10-30, each fixed in
+48.0.8 (and in 49.0.5 and 50.0.1). They hold for every tree, `master` and `launch/2.0.0` among them; the next nightly would
+have been red.
+
+**Reachable here?** No, read against the code. -0422: typed functions with `i31` or `nullref` arguments (the GC and
+function-references proposals); -0423: host-created struct types with supertypes (GC); -0424: borrowed resources passed
+between components (the component model). `harden_wasm_features` turns off GC, function references and the component
+model, and the host's functions take and give `i32`, `i64` and `f64` alone.
+
+**The change.** `cargo update -p wasmtime --precise 48.0.8`: 30 packages, wasmtime's own, Cranelift's (0.135.7 → 0.135.8)
+and Pulley's, every one a patch release; nothing added or removed. The `cache` feature stays off (#76, 2026-10-27).
+
+**Gates.** `cargo deny check advisories` on the old lock: the three advisories, failed; on the new one: ok. `bans
+licenses sources` ok. `cargo test -p delulu-wasm` (every target, `wasmtime_features` and B5's placement tests among them),
+`wasm_cli` 22 and `core_invariance` passed on 48.0.8.
+
+**Landed with** #93 (B5), #94 (RW 6.41) and #95 (RW 6.40), stacked below it: this branch's run is the one that covers
+all four. The next merge into `launch/2.0.0` takes it, and CHECKLIST-2.0 criterion 4 names the three advisories.
+
+## 2026-10-31 — the laptop: a keyword in a module's name is refused as a keyword (C9, RW 6.42)
+
+**What the agent found** (C9, the zero-authority agent, Haiku 5.5, 2026-10-24), and what the laptop measured on the binary
+before the change: `module t.actor` was DL0209 *"expected end of statement"* at the `.`; `module fn`, `module type`,
+`module let` and the rest at the next line's item, since the line break after a keyword does not end a statement and
+`parse_path` takes a keyword as its first part. `module true`, `module new`, `module be` and `module a.new` checked clean.
+
+**The change** (`parser.rs`). The `module` header and an `import` read their path through `parse_module_path`: a part
+that is a keyword is refused DL0201 *"`actor` is a keyword and cannot be part of a module's name"*, at the keyword, and
+read as the part so the line goes on. After a refused part, an item that follows at once is read as an item: otherwise
+the statement's recovery would have skipped it as the rest of a bad line. `true` and `false` stay names there, so nothing
+accepted before is refused, and every keyword was refused before: what a module's name may be is unchanged. `parse_path`
+itself, which reads types, effect rows and patterns, is untouched.
+
+**Gates.** `campaign_wording` `a_keyword_in_a_module_name_is_refused_as_a_keyword`: `module t.actor`, `module fn`,
+`module a.type.b` and `import a.actor`, each one DL0201 at its keyword with `fn main` still read; `module true`,
+`module new`, `module a.new` and `module ok.fine` check clean. Red on the old parser (DL0209 at the `.`). Mutants M928 (an
+item after a refused part skipped), M929 (no part refused), M930 (`true` refused), each killed. `cargo test -p
+delulu-syntax -p delulu-check -p delulu-conform` and `core_invariance` passed, the snapshot unchanged.
+
+## 2026-10-31 — the laptop: a source file that is not UTF-8 is refused at its first bad byte (C11, RW 6.43)
+
+**What the agent found** (C11, the zero-authority agent, Haiku 5.5, 2026-10-24), measured on the laptop before the change:
+`delulu check` of a file holding a Latin-1 `é` (byte `0xE9`) said *"error: cannot read `f`: stream did not contain valid
+UTF-8"* and exited 2, a usage error; `run` the same. Under `--json` the fallback envelope said `kind: usage`,
+`summary.errors: 1`, and listed no diagnostic. The words were the standard library's, with no place: C27's class, an
+OS-level error where a diagnostic belongs, which C65 had closed for a `.dwx` handed to a source command.
+
+**The change** (`cli.rs`). When the loader's read fails as invalid data and the file is not a `.dwx`, `refuse_non_utf8`
+reads its bytes, finds the first that begins no UTF-8 character, and refuses it as DL0101 (*"unexpected character"*; no
+new code): *"this file is not UTF-8: 0xE9 here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as
+UTF-8"*, exit 1. The source map holds the file with each bad sequence shown as `�`, so the line renders with the byte under
+the caret; nothing is checked or run from it. The loader runs before a command has its options in hand, so `run` records
+the command and `--json` once (`INVOCATION`) and the refusal answers in that channel: one envelope, with the diagnostic.
+`delulu explain DL0101` says a file that is not UTF-8 is refused there.
+
+**Gates.** `artifact_review` `a_source_file_that_is_not_utf8_is_refused_at_its_first_bad_byte`: `check` and `run` exit 1
+with DL0101 at `3:25`; `--json` gives one envelope with the diagnostic and no `error` fallback. Red on the old CLI (exit 2,
+the library's words). Mutants M931 (no refusal made), M932 (`--json` ignored), M933 (the span one byte off), each killed.
+`json_contract`, `cli_contract`, `artifact_review` and `cargo test -p delulu-diag` passed.
+
+## 2026-10-31 — the laptop: `delulu authority` names the scopes a program requests (A8, RW 6.44)
+
+**What the agent found** (A8, the builder, Sonnet 5.5, 2026-10-24), measured on the laptop before the change: for a
+program whose source says `root.fs_read("./data")` the human `delulu authority` printed `FsRead   (scope granted at
+runtime)`, while `--json` listed `requested_scopes: ["./data"]`. NE-10 (2026-09) had put the requested scopes into the JSON
+and the Atlas's chain; the human line never read them. A reader of the human report could not see which directories a
+program asks for. My earlier note called it a decision because a Stage-3 test pins the human report byte for byte.
+
+**The decision.** That pin is Stage 4's criterion 7: adding the foreign surface must change nothing in a report without
+foreign code. It does not say the report may never say more, and the line it pins was the gap. It moves, with its comment
+saying why; criterion 7 still holds, since the foreign surface changes nothing in the report.
+
+**The change.** `delulu_atlas::scope_words` writes a capability's scope for the authority report and the Atlas's digest
+alike: the scopes a manifest grants, else the scopes the program writes, *"./data (requested; the grant decides)"*. Where
+another minting site of the kind computes its scope (SCOPE-HIDDEN-1's hidden kinds), it adds *"and one computed at run
+time"*, so the literals are not read as all the program asks for. Where the source writes none, it keeps *"(scope granted
+at runtime)"*. Each capability in `--json` gains `requested_computed`, additive and described in the report's schema
+(`schema.rs`; `within_cli` holds every report to it).
+
+**Gates.** `cli` `the_human_authority_report_names_the_scopes_a_program_requests`: literal scopes, a literal beside a
+computed site, a computed site alone; red on the old source. Mutants M934 (the requested scopes ignored), M935 (the
+computed note dropped), M936 (`requested_computed` always false), each killed. The core snapshot, blessed, changed in
+exactly 10 human lines (each now naming its program's requested scope) and 38 `"requested_computed": false` fields; the
+Atlas chain snapshots in 17 such fields. `within_cli`, `json_contract`, `atlas_chain`, `atlas_cli`, `atlas_e2e`,
+`cargo test -p delulu-atlas` and `core_invariance` passed.
+
+## 2026-10-31 — the laptop: a `ref` list refused at a `val` parameter names both ways to pass it (A13, RW 6.45)
+
+**What the agent found** (A13, the builder, Sonnet 5.5, 2026-10-24): a list built through a `ref` helper (`fill(acc)`,
+`acc: ref List[Int]`) could not then be handed to `fn total(xs: List[Int])`: DL1603 *"cannot store `ref` (aliases as
+`ref`) where `val` is required (argument `xs`)"*. Nothing named a way out, so the agent rewrote "fill it in a helper, then
+read it elsewhere" as pure recursion.
+
+**Kept.** A parameter with no capability keyword is `val` (spec §2's default), and the callee may keep what it is given;
+a `ref` passed there could be written by the caller after the callee kept it. Two ways out exist and work today, measured
+on the laptop: declare the parameter `box` (it reads a `ref` as well as a `val`, and keeps nothing), or pass a copy
+(`acc.concat([])` is a fresh list, accepted).
+
+**The change** (`rcap_check.rs`): DL1603 for a `ref` argument at a parameter whose type names no capability keyword adds
+that the type reads as `val`, and the two remedies. A parameter that writes `val` gets no such advice, since its author
+chose it. `codes.rs`: `delulu explain DL1603` gains the case.
+
+**Gates.** `campaign_wording` `a_ref_list_refused_at_a_val_parameter_names_both_ways_to_pass_it`: the message names `box`
+and `.concat([])`; each is then accepted; `xs: val List[Int]` gets no advice. Red before. Mutants M937 (no hint), M938 (the
+hint for a written `val` too), each killed. `cargo test -p delulu-check -p delulu-diag` and `core_invariance` passed, the
+snapshot unchanged.
+
+## 2026-10-31 — the laptop: `list_dir` runs on the WASM engine and in a `.dwx` (A7, RW 6.46)
+
+**What the agent found** (A7, the builder, Sonnet 5.5, 2026-10-24): its `textstats` program walked a directory, and on
+`--engine wasm` and `build --target wasm` it was DL1201 *"WASM codegen does not support the method `.list_dir`"*;
+`read_text` and `write_text` ran there. A program that walks a directory ran on the interpreter alone, and could not be
+shipped as a `.dwx`.
+
+**The change.**
+- `codegen.rs`: `Cap[FsRead].list_dir(path)` lowers to a call of `delulu:cap.fs_list_dir(cap, path, file, start, end)`,
+  typed `Result[List[Str], IoErr]` (the list boxed in the `Ok`, as any list in a slot). The import is declared only by a
+  module that calls `list_dir`, so every other module compiles byte for byte as before: the 11 `.dwx` builds of the
+  examples, the book's samples and B5's programs were identical to the previous build.
+- `host.rs`: `fs_list_dir` performs the listing in `fs_read_text`'s order, which is the interpreter's: the `Read` record
+  at dispatch (with where the path pointed and the scope, RW 6.13), the custody asked with the resolved path, the scope by
+  the interpreter's own `resolve_in_anchor`, then `beneath::list_dir_at` at the pinned path (FS-RACE-1, RW 4.72). The
+  names come back as a `List[Str]` written in one allocation (`write_str_list`); the errors as the interpreter maps them.
+
+**Gates.**
+- `list_dir_parity` (new): a directory listed alike on both engines, with its empty subdirectory, a missing directory, a
+  file named as one, and each listed file read back; a listing past the scope refused DL0904 in the interpreter's exact
+  words; an artifact that does not declare `Read` refused DL1202 at the listing.
+- `wasm_cli` `a_directory_walk_runs_on_wasm_and_as_a_dwx_and_traces_alike`: the same output and the same `--trace-out`,
+  record for record, on both engines; the `.dwx` builds and runs. Every one red on the old backend (DL1201).
+- Mutants: M939 (the lowering off), M940 (no custody check), M941 (no scope check), M942 (no trace record), each
+  killed. (M941's first spelling was a no-op, `Result::and` keeping the `Err`, and survived; rewritten, killed.)
+- `cargo test -p delulu-wasm` (every target) passed.
+
+The entries come in the operating system's order on both engines (`beneath` does not sort); a program that prints them
+should sort them, as the tests do.
+
+## 2026-10-31 — the laptop: a refusal's two shapes, kept and documented (B8, RW 6.47)
+
+**What the agent found** (B8, the least-authority agent, Sonnet 5.5, 2026-10-24, *low, info*): refusals come in two
+shapes. A host outside the allowlist, a path outside a path scope and a scope escape end the run (DL0904, exit 1); a
+special-use address, a scheme, userinfo, a port or a backslash come back as `Err(Refused)` (exit 0). A script that reads
+only the exit code sees the second as success.
+
+**Measured again** on the laptop's binary: under `--grant net=api.example.invalid`, `get("https://other.invalid/x")` is
+DL0904 at the call; `get("http://api.example.invalid/x")` and `get("https://user@api.example.invalid/x")` are
+`ERR:Refused`, each with the operator's note on standard error naming the reason (`[egress: scheme]`,
+`[egress: userinfo]`).
+
+**Decided: kept.** The two are different events. A request beyond what the grant names is the program asking for more
+authority than it holds, and the run ends where it asked. A URL the egress client will not send (for what the URL itself
+is) is a failed request the program handles as it handles any `Err`; ending the run there would take that choice from
+it. What was missing was the statement: `docs/for-agents.md` now gives both shapes, the exit codes, and where a harness
+that must know of every refused request reads it (`egress.records[].reason` in the run report, and the operator's note).
+
+## 2026-10-31 — the laptop: a sandboxed run's fault names its place (RW 6.39)
+
+**What was seen** while closing B5: the `broker_cli` daemon test, asked to check every route's place, found the sandboxed
+guest's fault unplaced. The guest printed *"error[DL0904]: …"* alone, relayed as `guest: error[DL0904]: …`, where the
+interpreter and (since B5) the WASM engine point at the call. The guest holds the program and the fault's span; it was
+never told the program's name, since the channel's `Program` frame carried the text, its hash, the seed and the clock.
+
+**The change.**
+- `channel.rs`: `Program` gains `name`, `#[serde(default)]`. Host and guest are one version (D-V2-56: a version mismatch
+  is refused in words), and a frame without the field reads as an empty name, so nothing else of the protocol moves.
+- `guest.rs`: the sandboxed run passes the name it reports the program under (the file, or a package's flattened name)
+  through to the frame, which carries its LAST COMPONENT only, never the host's directories. The internal runner and the
+  probe send none. The guest renders its fault as an ordinary run does (`runtime fault here`, under that name) when it
+  has a name and a span, and keeps the one-line form otherwise; the message stays escaped (TERMINAL-TEXT-1), and the
+  host's relay marks and escapes every line as before.
+
+**Why it is safe.** The channel's rule is that the guest is told what to execute, never what it may reach. A file's last
+component grants nothing and names nothing on the host; the test runs a program by its absolute path and holds that no
+guest line carries its directory.
+
+**Gates.** `sandbox_run_cli` `a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories` (red before):
+the guest's DL0902 placed at `share.delulu:5:16`, `runtime fault here`, and no line naming the temporary directory.
+`broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now checks the sandboxed route's place too (it
+was left out, naming this row). Mutants M943 (the guest ignores the name), M944 (no name sent), M945 (the whole path
+sent), each killed. `broker_cli`, `terminal_text_cli`, `sandbox_run_cli`, `sandbox_modes_cli`, `sandbox_guard_e2e` and
+`delulu-runtime`'s channel tests passed.
+
+With this row every finding of the agent test campaign of 2026-10-24 is closed or decided.

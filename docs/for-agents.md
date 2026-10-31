@@ -724,6 +724,12 @@ overstate it downstream:
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
+  **A refusal has two shapes, on purpose** (B8 of the agent test campaign, kept 2026-10-31). A request outside what
+  the grant names (its host, its path pattern, its method) ends the run, DL0904 at the call, exit 1: the program asked
+  for more than it was given. A request the egress client refuses for what the URL itself is (its scheme, userinfo, a
+  special-use address, a backslash) is `Err(Refused)` to the program, which decides what follows, so the run may exit
+  0; the operator's note on standard error (`[egress: scheme]`) and the report's `reason` say why. A harness that must
+  know of every refused request reads the report, not the exit code alone.
   `http.get_with(url, headers)` (a `Map[Str, Str]`, P9-04 (a)) sends headers under the same checks: each
   name an HTTP token, each value printable ASCII with no line break, no two names that differ only in
   case, at most 32 — and never `Host`, the framing and connection headers, `Proxy-*` or
@@ -804,7 +810,9 @@ overstate it downstream:
   56 ms on WASM (2026-10-29). Counting 372,300 words into a `Map[Str, Int]` is faster on WASM too: 0.29 s, against
   0.63–0.80 s interpreted (2026-10-29). The interpreter runs the whole language, and some programs only run there: actors, and a
   list or a record field holding a function. A program WASM cannot compile is refused with `DL1201`, naming its line,
-  and never runs half-compiled.
+  and never runs half-compiled. A run that faults reads the same on both engines: its code once, the same words, and
+  the line and column of the expression that faulted (since 2026-10-31); a `.dwx` names its file instead, having no
+  source to point into.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
   (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
   this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a

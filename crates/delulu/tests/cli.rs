@@ -248,13 +248,16 @@ fn write_foreign_program(dir_name: &str, manifest: Option<&str>) -> PathBuf {
 #[test]
 fn authority_without_foreign_is_byte_identical_to_stage3() {
     // Criterion 7 (regression-critical): a program with no foreign use has `"foreign_calls": []`
-    // and its human report is BYTE-IDENTICAL to the Stage-3 output, pinned here verbatim.
+    // and its human report is BYTE-IDENTICAL to the Stage-3 output, pinned here verbatim — the
+    // foreign surface added nothing to it. One line has changed since, on purpose: A8 of the agent
+    // test campaign (2026-10-31) names the scope the program requests, `./config`, where the report
+    // said `(scope granted at runtime)` and only `--json` listed it.
     let o = delulu(&["authority", "examples/demo.delulu"]);
     assert!(o.status.success());
     let expected = "Authority of `demo` — what this program can do to your system:\n\
         \x20 effects:      Read, Write\n\
         \x20 capabilities:\n\
-        \x20   - FsRead   (scope granted at runtime)\n\
+        \x20   - FsRead   ./config (requested; the grant decides)\n\
         \x20   - Console  stdio\n\
         \x20 secrets:      API_KEY\n\
         \x20 pure fns:     apply, fib\n\
@@ -263,6 +266,44 @@ fn authority_without_foreign_is_byte_identical_to_stage3() {
     let j = delulu(&["authority", "examples/demo.delulu", "--json"]);
     let v: Value = serde_json::from_str(&stdout(&j)).unwrap();
     assert_eq!(v["authority"]["foreign_calls"].as_array().unwrap().len(), 0);
+}
+
+/// A8 (the agent test campaign): the human `delulu authority` said `FsRead   (scope granted at runtime)` for a program whose
+/// source asks for `./data`, which `--json` listed as `requested_scopes`. It names the requested scope now, labelled
+/// requested, since the grant decides; says so when another site of the kind computes its scope; and keeps the old words
+/// where the source names none.
+#[test]
+fn the_human_authority_report_names_the_scopes_a_program_requests() {
+    let dir = std::env::temp_dir().join(format!("delulu-a8-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let open = "fn open(r: Root, p: Str) ! {Read} {\n    let f = r.fs_read(p)\n}\n\n";
+    for (name, body, line) in [
+        (
+            "literal",
+            "fn main(root: Root) ! {Read, Write} {\n    let rd = root.fs_read(\"./data\")\n    let wr = root.fs_write(\"./out\")\n}\n",
+            vec!["    - FsRead   ./data (requested; the grant decides)", "    - FsWrite  ./out (requested; the grant decides)"],
+        ),
+        (
+            "mixed",
+            "fn main(root: Root) ! {Read} {\n    let rd = root.fs_read(\"./data\")\n    open(root, \"./secret\")\n}\n",
+            vec!["    - FsRead   ./data (requested, and one computed at run time; the grant decides)"],
+        ),
+        ("computed", "fn main(root: Root) ! {Read} {\n    open(root, \"./x\")\n}\n", vec!["    - FsRead   (scope granted at runtime)"]),
+    ] {
+        let f = dir.join(format!("{name}.delulu"));
+        let helper = if name == "literal" { "" } else { open };
+        std::fs::write(&f, format!("module {name}\n\n{helper}{body}")).unwrap();
+        let o = delulu(&["authority", f.to_str().unwrap()]);
+        assert!(o.status.success(), "{name}: {}", stderr(&o));
+        for l in line {
+            assert!(stdout(&o).lines().any(|x| x == l), "{name}: expected `{l}` in:\n{}", stdout(&o));
+        }
+        let v: Value = serde_json::from_str(&stdout(&delulu(&["authority", f.to_str().unwrap(), "--json"]))).unwrap();
+        let fs = &v["authority"]["capabilities"][0];
+        assert_eq!(fs["requested_computed"].as_bool(), Some(name != "literal"), "{name}: {fs}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

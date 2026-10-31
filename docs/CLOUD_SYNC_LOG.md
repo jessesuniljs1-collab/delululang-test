@@ -6331,3 +6331,142 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first.
   4. The papercuts left: A7, A8, A13; B5, B8; C9, C11 (RW 6.30–6.34; the ledger on `origin/autosave/dogfood`).
   5. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — a fault on the WASM engine reads as the interpreter's, at its place: B5 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-fault-place` (on `master` `54ab0c1`)   Pull request: opened with this commit
+- **Read first:** runs 7 and 8 (DEADMAN-DEAF-1; `launch/2.0.0` at `2667105`, its records merge `5009a89`); `54ab0c1`'s
+  push run `41023213852` (14 success, 2 skipped) and the nightly `41033994313` (18 of 18; the broker's Miri 3 h 11 min).
+  **Redo on the laptop, done:** `laptop/val-by-type` and `claude/peaceful-carson-zmpprn` deleted from `origin` (both in
+  `master`'s history); `claude/peaceful-carson-8vcj5y` was already gone.
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu-wasm/src/lib.rs`, `crates/delulu-wasm/tests/fault_parity.rs`, `crates/delulu-wasm/tests/hostile_guest.rs`,
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu/tests/wasm_cli.rs`, `crates/delulu/tests/broker_cli.rs`, `docs/for-agents.md`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (rows 6.38–6.41), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land this pull request on green (the full suite runs on CI).
+  2. RW 6.41 (DL1604's "a element"), then RW 6.40 and RW 6.39.
+  3. The papercuts left: A7, A8, A13; B8; C9, C11.
+  4. The broker's Miri: 3 h 11 min on the 2026-10-30 nightly; if a nightly or an `everything` run passes 3 h 45 min,
+     shorten what that job runs before the 4 h cap turns it red.
+  5. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a write through an index names a list element: RW 6.41 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/dl1604-article` (stacked on `laptop/wasm-fault-place`, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/tests/campaign_wording.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.41), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93, then this, by fast-forward on green; then RW 6.40 and RW 6.39; the papercuts A7,
+  A8, A13, B8, C9, C11; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — an actor's death and a recursion too deep read alike on both engines: RW 6.40 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/fault-parity-gaps` (stacked on `laptop/dl1604-article`, #94, on #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name; a TERMINAL-TEXT-1 hole closed on the way (the actor-death line).
+- Files and folders: M `crates/delulu-runtime/src/actors.rs`, `crates/delulu-runtime/src/interp.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu/tests/wasm_cli.rs`, `crates/delulu/tests/terminal_text_cli.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.40), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93, #94 and this by fast-forward on green; RW 6.39 (a sandboxed guest's fault
+  unplaced); the papercuts A7, A8, A13, B8, C9, C11; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasmtime-48-0-8` (stacked on #95, #94, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. #93's run `41112572896` was red on `supply-chain` alone.
+- Files and folders: M `Cargo.lock`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #93, #94, #95 and this together by fast-forward, on this branch's green run.
+  2. Merge `master` into `launch/2.0.0`: CHANGELOG's five new sections; CHECKLIST-2.0 criterion 4 names
+     RUSTSEC-2026-0422/0423/0424; dispatch its `everything` run and release dry run.
+  3. RW 6.39; the papercuts A7, A8, A13, B8, C9, C11.
+  4. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a keyword in a module's name is refused as a keyword: C9 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/module-name-keyword` (stacked on #96, #95, #94, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-syntax/src/parser.rs`, `crates/delulu-check/tests/campaign_wording.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.42), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93–#96 together on #96's green run, then this; merge `master` into `launch/2.0.0`
+  (CHECKLIST-2.0 criterion 4 names RUSTSEC-2026-0422/0423/0424); RW 6.39; the papercuts A7, A8, A13, B8, C11;
+  *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a source file that is not UTF-8 is refused at its first bad byte: C11 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/source-not-utf8` (stacked on #97, #96, #95, #94, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu-diag/src/codes.rs`,
+  `crates/delulu/tests/artifact_review.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.43),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93–#96 on #96's green run, then #97 and this; merge `master` into `launch/2.0.0`;
+  RW 6.39; the papercuts A7, A8, A13, B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — `delulu authority` names the scopes a program requests: A8 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/authority-requested-scopes` (stacked on #98, #97, #96, #95, #94, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-atlas/src/render.rs`, `crates/delulu-atlas/src/lib.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/src/schema.rs`, `crates/delulu/tests/cli.rs`, `crates/delulu/tests/snapshots/atlas_chain/*.json` (12),
+  `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.44),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #93–#96 on #96's green run, then #97, #98 and this in order; merge `master` into
+  `launch/2.0.0`; RW 6.39; the papercuts A7, A13, B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a `ref` list refused at a `val` parameter names both ways to pass it: A13 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/val-argument-remedy` (stacked on #99, #98, #97, #96, #95, #94, #93)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/rcap_check.rs`, `crates/delulu-check/tests/campaign_wording.rs`,
+  `crates/delulu-diag/src/codes.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 6.45), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land the stack #93–#99 and this by fast-forward, each on a green run; merge `master` into
+  `launch/2.0.0`; RW 6.39; the papercuts A7 and B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — `list_dir` runs on the WASM engine and in a `.dwx`: A7 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-list-dir` (stacked on #100, #99, #98)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: A `crates/delulu-wasm/tests/list_dir_parity.rs`. M `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`
+  (row 6.46), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next, in order:** land #98, #99, #100 and this in order on green runs; merge `master` into `launch/2.0.0`;
+  RW 6.39; B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a refusal's two shapes, kept and documented: B8 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/refusal-shapes-doc` (stacked on #101, #100, #99, #98)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. Documents only.
+- Files and folders: M `docs/for-agents.md`, `docs/REMAINING_WORK.md` (row 6.47), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #98–#101 and this in order on green runs; merge `master` into `launch/2.0.0`; RW 6.39
+  (the last open row of the campaign's papercuts); *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a sandboxed run's fault names its place: RW 6.39 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/sandbox-fault-place` (stacked on #102, #101)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/channel.rs`, `crates/delulu/src/guest.rs`, `crates/delulu/src/boundary.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/sandbox_run_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`
+  (row 6.39), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #101, #102 and this on green runs; merge `master` into `launch/2.0.0` (CHANGELOG's
+  sections; CHECKLIST-2.0 criterion 4 names RUSTSEC-2026-0422/0423/0424) and dispatch its `everything` run and release
+  dry run; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

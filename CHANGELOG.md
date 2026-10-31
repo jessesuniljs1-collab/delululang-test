@@ -31,13 +31,105 @@ authority pin or carries none, as `build` does (DL1001, D-V2-186); `run --sandbo
 the program may write, as the ordinary run does (D-V2-21, RW 4.84); `r.int(lo, hi)` with `hi <= lo` faults with DL0908
 instead of DL0904 (D-V2-190); every `--seed` draws a different sequence than under 1.x, since the seed is mixed first
 (D-V2-191), and an actor's draws now follow `--seed` too (D-V2-192); a program that reads `IoErr::Other`'s text
-receives the kind of failure, such as `invalid filename`, not the operating system's message (D-V2-193).
+receives the kind of failure, such as `invalid filename`, not the operating system's message (D-V2-193); a `module`
+header or an `import` with a keyword in its name is refused as DL0201 at the keyword, where 1.x said DL0209 at the `.`
+or refused the next line's item (RW 6.42); a source file that is not UTF-8 is DL0101 at its first bad byte, exit 1, where
+1.x made it a usage error, exit 2 (RW 6.43).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a sandboxed run's fault names its place, 2026-10-31
+
+- **Improved: under `--sandbox` the guest's fault names its line and column** (RW 6.39). It printed `guest: error[DL0904]:
+  …` alone, where an ordinary run points at the expression, because the guest was never told the program's name. The
+  host now sends the file's last component with the program, and the guest's fault reads as the ordinary run's, each
+  line marked `guest:` as before. The host's directories are never sent. What the guest may reach is unchanged.
+
+### `list_dir` runs on the WASM engine and in a `.dwx`, 2026-10-31
+
+- **Added: `Cap[FsRead].list_dir(path)` on `--engine wasm` and `build --target wasm`** (the agent test campaign's A7, RW
+  6.46). It was DL1201 *"WASM codegen does not support the method `.list_dir`"*, so a program that walked a directory ran
+  on the interpreter alone. The WASM host lists as the interpreter does, after the same custody and scope checks and at
+  the same pinned path: the same names (in the operating system's order, on both engines), the same `IoErr`s, the same
+  DL0904 past the scope, and the same effect trace, record for record. A module that does not call `list_dir` compiles
+  byte for byte as before.
+
+### a `ref` list refused at a `val` parameter names both ways to pass it, 2026-10-31
+
+- **Improved: DL1603 at an argument names the two ways out** (the agent test campaign's A13, RW 6.45). A list filled
+  through a `ref` helper and handed to `fn total(xs: List[Int])` was *"cannot store `ref` (aliases as `ref`) where `val` is
+  required (argument `xs`)"*, and nothing said what to do; the agent rewrote its program as recursion. The refusal now says
+  the parameter's type names no reference capability, which reads as `val`, and names both remedies: declare the parameter
+  `box` if the function only reads it, or pass a copy (a list's `.concat([])`). A parameter that writes `val` gets no
+  such advice. `delulu explain DL1603` has the case. What is refused is unchanged.
+
+### `delulu authority` names the scopes a program requests, 2026-10-31
+
+- **Changed: the human authority report names a capability's requested scope** (the agent test campaign's A8, RW 6.44).
+  `FsRead   (scope granted at runtime)` became `FsRead   ./data (requested; the grant decides)` for a program whose source
+  says `root.fs_read("./data")`; only `--json` had listed it. A kind that another minting site computes at run time says
+  so: `./data (requested, and one computed at run time; the grant decides)`. A kind whose scope the source never writes
+  keeps `(scope granted at runtime)`. The Atlas's digest prints the same line.
+- **Added: `requested_computed`** on each capability of `delulu authority --json`, true where a minting site of the kind
+  computes its scope (an additive field; the report's schema describes it).
+
+### a source file that is not UTF-8 is refused at its first bad byte, 2026-10-31
+
+- **Improved: a `.delulu` file that is not UTF-8 is DL0101 at its first bad byte, exit 1** (the agent test campaign's
+  C11, RW 6.43). It was a usage error, exit 2, quoting the standard library's *"stream did not contain valid UTF-8"*, with
+  no place; under `--json` its envelope counted an error and listed no diagnostic. Now: *"this file is not UTF-8: 0xE9
+  here begins no UTF-8 character — DeluluLang source is UTF-8; save the file as UTF-8"*, with its line and column, in
+  either channel. `delulu explain DL0101` says so. What is refused is unchanged.
+
+### a keyword in a module's name is refused as a keyword, 2026-10-31
+
+- **Improved: `module t.actor` and `module fn` say that a keyword cannot be part of a module's name** (the agent test
+  campaign's C9, RW 6.42). They were *"expected end of statement"*, at the `.` before the keyword or, for `module fn`, at
+  the next line's item, since the line break after a keyword does not end a statement. The refusal is now DL0201 at the
+  keyword, once, and the item on the next line is still read; an `import` the same. What a module's name may be is
+  unchanged: every name that was accepted still is (`true`, `new`, a dotted name), and every keyword was refused before.
+
+### wasmtime 48.0.8, for RUSTSEC-2026-0422, -0423 and -0424, 2026-10-31
+
+- **Security: wasmtime 48.0.7 → 48.0.8** (with its Cranelift and Pulley crates, 30 packages, patch releases only). Three
+  wasmtime advisories were published on 2026-10-30: typed functions with `i31` or `nullref` arguments
+  (RUSTSEC-2026-0422), host-created struct types with supertypes (-0423), and borrowed resources passed between components
+  (-0424). None was reachable here: the engine turns off garbage-collected types, function references and the component
+  model (`harden_wasm_features`), and the host creates no such types and calls no such functions. The gate asks for the
+  fixed release all the same, and it is taken.
+
+### an actor's death and a recursion too deep read alike on both engines, 2026-10-31
+
+- **Fixed: the line for an actor that died printed its fault's words raw** (RW 6.40, TERMINAL-TEXT-1). A behaviour's failed
+  assertion quotes its values, so a program could write control sequences onto the operator's terminal through it, and
+  with a carriage return overwrite the line with words of its choosing. They are escaped now, as a run's fault is.
+- **Improved: an actor that dies on the WASM engine is named, as on the interpreter**: *"actor Div died in `go`: division
+  by zero [DL0902] (its later messages will be dropped and counted)"*. It was only counted.
+- **Improved: a recursion too deep (`DL0905`) on the interpreter is placed at the call that went one deeper**, as the WASM
+  engine places it. It named no place.
+
+### a write through an index names a list element, 2026-10-31
+
+- **Fixed: DL1604 for `xs[i] = v` on a `val` list said "cannot write a element"** (RW 6.41). It says *"cannot write a list
+  element through a `val` receiver"* now, as a `push` or a `pop` does. What is refused is unchanged.
+
+### a fault on the WASM engine reads as the interpreter's, at the same place, 2026-10-31
+
+- **Improved: a run's fault on `--engine wasm` names the line and column of the expression that faulted** (the agent test
+  campaign's B5, RW 6.38). It named no place, and its code twice: *"error[DL0904]: WASM engine: WASM trap: DL0904: path
+  `../forbidden/secret.txt` escapes the granted scope"*, where the interpreter pointed at the call. It now reads as the
+  interpreter's: the code once, the same words, the same `-->` line and `runtime fault here`. This holds for a refusal the
+  host makes (under the broker daemon too), a trap in the program's own code, and either inside a called or a generic
+  function; `--json` carries the span. A recursion too deep for the WASM engine's stack is placed at the call that went
+  one deeper. A `.dwx` names its file and says the same words: it has no source to point into.
+- **Changed: an index out of bounds is placed at the whole `xs[i]`** on the interpreter, as a unary or a binary fault is.
+  It underlined `xs` alone.
+- What a program may do, and what either engine refuses, is unchanged. So is the compiled code: a `.dwx` is byte for byte
+  what it was.
 
 ### a stopped broker daemon no longer revokes a healthy monitor, 2026-10-29
 

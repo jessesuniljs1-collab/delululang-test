@@ -68,6 +68,26 @@ fn an_assertions_values_reach_the_terminal_escaped() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// RW 6.40 (seen while the WASM engine learned to name an actor's death): the interpreter's line for an actor that died
+/// quoted its fault's words raw, so an assertion's values in a behaviour reached the terminal unescaped.
+#[test]
+fn an_actors_death_quotes_its_fault_escaped() {
+    let d = lab("actor");
+    std::fs::write(
+        d.join("a.delulu"),
+        format!(
+            "module a\n\nactor W {{\n    var n: Int\n    new() {{ self.n = 0 }}\n    be go() {{ assert_eq(\"{HOSTILE}\", \"x\") }}\n}}\n\n\
+             fn main(root: Root) ! {{Async}} {{\n    let w = spawn W()\n    w.go()\n}}\n"
+        ),
+    )
+    .unwrap();
+    let r = delulu(&d, &["run", "a.delulu"]);
+    assert!(text(&r).contains("actor W died in `go`") && text(&r).contains("DL1707"), "the death, named: {}", text(&r));
+    assert_no_control(&r, "an actor's death");
+    assert!(!text(&r).lines().any(|l| l.starts_with("sandbox: forged")), "no line is forged: {}", text(&r));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// The same program as a sandboxed guest: the guest prints its own fault, on its own standard error.
 #[test]
 fn a_sandboxed_guests_fault_reaches_the_terminal_escaped() {

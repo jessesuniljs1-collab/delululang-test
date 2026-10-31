@@ -327,6 +327,11 @@ pub struct Program {
     pub hash: String,
     pub seed: u64,
     pub fixed_clock_ms: Option<i64>,
+    /// The program's file name, for the guest's diagnostics alone (RW 6.39): its last component, never the host's
+    /// directories. Empty where the host has none to give, and from a host that predates it; the guest then names no
+    /// place, as before.
+    #[serde(default)]
+    pub name: String,
 }
 
 /// One request from the guest to the host.

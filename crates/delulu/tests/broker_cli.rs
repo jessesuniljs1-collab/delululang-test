@@ -753,6 +753,10 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
                 "{file} {extra:?}: {}",
                 stderr(&o)
             );
+            // B5: placed at the call, by either custody, on the interpreter and on the WASM engine (by the frames of the
+            // refused call); RW 6.39: and by a sandboxed guest, which is now sent the program's name (`guest:   --> …`).
+            let place = format!("{file}:6:11");
+            assert!(stderr(&o).contains(&place), "{file} {extra:?}: the refusal names its call: {}", stderr(&o));
             assert!(!stdout(&o).contains("answered"), "{file} {extra:?}: the program never got an answer: {}", stdout(&o));
         }
     };

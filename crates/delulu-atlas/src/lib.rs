@@ -24,7 +24,7 @@ pub use model::{
     Node, NodeKind, SpanLoc, CAVEAT_CUSTODY, CAVEAT_STATIC, SCHEMA,
 };
 pub use query::Resolved;
-pub use render::{tokens, DEFAULT_BUDGET, QUERYING_FOOTER};
+pub use render::{scope_words, tokens, DEFAULT_BUDGET, QUERYING_FOOTER};
 
 #[cfg(test)]
 mod tests {
