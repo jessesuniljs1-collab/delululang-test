@@ -6989,8 +6989,12 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **What:** see V2_LOG's entry of the same name. The weekly sweep's documents scan, second pass, read every open row's
   status. Row 4.29 read *"P9-04 and P9-05 next"*, though P9-01 to P9-03, its whole closing condition, were complete on
   2026-10-13 (D-V2-126). Checked against the binary of `cccb001`, and closed.
-- Files and folders: M `docs/REMAINING_WORK.md` (row 4.29), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+- Files and folders: M `docs/REMAINING_WORK.md` (rows 4.29 and 3.24), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
-- **Open / next:** unchanged from the entry above (#105's): read the sweep's run and the launch runs, then cite the
-  launch runs. RW 3.24 is the laptop's.
+- **RW 3.24 handed back.** The laptop measured it and refuted two causes (row 3.24 has the numbers): the size of what an
+  evaluation returns, and the allocation of a scope's bindings. It cannot profile, because it has no tool and WSL's
+  build ran it out of memory. A routine VM can install valgrind or perf, so RW 3.24 goes back to the work order (step
+  4.7). Start from a profile of the row's benchmarks, and nothing in this entry or #105's reserves it any longer.
+- **Open / next:** read the sweep's run `41246969522` and the launch runs `41247420596` and `41247423239` (#105's entry),
+  then cite the launch runs. RW 3.24 is anyone's, profile first.
 - Survey and doctor (after the last edit): in the commit message.
