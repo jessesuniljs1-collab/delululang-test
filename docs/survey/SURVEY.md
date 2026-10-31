@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 196447 |
+| Rust lines | 196522 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 277 |
-| Markdown lines | 91675 |
+| Markdown lines | 91798 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1579 / 17981 |
+| Nodes / edges in this map | 1579 / 18004 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 25 files, 24433 lines
+- **Modules:** 25 files, 24445 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -320,7 +320,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/egress.rs` | 1409 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 1376 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 456 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2947 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/interp.rs` | 2959 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 459 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2222 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |

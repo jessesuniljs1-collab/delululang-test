@@ -11,6 +11,10 @@
 //!
 //! These drive the real binary on the interpreter; the WASM engine's half is `delulu-wasm`'s `loop_parity`
 //! (`a_function_value_never_reads_a_name_bound_after_it`), which holds both engines to the same values.
+//!
+//! The same sweep found **CTOR-SHADOW-1**: the checker resolves a name a constructor and a function share to the
+//! constructor, and the interpreter called the function (the last test here; `loop_parity`'s
+//! `a_constructor_is_built_where_a_function_shares_its_name_and_a_function_is_passed_where_none_does` holds the values).
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -156,4 +160,34 @@ fn a_closure_reads_each_name_as_it_was_where_the_closure_was_written() {
     let run = delulu(VALUES, &["run", "--grant", "console"]);
     assert!(run.status.success(), "{}", text(&run));
     assert_eq!(String::from_utf8_lossy(&run.stdout), "8 seven\n8\n", "{}", text(&run));
+}
+
+/// **CTOR-SHADOW-1.** `Wrap` is a constructor of the module's `Holder` and a function that prints. The checker resolves
+/// `Wrap(c)` to the constructor, so `hold` is pure and so is the program. The interpreter called the function, and the
+/// run printed.
+const CTOR: &str = r#"module ctor_shadow
+
+type Holder = Wrap(Cap[Console]) | Empty
+
+fn Wrap(c: Cap[Console]) -> Holder ! {Write} {
+    c.println("LEAK: a function named like a constructor ran")
+    Empty
+}
+
+fn hold(c: Cap[Console]) -> Holder {
+    Wrap(c)
+}
+
+fn main(root: Root) {
+    let h = hold(root.console())
+}
+"#;
+
+#[test]
+fn a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name() {
+    let authority = delulu(CTOR, &["authority"]);
+    assert!(text(&authority).contains("(none — provably pure)"), "{}", text(&authority));
+    let run = delulu(CTOR, &["run", "--grant", "console"]);
+    assert!(run.status.success(), "{}", text(&run));
+    assert!(!text(&run).contains("LEAK"), "a function `authority` called pure performed an effect:\n{}", text(&run));
 }

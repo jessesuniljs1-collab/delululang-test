@@ -1322,6 +1322,11 @@ spells the same thing?**
   however tempting one scope per block is (A14), and never copy a closure's scopes at its making: its maker's `var`s are
   shared by reference. Search key: `define(` into an `Env` that `Expr::Lambda` captured, and a `callables` or `scopes`
   insert in a `let` without `Cx::bind_after`.
+- **LOCAL-CALLEE-1 — a call through a local reaches what the local holds** (the laptop, 2026-11-01, D-V2-200). The
+  interpreter called a local only if it held a closure, so a plugin's export in a local named like a module function
+  called the function instead, and a program `why Write` called unable to write, wrote. Never ask "is it a closure?" where
+  the question is "does a local bind the name?". A new callable kind must not fall through to the module's functions.
+  Search key: `eval_call`'s `env.get(name)` tested against one `Value` variant.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

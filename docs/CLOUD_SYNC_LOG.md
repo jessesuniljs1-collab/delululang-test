@@ -6985,7 +6985,7 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 
 ### 2026-11-01 — RW 4.29 closed: its condition met since 2026-10-13 (made on the laptop)
 - Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
-- Branch: `laptop/rw-4-29` (stacked on `laptop/records-1101`, #105)   Pull request: opened with this commit
+- Branch: `laptop/local-callee` (made on `laptop/rw-4-29`, which was folded into it)   Pull request: the one that carries LOCAL-CALLEE-1, below
 - **What:** see V2_LOG's entry of the same name. The weekly sweep's documents scan, second pass, read every open row's
   status. Row 4.29 read *"P9-04 and P9-05 next"*, though P9-01 to P9-03, its whole closing condition, were complete on
   2026-10-13 (D-V2-126). Checked against the binary of `cccb001`, and closed.
@@ -6997,4 +6997,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4.7). Start from a profile of the row's benchmarks, and nothing in this entry or #105's reserves it any longer.
 - **Open / next:** read the sweep's run `41246969522` and the launch runs `41247420596` and `41247423239` (#105's entry),
   then cite the launch runs. RW 3.24 is anyone's, profile first.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — LOCAL-CALLEE-1: a call through a local reaches what the local holds (RW 2.24, D-V2-200) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/local-callee` (on `master` `8b2784b`, #105; it also carries RW 4.29 and RW 3.24 above)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu/tests/plugin_load_cli.rs`,
+  `docs/design/SOUNDNESS_AUDIT.md` (entrenched: one paragraph in §D's box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 2.24), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-200),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- For the laptop's memory: HANDOFF §11.4 (LOCAL-CALLEE-1).
+- **Open / next, in order:** land this on a green run; read the sweep's run `41246969522` and the launch runs
+  `41247420596` and `41247423239`; bring `launch/2.0.0` current again (one section to fold, LOCAL-CALLEE-1: not
+  breaking, since v1.0.0 had no plugin export at run time, `PluginFn` and `load` being V2's P2, so no released surface
+  moves); cite the newest launch runs; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
