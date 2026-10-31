@@ -1291,6 +1291,30 @@ spells the same thing?**
   policy` went ahead too. Their loaders checked types and never called the pin check. Every route that runs, ships or
   plans a package calls `supply_chain_gate` now. Never soften this to "the pin is a build-time check": a pin is enforced
   wherever the dependency's code can run. Search key: `resolve_workspace(` without `supply_chain_gate` on the same path.
+- **RW 4.79 — a record says what happened, not what the first judge asked would have allowed** (on-demand routine run 10,
+  2026-10-31, D-V2-195). A capability may hold less than its node, and every gate asked the custody first: under the daemon
+  a write or a request the program's own capability refused left `use allow` in the chain (19 of them across seven calls
+  and three routes), and a Guard rule was asked about a read that could never happen — DL1410 told the agent to request a
+  permit for it. Now a verdict that needs nothing from the custody (the capability's, `prim::capability_refusal`) is made
+  before the custody is asked, and the custody is TOLD it: one `use deny`, `refused_by: capability`. A refusal that needs
+  the custody's answer (the egress client's, an envelope's) still follows it as an overriding `deny`. Never soften this to
+  "the effect re-checks anyway": the chain is what a monitor and an auditor read, and never let a capability refusal go
+  unrecorded either — a monitor's `denies=N/MS` counts it. Search key: `check_at(` reached before `capability_refusal`.
+- **RW 4.67 — a sent secret leaves no copy of its bytes behind** (on-demand routine run 12, 2026-10-31, D-V2-196). Under
+  the daemon a secret's bytes enter the run only to be sent, and the copies on the way to the wire are made by code that is
+  not ours: the copy run 25's red team found, and run 12 read again by scanning the run's memory, was hyper's serialized
+  request, in the arena of reqwest's runtime thread. No call site can clear a buffer it never sees, so the rule is the
+  allocator's: while a `delulu_runtime::scrub::Window` is open, the `delulu` binary zeroes every block it frees, on every
+  thread. Never soften this to "the runtime zeroes its own copies" — that was P17-F's stated limit, and the copy that stayed
+  was not ours. A new path that hands a secret's bytes to code outside the runtime opens a window around it. Search key:
+  `send_secret(` or `reveal()` with no `scrub::Window::open` around the call.
+- **ESTOP-QUEUE-1 — a revocation goes first** (on-demand routine run 14, 2026-10-31, D-V2-198). The daemon is serial,
+  and on a held audit chain each request waits up to 5 s for its record, so an e-stop in the same line as everything else
+  waited out the whole queue: behind four, `grants revoke` answered DL1401 at 15 s ("start it with `delulu broker
+  start`") and landed at ~25 s. A revocation now has a line the handler reads first, and dead-men are judged as of the
+  earliest arrival still waiting. Never put revocations back in the ordinary line, and never judge a dead-man by a
+  revocation's own arrival — a beat that arrived in time waits behind it. A new request kind that only narrows (a stop of
+  any sort) belongs in `ReqBody::is_revocation`. Search key: `is_revocation` and `revocations.try_recv`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1924,6 +1948,56 @@ Added in V2 (2026-09-17 → 2026-09-28):
   and nothing that could tell a starved monitor from one that stopped on an error or from a daemon that did not run. Load
   did not reproduce it (6 of 6 green). `SIGSTOP` on the daemon, the one party nobody had stopped, was red at once and
   every time. `kill -STOP PID` holds a process's window open deterministically, where load only makes it likelier.
+- **A job whose runner died leaves no log, and its annotations say why** (on-demand routine run 9, RW 7.26): #101's Ubuntu
+  test job failed with no failed step, and `get_job_logs` answered 404. Its check run's annotations
+  (`/check-runs/JOB_ID/annotations`) held the runner's last words, *"No space left on device"*. Reading every failed job
+  of 223 runs that way took one script and showed it was the only such death. Then measure before you guess: the guess
+  was a thin margin, and the test jobs' new disk notices (`f5a1d58`) refuted it at once. Ubuntu had 82 GB free before
+  the suite and 67 GB after it (`target/` 2.9 → 18 GB), so that death was the runner's, not the build's. Read those
+  notices first if a job dies that way again.
+- **A test that asserts the order a defect lives in is the defect's record** (on-demand routine run 10). `grants_cli`'s
+  sealed-artifact case asserted that an out-of-scope read was refused *"by the custody, which the host asks first … not by
+  the scope's own check"*, and the WASM F1 test that both engines ASK the custody about a read the scope refuses; RW 4.79
+  moved the order, and both went red. Neither was weakened: each was rewritten to what it protected — the lease's custody
+  still decides what the capability allows (a read inside it, refused by a `guarded` rule), and the two engines still
+  meet the custody alike (they tell it the refusal, in the same words). Read what such a test was FOR before changing it.
+- **A fresh routine VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`. Delete
+  `target/debug/incremental` and the stale test binaries before a mutant batch and before the suite (`scripts/suite.sh`
+  refuses under 10 GB); a batch of fifteen mutants with `CARGO_INCREMENTAL=0` took about 45 minutes and no disk.
+- **A command that exits 0 whatever it finds is not a gate until something counts what it says** (on-demand routine run
+  11). `survey findings` prints `error:` lines and exits 0, and three launch merges in a row read its count by eye.
+  `scripts/launch-gates.sh` counts them (red on a planted broken link) and refuses `ok` when `cargo-deny` is missing (red,
+  exit 127) — a gate that did not run is a failure, never a skip. **And judge a launch's *Breaking* paragraph against 1.x
+  itself**, not against the V2 state just before the change: `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH`.
+  RW 4.79 moved an order 1.x already had (the daemon's custody asked before the capability), so its code move is breaking.
+- **A memory scan's scan point must not allocate** (on-demand routine run 12). A copy freed on the run's own thread is
+  overwritten as soon as that thread allocates again: the first witness scanned while the program waited in a second
+  request, and a mutant that left a copy there (the held secret's own zeroing removed, M968) survived it. Scanned while
+  the program waited on standard input (`console.readline`, which allocates nothing), M968 was red 3 of 3. Scan for a
+  fragment as well as the whole — a freed block's first 16 bytes are the allocator's own — and read only the pages in
+  memory (`/proc/PID/pagemap`): the interpreter's stack reservation made a whole-mapping scan take 34 s in a debug build.
+- **Never undo a mutant with `git stash push` and `git stash drop`** (on-demand routine run 12): it dropped the file's whole
+  diff, the fix with it, and the edit was re-applied from the run's own record. Apply a mutant by an anchored edit and
+  restore the exact text (`scripts/mutants.py`; `MUTANTS_KEEP=DIR` keeps each mutant's `delulu` for by-hand probes), and
+  compare `git diff` with a saved patch after each. And a by-hand run after a stashed red reading runs the binary the old
+  code built: four reds in a row were that binary, not the fix — `cargo build` first.
+- **A new gate is run against every merge that will call it, not only the one it was written on** (on-demand routine
+  run 13). `scripts/launch-gates.sh`'s `criterion-2-cited` first asked criterion 2's row to cite the merged `master`'s
+  own hash; it passed on the code merge it was written for, and would have gone red on the citations merge that follows
+  every such run, whose `master` is a records-only closing commit the row never cites. Found before that merge, by
+  asking which calls the procedure makes; the gate now accepts a citation whose criterion-2 inputs are the base's, and
+  was falsified on both shapes.
+- **A measurement that comes back clean is re-asked in the shape that failed** (on-demand routine run 14). RW 4.53's
+  open item was routine run 16's measurement, and on `0ebbc15` it was clean (a revoke beside 12 sandbox loops: 22 ms
+  median). The red team's F4 named a different shape — the chain HELD, requests queued — and that one still answered
+  DL1401 at 15 s. Closing the row on the clean number would have closed it on the wrong question. And **a witness of an
+  order places every member it is about**: the first form asserted only that the e-stop overtook the queue, and M970 —
+  the quarantine left out of the lane — survived it.
+- **A line a gate reads back is written by a tool, not by hand** (on-demand routine run 15). CHECKLIST-2.0 criterion 2's
+  sentence was typed five times by five runs, and since run 13 `criterion-2-cited` greps it in one exact shape — a
+  typo there is a red gate, and a stale count copied forward a false citation. `scripts/launch-criterion-2.py` measures
+  and writes it, and refuses a tree under 100%. Where a procedure writes text that a check later parses, give the
+  writing to the same kind of program as the reading.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

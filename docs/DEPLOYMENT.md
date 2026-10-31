@@ -494,7 +494,8 @@ The monitor reads only the audit chain and acts only as `g_M`: the broker lets a
 descendant, so it can stop the runs delegated under `g_M` and nothing else. A quarantine revokes the offending run's node —
 its devices park and it is ended — and the revocation's record carries the rule and the records that fired it. The rules:
 `envelope` (any envelope refusal), `special-use` (any fetch refused for reaching a loopback, private, link-local or metadata
-address — the egress client refuses it and records why) and `denies=N/MS` (N refusals within MS milliseconds). Two
+address — the egress client refuses it and records why) and `denies=N/MS` (N refusals within MS milliseconds — a use the program's own capability refused among them, recorded
+`refused_by: capability`, RW 4.79). Two
 limits, said plainly: `g_M` *holds* the runs' authority (a parent bounds its child), and what keeps the monitor from using
 it is that it performs nothing but a revoke and, as everywhere, the OS account it runs as — run it as an account the
 agent cannot reach (Tier 2). And it is a slower second line: each run's own heartbeat and TTL stay the real-time stop.
@@ -535,7 +536,11 @@ shows as live only what a running holder holds. A `--lease` run's own node is th
 
 These are known, documented, and not fixable by configuration:
 
-- **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does.
+- **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does. Such a process reaches the broker's socket
+  and its state directory alike, and `secrets.json` there holds each secret's bytes in plaintext — so it can also ask the
+  broker for the bytes of a secret a node may only send (`SendSecret`), though the node holds no `Declassify`. The
+  socket's door is the directory's: whoever can ask could already read (RW 4.66, D-V2-197). A sandboxed guest is the one such
+  process that reaches neither: it opens no socket, and the state directory is refused to it.
 - **A concurrent writer into a granted directory — closed as a race, kept as advice.** Filesystem
   containment used to be a check-then-open, so a second writer could swap a checked file for a symlink
   in between (`CONTAIN-TOCTOU-1`). Since V2 P5c (2026-09-27, FS-RACE-1) every file effect opens the

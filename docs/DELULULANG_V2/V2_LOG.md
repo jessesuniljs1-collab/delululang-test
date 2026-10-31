@@ -10408,3 +10408,622 @@ chose it. `codes.rs`: `delulu explain DL1603` gains the case.
 and `.concat([])`; each is then accepted; `xs: val List[Int]` gets no advice. Red before. Mutants M937 (no hint), M938 (the
 hint for a written `val` too), each killed. `cargo test -p delulu-check -p delulu-diag` and `core_invariance` passed, the
 snapshot unchanged.
+
+## 2026-10-31 — the laptop: `list_dir` runs on the WASM engine and in a `.dwx` (A7, RW 6.46)
+
+**What the agent found** (A7, the builder, Sonnet 5.5, 2026-10-24): its `textstats` program walked a directory, and on
+`--engine wasm` and `build --target wasm` it was DL1201 *"WASM codegen does not support the method `.list_dir`"*;
+`read_text` and `write_text` ran there. A program that walks a directory ran on the interpreter alone, and could not be
+shipped as a `.dwx`.
+
+**The change.**
+- `codegen.rs`: `Cap[FsRead].list_dir(path)` lowers to a call of `delulu:cap.fs_list_dir(cap, path, file, start, end)`,
+  typed `Result[List[Str], IoErr]` (the list boxed in the `Ok`, as any list in a slot). The import is declared only by a
+  module that calls `list_dir`, so every other module compiles byte for byte as before: the 11 `.dwx` builds of the
+  examples, the book's samples and B5's programs were identical to the previous build.
+- `host.rs`: `fs_list_dir` performs the listing in `fs_read_text`'s order, which is the interpreter's: the `Read` record
+  at dispatch (with where the path pointed and the scope, RW 6.13), the custody asked with the resolved path, the scope by
+  the interpreter's own `resolve_in_anchor`, then `beneath::list_dir_at` at the pinned path (FS-RACE-1, RW 4.72). The
+  names come back as a `List[Str]` written in one allocation (`write_str_list`); the errors as the interpreter maps them.
+
+**Gates.**
+- `list_dir_parity` (new): a directory listed alike on both engines, with its empty subdirectory, a missing directory, a
+  file named as one, and each listed file read back; a listing past the scope refused DL0904 in the interpreter's exact
+  words; an artifact that does not declare `Read` refused DL1202 at the listing.
+- `wasm_cli` `a_directory_walk_runs_on_wasm_and_as_a_dwx_and_traces_alike`: the same output and the same `--trace-out`,
+  record for record, on both engines; the `.dwx` builds and runs. Every one red on the old backend (DL1201).
+- Mutants: M939 (the lowering off), M940 (no custody check), M941 (no scope check), M942 (no trace record), each
+  killed. (M941's first spelling was a no-op, `Result::and` keeping the `Err`, and survived; rewritten, killed.)
+- `cargo test -p delulu-wasm` (every target) passed.
+
+The entries come in the operating system's order on both engines (`beneath` does not sort); a program that prints them
+should sort them, as the tests do.
+
+## 2026-10-31 — the laptop: a refusal's two shapes, kept and documented (B8, RW 6.47)
+
+**What the agent found** (B8, the least-authority agent, Sonnet 5.5, 2026-10-24, *low, info*): refusals come in two
+shapes. A host outside the allowlist, a path outside a path scope and a scope escape end the run (DL0904, exit 1); a
+special-use address, a scheme, userinfo, a port or a backslash come back as `Err(Refused)` (exit 0). A script that reads
+only the exit code sees the second as success.
+
+**Measured again** on the laptop's binary: under `--grant net=api.example.invalid`, `get("https://other.invalid/x")` is
+DL0904 at the call; `get("http://api.example.invalid/x")` and `get("https://user@api.example.invalid/x")` are
+`ERR:Refused`, each with the operator's note on standard error naming the reason (`[egress: scheme]`,
+`[egress: userinfo]`).
+
+**Decided: kept.** The two are different events. A request beyond what the grant names is the program asking for more
+authority than it holds, and the run ends where it asked. A URL the egress client will not send (for what the URL itself
+is) is a failed request the program handles as it handles any `Err`; ending the run there would take that choice from
+it. What was missing was the statement: `docs/for-agents.md` now gives both shapes, the exit codes, and where a harness
+that must know of every refused request reads it (`egress.records[].reason` in the run report, and the operator's note).
+
+## 2026-10-31 — the laptop: a sandboxed run's fault names its place (RW 6.39)
+
+**What was seen** while closing B5: the `broker_cli` daemon test, asked to check every route's place, found the sandboxed
+guest's fault unplaced. The guest printed *"error[DL0904]: …"* alone, relayed as `guest: error[DL0904]: …`, where the
+interpreter and (since B5) the WASM engine point at the call. The guest holds the program and the fault's span; it was
+never told the program's name, since the channel's `Program` frame carried the text, its hash, the seed and the clock.
+
+**The change.**
+- `channel.rs`: `Program` gains `name`, `#[serde(default)]`. Host and guest are one version (D-V2-56: a version mismatch
+  is refused in words), and a frame without the field reads as an empty name, so nothing else of the protocol moves.
+- `guest.rs`: the sandboxed run passes the name it reports the program under (the file, or a package's flattened name)
+  through to the frame, which carries its LAST COMPONENT only, never the host's directories. The internal runner and the
+  probe send none. The guest renders its fault as an ordinary run does (`runtime fault here`, under that name) when it
+  has a name and a span, and keeps the one-line form otherwise; the message stays escaped (TERMINAL-TEXT-1), and the
+  host's relay marks and escapes every line as before.
+
+**Why it is safe.** The channel's rule is that the guest is told what to execute, never what it may reach. A file's last
+component grants nothing and names nothing on the host; the test runs a program by its absolute path and holds that no
+guest line carries its directory.
+
+**Gates.** `sandbox_run_cli` `a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories` (red before):
+the guest's DL0902 placed at `share.delulu:5:16`, `runtime fault here`, and no line naming the temporary directory.
+`broker_cli` `a_post_is_judged_by_its_method_under_the_daemon_as_embedded` now checks the sandboxed route's place too (it
+was left out, naming this row). Mutants M943 (the guest ignores the name), M944 (no name sent), M945 (the whole path
+sent), each killed. `broker_cli`, `terminal_text_cli`, `sandbox_run_cli`, `sandbox_modes_cli`, `sandbox_guard_e2e` and
+`delulu-runtime`'s channel tests passed.
+
+With this row every finding of the agent test campaign of 2026-10-24 is closed or decided.
+
+## 2026-10-31 — on-demand routine run 9: `launch/2.0.0` brought current with `master` at `9a82bf9` (release procedure step 1)
+
+**Read first.**
+- The laptop's session of 2026-10-30 evening (`session_01Deh6W8qqxwXgHPRfKCrupn`) landed #93–#102 on `master`, B5
+  through B8: `6516ae5`'s push run `41127219112` 14 jobs success, 2 skipped. Of the stack's pull-request runs, #93's
+  `41112572896`, #94's `41113095075` and #95's `41114885037` were red on `supply-chain` alone (RUSTSEC-2026-0422 to -0424,
+  fixed by `d879eda` in #96), and #101's `41121497877` (`ff0b4f6`) on its Ubuntu test job alone — the runner's disk
+  (RUNNER-DISK-1, below). The nightly `41033994313` (2026-10-30, `54ab0c1`): 18 of 18 (the broker's Miri 3 h 11 min).
+- One branch was ahead of `master`: `laptop/sandbox-fault-place` (#103, RW 6.39, `9a82bf9`, on `6516ae5`), its
+  pull-request run `41124338693` 14 jobs success, 2 skipped. Read as a stranger's diff and re-run in the VM:
+  `sandbox_run_cli` 20, `broker_cli` 18 and `terminal_text_cli` 11 passed; its witness
+  `a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories` red with the name not sent (a mutant of
+  `converse`, *"at its place"*), green restored. `master` fast-forwarded to it; GitHub closed #103 as merged (03:07:48 UTC).
+  The git proxy refused the branch's deletion (*"the remote end hung up unexpectedly"*), as it refused runs 7's and 8's.
+- `origin/autosave/laptop`'s newest snapshot, `942c069` (on `78e9648`, 20:05 UTC, `laptop/wasm-list-dir`), landed whole
+  in `ff0b4f6` (`git diff` over its two paths empty).
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1569 nodes, 17699 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+
+**The milestone.** `master` held 11 commits `launch/2.0.0` lacked (#93–#103). Release procedure step 1, in a worktree,
+`git merge --no-ff origin/master`, as `1a7a1c3`:
+- `scripts/launch-changelog.py` folded `master`'s ten new `## Unreleased` sections into `## [2.0.0]` (B8 changed
+  documents only and wrote none). `CHANGELOG.md` and the map were the only conflicts; `Cargo.lock` merged clean
+  (wasmtime 48.0.8, the workspace at 2.0.0).
+- **The *Breaking* paragraph, judged by hand against the ten, gains two.** The test is STABILITY.md §1: *"a program
+  refused today is still refused — with the same code"*, and *"a command's exit code for a given outcome does not
+  change"*. C9 moves a refused module header's code (DL0209 at the `.`, or a refusal of the next line's item, to DL0201 at
+  the keyword; RW 6.42), and C11 a source file that is not UTF-8 from a usage error, exit 2, to DL0101, exit 1 (RW 6.43).
+  Each refused program is refused still, but a driver that branched on the old code or exit code reads a new one. The
+  other eight change a refusal's or a fault's words or place (B5, RW 6.39, RW 6.40, RW 6.41, A13), add `list_dir` on the
+  WASM engine (A7) or an additive JSON field (A8's `requested_computed`; STABILITY's JSON row: consumers ignore unknown
+  fields), or update wasmtime by a patch release: none can stop a 1.x program, driver or deployment.
+- CHECKLIST-2.0 criterion 4 names RUSTSEC-2026-0422, -0423 and -0424, why none was reachable, and `d879eda`'s update
+  (its push run `41119921640`'s `supply-chain` success). Criterion 2 re-measured on the merged tree: `delulu-conform
+  --coverage` 358/358 (diag 155, prim 86, grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24
+  chapters); `delulu fmt --check examples docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust sources equal `master`'s at `9a82bf9`; only the 2.0.0 version (`Cargo.toml`, `Cargo.lock`) and
+  the editor's launch files differ, so `master`'s push runs on three systems already cover its code.
+
+**Gates on the merged tree** (the VM): `scripts/clippy.sh -j 4` clean and stamped; the Survey 1570 nodes, 17755 edges,
+check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; the document gates `book` 9,
+`core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance` 11,
+`release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; `cargo deny --all-features
+check advisories` ok and `bans licenses sources` ok (cargo-deny 0.20.2, the advisory database of 2026-10-31).
+
+**Read at `1a7a1c3`:**
+- `everything` `41163618866`: **18 of 18 jobs success** (1 h 49 min in all) — the Linux, Windows, macOS and arm64 test
+  jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`, `microvm-reproducible`, `miri`
+  (diag, atlas), `miri-ffi` and `miri-slow` (syntax 22 min, the checker 1 h 31 min, the broker 1 h 49 min). 16 of 18 were
+  read at this entry's first commit (`dbfdac6`), the two `miri-slow` at 05:05 UTC.
+  `actors_pingpong` MEASURED on arm64 (2.82x where the machine gave 3.94x, against a bar of 1.48x: passed); NOT MEASURED
+  on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 1.94x observed). The sandbox properties as
+  recorded before (macOS `filesystem_confinement absent`, its reads not confined).
+- The release dry run `41163621006`: **success** in 8 min 39 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows), its `release` job skipped (no tag).
+- `master`'s push runs: `9a82bf9` (#103) `41163006021` 14 jobs success, 2 skipped (`actors_pingpong` MEASURED on arm64,
+  2.90x against 1.48x; NOT MEASURED on the other three). Its Linux and Windows test jobs could not restore their cache
+  (*"Failed to restore: Egress is over the account limit"*, an Actions annotation) and passed on a cold build. `f5a1d58`
+  `41164074066` 14 jobs success, 2 skipped, with the first disk readings (below). `dbfdac6` (this entry's first records)
+  `41165974895` 14 jobs success, 2 skipped, the disk readings the same (Windows on a 220 GB disk: 217 → 202 GB free).
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41163618866` and `41163621006`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+
+**RUNNER-DISK-1 (RW 7.26).** #101's Ubuntu test job (`124288578335`) died 2 min 50 s in: its annotation is the runner's
+own *"System.IO.IOException: No space left on device"* writing its diagnostic log, its suite step has no conclusion, and
+its log answers 404. Every failed job of the 223 CI runs since 2026-10-20 was read by its annotations: this is the one
+disk death; the others are advisories (`supply-chain`), reds already recorded (RW 7.21–7.25, and the two wording tests
+#86's run read red, 2026-10-29) and one formatting red. The same
+code passed on `6516ae5`'s pull-request and push runs. About a minute into the suite means the disk was nearly full when
+the build began, after the cache restore, and nothing said how full. `f5a1d58` makes every test job and the arm64 job read
+the margin: the workspace disk's free space and `target/`'s size before the suite (the restored cache) and after it (the
+suite's build), each a notice, never failing the job (each reading guarded for a missing `target/` and a `du` error under
+`bash -eo pipefail`, both tried in the VM).
+The first readings, `41164074066`: Ubuntu **82 GB free of 145 GB before the suite and 67 GB after** (`target/` 2.9 GB, the
+restored cache, then 18 GB); Windows 144 → 129 GB of 150 (3.2 → 19 GB); macOS 93 → 89 GiB of 320 (2.1 → 6.1 GB); arm64
+104 → 91 GB of 145 (2.3 → 16 GB). The margin is wide on all four, so the first guess, a thin margin, is refuted on its
+first reading: the suite spends about 15 GB of a disk with 67 GB left, and that runner's disk was full for its own
+reason. RW 7.26 is closed; the notices stay, so a second death names its margin.
+
+**Loop engineering.** `docs/CLOUD_ROUTINE.md` step 4.3 says what decides the *Breaking* paragraph (STABILITY.md §1's
+surfaces), and `scripts/launch-changelog.py` says it when it folds; step 3 says that a job whose runner died has no log
+and no failed step, and that its check run's annotations name why.
+
+## 2026-10-31 — on-demand routine run 10: a use its capability refuses is recorded refused, never allowed (RW 4.79, D-V2-195)
+
+**The milestone, named before building:** RW 4.79 closed end to end — a use the program's own capability refuses is
+judged before its custody is asked, by the interpreter, the WASM engine and a sandboxed guest's host, and the chain says
+what happened (one `use deny` naming `refused_by: capability` where a use of that class is recorded, never `use allow`):
+witnessed red per op, fixed, mutants, the full suite, the other runners, CI.
+
+**Housekeeping.** `master` at `658daf1` (run 9's close), its push run `41171405565` green (14 jobs success, 2 skipped;
+`actors_pingpong` MEASURED on macOS, 2.52x against a bar of 1.40x, NOT MEASURED on Ubuntu and Windows; the disk readings
+Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB). No branch ahead of `master` but the archived ones; the
+newest autosave snapshot (`942c069`) landed whole in `ff0b4f6`, as run 9 recorded (`git diff 942c069 ff0b4f6` on its two
+paths, empty). The Survey matched the tree (1569 nodes, 17736 edges) and `doctor --check` passed 26 checks.
+
+**What it was** — read red on `658daf1` with the new witness before any fix, under `--broker daemon`. Each program mints a
+capability narrower than its node and makes one call the capability refuses and the node allows. The chain, per target:
+
+| call (capability vs node) | interp | WASM | guest's host |
+|---|---|---|---|
+| `write_text("../w.txt")` from `./data/sub` (node `./data`) | `use allow` | `use allow` | `use allow` |
+| `append_text("../a.txt")` | `use allow` | `use allow` | `use allow` |
+| `get` outside `*.example.invalid/v1/**` (node: the whole host, GET and POST) | `use allow` | `use allow` | `use allow` |
+| `get_with` to another host than `other.example.invalid` | `use allow` | `use allow` | `use allow` |
+| `post` under a GET-only capability | `use allow` | `use allow` | `use allow` |
+| `get_with_secret` outside `/v1/**` (a broker-held secret) | `use allow` | `use allow` | — (a guest's channel carries no secret) |
+| `post_with_secret` under a GET-only capability | `use allow` | `use allow` | — |
+| `write_text("../../e.txt")` — neither allows | the custody's `deny` | the same | the same |
+
+Nineteen allowed uses that never happened, each followed by a DL0904 at the call. Under a lease with `guard policy set
+fs_read:* guarded`, a read beside its capability's directory was DL1410, *"needs approval to use
+`fs_read:…/data/in.txt` … request access: delulu guard request …"*, a permit for a read the capability can never make;
+under `warn` it printed *"guard warn: `fs_read:*` used by delegated node … (audited)"*, recorded `guard_warn allow`, and
+then faulted DL0904 — on both engines.
+
+**The decision (D-V2-195).** The capability first, everywhere, and the custody told. Recording nothing (the row's first
+sketch) was rejected: the write neither allows is a `deny` today, and a monitor's `denies=N/MS` counts it. An overriding
+`deny` after the custody's `allow` (RW 4.46's and P8-04's shape) was rejected too: those refusals need what the custody
+answered, and a capability's verdict needs nothing from it. A read is recorded only where a Guard rule makes it
+round-trip, as a read is.
+
+**What changed.**
+- `prim::capability_refusal` (with `fs_scope_refusal` and `net_scope_refusal`, which the effect itself now calls for its
+  own refusal, so the words are one function's): the effect's rule, judged before the custody, performing nothing. Its
+  `reason` is machine-readable (`outside-scope`, `hostile-path`, `other-host`, `outside-path`, `other-method`,
+  `ambiguous-path`); the URL is never recorded.
+- The gates: the interpreter's (`interp.rs`, `capability_refusal_for`), a sandboxed guest's host's (`channel.rs`), the WASM
+  host's (`host.rs`, `use_allows`, between ARTIFACT-CLAIM-1's declared-effects ceiling and the custody; its two unused
+  `custody_allows_*` wrappers folded into it). A guest's handle carries no scope; its host judges.
+- `Custody::note_capability_refusal` (a no-op by default; `PluginUseCustody` forwards to the run's custody); the broker
+  client sends it for every synchronous-class use and for a read only when a Guard rule makes reads round-trip; the
+  daemon's `CapabilityRefused` (additive `broker/1`) records one `use` `deny` through
+  `Broker::record_capability_refusal`, its lost record answered DL1401 (RW 4.61's rule), an unknown op refused in words.
+- Tests that held the old order, each rewritten to what it was protecting: `broker_cli`'s GET-only POST now has no
+  `allow` and one capability `deny` (it counted the defect's record, `n + 1`); the WASM F1 parity test (on-demand run 5's
+  red team) now holds that both engines SAY the refusal to the custody, with the same path and reason, and ask it
+  nothing; `grants_cli`'s sealed-artifact case (DWX-FLAGS-1) asserted that an out-of-scope read was refused *"by the
+  custody, which the host asks first, in the lease's words"* — that read is now the capability's DL0904, and the lease's
+  custody is witnessed deciding the artifact's effects by a read inside its capability that a `guarded` rule refuses
+  (DL1410).
+
+**Evidence.**
+- The witnesses, each read red on `658daf1` first (the table above; `guard_e2e`'s at its first assertion, DL1410) and
+  green on the fix: `broker_cli` `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed` — the eight calls on
+  every route that can run them (no `allow`; one `deny` per run, `refused_by: capability`, `code: DL0904`, its reason, a
+  request's `url_path` and a POST's `method`), an ungated read its capability refuses recorded by no one, nothing written,
+  the chain verified — and `guard_e2e` `a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard`
+  (`read_text` and `list_dir`, `guarded` and `warn`, both engines: DL0904, no DL1410, no warning, eight `use deny`, no
+  Guard record). Unit tests: `validate.rs` `a_capability_refusal_is_recorded_as_a_denied_use_for_a_held_node_only`,
+  `brokerd.rs` `a_capability_refusal_whose_record_was_lost_is_not_answered_as_recorded`.
+- **Mutants M946–M960, every one red, the control green** (`scripts/mutants.py`, each mutant's witnesses in two targets by
+  one command — libtest takes several name filters): the interpreter's judgment skipped (M946) or its note dropped (M947);
+  the guest host's (M948, M949); the WASM host's (M950, M951); the broker client noting no synchronous use (M952), every
+  read (M953, red on the ungated read), or no read (M954); `capability_refusal` blind to files (M955) or requests (M956), or
+  naming the wrong reason (M957); the broker's record naming `envelope` (M958) or a GET's method (M959); the daemon
+  answering a lost record `Recorded` (M960).
+- The two-engine differential, 50,000 programs, green (145 s, release); `scripts/clippy.sh -j 4` clean and stamped.
+- **The full suite in the VM: 2620 passed, 0 failed, 16 ignored, 190 binaries**, the tree unmoved (`scripts/suite.sh`, on
+  a clean build: the first attempt died at link, `No space left on device` — 12 GB free beside the setup snapshot's
+  16 GB `target/`; `target/` deleted, 28 GB free, run again).
+- The new tests on the other runners, before `master` moved (`witness.yml` at `4cdad8a` on this run's branch, every test of
+  `broker_cli`, `guard_e2e` and `grants_cli`): macOS `41176123350` success (19, 5 and 5 passed), Windows `41176125665`
+  success (18, 5 and 5 passed; the only orphan the runner terminated was MSVC's `vctip`).
+- The Survey 1569 nodes, 17766 edges after the code, check ok, findings 0 errors and 15 warnings.
+- `master` fast-forwarded to `92ffb1a` (the fix `4cdad8a` and these records): its push run `41177377312` **14 jobs success,
+  2 skipped** — `actors_pingpong` MEASURED on arm64 (2.85x against 1.48x, passed), NOT MEASURED on the other three;
+  `ocsf` `41177377173` success. The records' Survey 1570 nodes, 17811 edges, findings 0 errors; `doctor --check` 26
+  checks; the document gates and the Survey's own suite (73) passed.
+
+**Loop engineering.** `scripts/suite.sh` names a full disk (`DISK-FULL:`) where it was one more `EXIT=101`, and says it
+passes `--workspace --no-fail-fast -j 4` itself (a second `--no-fail-fast` stops cargo before a test runs — this run's first
+attempt). `docs/CLOUD_ROUTINE.md`: a fresh VM's disk with the snapshot's `target/`, and a mutant's witnesses in several
+targets by one command.
+
+## 2026-10-31 — on-demand routine run 11: `launch/2.0.0` brought current with `master` at `1927bca` (RW 4.79; release procedure step 1)
+
+**Read first.**
+- Run 10's three commits (`4cdad8a`, `92ffb1a`, `1927bca`) were `master`'s newest; `1927bca`'s push run `41178859307`:
+  14 jobs success, 2 skipped (`heavy-gates`, `miri-slow`). `actors_pingpong` MEASURED on arm64 (2.83x where the machine
+  gave 3.95x, against a bar of 1.48x: passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware
+  threads, 2.10x observed). The disk: Ubuntu 82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 144 → 129, macOS 92 → 88 GiB,
+  arm64 104 → 91. The newest nightly, `41033994313` (2026-10-30), was read by run 9 (18 of 18); the 2026-10-31 nightly had
+  not started when this entry was written.
+- Run 10's witnesses re-run in the VM on `1927bca`, each passed: `broker_cli`
+  `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed`, `guard_e2e`
+  `a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard`, `grants_cli`'s sealed artifact,
+  `delulu-broker` `a_capability_refusal_is_recorded_as_a_denied_use_for_a_held_node_only`, `delulu-wasm`
+  `a_read_its_scope_refuses_is_said_to_the_custody_never_asked_as_the_interpreter_does`, and `delulu`'s unit test
+  `a_capability_refusal_whose_record_was_lost_is_not_answered_as_recorded`.
+- No branch held a commit `master` lacks but the archived ones; `origin/autosave/laptop`'s newest snapshot is still
+  `942c069` (landed in `ff0b4f6`, runs 9 and 10). The git proxy refused the deletion of `claude/peaceful-carson-dfkzl9`
+  and `laptop/sandbox-fault-place` (both in `master`'s history), as it refused runs 7–10's.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1570 nodes, 17817 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+
+**The milestone.** `master` held three commits `launch/2.0.0` lacked. Release procedure step 1 in a worktree, `git merge
+--no-ff origin/master`, as `6193479`:
+- `scripts/launch-changelog.py` folded the one new `## Unreleased` section (RW 4.79) into `## [2.0.0]`. `CHANGELOG.md`
+  and the map were the only conflicts; the decision log merged clean (D-V2-155 kept, D-V2-195 in).
+- **The *Breaking* paragraph gains RW 4.79, judged against 1.x itself.** Its *Changed* line says a call its capability
+  refuses is DL0904 under every custody, where under the daemon a Guard rule or a revoked or expired lease could answer
+  first. Whether that was 1.x's behaviour or only V2's was read from the tag (`git fetch origin tag v1.0.0`): v1.0.0's
+  interpreter asked the daemon's custody before the capability (`crates/delulu-runtime/src/interp.rs:851` at the tag,
+  *"authorize the effectful op through the trait BEFORE performing it"*), and DL1410–DL1413 and DL0801 were 1.x codes
+  then. So under `--broker daemon` a 1.x driver that branched on DL1410's *"request a permit"* (or a lease's DL1402/DL1403)
+  for such a call reads DL0904 under 2.0.0 — a refused program's code moved (STABILITY.md §1), though nothing refused runs
+  and nothing that ran is refused.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree: `delulu-conform --coverage` 358/358 (diag 155, prim 86,
+  grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check examples
+  docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust under `crates/` and `fuzz/` is `master`'s at `1927bca`; only the 2.0.0 version differs, so
+  `master`'s push runs on three systems already cover its code.
+
+**Gates on the merged tree, by `scripts/launch-gates.sh`** (new, below): `LAUNCH-GATES=ok` — the Survey 1571 nodes, 17861
+edges, check ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stamped; `doctor --check` 26
+checks passed; `book` 9, `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims`
+3, `governance` 11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion
+2's three as above; `cargo deny --all-features check advisories` ok and `bans licenses sources` ok (cargo-deny 0.20.2,
+installed in the VM this run).
+
+**Read at `6193479`** (dispatched 08:16 UTC):
+- The release dry run `41183916484`: **success** in 4 min 3 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each archive checked for its target, its binary naming target and commit, and installed the way
+  `INSTALL.md` says), its `release` job skipped (no tag).
+- `everything` `41183914783`: **18 of 18 jobs success** (1 h 39 min in all, 08:16 → 09:55 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 12 min, the checker 1 h 32 min, the
+  broker 1 h 39 min — well under the 240-minute cap). 16 of 18 were read at 08:46 UTC, the two `miri-slow` at 09:56.
+  `actors_pingpong` MEASURED on arm64 (2.91x where the machine gave 3.95x, against a bar of 1.48x: passed); NOT MEASURED
+  on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 2.24x observed). The sandbox properties as
+  recorded before (macOS `filesystem_confinement absent`, its reads not confined). Disk: Ubuntu 82 → 67 GB free, Windows
+  144 → 129, macOS 92 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41183914783` and `41183916484`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `1289d8b` (this entry's first records) `41184451019`: 14 jobs success, 2 skipped (22 min);
+  `actors_pingpong` MEASURED on arm64 (2.89x against 1.48x, passed), NOT MEASURED on the other three; the disk as above.
+  The nightly `41187794369` (2026-10-31, on `1289d8b`) was running at this entry's closing commit.
+
+**Loop engineering: `scripts/launch-gates.sh`.** Runs 8, 9 and this one each typed the same dozen gate commands of step
+4.3 by hand, and read `survey findings`' error count by eye — that command exits 0 whatever it finds, so the step's "0
+errors" was never a gate. The script runs them in order after the merge's last edit, counts the findings' errors itself,
+fails when `cargo-deny` is missing rather than skipping it, notes whether the merged tree's Rust is `master`'s, refuses a
+HEAD that is not a `launch/*` branch, and ends with one line per gate and `LAUNCH-GATES=ok` — or `partial-ok` when
+`LAUNCH_GATES_ONLY` named a subset, never `ok`. Falsified on the merged tree before its real run: a broken link planted
+in `docs/REMAINING_WORK.md` turned `survey-findings` red (*"1 error(s)"*, `LAUNCH-GATES=failed`, exit 1); before
+cargo-deny was installed, `cargo-deny` was red (exit 127); on `master`'s checkout it refused at once (exit 2). The control
+is the green run above. `docs/CLOUD_ROUTINE.md` step 4.3 names it, and says to judge the *Breaking* paragraph against
+v1.0.0's own code.
+
+## 2026-10-31 — on-demand routine run 12: a sent secret leaves no copy of its bytes in the run (RW 4.67, D-V2-196); RW 4.66 decided (D-V2-197)
+
+**The milestone, named before building:** RW 4.67 closed end to end — a sent secret's plaintext leaves no copy in the run
+process after the send: witnessed red by a scan of the run's memory over real TLS under the daemon custody, fixed,
+mutants, the full suite, the other runners — with RW 4.66 decided alongside, with its evidence.
+
+**Housekeeping.** `master` at `9553ab7` (run 11's close), its push run `41190824409` green (14 jobs success, 2 skipped;
+`actors_pingpong` MEASURED on arm64, 2.90x where the machine gave 3.95x against a bar of 1.48x, NOT MEASURED on Ubuntu;
+disk Ubuntu 82 → 67 GB free, arm64 104 → 91). The nightly `41187794369` (on `1289d8b`): **18 of 18 success** (`miri-slow` the broker 3 h 14 min, the checker 1 h 31 min, the
+syntax 17 min). No branch held a
+commit `master` lacks but the archived ones (`claude/peaceful-carson-dfkzl9` and `laptop/sandbox-fault-place` are in its
+history); `origin/autosave/laptop`'s newest snapshot is still `942c069` (landed in `ff0b4f6`). The Survey matched the tree
+(1572 nodes, 17840 edges) and `doctor --check` passed 26 checks. Effort `xhigh` (`CLAUDE_EFFORT` and the transcript).
+
+**What it was — read red on `9553ab7` before any fix.** A run under `--broker daemon` sent a broker-held secret with
+`get_with_secret` to a TLS server on loopback (a certificate only `SSL_CERT_FILE` vouched for), then waited on a held
+second request while its memory was read through `/proc/PID/mem`: one copy, `…on: hunter2-…` — the serialized request's
+`authorization` header — in an anonymous mapping (the arena of reqwest's runtime thread), three runs of three; the same on
+`--engine wasm`. With a 46- to 8,186-byte secret the unscrubbed binary left up to six partial copies. The copies are made
+by code that is not the runtime's (the custody's decoded answer, `reveal`'s copy, each header the egress client builds,
+reqwest's `HeaderValue`, hyper's head buffer), each freed as it stood; P17-F's `SecretVal` zeroing reaches only its own
+buffer, and said so.
+
+**The decision (D-V2-196) and what changed.**
+- `delulu_runtime::scrub` (new): a process-wide `Window` count, `is_open()` (one atomic load) and `wipe` (volatile, so no
+  store is elided before the free).
+- `crates/delulu/src/ceiling.rs`: while a window is open, `CeilingAware::dealloc` zeroes the block first and `realloc`
+  moves a block by `alloc`, a copy and that `dealloc`, never by the system's `realloc`.
+- Two windows: around the custody's answer (`interp::broker_secret_send`, both engines) and around every secret-bearing
+  request (`prim`'s request arm, any custody), closing after the request's client is dropped and its runtime thread joined.
+- Not taken: zeroing only the runtime's own copies (hyper's was the one left), zeroing every free always, the broker
+  making the request (D-V2-197).
+
+**The witness.** `broker_cli` `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`: over real
+TLS under `--broker daemon`, on the interpreter (scanned while the program waits on standard input — `console.readline`
+allocates nothing) and on the WASM engine (no `readline` there: scanned in a held second request), counting the whole
+secret and its last 24 bytes in every resident page of the run's writable mappings (`/proc/PID/pagemap`). Controls: the
+server saw the secret arrive, and the scan finds the program's own path. Red on `9553ab7`: `[([], Ok(10), Ok(1)),
+(["--engine", "wasm"], Ok(13), Ok(1))]` (the first form, before the fragment count); green with the fix; four concurrent
+copies of the test binary green. A sandboxed guest is never handed a secret (DL1401), so a guest is no case.
+
+**Mutants** (`scripts/mutants.py`, the witness's own command): **red** — M961 (`dealloc` never zeroes), M963 (`is_open`
+always false), M964 (no window around the request), M966 (`wipe` skips its words), M968 (`SecretVal`'s own zeroing
+removed: red only at the stdin scan point — it survived the first form, which scanned during a second request whose
+allocations overwrote the freed block). **Survived, each read before it was recorded:** M962 and M967 (the grown block
+moved by the system's `realloc`, or its old block freed unzeroed) — by hand with secrets up to the 8 KiB header limit, no
+block holding the bytes was grown by a move the scan could see (glibc grew it in place, or a later zeroed free reused it);
+M965 (no window around the custody's answer) — the decoded frame is freed on the run's own thread and reused within the
+request's window, so no scan point reached it, even unscrubbed on the path where a header rule refuses the secret after the
+broker's answer. Those walls stay: the allocator's contract lets `realloc` free the old block as it stands, and the frame
+does hold the bytes when it is freed. Control green.
+
+**RW 4.66 (D-V2-197).** Measured: the socket lives in the `0700` state directory beside `broker.key` and `secrets.json`
+(both `0600`), whose JSON holds each secret in plaintext (`cat` as the same user read `{"API_TOKEN": "hunter2-…"}`); on
+Windows the pipe admits only the broker's own user. So every caller that can send `SendSecret` can read every secret
+without it. Decided: unchanged, a residual named in `docs/DEPLOYMENT.md` §5; the peer binding and the sealed token are
+not taken, for the reasons recorded there.
+
+**Verification.** `scripts/clippy.sh -j 4` clean and stamped; `scripts/check-other-os.sh` clean for all five targets;
+`delulu-runtime`'s `scrub` unit tests (2) passed. The full suite alone at `ab46618`: 2,623 passed, 0 failed, 16 ignored (190 binaries), cargo exit 0, the tree unmoved, no daemon left — three more than run 10's 2,620 (the witness and the two `scrub` unit tests). Read on the runners at
+`ab46618` (every test of `broker_cli`): Ubuntu `41198603696` and arm64 `41198609344` — 20 passed each, the witness among them (its control proves a non-root runner reads its child's memory); macOS `41198605560` and Windows `41198607230` — success (the witness is Linux-only; the other secret sends run there through the changed allocator).
+
+**Loop engineering.** `scripts/mutants.py` keeps each mutant's built `delulu` under `MUTANTS_KEEP=DIR` (this run built
+three by hand to probe its survivors, and an improvised undo, `git stash push` then `git stash drop`, took the fix with a
+mutant — re-applied from the record); `docs/CLOUD_ROUTINE.md` step 5 says where a memory scan must wait; `HANDOFF.md`
+§11.5 records both traps, with the four by-hand reds that were the old binary.
+
+**Read after the push.** `ab46618`'s push run `41199511756`: 14 jobs success, 2 skipped (`actors_pingpong` MEASURED on
+arm64, 2.84x against 1.48x, passed; NOT MEASURED on macOS — 3 hardware threads — Ubuntu and Windows; disk Ubuntu 82 → 67 GB
+free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91). `d3e5599`'s (the records) `41199808938`: 14 success, 2 skipped
+(arm64 MEASURED 2.96x). **`master` green at the end of the run.** The final form of the witness under load, four concurrent
+copies of its test binary: 4 of 4 green.
+
+## 2026-10-31 — on-demand routine run 13: `launch/2.0.0` brought current with `master` at `d84b9e1` (RW 4.67; release procedure step 1)
+
+**Read first.**
+- Run 12's three commits (`ab46618`, `d3e5599`, `d84b9e1`) were `master`'s newest; `d84b9e1`'s push run `41201440036`:
+  14 jobs success, 2 skipped (`heavy-gates`, `miri-slow`). `actors_pingpong` MEASURED on arm64 (2.90x where the machine
+  gave 3.94x, against a bar of 1.48x: passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware
+  threads, 1.57x observed). The disk: Ubuntu 82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 217 → 202, macOS 93 → 89
+  GiB, arm64 104 → 91.
+- Run 12's witnesses re-run in the VM on `d84b9e1`, each passed: `broker_cli`
+  `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`, and `delulu-runtime`'s
+  `scrub::tests::a_window_is_open_until_its_last_holder_drops_it` and `a_wipe_zeroes_every_byte_whatever_the_alignment`.
+  Its records checked against the tree: RW 4.66 and 4.67 struck in `REMAINING_WORK.md`, D-V2-196 and D-V2-197 in the
+  decision log, `DEPLOYMENT.md` §5 naming RW 4.66, `scripts/mutants.py`'s `MUTANTS_KEEP`, the memory file.
+- No branch held a commit `master` lacks but the archived ones; `origin/autosave/laptop`'s newest snapshot is still
+  `942c069` (`git diff 942c069 ff0b4f6` over its two Rust paths empty: landed). The VM's local `master` was the setup
+  snapshot's `6516ae5`, 12 commits behind `origin/master`; fast-forwarded before any edit. The git proxy refused the
+  deletion of `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9` and `laptop/sandbox-fault-place` (all in
+  `master`'s history; *"the remote end hung up unexpectedly"*), as it refused runs 7–12's.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1574 nodes, 17875 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+  `cargo-deny` 0.20.2 installed in the VM.
+
+**The milestone.** `master` held three commits `launch/2.0.0` lacked. Release procedure step 1 in a worktree, `git merge
+--no-ff origin/master`, as `df32509`:
+- `scripts/launch-changelog.py` folded the one new `## Unreleased` section (RW 4.67, with RW 4.66's *Documented* line) into
+  `## [2.0.0]`. `CHANGELOG.md` and the map were the only conflicts; the decision log merged clean (D-V2-155 kept, D-V2-196
+  and D-V2-197 in) and so did `Cargo.lock` (`cargo metadata --locked --offline` ok).
+- **The *Breaking* paragraph is unchanged**, judged against `STABILITY.md` §1 and against 1.x itself. The *Fixed* line
+  moves no refused program's code, no exit code, no JSON field and no syntax — what a program can do is unchanged, and
+  outside a send a free costs one atomic load. And v1.0.0 (`git fetch origin tag v1.0.0`) had no secret-sending primitive
+  (no `with_secret` in its `prim_table.rs`), no `ceiling` module and no global allocator, so no 1.x program, driver or
+  deployment can observe the change. The *Documented* line (RW 4.66) changes no behaviour.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree: `delulu-conform --coverage` 358/358 (diag 155, prim 86,
+  grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check examples
+  docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust under `crates/` and `fuzz/` is `master`'s at `d84b9e1`, so `master`'s push runs on three systems
+  already cover its code.
+
+**Gates on the merged tree, by `scripts/launch-gates.sh`:** `LAUNCH-GATES=ok` — the Survey 1575 nodes, 17919 edges, check
+ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stamped; `doctor --check` 26 checks passed;
+`book` 9, `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance`
+11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion 2's three as
+above; `cargo deny --all-features check advisories` ok and `bans licenses sources` ok.
+
+**Read at `df32509`** (dispatched 13:11 UTC):
+- The release dry run `41204428474`: **success** in 9 min 2 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each step read: the archive is for the target the job claims, the binary names its target and
+  commit, installed the way `INSTALL.md` says), its `release` job skipped (no tag).
+- `everything` `41204426153`: **18 of 18 jobs success** (2 h 07 min in all, 13:11 → 15:18 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 22 min, the checker 48 min, the
+  broker 2 h 07 min — under the 240-minute cap). `actors_pingpong` MEASURED on arm64 (2.88x where the machine gave 3.94x,
+  against a bar of 1.48x: passed); NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads,
+  1.77x observed). Disk: Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41204426153` and `41204428474`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `1ada477` (this entry's first records) `41204848160`: 14 jobs success, 2 skipped (19 min);
+  `actors_pingpong` MEASURED on arm64 (2.93x against 1.48x, passed), NOT MEASURED on the other three (macOS 1.75x
+  observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
+
+**Loop engineering: the gates read criterion 2's row back.** Runs 8, 9, 11 and this one each re-measured criterion 2 and
+wrote it into CHECKLIST-2.0 by hand, and no gate read what was written: a merge that forgot the row, or copied a stale
+count, passed. `scripts/launch-gates.sh` gains `criterion-2-cited`: the row's newest citation at the anchor count
+`delulu-conform --coverage` measures now (`` `HASH`: **N/N (100%)** ``) must be the merged base, or a commit whose
+criterion-2 inputs (`crates`, `tests`, `examples`, `docs/reference`, `docs/book/samples`, `Cargo.toml`, `Cargo.lock`) are
+the base's. **Its first form was wrong and was caught before use:** it asked for the base's own hash, which passed on the
+code merge (`1ada477`) and would have refused the citations merge that follows every launch run, whose base is a
+records-only closing commit the row never cites. Falsified on the committed launch tree with
+`LAUNCH_GATES_ONLY=criterion-2-cited`: base `d84b9e1` (cited) exit 0; base `1ada477` (records only after it) exit 0;
+base `9553ab7` (before `ab46618`'s Rust) exit 1, naming the changed inputs; the row's count planted as 357/358 exit 1 (the
+newest 358/358 citation then `1927bca`, before `ab46618`); the row's newest line removed exit 1; the row restored, the
+tree clean. `docs/CLOUD_ROUTINE.md` step 4.3 names it; `HANDOFF.md` §11.5 and
+`docs/assistant-memory/a-gate-runs-on-every-caller.md` keep the lesson — a gate is run against every call the procedure
+makes of it.
+
+## 2026-10-31 — on-demand routine run 14: the e-stop goes before the requests waiting at the broker (ESTOP-QUEUE-1, RW 4.53, D-V2-198)
+
+**The milestone, named before building:** RW 4.53 closed end to end — routine run 16's measurement and the red team's F4
+re-run on the current binary; what still failed witnessed red, fixed, mutants, the full suite, the runners, the records.
+
+**Housekeeping.** `master` at `0ebbc15` (run 13's close); its push run `41215074286` green (14 jobs success, 2 skipped;
+`actors_pingpong` MEASURED on macOS, 2.36x where the machine gave 3.59x against a bar of 1.34x, and on arm64, 2.97x against
+1.48x, both passed; NOT MEASURED on Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB,
+arm64 104 → 91). `launch/2.0.0`'s citations merge is `4127776`. No branch held a commit `master` lacks but the archived
+ones; `origin/autosave/laptop`'s newest snapshot is still `942c069` (landed in `ff0b4f6`). The Survey matched the tree
+(1575 nodes, 17887 edges) and `doctor --check` passed 26 checks. Effort `xhigh` (`CLAUDE_EFFORT` and the transcript).
+
+**What was measured.** Routine run 16's measurement, on `0ebbc15` (a frozen debug binary, a fresh daemon, 15 samples):
+beside 12 loops of sandboxed runs (633 runs, a 1,391-record chain) a revoke took 22 ms median, 40 ms p90, 49 ms max, and a
+daemon run 53 / 68 / 71 ms; beside 12 loops of plain runs (no chain writes) 29 / 35 / 50 ms and 50 / 61 / 76 ms; on an
+idle daemon 11 ms and 17 ms. The chain's contention is gone (run 16: 167 ms median, 1,077 ms max). **F4's shape still
+failed:** with the chain's append lock held by another writer (`flock`, as `File::lock`), four `grants delegate`s queued,
+then `grants revoke`: DL1401, "broker unreachable: the broker accepted the request but did not answer within 15s — start
+it with `delulu broker start`", at 15.18 s, exit 1, and the node revoked (by seq 8) only after the queue — about
+25 s. `broker.log` said why: each queued request had waited 5 s for the chain.
+
+**The decision (D-V2-198) and what changed.**
+- `broker_ipc.rs`: `ReqBody::is_revocation` — `Revoke` and `Quarantine`.
+- `brokerd.rs` `serve_inner`: a revocation's own bounded line, read first, with a wake on the ordinary line; a bounded
+  `waiting` line of the requests already handed over; dead-men fired as of the earliest arrival in either.
+- `cli.rs`: `broker_unreachable_advice` and `broker_accepted_and_was_silent`; every DL1401 site (`grants`, `guard`, a
+  lease run, `broker_client`) and `broker status` / `stop` / `rotate-key` (`not_answered`) say a silent broker is running
+  and point at `broker.log`. `delulu explain E-DL1401` gains the sentence.
+- After: the same held chain, the same four queued — `ok: revoked 1 node(s) (audit seq 5 …)` with `warning[DL1401]: … the
+  revocation IS in force, but audit seq 5 names no record` at 9.81 s (`broker.log`: 4,797 ms waiting for the request in
+  hand, 5,000 ms its own record's wait). Against a socket that accepts and never answers, `grants revoke`, `broker status`
+  and `broker stop` each say the broker did not answer and name `broker.log`.
+
+**Witnesses** (`brokerd` unit tests). `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`:
+the test holds the chain while four mints queue, then a revoke and a quarantine arrive, and reads the order from the
+chain's seqs — red on `0ebbc15` (mints at 4–7, the revoke at 8, the quarantine at 9), green after.
+`a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man`: a beat 0.3 s into a 2 s period waits
+behind a held mint; an e-stop that arrives after the deadline goes first; the dead-man must not fire.
+`a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Twelve runs of the three as four concurrent
+copies of the test binary: 12 of 12 green.
+
+**Mutants** (`scripts/mutants.py`, `cargo test -p delulu --bin delulu -- brokerd::tests`, 58 tests): **red** — M969
+(revocations handed to the ordinary line: the old behaviour), M971 (dead-men judged by the revocation's own arrival), M972
+(no wake: eight tests' revocations went unanswered on an idle daemon), M973, M973a, M973b (the words); **M970** (the
+quarantine left out of the lane) **survived the witness's first form**, which placed only the e-stop before the mints —
+the witness now asserts both, and M970 is red. Control green.
+
+**Verification.** `cargo fmt`; `scripts/clippy.sh -j 4` clean and stamped; `scripts/check-other-os.sh` clean for all five
+targets; `delulu`'s unit tests 228 → 231, all passed. The full suite alone at `294ddfa`: 2,626 passed, 0 failed, 16 ignored (190 binaries), cargo exit 0, the tree unmoved, no daemon left — three more than run 12's 2,623 (the three witnesses). Runners at `294ddfa` (`witness.yml`, `bin:delulu`,
+`brokerd::tests`): macOS `41220699505` 57 passed, Windows `41220701916` 53 (the words witness is Unix-only), Ubuntu `41220704527` and arm64 `41220706907` 58 each — 0 failed anywhere, the new witnesses named in each log.
+
+**Loop engineering.** `docs/CLOUD_ROUTINE.md` step 5: a measurement that comes back clean is re-asked in the shape that
+failed (run 16's numbers were clean on `0ebbc15`; F4's held chain was not), and a witness of an order places every member
+it is about (M970). `scripts/estop-measure.py` keeps both of RW 4.53's measurements — the e-stop beside N loops of chain
+writers, and behind a queue on a held chain — which this run rebuilt by hand from run 16's record. `HANDOFF.md` §11.4 and
+§11.5, `docs/assistant-memory/re-ask-the-shape-that-failed.md`.
+
+**Read after the push.** `294ddfa`'s push runs: CI `41221655879` — 14 jobs success, 2 skipped (`actors_pingpong` MEASURED
+on arm64, 2.91x where the machine gave 3.94x against a bar of 1.48x, passed; NOT MEASURED on Ubuntu and Windows — busy or
+SMT — and macOS, 3 hardware threads; disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91);
+OpenShell `41221655891` — success. `22e5c8c`'s (the records) `41221939225`: 14 success, 2 skipped (arm64 MEASURED 2.94x).
+**`master` green at the end of the run.** The merged branches stay on `origin`: the permission classifier refused `git
+push --delete` (recorded for the laptop).
+
+## 2026-10-31 — on-demand routine run 15: `launch/2.0.0` brought current with `master` at `19629a7` (ESTOP-QUEUE-1; release procedure step 1)
+
+**Read first.**
+- Run 14's three commits (`294ddfa`, `22e5c8c`, `19629a7`) were `master`'s newest; `19629a7`'s push run `41223529177`:
+  14 jobs success, 2 skipped (`heavy-gates`, `miri-slow`; 15 min). `actors_pingpong` MEASURED on arm64 (2.91x where the
+  machine gave 3.94x, against a bar of 1.48x: passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3
+  hardware threads, 2.32x observed). The disk: Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 →
+  91.
+- Run 14's three witnesses re-run in the VM on `19629a7`, each passed among `brokerd::tests`' 58 (`cargo test -p delulu
+  --bin delulu brokerd::tests::`): `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`,
+  `a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man` and
+  `a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Its records checked against the tree: RW 4.53
+  struck, D-V2-198 in the decision log, `scripts/estop-measure.py` and its row, the memory file.
+- No branch held a commit `master` lacks but the archived ones (`autosave/*`); `origin/autosave/laptop`'s newest snapshot
+  is still `942c069` (landed in `ff0b4f6`, as runs 13 and 14 recorded). The VM's local `master` was the setup snapshot's
+  `6516ae5`; fast-forwarded before any edit. `claude/peaceful-carson-dfkzl9`, `-rx0bf9`, `-0fcquc`, this session's
+  `-xmq3m4` and `laptop/sandbox-fault-place` are each in `master`'s history; the session's permission classifier refused
+  `git push --delete` (*"Git Destructive"*), so they stay for the laptop.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1577 nodes, 17931 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+  `cargo-deny` 0.20.2 installed in the VM.
+
+**The milestone.** `master` held three commits `launch/2.0.0` lacked. Release procedure step 1 in a worktree, `git merge
+--no-ff origin/master`, as `fc7faff`:
+- `scripts/launch-changelog.py` folded the one new `## Unreleased` section (ESTOP-QUEUE-1's *Fixed* and *Changed*) into
+  `## [2.0.0]`. `CHANGELOG.md` and the map were the only conflicts; the decision log merged clean (D-V2-155 kept, D-V2-198
+  in).
+- **The *Breaking* paragraph is unchanged**, judged against `STABILITY.md` §1 and against v1.0.0 (`git fetch origin tag
+  v1.0.0`). The *Changed* line moves words only, and §2 holds diagnostic messages unstable: every DL1401 keeps its code,
+  and `broker status`, `stop` and `rotate-key` keep exit 1 and `{"running": false}` for a broker they cannot reach —
+  v1.0.0's three arms read the same (`git show v1.0.0:crates/delulu/src/brokerd.rs`). The *Fixed* line moves no §1
+  surface: the wire is unchanged (`ReqBody` gains a method, `is_revocation`, not a variant), and the order in which a
+  revocation and another client's request are decided was a race under 1.x as well — v1.0.0's daemon decided requests in
+  accept order, which no client observes or can rely on, and a request decided after a revocation was refused then as
+  it is now.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree before the gates: `delulu-conform --coverage` 358/358 (diag
+  155, prim 86, grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check
+  examples docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust under `crates/` and `fuzz/` is `master`'s at `19629a7`, so `master`'s push runs on three systems
+  already cover its code.
+
+**Gates on the merged tree, by `scripts/launch-gates.sh`:** `LAUNCH-GATES=ok` — the Survey 1578 nodes, 17975 edges, check
+ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stamped; `doctor --check` 26 checks passed;
+`book` 9, `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance`
+11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion 2's three as
+above; `criterion-2-cited` ok (`19629a7` at 358/358); `cargo deny --all-features check advisories` ok and `bans licenses
+sources` ok.
+
+**Read at `fc7faff`** (dispatched 17:33 UTC):
+- The release dry run `41225115918`: **success** in 2 min 54 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each step read: the archive is for the target the job claims, the binary names its target and
+  commit, installed the way `INSTALL.md` says), its attestation and keep steps and its `release` job skipped (no tag).
+- `everything` `41225113353`: **18 of 18 jobs success** (3 h 15 min in all, 17:33 → 20:48 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 20 min, the checker 1 h 09 min, **the
+  broker 3 h 14 min** — the longest of the eleven broker-Miri times CHECKLIST-2.0 criterion 3 cites (the ten before it
+  1 h 39 min to 3 h 12 min), 46 min under the 240-minute cap and 31 min under the 3 h 45 min line at which *Open / next*
+  says to shorten that job). `actors_pingpong` MEASURED on arm64 (2.89x where the machine gave 3.95x, against a bar of 1.48x: passed);
+  NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 2.24x observed). Disk: Ubuntu 82 → 67
+  GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41225113353` and `41225115918`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `e2354df` (this entry's first records) `41225469666`: 14 jobs success, 2 skipped (22 min);
+  `actors_pingpong` MEASURED on arm64 (2.87x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on the other three (macOS 1.56x
+  observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 91 → 89 GiB, arm64 104 → 91.
+
+**Loop engineering: criterion 2's line is written by a tool.** Runs 8, 9, 11, 13 and this one each ran criterion 2's three
+commands and wrote its sentence into CHECKLIST-2.0 by hand, and since run 13 the gate `criterion-2-cited` greps that
+sentence back in one shape (`` `HASH`: **N/N (100%)** ``). `scripts/launch-criterion-2.py LABEL [BASE]` runs the three,
+refuses to write unless all three are clean (every anchor and every kind covered, the kinds adding up to the anchors —
+a new kind is refused, not dropped — the reference in sync, nothing to reformat or refused), and appends the sentence in
+that shape; it says *already cited* and writes nothing when the row names BASE at the count. `--self-test` checks its
+parsers on canned reports (one accepted, five coverage reports, one reference check and two `fmt` checks refused), and
+five mutants of its walls were each killed by it (one survived at first: a kind short of its total was caught only by the
+sum check, which then summed the kinds' own totals). On the launch tree its `--dry-run` printed, byte for byte, the line
+this run had written by hand; a write citing `22e5c8c` appended exactly one sentence to the row, and a second call wrote
+nothing; with `examples/demo.delulu` put out of format it exited 1 and wrote nothing (each probe restored, the tree
+clean). `scripts/launch-gates.sh` names it when `criterion-2-cited` fails, and step 4.3 of `docs/CLOUD_ROUTINE.md` names
+it.

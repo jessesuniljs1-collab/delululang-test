@@ -724,6 +724,12 @@ overstate it downstream:
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
+  **A refusal has two shapes, on purpose** (B8 of the agent test campaign, kept 2026-10-31). A request outside what
+  the grant names (its host, its path pattern, its method) ends the run, DL0904 at the call, exit 1: the program asked
+  for more than it was given. A request the egress client refuses for what the URL itself is (its scheme, userinfo, a
+  special-use address, a backslash) is `Err(Refused)` to the program, which decides what follows, so the run may exit
+  0; the operator's note on standard error (`[egress: scheme]`) and the report's `reason` say why. A harness that must
+  know of every refused request reads the report, not the exit code alone.
   `http.get_with(url, headers)` (a `Map[Str, Str]`, P9-04 (a)) sends headers under the same checks: each
   name an HTTP token, each value printable ASCII with no line break, no two names that differ only in
   case, at most 32 — and never `Host`, the framing and connection headers, `Proxy-*` or

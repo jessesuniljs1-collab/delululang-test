@@ -310,6 +310,53 @@ fn a_wasm_fault_reads_as_the_interpreters_at_the_same_place() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A7 (the agent test campaign): a program that walks a directory runs on the WASM engine and as a `.dwx`. `list_dir` was
+/// DL1201 *"WASM codegen does not support the method `.list_dir`"* on `--engine wasm` and on `build --target wasm`. Its
+/// output and its effect trace are the interpreter's, record for record.
+#[test]
+fn a_directory_walk_runs_on_wasm_and_as_a_dwx_and_traces_alike() {
+    let dir = std::env::temp_dir().join(format!("delulu-wasm-list-dir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    std::fs::write(dir.join("data").join("b.txt"), "one\ntwo\n").unwrap();
+    std::fs::write(dir.join("data").join("a.txt"), "x\n").unwrap();
+    let data = dir.join("data").to_string_lossy().replace('\\', "/");
+    let walk = dir.join("walk.delulu");
+    std::fs::write(
+        &walk,
+        format!(
+            "module walk\n\nfn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    let rd = root.fs_read(\"{data}\")\n    \
+             match rd.list_dir(\".\") {{\n        Ok(names) => {{\n            for n in names.sort() {{\n                \
+             match rd.read_text(n) {{\n                    Ok(t) => out.println(n + \": \" + str(t.len())),\n                    \
+             Err(e) => out.println(n + \": \" + str(e)),\n                }}\n            }}\n        }}\n        \
+             Err(e) => out.println(\"cannot list: \" + str(e)),\n    }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    let (f, grant) = (walk.to_string_lossy().to_string(), format!("fs.read={data}"));
+    let traced = |engine: &[&str], out: &str| {
+        let trace = dir.join(out).to_string_lossy().to_string();
+        let mut args = vec!["run", f.as_str(), "--grant", "console", "--grant", grant.as_str()];
+        args.extend_from_slice(engine);
+        args.extend(["--trace-effects", "--trace-out", trace.as_str()]);
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(0), "{engine:?}: {}", String::from_utf8_lossy(&o.stderr));
+        (stdout(&o), std::fs::read_to_string(&trace).expect("a trace"))
+    };
+    let (i_out, i_trace) = traced(&[], "interp.trace");
+    let (w_out, w_trace) = traced(&["--engine", "wasm"], "wasm.trace");
+    assert_eq!(i_out, "a.txt: 2\nb.txt: 8\n");
+    assert_eq!(w_out, i_out, "the WASM engine prints what the interpreter prints");
+    assert!(i_trace.contains("list_dir"), "the listing is traced: {i_trace}");
+    assert_eq!(w_trace, i_trace, "the WASM engine's trace is the interpreter's, record for record");
+    let dwx = dir.join("walk.dwx").to_string_lossy().to_string();
+    let built = delulu(&["build", &f, "--target", "wasm", "-o", &dwx]);
+    assert_eq!(built.status.code(), Some(0), "builds to a .dwx: {}", String::from_utf8_lossy(&built.stderr));
+    let ran = delulu(&["run", &dwx, "--grant", "console", "--grant", &grant]);
+    assert_eq!((ran.status.code(), stdout(&ran)), (Some(0), i_out), "{}", String::from_utf8_lossy(&ran.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// RW 6.40: an actor that dies is named alike on both engines, and a recursion too deep is placed at the same call. The
 /// WASM engine counted a death (*"actors: 1 died"*) and named nothing; the interpreter's `DL0905` named no place, where
 /// the WASM engine's names the call that went one deeper (B5).

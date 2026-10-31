@@ -6396,3 +6396,538 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** land the stack #93–#99 and this by fast-forward, each on a green run; merge `master` into
   `launch/2.0.0`; RW 6.39; the papercuts A7 and B8; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — `list_dir` runs on the WASM engine and in a `.dwx`: A7 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/wasm-list-dir` (stacked on #100, #99, #98)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: A `crates/delulu-wasm/tests/list_dir_parity.rs`. M `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`
+  (row 6.46), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next, in order:** land #98, #99, #100 and this in order on green runs; merge `master` into `launch/2.0.0`;
+  RW 6.39; B8; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a refusal's two shapes, kept and documented: B8 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/refusal-shapes-doc` (stacked on #101, #100, #99, #98)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name. Documents only.
+- Files and folders: M `docs/for-agents.md`, `docs/REMAINING_WORK.md` (row 6.47), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #98–#101 and this in order on green runs; merge `master` into `launch/2.0.0`; RW 6.39
+  (the last open row of the campaign's papercuts); *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — a sandboxed run's fault names its place: RW 6.39 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W8qqxwXgHPRfKCrupn`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/sandbox-fault-place` (stacked on #102, #101)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/channel.rs`, `crates/delulu/src/guest.rs`, `crates/delulu/src/boundary.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/sandbox_run_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`
+  (row 6.39), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** land #101, #102 and this on green runs; merge `master` into `launch/2.0.0` (CHANGELOG's
+  sections; CHECKLIST-2.0 criterion 4 names RUSTSEC-2026-0422/0423/0424) and dispatch its `everything` run and release
+  dry run; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-31 — on-demand routine run 9: `launch/2.0.0` brought current with `master` at `9a82bf9` (release procedure step 1); #103 landed; RUNNER-DISK-1 measured
+- Session: `https://claude.ai/code/session_01Deh6W869fPE8rBr7jgXnC7`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 222 at its records' first commit, 266 when its closing
+  commit was written). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). Pull request: none of this run's (#103, the laptop's, landed by fast-forward).
+- Base: `6516ae5` (`master` at the start; its push run `41127219112` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** the newest entries' *Open / next* 2 — `launch/2.0.0` brought current with
+  `master` once #103 lands (11 commits, B5 through RW 6.39), its CHANGELOG folded and its *Breaking* paragraph judged,
+  CHECKLIST-2.0 criterion 4 naming RUSTSEC-2026-0422/0423/0424 and criterion 2 re-measured, the gates and document gates
+  green on the merged tree, its `everything` run and release dry run dispatched, READ and cited. **Delivered:** the merge
+  `1a7a1c3` on `launch/2.0.0` (pushed); the *Breaking* paragraph gains C9 (a refused module header's code, DL0209 →
+  DL0201) and C11 (a non-UTF-8 source's exit code, 2 → 1), each a surface `STABILITY.md` §1 holds stable; every gate green
+  there; its release dry run `41163621006` read success and its `everything` `41163618866` read **18 of 18 success** (1 h 49 min;
+  the broker's Miri 1 h 49 min); CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing
+  commit into `launch/2.0.0`, pushed after it (`git log -1 origin/launch/2.0.0`).
+- **Housekeeping:** `laptop/sandbox-fault-place` (#103, RW 6.39) was the one branch ahead of `master`, green on
+  `41124338693`; read as a stranger's diff, its witnesses re-run in the VM and its witness read red on a mutant;
+  `master` fast-forwarded to `9a82bf9` (GitHub closed #103 as merged). The newest autosave snapshot (`942c069`) landed
+  whole in `ff0b4f6`. The Survey and `doctor` healthy at the start (1569 nodes, 17699 edges; 26 checks). `gh` is
+  installed (not used; CI read with the REST API and the GitHub MCP tools). `cargo-deny` 0.20.2 installed in the VM.
+  **A finding:** #101's run `41121497877` died on its Ubuntu test job of a full runner disk — RUNNER-DISK-1, RW 7.26, the
+  one such death in 223 CI runs; `f5a1d58` makes every test job read its disk's margin before and after the suite.
+- Commits: on `master`, `9a82bf9` (the laptop's #103, fast-forwarded), `f5a1d58` (the disk readings), `dbfdac6` (these
+  records, the loop's edits), and this entry's closing commit (the runs read to their end). On `launch/2.0.0`, `1a7a1c3`
+  (the merge), then the merge of this entry's closing commit (the citations).
+- Files and folders (`master`, `git diff --name-status 9a82bf9..HEAD`): M `.github/workflows/ci.yml` (RUNNER-DISK-1's four
+  steps), `scripts/launch-changelog.py` (its *Breaking* advice), `docs/CLOUD_ROUTINE.md` (steps 3 and 4.3),
+  `docs/REMAINING_WORK.md` (row 7.26), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing. On `launch/2.0.0`
+  (`1a7a1c3`): `master`'s 11 commits, `CHANGELOG.md` (ten sections folded; the *Breaking* paragraph names RW 6.42 and
+  RW 6.43), its release checklist (CHECKLIST-2.0, criteria 2 and 4), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `6516ae5`'s push run `41127219112` (green, 14 and 2 skipped); the nightly `41033994313` (2026-10-30, 18 of 18; the
+    broker's Miri 3 h 11 min); the stack's pull-request runs, #93–#95's red on `supply-chain` alone (RUSTSEC-2026-0422 to
+    -0424, fixed by `d879eda`) and #101's `41121497877` red on a dead Ubuntu runner (RUNNER-DISK-1); #103's `41124338693`
+    (green). Every failed job of the 223 CI runs since 2026-10-20 read by its annotations.
+  - `master` `9a82bf9`'s push run `41163006021`: 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.90x,
+    passed), NOT MEASURED on the other three; the Linux and Windows cache restores failed (*"Egress is over the account
+    limit"*) and those jobs passed cold. `f5a1d58`'s `41164074066`: 14 success, 2 skipped; the first disk readings, Ubuntu
+    82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `1a7a1c3`: the release dry run `41163621006` success (8 min 39 s; four `package` jobs; `release`
+    skipped, no tag); `everything` `41163618866` **18 of 18 success** (1 h 49 min in all; `miri-slow` syntax 22 min, the
+    checker 1 h 31 min, the broker 1 h 49 min; `actors_pingpong` MEASURED on arm64, 2.82x against 1.48x, NOT MEASURED on
+    the other three).
+  - `dbfdac6`'s push run `41165974895` (this entry's first records): 14 jobs success, 2 skipped.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `docs/CLOUD_ROUTINE.md` step 4.3 says what decides the *Breaking* paragraph (a surface
+  `STABILITY.md` §1 holds stable, moved), and `scripts/launch-changelog.py` says it when it folds; step 3 says a failed
+  job with no failed step died with its runner, its log 404 and its annotations naming why; the test jobs read their disk.
+- **Redo on the laptop:** delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-e5h9x9` from `origin` (both in
+  `master`'s history; this session's git proxy refused `git push --delete`, as runs 7's and 8's did).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a job whose runner died leaves no log, and its annotations say why; a
+  runner's disk is a budget the suite spends).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `dbfdac6`'s `41165974895` is green), and
+     record the hash of `launch/2.0.0`'s records merge that follows it.
+  2. Keep `launch/2.0.0` current as `master` moves (step 4.3); it is at `master` `9a82bf9` plus this run's records.
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first. And if a test
+     job dies with no failed step again, read its `RUNNER-DISK-1` notices and its annotations before anything else.
+  5. With every finding of the agent campaign closed or decided, the work order's items 5–7: a `REMAINING_WORK.md` row a
+     Linux VM can verify — RW 4.79 (a use the custody allows recorded `allow` though the program's narrower capability
+     refuses it), RW 4.66 and RW 4.67 (red team F3, F4; LOW) are open and in reach.
+  6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-e5h9x9` from `origin`.
+  7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 10: a use its capability refuses is recorded refused, never allowed (RW 4.79, D-V2-195)
+- Session: `https://claude.ai/code/session_01Deh6WAYtoRt9tGM11ue53h`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command.
+- Branch: `claude/peaceful-carson-dfkzl9` for the code's runner witnesses, then `master` fast-forwarded to it and pushed
+  (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `658daf1` (`master` at the start; its push run `41171405565` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.79 closed end to end — a use the program's own capability refuses is
+  judged before its custody is asked, by the interpreter, the WASM engine and a sandboxed guest's host, and the chain says
+  what happened. **Delivered:** `4cdad8a` — `prim::capability_refusal` judges first at all three gates; the custody is told
+  (`Custody::note_capability_refusal`), and under the daemon one `use deny` naming `refused_by: capability`, `code`,
+  `reason` and a request's path and method is recorded where a use of that class is (every write and request; a read under
+  a Guard rule); the wire's `CapabilityRefused`. Read red first on `658daf1`: nineteen `use allow` for calls that never
+  happened, and a Guard asked about reads that could not happen (DL1410 telling an agent to request a permit for one).
+  Mutants M946–M960 red; the full suite 2620 passed, 0 failed; macOS and Windows witnesses green before `master` moved.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot (`942c069`) landed in
+  `ff0b4f6` (diff on its paths empty). The Survey and `doctor` healthy at the start (1569 nodes, 17736 edges; 26 checks).
+  `gh` is installed (not used; CI read with the REST API and the GitHub MCP tools).
+- Commits: `4cdad8a` (the fix and its witnesses), this entry's records commit, and its closing commit (the push run read).
+- Files and folders (`git diff --name-status 658daf1..HEAD`): M `crates/delulu-runtime/src/prim.rs`, `interp.rs`,
+  `channel.rs`, `custody.rs`; `crates/delulu-wasm/src/host.rs`, `lib.rs` (the F1 parity test); `crates/delulu-broker/src/validate.rs`;
+  `crates/delulu/src/broker_client.rs`, `broker_ipc.rs`, `brokerd.rs`; `crates/delulu/tests/broker_cli.rs`, `guard_e2e.rs`,
+  `grants_cli.rs`; `scripts/suite.sh`; `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md` (row 4.79),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-195), `V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md`,
+  `HANDOFF.md` (§11.4, §11.5), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  A `docs/assistant-memory/a-record-says-what-happened.md`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `658daf1`'s push run `41171405565` (run 9's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on macOS
+    (2.52x against 1.40x, passed), NOT MEASURED on Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+    macOS 93 → 89 GiB.
+  - `witness.yml` at `4cdad8a`, every test of `broker_cli`, `guard_e2e` and `grants_cli`: macOS `41176123350` success,
+    Windows `41176125665` success.
+  - `92ffb1a`'s push runs (the fix and these records): CI `41177377312` **14 jobs success, 2 skipped** (22 min) —
+    `actors_pingpong` MEASURED on arm64 (2.85x where the machine gave 3.95x, against a bar of 1.48x: passed), NOT MEASURED
+    on macOS (3 hardware threads), Ubuntu and Windows (busy or SMT); disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+    macOS 93 → 89 GiB, arm64 104 → 91 GB. `ocsf` `41177377173` success.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/suite.sh` says `DISK-FULL:` when the disk filled (this run's first suite died at link and
+  read as one more `EXIT=101`) and which flags it passes itself; `docs/CLOUD_ROUTINE.md` names a fresh VM's 13 GB beside
+  the setup snapshot's 16 GB `target/` (delete it whole before a suite under ~20 GB free) and a mutant's witnesses in
+  several targets by one command (libtest's several name filters).
+- **Redo on the laptop:** delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-dfkzl9` from `origin` (both in
+  `master`'s history; this session's harness refused `git push --delete`, as runs 7's, 8's and 9's did).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.79 — a record says what happened; judge what needs nothing from the
+  custody first, and tell it), §11.5 (a test asserting the order a defect lives in; a fresh VM's disk), and
+  `docs/assistant-memory/a-record-says-what-happened.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `92ffb1a`'s runs are read above).
+  2. Bring `launch/2.0.0` current with `master` (step 4.3): fold RW 4.79's CHANGELOG section and judge its *Changed* line
+     — a call its capability refuses is DL0904 under every custody, where a Guard rule (DL1410–DL1413) or a revoked or
+     expired lease (DL0801, DL1402, DL1403) could answer first under the daemon — against STABILITY.md §1 for the 2.0.0
+     *Breaking* paragraph; dispatch its `everything` run and release dry run, read them, cite them.
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  5. The work order's items 5–7: RW 4.66 and RW 4.67 (routine run 25's red team, F3 and F4; LOW) are the open
+     containment rows a Linux VM can verify.
+  6. *[laptop]* delete `laptop/sandbox-fault-place` and `claude/peaceful-carson-dfkzl9` from `origin`.
+  7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 11: `launch/2.0.0` brought current with `master` at `1927bca` (RW 4.79; release procedure step 1); `scripts/launch-gates.sh`
+- Session: `https://claude.ai/code/session_01Deh6W7pbXyHNgHeCtaNAJX`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 201 when its
+  closing commit was written). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). Pull request: none.
+- Base: `1927bca` (`master` at the start; its push run `41178859307` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** `launch/2.0.0` brought current with `master` at `1927bca` (run 10's *Open /
+  next* 2): RW 4.79's CHANGELOG section folded, the 2.0.0 *Breaking* paragraph judged for it against STABILITY.md §1,
+  CHECKLIST-2.0 criterion 2 re-measured, the gates and document gates green on the merged tree, its `everything` run and
+  release dry run dispatched, READ and cited. **Delivered:** the merge `6193479` on `launch/2.0.0` (pushed); the *Breaking*
+  paragraph gains RW 4.79 — judged against v1.0.0's own code, which asked the daemon's custody before the capability, so a
+  refused call's code under `--broker daemon` moves from a Guard's DL1410–DL1413 or a lease's DL0801/DL1402/DL1403 to DL0904;
+  criterion 2 358/358; every gate green by the new `scripts/launch-gates.sh` (`LAUNCH-GATES=ok`); its release dry run
+  `41183916484` read success and its `everything` `41183914783` read **18 of 18 success** (1 h 39 min).
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). Run 10's six witnesses re-run in the VM, all passed. The Survey and `doctor` healthy at the start
+  (1570 nodes, 17817 edges; 26 checks). `gh` is installed (not used; CI read with the REST API and the GitHub MCP tools).
+  `cargo-deny` 0.20.2 installed in the VM. The git proxy refused `git push --delete` for `claude/peaceful-carson-dfkzl9`
+  and `laptop/sandbox-fault-place` (*"the remote end hung up unexpectedly"*), as it refused runs 7–10's.
+- Commits: on `launch/2.0.0`, `6193479` (the merge). On `master`, `1289d8b` (the records, the script), then this entry's
+  closing commit (the runs read); then the merge of the closing commit into `launch/2.0.0` (the citations).
+- Files and folders (`master`, `git diff --name-status 1927bca..HEAD`): A `scripts/launch-gates.sh`,
+  `docs/assistant-memory/a-gate-counts-what-it-reads.md`. M `docs/CLOUD_ROUTINE.md` (step 4.3), `docs/REPOSITORY_STRUCTURE.md`
+  (the script's row), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `HANDOFF.md` (§11.5),
+  `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing. On
+  `launch/2.0.0` (`6193479`): `master`'s three commits, `CHANGELOG.md` (one section folded; the *Breaking* paragraph names
+  RW 4.79), its release checklist (CHECKLIST-2.0, criterion 2), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `1927bca`'s push run `41178859307` (run 10's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.83x against 1.48x, passed), NOT MEASURED on the other three; disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS
+    92 → 88 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `6193479`, dispatched 08:16 UTC: the release dry run `41183916484` **success** (4 min 3 s; its four
+    `package` jobs success — x86-64 and arm64 Linux, macOS arm64, Windows — each packaged, checked for its target and its
+    binary's target and commit, and installed the way `INSTALL.md` says; `release` skipped, no tag); `everything`
+    `41183914783` **18 of 18 success** (1 h 39 min; `miri-slow` syntax 12 min, the checker 1 h 32 min, the broker 1 h 39
+    min; `actors_pingpong` MEASURED on arm64, 2.91x against 1.48x, NOT MEASURED on the other three). CHECKLIST-2.0
+    criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`, pushed after it
+    (`git log -1 origin/launch/2.0.0`).
+  - `1289d8b`'s push run `41184451019` (this entry's first records): 14 jobs success, 2 skipped; `actors_pingpong`
+    MEASURED on arm64 (2.89x, passed), NOT MEASURED on the other three; disk as before.
+  - The nightly `41187794369` (2026-10-31, on `1289d8b`): in progress at the closing commit — Open / next 1.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/launch-gates.sh` — step 4.3's gates in one command, `survey findings`' errors counted (the
+  command exits 0 whatever it finds), a missing `cargo-deny` a failure, a note whether the merged tree's Rust is `master`'s;
+  falsified red twice before its green run. Step 4.3 names it and says to judge the *Breaking* paragraph against v1.0.0.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-nxocco` (this run's, at
+  `1927bca`) and `laptop/sandbox-fault-place` from `origin` — all in `master`'s history.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a command that exits 0 whatever it finds is not a gate until something counts
+  it; judge *Breaking* against 1.x itself) and `docs/assistant-memory/a-gate-counts-what-it-reads.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `1289d8b`'s `41184451019` is green) and the
+     nightly `41187794369` (on `1289d8b`), and record the hash of `launch/2.0.0`'s citations merge that follows them.
+  2. Keep `launch/2.0.0` current as `master` moves (step 4.3, now `scripts/launch-gates.sh`).
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  5. The work order's items 5–7: RW 4.66 and RW 4.67 (routine run 25's red team, F3 and F4; LOW) are the open containment
+     rows a Linux VM can verify.
+  6. *[laptop]* delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-nxocco` and `laptop/sandbox-fault-place`
+     from `origin`.
+  7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 12: a sent secret leaves no copy of its bytes in the run (RW 4.67, D-V2-196); RW 4.66 decided (D-V2-197)
+- Session: `https://claude.ai/code/session_01Deh6W7aG4yTRkBQDRS6Tgn`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 412 when its records were written). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `claude/peaceful-carson-rx0bf9` for the code's runner witnesses, then `master` fast-forwarded to it and pushed
+  (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `9553ab7` (`master` at the start; its push run `41190824409` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.67 closed end to end — a sent secret's plaintext leaves no copy in the
+  run process after the send (witnessed red by a scan of the run's memory over real TLS under the daemon custody, fixed,
+  mutants, the full suite, the runners) — with RW 4.66 decided alongside. **Delivered:** `ab46618` — while a send's
+  bytes are in the process (`delulu_runtime::scrub::Window`: one while the custody is asked, one around every
+  secret-bearing request), the `delulu` binary's allocator zeroes every block it frees, on every thread, and moves a
+  growing block through that free. Read red on `9553ab7` (one copy on the interpreter, one on the WASM engine — hyper's
+  serialized request, in reqwest's runtime thread's arena), green after; mutants M961, M963, M964, M966, M968 red, M962,
+  M965 and M967 read and recorded as walls no scan point reaches; the full suite 2,623 passed, 0 failed; the runners green before
+  `master` moved. RW 4.66 decided (D-V2-197): the socket admits exactly whom the state directory admits, and
+  `secrets.json` there holds every secret in plaintext — a residual of the same-user boundary, now in `DEPLOYMENT.md` §5.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The Survey and `doctor` healthy at the start (1572 nodes, 17840 edges; 26 checks). `gh` is
+  installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+- Commits: `ab46618` (the fix and its witness), `d3e5599` (these records, with `scripts/mutants.py`'s `MUTANTS_KEEP`), and
+  this entry's closing commit (the push runs and the nightly read).
+- Files and folders (`git diff --name-status 9553ab7..HEAD`): A `crates/delulu-runtime/src/scrub.rs`,
+  `docs/assistant-memory/a-scan-point-must-not-allocate.md`. M `crates/delulu-runtime/src/lib.rs`, `interp.rs`, `prim.rs`,
+  `value.rs` (a comment); `crates/delulu/src/ceiling.rs`; `crates/delulu/tests/broker_cli.rs`; `crates/delulu/Cargo.toml`
+  (dev-dependencies `rcgen`, `rustls`), `Cargo.lock` (their two edges); `scripts/mutants.py`; `CHANGELOG.md`,
+  `docs/DEPLOYMENT.md` (§5), `docs/REMAINING_WORK.md` (rows 4.66, 4.67), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-196, D-V2-197), `V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md` (step 5),
+  `HANDOFF.md` (§11.4, §11.5), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `9553ab7`'s push run `41190824409` (run 11's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.90x against 1.48x, passed), NOT MEASURED on Ubuntu; disk Ubuntu 82 → 67 GB free, arm64 104 → 91.
+  - The nightly `41187794369` (2026-10-31, on `1289d8b`): **18 of 18 success** — `miri-slow` the broker 3 h 14 min, the
+    checker 1 h 31 min, the syntax 17 min.
+  - `witness.yml` at `ab46618`, every test of `broker_cli`: Ubuntu `41198603696` and arm64 `41198609344` — 20 passed each, the witness among them (its control proves a non-root runner reads its child's memory); macOS `41198605560` and Windows `41198607230` — success (the witness is Linux-only; the other secret sends run there through the changed allocator).
+  - `ab46618`'s push run `41199511756`: 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.84x, passed),
+    NOT MEASURED on macOS (3 hardware threads), Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS
+    93 → 89 GiB, arm64 104 → 91.
+  - `d3e5599`'s push run `41199808938` (these records): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.96x, passed), NOT MEASURED on the other three; disk as above but Windows 217 → 202 GB (a larger runner).
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/mutants.py` keeps each mutant's `delulu` under `MUTANTS_KEEP=DIR` (falsified: a kept
+  M963 binary left copies by hand where the restored tree's left none); `docs/CLOUD_ROUTINE.md` step 5 says a memory scan
+  waits where the program allocates nothing, counts a fragment, and reads only resident pages; `HANDOFF.md` §11.5 records
+  the `git stash drop` that took the fix with a mutant and the four by-hand reds that were the old binary.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9` (this run's) and
+  `laptop/sandbox-fault-place` from `origin` — all in `master`'s history (`claude/peaceful-carson-nxocco` is gone already)
+  — since this session could not (this session's permission classifier refused `git push --delete` for `claude/peaceful-carson-dfkzl9` and `laptop/sandbox-fault-place`; not retried).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.67 — the copy that stayed was not ours, so the rule is the
+  allocator's), §11.5 (a scan point that allocates erases what it looks for; never `git stash drop` a mutant), and
+  `docs/assistant-memory/a-scan-point-must-not-allocate.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `d3e5599`'s `41199808938` is green).
+  2. Bring `launch/2.0.0` current with `master` (step 4.3, `scripts/launch-gates.sh`): fold RW 4.67's CHANGELOG section
+     (a *Fixed* and a *Documented* line — neither moves a surface `STABILITY.md` §1 holds stable, so the *Breaking*
+     paragraph should not change; judge it), dispatch its `everything` run and release dry run, read them, cite them.
+  3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red (the nightly `41187794369`'s took 3 h 14 min, 31 min under that line).
+  4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  5. The work order's items 5–7, now that RW 4.66 and 4.67 are closed: RW 2.12's last methods (PUT, PATCH, DELETE — P9's
+     open end, "each a primitive of its own when a program needs one"), RW 4.53's original measurement (the serial
+     daemon's queue behind other writers on a short chain, not re-run since routine run 16), or a sweep (Sunday).
+  6. *[laptop]* delete the merged branches above from `origin` if the cloud's proxy still refuses it.
+  7. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 13: `launch/2.0.0` brought current with `master` at `d84b9e1` (RW 4.67; release procedure step 1); criterion 2 read back by the gates
+- Session: `https://claude.ai/code/session_01Deh6W8tbAzgsH27h559GP5`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 160 when its first records were written, 262 at its closing commit). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). The session's own branch `claude/peaceful-carson-ubupyf` held nothing beyond
+  `master`. Pull request: none.
+- Base: `d84b9e1` (`master` at the start; its push run `41201440036` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** `launch/2.0.0` brought current with `master` at `d84b9e1` (run 12's *Open /
+  next* 2): RW 4.67's CHANGELOG section folded, the 2.0.0 *Breaking* paragraph judged for it against STABILITY.md §1 and
+  v1.0.0, CHECKLIST-2.0 criterion 2 re-measured, the gates green on the merged tree, its `everything` run and release dry
+  run dispatched, READ and cited. **Delivered:** the merge `df32509` on `launch/2.0.0` (pushed); the *Breaking* paragraph
+  unchanged — RW 4.67 moves no §1 surface, and v1.0.0 had no secret-sending primitive, no `ceiling` module and no global
+  allocator; criterion 2 358/358; `LAUNCH-GATES=ok`.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The VM's local `master` was the setup snapshot's `6516ae5`, 12 behind; fast-forwarded first.
+  Run 12's three witnesses re-run in the VM, all passed; its records checked against the tree. The Survey and `doctor`
+  healthy at the start (1574 nodes, 17875 edges; 26 checks). `gh` is installed (not used). `cargo-deny` 0.20.2 installed in
+  the VM. The git proxy refused `git push --delete` for `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`
+  and `laptop/sandbox-fault-place` (*"the remote end hung up unexpectedly"*), as it refused runs 7–12's.
+- Commits: on `launch/2.0.0`, `df32509` (the merge). On `master`, `1ada477` (the records, the gate's first form), then
+  this entry's closing commit (the runs read; the gate reworked); then the merge of the closing commit into `launch/2.0.0` (the citations).
+- Files and folders (`master`, `git diff --name-status d84b9e1..HEAD`): M `scripts/launch-gates.sh` (`criterion-2-cited`),
+  `docs/CLOUD_ROUTINE.md` (step 4.3), `docs/REPOSITORY_STRUCTURE.md` (the script's row), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `HANDOFF.md` (§11.5), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. A `docs/assistant-memory/a-gate-runs-on-every-caller.md`. Deleted, renamed:
+  nothing. On `launch/2.0.0` (`df32509`): `master`'s three commits, `CHANGELOG.md` (one section folded), its release
+  checklist (CHECKLIST-2.0, criterion 2), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `d84b9e1`'s push run `41201440036` (run 12's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.90x against 1.48x, passed), NOT MEASURED on the other three (macOS 3 hardware threads, 1.57x observed); disk Ubuntu
+    82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `df32509`, dispatched 13:11 UTC: the release dry run `41204428474` and `everything` `41204426153` —
+    the release dry run `41204428474` **success** (9 min 2 s; four `package` jobs success, each archive checked for its
+    target, its binary's target and commit, and installed the way `INSTALL.md` says; `release` skipped, no tag);
+    `everything` `41204426153`: **18 of 18 jobs success** (2 h 07 min in all, 13:11 → 15:18 UTC) — the Linux, Windows,
+    macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+    `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 22 min, the checker 48 min, the
+    broker 2 h 07 min — under the 240-minute cap). `actors_pingpong` MEASURED on arm64 (2.88x where the machine gave 3.94x,
+    against a bar of 1.48x: passed); NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads,
+    1.77x observed). Disk: Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+    CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`,
+    pushed after it (`git log -1 origin/launch/2.0.0`).
+  - `1ada477`'s push run `41204848160` (this entry's first records): 14 jobs success, 2 skipped; `actors_pingpong`
+    MEASURED on arm64 (2.93x, passed), NOT MEASURED on the other three; disk Ubuntu 82 → 67 GB free, Windows 217 → 202,
+    macOS 92 → 89 GiB, arm64 104 → 91.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/launch-gates.sh` gains `criterion-2-cited` — CHECKLIST-2.0's criterion 2 row's newest
+  citation at the anchor count measured now must be the merged base or a commit with the same criterion-2 inputs; runs 8,
+  9, 11 and 13 wrote that row by hand and no gate read it back. Its first form (`1ada477`) asked for the base's own hash
+  and would have refused the records-only citations merge; reworked in the closing commit before that merge, and
+  falsified five ways (two shapes green, a changed-inputs base, a planted count and a removed line each exit 1). Step 4.3
+  names it; `HANDOFF.md` §11.5 keeps the lesson.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-ubupyf` (this session's, at `d84b9e1`) and
+  `laptop/sandbox-fault-place` from `origin` — each in `master`'s history; the cloud's proxy refuses the deletion.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a new gate is run against every merge that calls it) and
+  `docs/assistant-memory/a-gate-runs-on-every-caller.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records and the reworked gate; `1ada477`'s `41204848160` is
+     green), and record the hash of `launch/2.0.0`'s citations merge that follows it (`git log -1 origin/launch/2.0.0`).
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (RW 4.67's allocator window, or `http.post_with_secret`), and the live
+     documents scanned for claims the code has overtaken.
+  3. Keep `launch/2.0.0` current as `master` moves (step 4.3, `scripts/launch-gates.sh`; write criterion 2's row first).
+  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red.
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 4.53's original measurement (the serial daemon's queue behind other writers' appends
+     on a short chain, not re-run since routine run 16); RW 2.12's last methods (PUT, PATCH, DELETE) only when a program
+     needs one (P9's design).
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 14: the e-stop goes before the requests waiting at the broker (ESTOP-QUEUE-1, RW 4.53, D-V2-198)
+- Session: `https://claude.ai/code/session_01Deh6W9Cuzh8r2TmRb8JSY4`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 332 when its
+  records were written). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `claude/peaceful-carson-0fcquc` (this session's) for the code's runner witnesses, then `master` moved to the same
+  commits and pushed (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `0ebbc15` (`master` at the start; its push run `41215074286` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.53 closed end to end — routine run 16's measurement and the red team's
+  F4 re-run on the current binary, what still failed witnessed red, fixed, mutants, the full suite, the runners, the
+  records. **Delivered:** `294ddfa` — run 16's measurement is clean on `0ebbc15` (a revoke beside 12 sandbox loops 22 ms
+  median, 49 ms max), but F4's shape still failed: with the audit chain held, an e-stop behind four queued requests
+  answered DL1401 "did not answer within 15s — start it with `delulu broker start`" at 15.18 s and landed ~25 s after the
+  pull (ESTOP-QUEUE-1). A revocation (`Revoke`, `Quarantine`) now has a line the serial handler reads first, dead-men
+  are judged as of the earliest arrival still waiting, and a broker that accepted and did not answer is said to be
+  running (every DL1401, `broker status`/`stop`/`rotate-key`, `explain E-DL1401`). After: 9.81 s, revoked, its record
+  said lost. Witnesses red then green; mutants M969–M973 red (M970 survived the witness's first form, which then placed
+  both revocations); the full suite 2,626 passed, 0 failed; the runners green before `master` moved. D-V2-198.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`); `launch/2.0.0`'s citations merge (run 13's Open / next 1) is `4127776`. The Survey and `doctor`
+  healthy at the start (1575 nodes, 17887 edges; 26 checks). `gh` is installed (`/usr/local/bin/gh`), not used: CI read
+  with the REST API and the GitHub MCP tools.
+- Commits: `294ddfa` (the fix and its three witnesses), `22e5c8c` (the records and `scripts/estop-measure.py`), and this
+  entry's closing commit (the push runs read).
+- Files and folders (`git diff --name-status 0ebbc15..HEAD`): A `scripts/estop-measure.py`,
+  `docs/assistant-memory/re-ask-the-shape-that-failed.md`. M `crates/delulu/src/brokerd.rs`, `broker_ipc.rs`, `cli.rs`,
+  `broker_client.rs`, `run_cmd.rs`; `crates/delulu-diag/src/codes.rs` (DL1401's explanation); `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4, §11.5), `docs/CLOUD_ROUTINE.md` (step 5), `docs/REMAINING_WORK.md` (row 4.53), `docs/REPOSITORY_STRUCTURE.md`
+  (the script's line), `docs/book/THE_DELULULANG_BOOK.md` (*The e-stop is revocation*), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-198), `V2_PHASE_STATUS.md` (row 17), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `0ebbc15`'s push run `41215074286` (run 13's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on macOS
+    (2.36x where the machine gave 3.59x, against 1.34x, passed) and arm64 (2.97x against 1.48x, passed), NOT MEASURED on
+    Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `witness.yml` at `294ddfa` (`bin:delulu`, `brokerd::tests`): macOS `41220699505` 57 passed, Windows `41220701916` 53
+    (the words witness is Unix-only), Ubuntu `41220704527` and arm64 `41220706907` 58 each — all success, 0 failed, the
+    new witnesses named in each log.
+  - `294ddfa`'s push runs: CI `41221655879` — 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.91x
+    where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3
+    hardware threads, 2.15x observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+    OpenShell `41221655891` — success.
+  - `22e5c8c`'s push run `41221939225` (the records): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.94x against 1.47x, passed), NOT MEASURED on the other three; disk as above but Windows 217 → 202 GB.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/estop-measure.py` keeps both of RW 4.53's measurements (the e-stop beside N loops of chain
+  writers; behind a queue on a held chain), which this run rebuilt by hand from run 16's record — it reads 15.14 s DL1401
+  on `0ebbc15`'s binary and 9.81 s revoked on the fix. `docs/CLOUD_ROUTINE.md` step 5: re-ask a clean measurement in the
+  shape that failed, and place every member of an order in its witness. `HANDOFF.md` §11.5 and
+  `docs/assistant-memory/re-ask-the-shape-that-failed.md` keep the lesson.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-ubupyf`, `laptop/sandbox-fault-place` and this session's `claude/peaceful-carson-0fcquc` from
+  `origin` once each is in `master`'s history — the cloud's proxy has refused every such deletion since run 7.
+- For the laptop's memory: `HANDOFF.md` §11.4 (ESTOP-QUEUE-1 — a revocation goes first; never put it back in the line),
+  §11.5 (a clean measurement is re-asked in the shape that failed) and
+  `docs/assistant-memory/re-ask-the-shape-that-failed.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only; `294ddfa`'s `41221655879` and `22e5c8c`'s
+     `41221939225` are green).
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (the revocation line of D-V2-198, or RW 4.67's allocator window), and
+     the live documents scanned for claims the code has overtaken.
+  3. Bring `launch/2.0.0` current with `master` (step 4.3, `scripts/launch-gates.sh`; write criterion 2's row first):
+     fold this section's CHANGELOG (*Fixed* and *Changed*) and judge the *Breaking* paragraph — the words of DL1401 and of
+     `broker status`/`stop`/`rotate-key` change, their codes, exit codes and JSON do not; v1.0.0's daemon handled requests
+     in arrival order.
+  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red (`41204426153`'s took 2 h 07 min).
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 2.12's last methods (PUT, PATCH, DELETE) only when a program needs one; RW 3.24 (the
+     interpreter's variables resolved to slots) is the largest open user-facing item a VM can build and verify.
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 15: `launch/2.0.0` brought current with `master` at `19629a7` (ESTOP-QUEUE-1; release procedure step 1); criterion 2's line written by a tool
+- Session: `https://claude.ai/code/session_01Deh6WBteyF5ovaXJkePjoN`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run, 148 when its first records were written, 204 at its
+  closing commit). The
+  setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
+  (`../launch-wt`, removed at the close). The session's own branch `claude/peaceful-carson-xmq3m4` held nothing beyond
+  `master`. Pull request: none.
+- Base: `19629a7` (`master` at the start; its push run `41223529177` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** `launch/2.0.0` brought current with `master` at `19629a7` (run 14's *Open /
+  next* 3): ESTOP-QUEUE-1's CHANGELOG section folded, the 2.0.0 *Breaking* paragraph judged for it against STABILITY.md
+  §1 and v1.0.0, CHECKLIST-2.0 criterion 2 re-measured and written before the gates, the gates green on the merged tree,
+  its `everything` run and release dry run dispatched, READ and cited. **Delivered:** the merge `fc7faff` on
+  `launch/2.0.0` (pushed); the *Breaking* paragraph unchanged — the *Changed* line moves words only (DL1401's code and
+  `broker status`/`stop`/`rotate-key`'s exit 1 and `{"running": false}` are v1.0.0's), and the *Fixed* line's order was a
+  race under 1.x too (v1.0.0's daemon decided in accept order; the wire is unchanged); criterion 2 358/358;
+  `LAUNCH-GATES=ok`.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`). The VM's local `master` was the setup snapshot's `6516ae5`; fast-forwarded first. Run 14's three
+  witnesses re-run in the VM, all passed (`brokerd::tests`, 58 passed); its records checked against the tree. The Survey and
+  `doctor` healthy at the start (1577 nodes, 17931 edges; 26 checks). `gh` is installed (not used). `cargo-deny` 0.20.2
+  installed in the VM. The session's permission classifier refused `git push --delete` for the merged branches (*"Git
+  Destructive"*): they stay for the laptop.
+- Commits: on `launch/2.0.0`, `fc7faff` (the merge). On `master`, `e2354df` (the records and
+  `scripts/launch-criterion-2.py`), then this entry's closing commit (the runs read); then the merge of the closing commit
+  into `launch/2.0.0` (the citations).
+- Files and folders (`master`, `git diff --name-status 19629a7..HEAD`): A `scripts/launch-criterion-2.py`. M
+  `scripts/launch-gates.sh` (names the helper when `criterion-2-cited` fails), `docs/CLOUD_ROUTINE.md` (step 4.3),
+  `docs/REPOSITORY_STRUCTURE.md` (the script's row), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`
+  (row 17), `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing. On `launch/2.0.0`
+  (`fc7faff`): `master`'s three commits, `CHANGELOG.md` (one section folded), its release checklist (CHECKLIST-2.0,
+  criterion 2), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `19629a7`'s push run `41223529177` (run 14's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.91x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS
+    (3 hardware threads, 2.32x observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `launch/2.0.0` `fc7faff`, dispatched 17:33 UTC: the release dry run `41225115918` **success** (2 min 54 s; four
+    `package` jobs success, each archive checked for its target, its binary's target and commit, and installed the way
+    `INSTALL.md` says; `release` skipped, no tag); `everything` `41225113353`: **18 of 18 jobs success** (3 h 15 min,
+    17:33 → 20:48 UTC) — the four test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+    `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 20 min, the checker 1 h 09 min, the
+    broker **3 h 14 min**, its longest yet — under the 240-minute cap). `actors_pingpong` MEASURED on arm64 (2.89x where the
+    machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3 hardware
+    threads, 2.24x observed); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
+    CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing commit into `launch/2.0.0`, pushed
+    after it (`git log -1 origin/launch/2.0.0`).
+  - `e2354df`'s push run `41225469666` (this entry's first records): 14 jobs success, 2 skipped (22 min);
+    `actors_pingpong` MEASURED on arm64 (2.87x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on the
+    other three (macOS 1.56x observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 91 → 89 GiB, arm64 104 → 91.
+  - On this entry's closing commit: Open / next 1.
+- **Loop engineering:** `scripts/launch-criterion-2.py LABEL [BASE]` measures criterion 2's three on the launch tree,
+  refuses to write unless all three are clean, and appends the sentence in the one shape `criterion-2-cited` reads (runs 8,
+  9, 11, 13 and 15 typed it by hand). `--self-test` (five mutants of its walls, each killed), and three probes on the
+  launch tree: its `--dry-run` printed this run's hand-written line byte for byte; a write appended exactly one sentence
+  and a second call wrote nothing; an example put out of format made it exit 1, writing nothing. `launch-gates.sh` and
+  step 4.3 name it; `HANDOFF.md` §11.5 keeps the lesson (a line a gate reads back is written by a tool).
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-0fcquc`, this session's `claude/peaceful-carson-xmq3m4` and
+  `laptop/sandbox-fault-place` from `origin` once each is in `master`'s history (each checked with `git merge-base
+  --is-ancestor` this run; `claude/peaceful-carson-ubupyf`, which run 14 named, is no longer on `origin`).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a line a gate reads back is written by a tool, not by hand).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only), and record the hash of `launch/2.0.0`'s
+     citations merge that follows it (`git log -1 origin/launch/2.0.0`).
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (the revocation line of D-V2-198, or RW 4.67's allocator window), and
+     the live documents scanned for claims the code has overtaken.
+  3. Keep `launch/2.0.0` current as `master` moves (step 4.3: `scripts/launch-criterion-2.py`, then
+     `scripts/launch-gates.sh`).
+  4. The broker's Miri: `41225113353`'s took **3 h 14 min**, the longest yet (the ten before it 1 h 39 min – 3 h 12 min).
+     If a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h cap turns it red —
+     and the weekly sweep's `everything` (item 2) is the next reading.
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 3.24 (the interpreter's variables resolved to slots) is the largest open user-facing
+     item a VM can build and verify; RW 2.12's last methods (PUT, PATCH, DELETE) only when a program needs one.
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.

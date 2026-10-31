@@ -261,7 +261,8 @@ another OS, and then takes about seven minutes itself (run 5).
   annotation (D-V2-47) — record each OS's verdict; the step before it prints that runner's sandbox
   properties (PS-E-01, D-V2-57) — record those too (a `tail_lines` of about 45 reaches both on a RED run;
   on a green one the cache save follows them, so ask for about 3,000 lines — saved to a file — and grep
-  `##[notice]`, run 4). **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
+  `##[notice]`, run 4). **A failed job with no failed step died with its runner** (on-demand run 9: a full disk): its log
+  answers 404, and its check run's annotations (below) carry the runner's own last words. **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
   VM** — `curl -s https://api.github.com/repos/jessesuniljs1-collab/delululang-test/check-runs/JOB_ID/annotations`
   returns each test job's verdict and properties as JSON, no log at all (a job's id is its check run's); and
   `curl -s ".../actions/runs?per_page=15"` (add `&event=schedule` for the nightly) and `.../actions/runs/ID/jobs` list
@@ -293,13 +294,25 @@ another OS, and then takes about seven minutes itself (run 5).
    Survey's binary there, so an exported `CARGO_TARGET_DIR` elsewhere fails it); `git merge --no-ff origin/master`; fold
    `master`'s new `## Unreleased` CHANGELOG sections into `## [2.0.0]` as `###` entries with `python3 -I
    scripts/launch-changelog.py` (on-demand run 8 — it refuses an order it cannot fold), then judge the 2.0.0 *Breaking*
-   paragraph against each section it lists, by hand; keep both sides of the
-   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
-   rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document
-   gates there (`book`, `core_invariance`, `distribution`, `doctor_cli`, `editor_contract`, `evidence_claims`,
-   `governance`, `release`, `repository_structure`, and `delulu-survey`'s own suite); re-measure CHECKLIST-2.0's criterion 2
-   (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples docs/book/samples`); commit, push
-   the branch, and dispatch `ci.yml` (`jobs=everything`, about 3 h 10 min — the broker's Miri) and `release.yml` at it.
+   paragraph against each section it lists, by hand — a section that moves a surface `STABILITY.md` §1 holds stable (a
+   refused program's code, a command's exit code for an outcome, a JSON field's type or meaning, syntax that parsed) is
+   breaking, though the program stays refused (on-demand run 9: C9's DL0209 → DL0201, C11's exit 2 → 1); keep both sides of the
+   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*`
+   (`git checkout --theirs docs/survey/`); re-measure CHECKLIST-2.0's criterion 2 and write it — `python3 -I
+   scripts/launch-criterion-2.py 'on-demand routine run N'` runs the three, refuses a tree under 100%, and writes the line
+   in the one shape the gate reads (on-demand run 15; runs 8–15 wrote it by hand); then, after the merge's
+   last edit, **`scripts/launch-gates.sh`** (on-demand run 11) — the map rebuilt, `check`, `findings` with its errors
+   counted (the command itself exits 0 whatever it finds), `scripts/clippy.sh` (the hook asks for it on a merge that brings
+   in Rust), `doctor --check`, the document gates (`book`, `core_invariance`, `distribution`, `doctor_cli`,
+   `editor_contract`, `evidence_claims`, `governance`, `release`, `repository_structure`), `delulu-survey`'s own suite,
+   criterion 2's three (`delulu-conform -- --coverage`, `-- --check-reference`, `delulu fmt --check examples
+   docs/book/samples`), that criterion 2's row's newest citation at the count just measured is the merged `master`,
+   or a commit with the same criterion-2 inputs (`criterion-2-cited`, on-demand run 13 — so a merge that brings in code
+   writes the row BEFORE the gates, and a records-only citations merge needs no new line) and `cargo deny` (criterion 4) — ending `LAUNCH-GATES=ok` only when every one ran and passed, with a
+   note saying whether the merged tree's Rust is `master`'s. **Judge the *Breaking* paragraph against 1.x itself** (run
+   11): `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH` — RW 4.79's order (the daemon's custody asked before the
+   capability) was already 1.x's, so its code move is breaking. Commit, push the branch, and dispatch `ci.yml`
+   (`jobs=everything`, about 3 h 10 min — the broker's Miri) and `release.yml` at it.
    Never the reverse merge. Then `git worktree remove` it and delete its target
    (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free). **Under about 15 GB free,
    delete `master`'s `target/debug` before the launch build** (on-demand run 5: the launch build took 13 GB down to 3 GB
@@ -398,9 +411,17 @@ lints only the targets named — about two minutes for one, against seven for al
 first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that
 does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
 kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
+**A mutant's witnesses in several targets take one command** (on-demand run 10): libtest takes several name filters —
+`cargo test -p delulu --test broker_cli --test guard_e2e -- NAME_A NAME_B` — fifteen mutants so took about 45 minutes.
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
+**A scan of a process's memory waits where the program allocates nothing** (on-demand run 12, RW 4.67): a copy freed on
+the run's own thread is overwritten by its next allocation, so a scan made during a second request missed one a mutant
+left (M968); scanned while the program blocked in `console.readline`, it was red 3 of 3. Count a fragment as well as the
+whole, read only resident pages (`/proc/PID/pagemap` — a whole-mapping scan of a debug build took 34 s), and keep a
+mutant's binary for by-hand probes with `MUTANTS_KEEP=DIR scripts/mutants.py …` rather than a stash (one `git stash drop`
+took the fix with the mutant).
 **A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
 `target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
 the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
@@ -448,7 +469,7 @@ design — record it so, then remove BOTH in one mutant (`scripts/mutants.py` ta
 witness can fail at all. A wall no double mutant can reach is dead code (run 18, M222).
 **A witness of a normalizing comparison spells the colliding pair both ways round** (run 23, M351: `Accept` then `accept`
 let a mutant that compared the WRITTEN name live; the non-canonical spelling must be the one the comparison reads).
-**A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
+**A measurement that comes back clean is re-asked in the shape that failed** (on-demand run 14): RW 4.53's contention numbers were clean on the current binary, and the red team's F4 — the chain HELD, requests queued — still answered DL1401 at 15 s. Re-run every shape a row's history names before closing it; and a witness of an ORDER places every member it is about (M970, the quarantine left out of the lane, survived a witness that placed only the e-stop). `scripts/estop-measure.py BIN DIR contention N` and `… held Q` time the e-stop in both of RW 4.53's shapes. **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
 `git revert` it in a commit of its own — a dispatch records its SHA when it is created, so the next commit may follow at once
@@ -581,6 +602,9 @@ refuses a deletion, name the branch in *Open / next* for the laptop.
   fires ended in seconds on `rate_limit: rejected (five_hour)`.
 - **The VM's limits (official docs):** 4 vCPUs, 16 GB, 30 GB; a command waits 2 minutes by default and
   at most 10, then moves to the background — run the suite in the background and poll its output file.
+  **A fresh VM had 13 GB free** (on-demand run 10): the setup snapshot holds a 16 GB `target/`, and a full suite beside it
+  died at link (`scripts/suite.sh` now says `DISK-FULL:`); under about 20 GB free, delete `target/` whole before the suite —
+  a clean build fits in the 28 GB that leaves.
   **The disk fills** (run 6): `scripts/check-other-os.sh` leaves about 3.6 GB of cross builds in `target/<triple>`, and
   incremental caches reach about 7 GB after a few suites — run 6's fourth suite died on ENOSPC. `df -h /` before a suite;
   delete `target/<triple>` after the lint; run suites with `CARGO_INCREMENTAL=0`. A dependency change re-hashes every

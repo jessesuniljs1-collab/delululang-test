@@ -45,11 +45,14 @@ pub fn enter_vm_guest_mode() {
     GUEST.store(true, Ordering::SeqCst);
 }
 
-/// The system allocator, with the guest's ceiling ending described above.
+/// The system allocator, with the guest's ceiling ending described above — and the scrubbing of every block freed
+/// while a secret's bytes are in this process (RW 4.67, `delulu_runtime::scrub`).
 pub struct CeilingAware;
 
-// SAFETY: every method forwards to `System` with the caller's arguments unchanged; the only addition
-// is what happens after a null result, which never returns in guest mode.
+// SAFETY: every method forwards to `System` with the caller's arguments unchanged; the additions are what
+// happens after a null result, which never returns in guest mode, and — while a secret's bytes are in this
+// process (RW 4.67) — a freed block zeroed before it is freed, and a grown block moved by `alloc`, a copy and
+// `dealloc` (the trait's own default `realloc`) rather than by the system's.
 unsafe impl GlobalAlloc for CeilingAware {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // SAFETY: forwarded as received.
@@ -62,11 +65,32 @@ unsafe impl GlobalAlloc for CeilingAware {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        // RW 4.67: while a secret's bytes are in this process, a block that grows is never left behind uncleared. The
+        // system's `realloc` may move it and free the old block as it stands, so it is moved here: copied, then freed
+        // through `dealloc`, which zeroes it first.
+        if delulu_runtime::scrub::is_open() {
+            // SAFETY: `GlobalAlloc::realloc`'s contract — `new_size`, rounded up to the block's alignment, does not
+            // overflow, so this layout is valid; and the old block is valid for `layout.size()` bytes until it is freed.
+            unsafe {
+                let moved = self.alloc(Layout::from_size_align_unchecked(new_size, layout.align()));
+                if !moved.is_null() {
+                    std::ptr::copy_nonoverlapping(ptr, moved, layout.size().min(new_size));
+                    self.dealloc(ptr, layout);
+                }
+                return moved;
+            }
+        }
         // SAFETY: forwarded as received.
         refused_ends_a_guest(unsafe { System.realloc(ptr, layout, new_size) })
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // RW 4.67: a block freed while a secret's bytes are in this process is zeroed first, whoever freed it
+        // (`delulu_runtime::scrub`) — reqwest's, hyper's and the custody's buffers among them.
+        if delulu_runtime::scrub::is_open() {
+            // SAFETY: the block is the caller's to free, so it is valid for writes of its whole size.
+            unsafe { delulu_runtime::scrub::wipe(ptr, layout.size()) };
+        }
         // SAFETY: forwarded as received.
         unsafe { System.dealloc(ptr, layout) }
     }

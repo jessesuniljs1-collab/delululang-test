@@ -320,7 +320,7 @@ mod tests {
     fn program() -> Program {
         let text = "module p\n\nfn main(root: Root) {\n}\n".to_string();
         let hash = blake3::hash(text.as_bytes()).to_hex().to_string();
-        Program { program: text, hash, seed: 1, fixed_clock_ms: None }
+        Program { program: text, hash, seed: 1, fixed_clock_ms: None, name: String::new() }
     }
 
     /// Run a scripted guest on the other end: it reads the `Open` frame, then does `act` with the channel.

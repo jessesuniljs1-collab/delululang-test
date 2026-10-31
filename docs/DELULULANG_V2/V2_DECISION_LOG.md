@@ -5171,3 +5171,182 @@ root-causing a once-seen macOS red (RW 7.25) whose message held no evidence.
   `an_arming_is_answered_with_the_hearing_clock_listening`.
 - Mutants M908 to M915 are each red, M914 by the handler test written for it. The runners: macOS `40958776212`, Windows
   `40958779882`, with every `delulu` test target.
+
+## D-V2-195 — RW 4.79: a use the program's own capability refuses is judged before its custody is asked, and the chain records it refused (`refused_by: capability`), never allowed — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Question.** A capability may hold less than its node: a directory narrowed under the node's, one host of the node's, a
+path or a method fewer. Every gate that asks a custody (the interpreter's, a sandboxed guest's host's, the WASM host's)
+asked it first, against the node's grant, and the effect then judged the capability. What should the chain say about a
+call the capability refuses, and who answers it first?
+
+**What it was.** Measured on `658daf1` by on-demand routine run 10, under `--broker daemon`: each of seven such calls —
+`write_text`, `append_text`, `get`, `get_with`, `post`, `get_with_secret`, `post_with_secret` — left a `use allow` in the
+chain on every route that ran it, then faulted DL0904: nineteen allowed uses that never happened (three routes for five calls, two for the two that carry a broker-held secret, which a guest's channel cannot). A write neither the
+capability nor the node allows left the custody's own `deny`. Under a lease with a Guard rule on reads, a read beside its
+capability's directory was asked of the Guard: a `guarded` rule refused it DL1410 and told the agent to request a permit
+for a read its capability can never make, and a `warn` rule printed its warning and recorded `guard_warn` `allow`.
+
+**Options.**
+- (a) Judge the capability first and record nothing (the row's first sketch). Rejected: the write neither allows is
+  recorded `deny` today, and an out-of-band monitor's `denies=N/MS` rule (P8-04, D-V2-100) counts it — a program probing
+  `../../` would leave the chain.
+- (b) Keep the custody first and append an overriding `deny` after its `allow`, as RW 4.46 (egress) and P8-04 (an
+  envelope) do. Rejected: those refusals are made after the custody by a party that needs what it answered (where the
+  name resolved, the command's magnitudes); a capability's verdict needs nothing from the custody, so the `allow` would
+  record a decision that was never needed, and a Guard would still be asked about a use that cannot happen.
+- (c) **Chosen:** the capability first, on every gate, and the custody TOLD its refusal.
+
+**Decision.**
+- `prim::capability_refusal` is the effect's own rule — `resolve_in_anchor` for a file, `url_verdict` for a request — in
+  the effect's own words, judged before the custody and performing nothing. The gate refuses the call with it and does
+  not ask the custody; a guest's handle carries no scope and is judged by the host that holds the capability. A URL that
+  is not `https://` is still answered `Refused`, a value, with no use asked (HTTP-SCHEME-1).
+- The custody is told: `Custody::note_capability_refusal` (a no-op by default; embedded custody keeps no chain). Under
+  the daemon the broker records one `use` `deny` at the argument the use would have been asked about, naming
+  `refused_by: capability`, `code: DL0904`, a machine-readable `reason` (`outside-scope`, `hostile-path`, `other-host`,
+  `outside-path`, `other-method`, `ambiguous-path`) and, for a network use, its `url_path` and a method other than GET, as
+  the broker's own record of a use names them. Never the request's words: a URL's query is in no record (D-V2-169).
+- Recorded exactly where a use of its class is: every synchronous-class use (a write, a request), and an epoch-class use
+  (a read) only where a Guard rule makes it round-trip. An ungated read its capability refuses is recorded by no one, as
+  an ungated read is.
+- The wire: `CapabilityRefused`, an additive `broker/1` request. A record lost to a held chain lock is answered DL1401,
+  never `Recorded` (RW 4.61's rule), and the client says once on standard error that the chain lacks it; an op the broker
+  does not know is refused in words, nothing recorded.
+- The WASM host asks it between ARTIFACT-CLAIM-1's declared-effects ceiling and the custody, so an artifact's undeclared
+  effect is refused DL1202 first, as before.
+- The effect keeps its own check after the custody. A link swapped in after the capability's judgment is refused at the
+  open (FS-RACE-1, RW 4.72) — `a_narrowed_directory_swapped_for_a_link_reads_nothing_outside` still swaps it.
+
+**Not changed.** What runs and what is refused: every call refused before is refused now, and none refused now ran before.
+The custody's own judgment of a use the capability allows, the Guard's, and their records. The trace (the dispatch, then
+`<op>.refused`, RW 4.62), byte for byte on both engines. Authority and the Guard mean what they meant: this hardens the
+chain's account of them.
+
+**What moves, for the 2.0.0 *Breaking* judgment.** A call its capability refuses is refused DL0904 under every custody.
+Under the daemon, a Guard rule's DL1410–DL1413, or a revoked or expired node's DL0801/DL1402/DL1403, could answer such a
+call first; now the capability's DL0904 does, and the custody's code answers the next call the capability allows. The
+chain's record of such a call is `deny` with `refused_by: capability` (was `allow`, `guard_warn` or `guard_block`).
+STABILITY.md §1 promises a refused program's code for the typing, effect and authority rules of `docs/reference`, which
+name no order between a capability and its custody; the move is named in CHANGELOG all the same, for the merge into
+`launch/2.0.0` to judge.
+
+**Evidence.** `broker_cli` `a_use_its_capability_refuses_is_recorded_refused_and_never_allowed` (eight calls and an
+ungated read, on the interpreter, the WASM engine and a sandboxed guest) and `guard_e2e`
+`a_guarded_read_its_capability_refuses_is_refused_by_the_capability_never_the_guard` (both tiers, both engines), each read
+red on `658daf1` first; the broker's and the daemon's unit tests; mutants M946–M960 (V2_LOG, on-demand routine run 10).
+
+## D-V2-196 — RW 4.67: while a secret's bytes are in the process for a send, the `delulu` binary's allocator zeroes every block it frees, so a sent secret leaves no copy behind — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** Under the daemon a secret's bytes enter the program process only to be sent: the broker hands them to the
+egress client for one origin (D-V2-134). Routine run 25's red team (F4) found one copy of the plaintext in the run's heap
+after the send, until exit. On-demand routine run 12 read it again on `9553ab7` by scanning the run's memory through
+`/proc` while it waited after the send: one copy, `…on: hunter2-…` — the serialized request's `authorization` header — in
+the arena of reqwest's runtime thread, on the interpreter and on the WASM engine alike. The copies are made by code that
+is not ours (the custody's answer as it is read and parsed, `reveal`'s copy, each header the egress client builds,
+reqwest's `HeaderValue`, hyper's head buffer) and each buffer is freed as it stands. No call site can clear a buffer it
+never sees; zeroing our own copies alone would have left hyper's.
+
+**Decision.**
+1. **A window, and the allocator's rule.** `delulu_runtime::scrub::Window` counts, process-wide, the sends whose bytes
+   are in this process. While one is open, the `delulu` binary's global allocator (`ceiling::CeilingAware`) zeroes every
+   block before it frees it — on every thread, because the request is made on reqwest's — and moves a block that grows
+   by `alloc`, a copy and that same `dealloc`, never by the system's `realloc`, which may free the old block as it stands.
+   Outside a window the cost is one atomic load per free.
+2. **Two windows cover a send.** One while the custody is asked for the bytes (`interp::broker_secret_send`, both
+   engines: the answer is read and decoded into buffers freed as it goes); one around every request that carries a
+   secret (`prim`'s request arm, under any custody), which closes only after the request's client has been dropped and
+   its runtime thread joined. Between the two the bytes live in one `SecretVal`, which zeroes its own buffer as it is
+   dropped (P17-F).
+3. **What it is not.** The rule is the `delulu` binary's: a program embedding `delulu-runtime` under another allocator
+   gets no scrubbing. It clears what is freed, not what is held — the embedded custody holds every secret's bytes in the
+   process for the whole run by design, and there the window clears only the send's own copies. A sandboxed guest is
+   never handed a secret (DL1401), so its host's send is not a case.
+4. **Not taken:** zeroing only our own copies (hyper's head buffer is out of reach — it is the copy run 25 found); a
+   zero-on-every-free allocator (a memset on every free of every program for a residue that exists only during a send);
+   the broker making the request itself (the serial daemon would wait on the network — RW 4.53 — and D-V2-197 says what
+   it would not buy).
+
+**Evidence.** `broker_cli` `a_sent_secret_leaves_no_copy_of_its_bytes_in_the_run_once_its_request_is_done`, over real TLS
+(a server presenting a certificate only `SSL_CERT_FILE` vouches for) under `--broker daemon`, on the interpreter (scanned
+while the program waits on standard input, which allocates nothing) and the WASM engine (scanned in a held second
+request): red on `9553ab7` — `[([], Ok(10), Ok(1)), (["--engine", "wasm"], Ok(13), Ok(1))]`, one copy each beside the
+control's count — and green with the fix; two controls in it (the server saw the secret arrive; the scan finds the
+program's own path). Four concurrent copies of the test binary green. By hand with a 46- to 8,186-byte secret: the
+unscrubbed binary left up to six partial copies, the fixed one none. Mutants: see V2_LOG (on-demand routine run 12).
+
+## D-V2-197 — RW 4.66: a raw `SendSecret` from a caller of the broker's own user stays answered — the socket admits exactly whom the state directory admits, and the directory holds every secret in plaintext — DECIDED, a residual named in `docs/DEPLOYMENT.md` §5 — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** Routine run 25's red team (F3): a raw `SendSecret` naming a node returns the bytes to any caller of the
+socket, though the node holds no `Declassify` and `Expose` would refuse it; the broker cannot tell the run's egress
+client from another process of the operator's user. The row proposed binding a send to the run that redeemed the node
+(the peer credential of the connection), or handing the egress client a one-use sealed token instead of the bytes.
+
+**What was measured** (on-demand routine run 12, Linux): the socket lives in the state directory, which the broker
+makes `0700` (`broker_transport.rs`), beside `broker.key` (`0600`) and `secrets.json` (`0600`), whose JSON holds each
+secret's bytes in plaintext (`{"API_TOKEN": "hunter2-…"}`, read back with `cat` as the same user). On Windows the pipe
+admits only the broker's own user (an owner-only DACL, then the client's SID compared), the user whose directory it is.
+So every caller that can send `SendSecret` can read every secret, and the broker's key, without asking anything.
+
+**Decision.** No change to the broker's answer; RW 4.66 is closed as a decided residual of the same-user boundary,
+which Tiers 0 and 1 do not contain and Tier 2 does (`docs/DEPLOYMENT.md` §5 now says so in these words).
+- **The peer binding is not taken.** A caller that can reach the socket can read the lease token the run was handed (it
+  is on the run's command line, `--lease TOKEN`) and redeem it itself, and so be the peer the binding names; it can read `secrets.json` in any case. A check that protects
+  nothing the caller cannot take another way would read as a boundary that is not there.
+- **The sealed token is not taken.** Something in the program process must put the bytes on the wire; only the broker
+  making the request itself would keep them out of it — a redesign of the serial daemon around network waits (RW 4.53)
+  that would still leave the same caller its `cat`.
+- **The one same-user process that cannot read the directory cannot reach the socket either:** a sandboxed guest opens
+  no new socket (seccomp, GUEST-SOCKET-1, D-V2-61), is refused the state directory and every network but its channel on macOS
+  (Seatbelt, T14), and on Windows runs as a per-run AppContainer with no network and none of the operator's files
+  (PS-B-03, T14). What separates a program's account from the custody is a
+  second account (Tier 2): it reaches neither the socket nor the directory.
+- **Revisit** if the secret store is ever sealed against its own user (a key the user's processes cannot read): then
+  the socket would be the weaker door, and the binding worth building.
+
+## D-V2-198 — ESTOP-QUEUE-1 (RW 4.53): a revocation — the operator's e-stop, a monitor's quarantine — is handled before every request waiting at the broker daemon, and dead-men are judged as of the earliest arrival still waiting — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** The daemon is serial: one handler touches custody, in the order whole requests are handed to it (RW 4.40).
+A request that records takes the audit chain's append lock and waits for it up to 5 s while another writer — a sandboxed
+run's host, a CLI command — holds it (RW 4.48; one wait per request since RW 4.58's rest). Routine run 18's red team (F4)
+saw an e-stop behind four queued requests answer `did not answer within 15s` while the revoke landed at ~25 s; RW 4.53
+recorded it and the chain-length half was fixed by D-V2-159 and D-V2-160. On-demand routine run 14 re-measured on
+`0ebbc15`: beside 12 sandbox loops the revoke took 22 ms median, 49 ms max (control 29 / 50 ms) — the contention is gone —
+but with the chain HELD, F4's shape still held: `grants revoke` behind four queued mints answered DL1401 at 15.18 s with
+"start it with `delulu broker start`", and the node was revoked about 25 s after the pull. Devices park themselves after
+1 s of broker silence (DEADMAN-1), so the machine fails safe; the operator was told the e-stop failed, wrongly, and why.
+
+**Decision.**
+1. **A revocation goes first.** `ReqBody::is_revocation` (`Revoke`, `Quarantine`). A reader thread hands a revocation to
+   the serve loop on its own bounded line and then a wake on the ordinary line (`try_send`: a full line needs none — the
+   handler is not waiting, and reads the revocation line before its next request). The handler stays serial and alone in
+   touching custody; it reads the revocation line first. A revocation now waits for the request being handled and no
+   other: on the same held chain the e-stop answered in 9.81 s, `ok: revoked`, its record said lost (RW 4.58).
+2. **Overtaking only narrows.** A request a revocation overtakes is decided after it, against less authority: a mint or
+   delegation under the revoked node is refused instead of minted and revoked; a use under it is denied; a refusal record
+   needs only that its node exists (`record_*_refusal`), so none is lost; a `Shutdown` that arrived first no longer
+   swallows the e-stop.
+3. **Dead-men are judged as of the EARLIEST arrival still waiting** — the requests already handed over sit in a bounded
+   `waiting` line, in order — never as of a revocation's own arrival when it goes first: a beat that arrived in time and
+   waits behind a held request keeps its dead-man (DEADMAN-BUSY-1, D-V2-127, kept).
+4. **A broker that accepted a request and did not answer it in time is said to be running.** Every DL1401 site
+   (`grants`, `guard`, a lease run, the daemon custody) and `broker status`, `stop`, `rotate-key` point at `broker.log`,
+   which names each late answer (RW 7.17), instead of "start it" / "not running" / "nothing to stop". No new code; exit
+   codes and `broker status --json` unchanged.
+5. **Not taken:** a second handler for revocations (custody has one writer by design); not waiting for a revocation's
+   record on a held chain (RW 4.58 keeps the record whenever the chain frees within its wait — and a device parks after
+   1 s of silence anyway); remembering a held chain across requests so later ones fail at once (it would refuse
+   synchronous operations a short contention would have recorded).
+
+**Residual.** On a held chain each request, a revocation included, still waits its own 5 s, so several revocations at
+once are answered one after another; a continuous stream of revocations is served before everything else and holds
+dead-men to the earliest waiting arrival while it lasts — a stream only a process of the broker's own user can send
+(RW 4.4). Behind more than 64 waiting requests a reader's hand-over still waits for room, as before.
+
+**Evidence.** `brokerd` unit tests: `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`
+(the chain held while four mints queue, then a revoke and a quarantine; the chain's own seqs say the order — red on
+`0ebbc15`: mints at 4–7, the revoke at 8, the quarantine at 9),
+`a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man`,
+`a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Mutants M969 (revocations
+in the ordinary line: the old behaviour), M970 (the quarantine left out), M971 (dead-men judged by the revocation's own
+arrival), M972 (no wake: an idle daemon left eight tests' revocations unanswered), M973/M973a/M973b (the words): all red,
+control green. By hand (`f4.py`, F4's shape): 15.18 s DL1401 before, 9.81 s revoked after. The code is `294ddfa`.

@@ -25,12 +25,13 @@ use crate::brokerd;
 
 /// The exact fail-closed message every unreachable-broker denial carries (invariant 27).
 fn dl1401(detail: &str) -> CustodyDenial {
+    let detail = crate::cli::broker_unreachable_detail(&detail);
     CustodyDenial::new(
         "DL1401",
         format!(
-            "broker unreachable: {} — start it with `delulu broker start` \
-             (fail closed, invariant 27: effectful ops never fall back to embedded custody)",
-            crate::cli::broker_unreachable_detail(&detail)
+            "broker unreachable: {detail} — {} (fail closed, invariant 27: effectful ops never fall back to embedded \
+             custody)",
+            crate::cli::broker_unreachable_advice(&detail)
         ),
     )
 }
@@ -618,6 +619,45 @@ impl Custody for BrokerClientCustody {
                 "warning: the broker did not record a refused command of `{}` ({}) — the command was \
                  refused all the same; the audit chain lacks this refusal",
                 delulu_diag::terminal_line(device),
+                delulu_diag::terminal_line(&failure)
+            );
+        }
+    }
+
+    /// RW 4.79: the program's own capability refused this use before the broker was asked — one `CapabilityRefused`
+    /// round-trip, where a use of this class is recorded and nowhere else: every synchronous-class use, and an epoch-class
+    /// one only where a Guard rule makes it round-trip (`check_at`); an ungated read is decided on the cached snapshot and
+    /// recorded by no one. Best-effort, and said once on standard error when the broker could not record it.
+    fn note_capability_refusal(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>, reason: &str) {
+        if op.class() == OpClass::Epoch {
+            if !self.cache_is_fresh() && self.refresh_cache().is_err() {
+                return;
+            }
+            if !self.op_is_guarded(op) {
+                return;
+            }
+        }
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::CapabilityRefused {
+                node: self.node.as_str().to_string(),
+                op: op.wire_name().to_string(),
+                target: arg.map(str::to_string),
+                url_path: url_path.map(str::to_string),
+                method: method.map(str::to_string),
+                reason: reason.to_string(),
+            },
+        );
+        let failure = match resp {
+            Ok(Response::Recorded { .. }) => return,
+            Ok(Response::Error { code, message, .. }) => format!("{code}: {message}"),
+            Ok(other) => format!("unexpected answer {other:?}"),
+            Err(d) => format!("{}: {}", d.code, d.message),
+        };
+        if !std::mem::replace(&mut self.refusal_unrecorded_said, true) {
+            eprintln!(
+                "warning: the broker did not record a use its capability refused ({}) — the use was refused all the \
+                 same; the audit chain lacks this refusal",
                 delulu_diag::terminal_line(&failure)
             );
         }

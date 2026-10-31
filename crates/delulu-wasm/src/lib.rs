@@ -973,18 +973,29 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A read on the WASM engine asks the custody in the interpreter's order — the dispatch, the custody's question about
-    /// the path the read would open, then the scope — so a read the scope refuses asks the same question on both engines
-    /// before its DL0904 (the red-team pass of on-demand routine run 5, F1: the WASM read checked the scope first, with a
-    /// copy of the rule, and never asked).
+    /// A read on the WASM engine meets its custody in the interpreter's order and words — the dispatch, then the capability's
+    /// own scope (RW 4.79), and a read the scope refuses is never asked of the custody: both engines tell it the refusal,
+    /// once, with the same path and reason, before the same DL0904. (The red-team pass of on-demand routine run 5, F1: the
+    /// WASM read checked the scope with a copy of the rule and said nothing to the custody, where the interpreter asked it;
+    /// until RW 4.79 both engines asked it to allow the read first.)
     #[test]
-    fn a_read_asks_the_custody_before_its_scope_as_the_interpreter_does() {
+    fn a_read_its_scope_refuses_is_said_to_the_custody_never_asked_as_the_interpreter_does() {
         type Asked = std::rc::Rc<std::cell::RefCell<Vec<(String, Option<String>)>>>;
         struct Recording(Asked);
         impl delulu_runtime::Custody for Recording {
             fn check(&mut self, op: delulu_runtime::Op, arg: Option<&str>) -> delulu_runtime::CustodyDecision {
                 self.0.borrow_mut().push((format!("{op:?}"), arg.map(str::to_string)));
                 delulu_runtime::CustodyDecision::Allow
+            }
+            fn note_capability_refusal(
+                &mut self,
+                op: delulu_runtime::Op,
+                arg: Option<&str>,
+                _url_path: Option<&str>,
+                _method: Option<&str>,
+                reason: &str,
+            ) {
+                self.0.borrow_mut().push((format!("{op:?} refused: {reason}"), arg.map(str::to_string)));
             }
             fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
                 Err(delulu_runtime::CustodyDenial::new("DL0904", "no secrets in this fake"))
@@ -1029,9 +1040,12 @@ mod tests {
         let words = "path `../outside.txt` escapes the granted scope";
         assert!(w.contains("DL0904") && w.contains(words), "{w}");
         assert!(format!("{i:?}").contains("DL0904") && format!("{i:?}").contains(words), "{i:?}");
-        let reads = |a: &Asked| a.borrow().iter().filter(|(op, _)| op == "FsRead").cloned().collect::<Vec<_>>();
-        assert_eq!(reads(&on_interp).len(), 1, "the interpreter asks once: {:?}", on_interp.borrow());
-        assert_eq!(reads(&on_wasm), reads(&on_interp), "the same question on both engines, before the scope's refusal");
+        let reads = |a: &Asked| a.borrow().iter().filter(|(op, _)| op.starts_with("FsRead")).cloned().collect::<Vec<_>>();
+        let said = reads(&on_interp);
+        assert_eq!(said.len(), 1, "the interpreter says it once, and asks nothing: {:?}", on_interp.borrow());
+        assert_eq!(said[0].0, "FsRead refused: outside-scope", "{said:?}");
+        assert!(said[0].1.as_deref().is_some_and(|p| p.ends_with("outside.txt")), "{said:?}");
+        assert_eq!(reads(&on_wasm), said, "the same words on both engines, before the scope's refusal");
     }
 
     /// RW 4.72 on the WASM engine (the red-team pass of on-demand routine run 5, F2): a narrowed handle is anchored where

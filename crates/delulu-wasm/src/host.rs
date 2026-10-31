@@ -335,11 +335,11 @@ impl HostState {
     /// carried from Stage 3/4): the runner surfaces the refusal cleanly after the call, exactly
     /// like the Stage-3 console/fs refusals. `None` custody (embedded) always allows.
     fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
-        self.custody_allows_at(op, arg, None)
+        self.use_allows(op, arg, None, None, None)
     }
 
     /// ARTIFACT-CLAIM-1's ceiling: whether a `.dwx`'s manifest declares `effect` (always, for a program compiled here). A
-    /// refusal is recorded (DL1202) and `false` returned. Asked by [`HostState::custody_allows_at`] of every custody op, and
+    /// refusal is recorded (DL1202) and `false` returned. Asked by [`HostState::use_allows`] of every custody op, and
     /// directly of an effect the host performs with no custody op, as the interpreter does (`Secret.verify`'s `Declassify`).
     fn declared_allows(&mut self, effect: &str) -> bool {
         let Some(declared) = &self.declared_effects else { return true };
@@ -354,15 +354,20 @@ impl HostState {
         false
     }
 
-    /// [`HostState::custody_allows`] for a network use naming its request path (P9-05, D-V2-169): the custody judges it
-    /// and names it in the use's record, as the interpreter's gate does.
-    fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
-        self.custody_allows_by(op, arg, url_path, None)
-    }
-
-    /// [`HostState::custody_allows_at`] by a network use's HTTP method when it is not a GET (P9-05 (d), D-V2-183: `post`),
-    /// judged and recorded beside the path, as the interpreter's gate asks it.
-    fn custody_allows_by(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> bool {
+    /// [`HostState::custody_allows`] for a use the program's own capability is asked about first (RW 4.79), as the
+    /// interpreter's gate asks it — between the artifact's declared effects and the custody. A use `refused` names (the
+    /// capability's verdict, `prim::fs_scope_refusal` or `prim::net_scope_refusal`) is refused in the effect's words and
+    /// said to the custody, whose chain records it refused, never allowed; the custody is not asked. Otherwise the custody
+    /// judges it — a network use by its request path (P9-05, D-V2-169) and its method when it is not a GET (P9-05 (d),
+    /// D-V2-183: `post`), each named in the use's record.
+    fn use_allows(
+        &mut self,
+        op: CustodyOp,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        refused: Option<delulu_runtime::prim::CapabilityRefusal>,
+    ) -> bool {
         // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
         // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
         // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
@@ -370,6 +375,13 @@ impl HostState {
             if !self.declared_allows(effect.name()) {
                 return false;
             }
+        }
+        if let Some(r) = refused {
+            if let Some(custody) = &self.custody {
+                custody.borrow_mut().note_capability_refusal(op, arg, url_path, method, r.reason);
+            }
+            self.refused = Some(format!("{}: {}", r.fault.code, r.fault.message));
+            return false;
         }
         let Some(custody) = &self.custody else { return true };
         match custody.borrow_mut().check_at(op, arg, url_path, method) {
@@ -646,7 +658,9 @@ fn send_with_secret(
     let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
     if let Some(h) = &host {
         let url_path = delulu_runtime::prim::request_path(&url);
-        if !caller.custody_allows_by(CustodyOp::Net, Some(h), Some(url_path), verb) {
+        let refused =
+            delulu_runtime::prim::net_scope_refusal(&url, verb.unwrap_or("GET"), &allow, delulu_diag::Span::new(0, 0, 0));
+        if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), verb, refused) {
             caller.data_mut().push_refusal_trace("Net", method, "Http", file, start, end);
             return 0;
         }
@@ -1519,7 +1533,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
                 };
-                if !caller.custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                let refused = delulu_runtime::prim::fs_scope_refusal(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0));
+                if !caller.use_allows(CustodyOp::FsRead, Some(&resolved_str), None, None, refused) {
                     caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                     return 0;
                 }
@@ -1601,7 +1616,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
                 };
-                if !caller.custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                let refused = delulu_runtime::prim::fs_scope_refusal(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0));
+                if !caller.use_allows(CustodyOp::FsRead, Some(&resolved_str), None, None, refused) {
                     caller.data_mut().push_refusal_trace("Read", "list_dir", "FsRead", file, start, end);
                     return 0;
                 }
@@ -1711,7 +1727,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
                 if let Some(h) = &host {
                     let url_path = delulu_runtime::prim::request_path(&url);
-                    if !caller.custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
+                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "GET", &allow, delulu_diag::Span::new(0, 0, 0));
+                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), None, refused) {
                         caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
                         return 0;
                     }
@@ -1791,7 +1808,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
                 if let Some(h) = &host {
                     let url_path = delulu_runtime::prim::request_path(&url);
-                    if !caller.custody_allows_by(CustodyOp::Net, Some(h), Some(url_path), Some("POST")) {
+                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "POST", &allow, delulu_diag::Span::new(0, 0, 0));
+                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), Some("POST"), refused) {
                         caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
                         return 0;
                     }
@@ -1867,7 +1885,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
                 if let Some(h) = &host {
                     let url_path = delulu_runtime::prim::request_path(&url);
-                    if !caller.custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
+                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "GET", &allow, delulu_diag::Span::new(0, 0, 0));
+                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), None, refused) {
                         caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
                         return 0;
                     }
@@ -2164,7 +2183,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
                 };
-                if !caller.custody_allows(CustodyOp::FsWrite, Some(&at)) {
+                let refused = delulu_runtime::prim::fs_scope_refusal(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0));
+                if !caller.use_allows(CustodyOp::FsWrite, Some(&at), None, None, refused) {
                     caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
                     return 0;
                 }
@@ -2669,8 +2689,14 @@ trait Refuse {
     /// Place the refusal a check just recorded, when it refused.
     fn placed(&mut self, allowed: bool) -> bool;
     fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool;
-    fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool;
-    fn custody_allows_by(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> bool;
+    fn use_allows(
+        &mut self,
+        op: CustodyOp,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        refused: Option<delulu_runtime::prim::CapabilityRefusal>,
+    ) -> bool;
     fn declared_allows(&mut self, effect: &str) -> bool;
 }
 
@@ -2696,12 +2722,15 @@ impl Refuse for Caller<'_, HostState> {
         let allowed = self.data_mut().custody_allows(op, arg);
         self.placed(allowed)
     }
-    fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
-        let allowed = self.data_mut().custody_allows_at(op, arg, url_path);
-        self.placed(allowed)
-    }
-    fn custody_allows_by(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>, method: Option<&str>) -> bool {
-        let allowed = self.data_mut().custody_allows_by(op, arg, url_path, method);
+    fn use_allows(
+        &mut self,
+        op: CustodyOp,
+        arg: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        refused: Option<delulu_runtime::prim::CapabilityRefusal>,
+    ) -> bool {
+        let allowed = self.data_mut().use_allows(op, arg, url_path, method, refused);
         self.placed(allowed)
     }
     fn declared_allows(&mut self, effect: &str) -> bool {

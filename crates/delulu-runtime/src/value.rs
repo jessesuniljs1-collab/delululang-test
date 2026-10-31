@@ -986,8 +986,9 @@ impl Drop for SecretVal {
         //
         // Still honest about the limit: this zeroes the CURRENT allocation only. Any earlier
         // buffer left behind by a `String` reallocation, and any copy made by `reveal`, is not
-        // reachable from here and is not zeroed. Zeroization bounds exposure; it does not
-        // eliminate it.
+        // reachable from here. RW 4.67 (D-V2-196) clears those where they matter most — while a
+        // send's bytes are in the process, the `delulu` binary's allocator zeroes every block it
+        // frees (`crate::scrub`) — but zeroization bounds exposure; it does not eliminate it.
         if let SecretInner::Local(v) = &self.inner {
             let mut v = v.borrow_mut();
             // SAFETY: writing 0 preserves the UTF-8 invariant (NUL is valid UTF-8), and the
@@ -1057,6 +1058,8 @@ pub type Env = Rc<Scope>;
 pub struct Scope {
     vars: RefCell<Vars>,
     parent: Option<Env>,
+    /// LATE-LET-1: a closure was made over this scope, or over one inside it ([`Scope::hold`]).
+    held: std::cell::Cell<bool>,
 }
 
 /// How many bindings a scope finds by comparing names before it keeps an index (A14).
@@ -1145,10 +1148,24 @@ impl fmt::Display for Name {
 
 impl Scope {
     pub fn root() -> Env {
-        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: None })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: None, held: std::cell::Cell::new(false) })
     }
     pub fn child(parent: &Env) -> Env {
-        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: Some(parent.clone()) })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: Some(parent.clone()), held: std::cell::Cell::new(false) })
+    }
+    /// LATE-LET-1: a closure is being made over this scope. It reads its names here and in every scope above, for as long
+    /// as it lives, and the checker resolved each of them where the closure was written — so a `let` made in any of these
+    /// scopes from now on must bind in a scope of its own ([`Scope::is_held`]), or the closure would read it.
+    pub fn hold(&self) {
+        let mut scope = Some(self);
+        // A scope already held had every scope above it held at the same time.
+        while let Some(s) = scope.filter(|s| !s.held.replace(true)) {
+            scope = s.parent.as_deref();
+        }
+    }
+    /// Does a closure read this scope ([`Scope::hold`])?
+    pub fn is_held(&self) -> bool {
+        self.held.get()
     }
     pub fn define(&self, name: &str, value: Value) {
         let old = self.vars.borrow_mut().put(name, value);

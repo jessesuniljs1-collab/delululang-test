@@ -327,6 +327,11 @@ pub struct Program {
     pub hash: String,
     pub seed: u64,
     pub fixed_clock_ms: Option<i64>,
+    /// The program's file name, for the guest's diagnostics alone (RW 6.39): its last component, never the host's
+    /// directories. Empty where the host has none to give, and from a host that predates it; the guest then names no
+    /// place, as before.
+    #[serde(default)]
+    pub name: String,
 }
 
 /// One request from the guest to the host.
@@ -883,6 +888,18 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 let recv = Value::Cap(capv.clone());
                 let fs_pin = crate::interp::fs_pin_for(&recv, method, &decoded);
                 let mut fetch_allowed: Option<String> = None;
+                // RW 4.79: the capability first, as the interpreter's gate judges it — a use it refuses is never asked of
+                // the custody; the custody is told the refusal, and the guest is told the fault the effect would raise.
+                if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded, fs_pin.as_deref()) {
+                    if let Some(refused) = crate::interp::capability_refusal_for(&recv, method, &decoded, span) {
+                        if let Some(custody) = self.custody.as_mut() {
+                            let url_path = crate::interp::custody_path_for(op, &decoded);
+                            let verb = crate::interp::custody_method_for(op, method);
+                            custody.note_capability_refusal(op, arg.as_deref(), url_path, verb, refused.reason);
+                        }
+                        return Response::Fault { code: refused.fault.code.to_string(), message: refused.fault.message };
+                    }
+                }
                 if let Some(custody) = self.custody.as_mut() {
                     if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded, fs_pin.as_deref()) {
                         let url_path = crate::interp::custody_path_for(op, &decoded);

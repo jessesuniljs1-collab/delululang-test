@@ -851,26 +851,30 @@ impl Interp {
     fn exec_block_value(&self, block: &Block, parent: &Env) -> R<Value> {
         // A14: a block binds names in its own scope only by `let`. Without one its scope would stay empty, and every
         // read, write and capture passes through an empty scope to its parent — so the block runs in the parent's.
-        let own;
-        let env = if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) {
-            own = Scope::child(parent);
-            &own
-        } else {
-            parent
-        };
+        let mut env =
+            if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) { Scope::child(parent) } else { Rc::clone(parent) };
         let mut value = Value::Unit;
         let n = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = i + 1 == n;
-            value = self.exec_stmt(stmt, env, is_last)?;
+            value = self.exec_stmt(stmt, &mut env, is_last)?;
         }
         Ok(value)
     }
 
-    fn exec_stmt(&self, stmt: &Stmt, env: &Env, is_last: bool) -> R<Value> {
+    /// `env` is the block's scope; a `let` may open a new one for the statements after it (LATE-LET-1).
+    fn exec_stmt(&self, stmt: &Stmt, env: &mut Env, is_last: bool) -> R<Value> {
         match stmt {
             Stmt::Let { name, value, .. } => {
                 let v = self.eval_expr(value, env)?;
+                // LATE-LET-1: a closure made over this scope — earlier in the block, or in this `let`'s own value — reads
+                // the names the checker resolved where it was written, and this one is not among them: it binds in a
+                // scope of its own, which the statements after it run in. Bound here, a closure typed pure called the
+                // effectful function a later `let` gave its callee's name, and a `Secret.map` callback printed the
+                // plaintext, from a program `authority` called provably pure.
+                if env.is_held() {
+                    *env = Scope::child(env);
+                }
                 env.define(&name.name, v);
                 Ok(Value::Unit)
             }
@@ -1051,6 +1055,8 @@ impl Interp {
             },
             Expr::Match { scrutinee, arms, span, .. } => self.eval_match(scrutinee, arms, *span, env),
             Expr::Lambda { params, body, .. } => {
+                // LATE-LET-1: from now on a `let` in this scope, or any above it, binds where this closure cannot see.
+                env.hold();
                 let v = Value::Closure(Rc::new(Closure {
                     params: params.iter().map(|p| p.name.name.clone()).collect(),
                     body: body.clone(),
@@ -1381,6 +1387,15 @@ impl Interp {
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             let url_path = custody_path_for(op, &argvals);
             let method = custody_method_for(op, &name.name);
+            // RW 4.79: the program's own capability first — it may hold less than its node, and a use it refuses cannot
+            // happen, so its custody is not asked to allow it; the custody is told the refusal, and its chain says so.
+            if let Some(refused) = capability_refusal_for(&recvv, &name.name, &argvals, span) {
+                self.custody.borrow_mut().note_capability_refusal(op, arg.as_deref(), url_path, method, refused.reason);
+                if let Some(t) = &dispatched {
+                    self.trace_refusal(t, &name.name, refused.fault.code, &refused.fault.message, span);
+                }
+                return Err(Escape::Fault(refused.fault));
+            }
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path, method) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
@@ -2589,13 +2604,31 @@ pub fn broker_secret_send(
         Err(reason) => return Ok(SecretSend::Answered(prim::answer_value(crate::egress::refuse_unsent(&url, reason)))),
     };
     let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+    // RW 4.67: the custody's answer is read and parsed into buffers this process frees as it goes, so every block freed
+    // while it is asked for is zeroed (`crate::scrub`). The bytes then live in one `SecretVal`, which zeroes them as it is
+    // dropped, and the request that sends them opens its own window (`prim`).
+    let scrub = crate::scrub::Window::open();
     let bytes =
         custody.send_secret(handle, &origin.to_string(), Some(&span_str)).map_err(|d| Fault::at(d.code, d.message, span))?;
+    drop(scrub);
     let name = s.audience().map(|a| a.name.clone()).unwrap_or_else(|| handle.to_string());
     let held = SecretVal::bound(bytes, Some(Rc::new(crate::value::SecretAudience { name, to: vec![origin] })));
     let mut args = argvals.to_vec();
     args[3] = Value::Secret(Rc::new(held));
     Ok(SecretSend::Held(args))
+}
+
+/// RW 4.79: what the receiver's own capability says of this call before its custody is asked ([`prim::capability_refusal`]).
+/// `None` for a receiver that is no capability, and for a guest's host handle, which carries no scope to judge: the host
+/// that holds the capability judges it (`channel.rs`).
+pub(crate) fn capability_refusal_for(
+    recvv: &Value,
+    method: &str,
+    argvals: &[Value],
+    span: delulu_diag::Span,
+) -> Option<prim::CapabilityRefusal> {
+    let Value::Cap(c) = recvv else { return None };
+    prim::capability_refusal(c, method, argvals, span)
 }
 
 pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {

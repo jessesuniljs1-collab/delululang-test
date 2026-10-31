@@ -399,6 +399,44 @@ impl Broker {
         Ok(seq)
     }
 
+    /// Record a use the run's own CAPABILITY refused before this broker was asked (RW 4.79): one `use` record with
+    /// decision `deny` on `node`, at `target` — the argument the use would have been asked about — naming
+    /// `refused_by: capability`, the refusal's code (DL0904), the capability's machine-readable reason (`outside-scope`,
+    /// `other-host`, `outside-path`, `other-method`, …), and for a network use its path and a method other than GET, as
+    /// this broker's own record of a use names them ([`Broker::check_use_by`]). A capability may hold less than its node
+    /// — a narrowed directory, one host of the node's, a path or a method fewer — and until this the broker was asked
+    /// first: it recorded `use allow` for a call the program's capability then refused, so the chain said what the
+    /// node's grant decided and not what happened, and a monitor counting refusals saw an allowed use. Decides nothing
+    /// (the call is already refused); refused for a node the tree does not hold; the reason is bounded.
+    pub fn record_capability_refusal(
+        &mut self,
+        node_id: &GrantId,
+        op: Op,
+        target: Option<&str>,
+        url_path: Option<&str>,
+        method: Option<&str>,
+        reason: &str,
+    ) -> Result<u64, Denial> {
+        if self.inspect(node_id).is_none() {
+            return Err(Denial::UnknownNode { node: node_id.clone() });
+        }
+        let mut payload = serde_json::json!({
+            "op": op.wire_name(),
+            "refused_by": "capability",
+            "code": "DL0904",
+            "reason": crate::bounded_text(reason, 64),
+        });
+        if let Some(path) = url_path.filter(|_| op == Op::Net) {
+            payload["url_path"] = serde_json::json!(path);
+        }
+        if let Some(m) = method.filter(|m| op == Op::Net && *m != "GET") {
+            payload["method"] = serde_json::json!(m);
+        }
+        let seq = self.consume_seq();
+        self.record_op(seq, "use", Some(node_id.as_str().to_string()), target.map(str::to_string), Some(payload), "deny", None);
+        Ok(seq)
+    }
+
     /// Record a device command its ENVELOPE refused (P8-04, routine run 15): one `use` record with
     /// decision `deny` on `node`, at `device`, carrying the refusal's code (DL1904), the reason in the
     /// words the program was told, and the seq of the `use allow` it overrides when the run knows it.
@@ -738,6 +776,43 @@ mod tests {
         let reason = a["reason"].as_str().unwrap();
         assert!(reason.len() <= 512 + '…'.len_utf8(), "bounded: {} bytes", reason.len());
         assert!(reason.ends_with('…') && reason.starts_with("éé"), "cut on a character, and said to be cut");
+    }
+
+    /// RW 4.79: a use its capability refused is recorded only for a node the tree holds, as one `use` `deny` naming the
+    /// capability, its code and its reason (bounded) — and a network use's path and non-GET method, which no other op's
+    /// record carries.
+    #[test]
+    fn a_capability_refusal_is_recorded_as_a_denied_use_for_a_held_node_only() {
+        let sink = crate::audit::MemSink::new();
+        let mut b = broker_with_clock(Rc::new(ManualClock::new(1000))).with_sink(Box::new(sink.clone()));
+        let ghost = GrantId::from_trusted("g_nobody".to_string());
+        let refused = b.record_capability_refusal(&ghost, Op::Net, Some("api.example.com"), None, None, "other-host");
+        assert!(matches!(refused, Err(Denial::UnknownNode { .. })));
+        assert!(sink.is_empty(), "nothing is recorded about a node that does not exist");
+
+        let node = b.issue(holder(), Authority::new(eff(&["Net", "Write"]), Scopes::default()), None);
+        let seq = b
+            .record_capability_refusal(&node, Op::Net, Some("api.example.com"), Some("/v2/x"), Some("POST"), "other-method")
+            .unwrap();
+        let r = sink.records().pop().unwrap();
+        assert_eq!((r.seq, r.action.as_str(), r.decision.as_str()), (seq, "use", "deny"));
+        assert_eq!((r.actor_node.as_deref(), r.target.as_deref()), (Some(node.as_str()), Some("api.example.com")));
+        let a = r.authority.unwrap();
+        assert_eq!(
+            (a["op"].as_str(), a["refused_by"].as_str(), a["code"].as_str()),
+            (Some("Net"), Some("capability"), Some("DL0904"))
+        );
+        assert_eq!(
+            (a["reason"].as_str(), a["url_path"].as_str(), a["method"].as_str()),
+            (Some("other-method"), Some("/v2/x"), Some("POST"))
+        );
+        // A GET names no method, and a file use no path, as the broker's own record of a use names neither.
+        b.record_capability_refusal(&node, Op::Net, Some("api.example.com"), Some("/v2/x"), Some("GET"), "outside-path").unwrap();
+        assert!(sink.records().pop().unwrap().authority.unwrap().get("method").is_none());
+        b.record_capability_refusal(&node, Op::FsWrite, Some("/data/w.txt"), Some("/x"), Some("POST"), &"r".repeat(200)).unwrap();
+        let a = sink.records().pop().unwrap().authority.unwrap();
+        assert!(a.get("url_path").is_none() && a.get("method").is_none(), "{a}");
+        assert!(a["reason"].as_str().unwrap().len() <= 64 + '…'.len_utf8(), "bounded: {a}");
     }
 
     #[test]

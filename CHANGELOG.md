@@ -11,6 +11,66 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an e-stop goes before the requests waiting at the broker, 2026-10-31
+
+- **Fixed: the operator's e-stop and a monitor's quarantine are handled before every request waiting at the broker
+  daemon** (ESTOP-QUEUE-1, RW 4.53, D-V2-198). The daemon answers one request at a time, and while another writer holds
+  the audit chain each request that records waits up to 5 s for it. A `grants revoke` behind four such requests answered
+  `DL1401 … did not answer within 15s`, told its operator to start a broker that was running, and the revocation landed
+  about 25 s after it was pulled. Now a revocation waits only for the request the daemon is handling: on the same held
+  chain it answered in 9.8 s, revoked, and said the chain could not record it. A request it overtakes is decided against
+  less authority, never more, and a dead-man is still judged as of the earliest request waiting, so a beat that arrived
+  in time keeps it.
+- **Changed: a broker that accepted a request and did not answer it in time is said to be running.** Every DL1401 said
+  "start it with `delulu broker start`", and `broker status`, `stop` and `rotate-key` said "broker not running" (`stop`:
+  "nothing to stop"); now they say it did not answer and point at its `broker.log`, which names each late answer, and
+  `delulu explain E-DL1401` says so. Exit codes, and `broker status --json`'s `{"running": false}`, are unchanged.
+
+## Unreleased — a sent secret leaves no copy of its bytes in the run, 2026-10-31
+
+- **Fixed: once a run has sent a broker-held secret, no copy of its bytes stays in the run's memory** (RW 4.67,
+  D-V2-196). Under `--broker daemon` a secret's bytes enter the program's process only to be sent to an origin its grant
+  names, and the copies made on the way to the wire — the broker's answer, each header, the serialized request — were
+  freed without being cleared: one stayed in the run's heap until the run ended, on the interpreter and on the WASM
+  engine. Now, while a send's bytes are in the process, `delulu` zeroes every block it frees, on every thread, and a scan
+  of the run's memory after the send finds none. What a program can do is unchanged; outside a send, a free costs one
+  atomic load.
+- **Documented: a process of the broker's own user can ask it for a secret's bytes, as it can read them in
+  `secrets.json`** (RW 4.66, D-V2-197). The broker's socket admits exactly whom its state directory admits, and
+  `docs/DEPLOYMENT.md` §5 now says so; a second OS account (Tier 2) is the boundary between them.
+
+## Unreleased — a use its capability refuses is recorded refused, never allowed, 2026-10-31
+
+- **Fixed: the audit chain no longer records `use allow` for a call the program's own capability refuses** (RW 4.79,
+  D-V2-195). A capability may hold less than the node it was minted under — `root.fs_write("./data/sub")` under
+  `fs.write=./data`, one host of the node's, a path or a method fewer — and the broker was asked about the call first,
+  against the node's grant: it recorded `allow`, and the capability then refused the call (DL0904). Under `--broker daemon`
+  each such write or request left an allowed use that never happened, on the interpreter, the WASM engine and a sandboxed
+  guest alike. Now the capability judges first, in the same words, and the broker is not asked; it records one `use`
+  `deny` naming `refused_by: capability`, `code: DL0904`, a `reason` (`outside-scope`, `other-host`, `outside-path`,
+  `other-method`, …) and, for a request, its path and method — never its query. A monitor's `denies=N/MS` counts it. A read
+  is recorded only where a Guard rule makes reads round-trip, as before.
+- **Changed: a call its capability refuses is refused DL0904 under every custody.** Under the daemon a Guard rule could
+  answer it first — DL1410 told an agent to request a permit for a read its own capability could never make, and a `warn`
+  rule warned and recorded `guard_warn` — as could a revoked or expired lease (DL0801, DL1402, DL1403). Those codes now
+  answer the next call the capability allows. Nothing that was refused runs, and nothing that ran is refused.
+
+## Unreleased — a sandboxed run's fault names its place, 2026-10-31
+
+- **Improved: under `--sandbox` the guest's fault names its line and column** (RW 6.39). It printed `guest: error[DL0904]:
+  …` alone, where an ordinary run points at the expression, because the guest was never told the program's name. The
+  host now sends the file's last component with the program, and the guest's fault reads as the ordinary run's, each
+  line marked `guest:` as before. The host's directories are never sent. What the guest may reach is unchanged.
+
+## Unreleased — `list_dir` runs on the WASM engine and in a `.dwx`, 2026-10-31
+
+- **Added: `Cap[FsRead].list_dir(path)` on `--engine wasm` and `build --target wasm`** (the agent test campaign's A7, RW
+  6.46). It was DL1201 *"WASM codegen does not support the method `.list_dir`"*, so a program that walked a directory ran
+  on the interpreter alone. The WASM host lists as the interpreter does, after the same custody and scope checks and at
+  the same pinned path: the same names (in the operating system's order, on both engines), the same `IoErr`s, the same
+  DL0904 past the scope, and the same effect trace, record for record. A module that does not call `list_dir` compiles
+  byte for byte as before.
+
 ## Unreleased — a `ref` list refused at a `val` parameter names both ways to pass it, 2026-10-31
 
 - **Improved: DL1603 at an argument names the two ways out** (the agent test campaign's A13, RW 6.45). A list filled

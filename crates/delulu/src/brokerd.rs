@@ -1108,6 +1108,38 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::CapabilityRefused { node, op, target, url_path, method, reason } => {
+            let Some(op) = Op::from_wire_name(&op) else {
+                return (
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("unknown op `{}` (nothing recorded)", delulu_diag::terminal_line(&op)),
+                        requires_human: false,
+                    },
+                    false,
+                );
+            };
+            let node = GrantId::from_trusted(node);
+            failed.set(false);
+            match broker.record_capability_refusal(&node, op, target.as_deref(), url_path.as_deref(), method.as_deref(), &reason)
+            {
+                // RW 4.61's rule: `Recorded` is a claim about the chain. A refusal whose record was lost is said as one, and
+                // the client says once on stderr that the chain lacks it — the call stays refused.
+                Ok(seq) if failed.get() => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "broker could not append the audit record of a use its capability refused (the chain's append \
+                             lock was not free within its wait) — audit seq {seq} names no record"
+                        ),
+                        requires_human: false,
+                    },
+                    false,
+                ),
+                Ok(seq) => (Response::Recorded { seq }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::BreakGlassRun { node, ticket, relax } => {
             let node = GrantId::from_trusted(node);
             failed.set(false);
@@ -1611,6 +1643,10 @@ pub fn serve(state_dir: &Path, bypass: bool) -> io::Result<()> {
     serve_inner(state_dir, owner, print_owner, bypass)
 }
 
+/// A whole request as a reader thread hands it to the serve loop: its connection, the request, and the instant it
+/// arrived — by the wall clock, for `broker.log`, and by the hearing clock, which every dead-man is judged by.
+type Whole = (Connection, Request, std::time::Instant, std::time::Instant);
+
 /// The serve loop with an explicit owner code (so tests can drive a KNOWN code without racing on a
 /// process-global env var). Owns the single `Broker` for this OS user. Blocking, single-connection.
 pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: bool, bypass: bool) -> io::Result<()> {
@@ -1762,8 +1798,15 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // handler being held on one request does not delay — by the wall clock, for `broker.log`, and by the hearing clock,
     // which every dead-man is judged by: it stands still while the whole daemon was not running (DEADMAN-DEAF-1).
     let clock = HearingClock::start();
-    let (whole, requests) =
-        std::sync::mpsc::sync_channel::<(Connection, Request, std::time::Instant, std::time::Instant)>(MAX_READERS);
+    // ESTOP-QUEUE-1 (RW 4.53, routine run 18's red team F4): a REVOCATION — the operator's e-stop, a monitor's quarantine —
+    // has a line of its own, which the handler reads before the other. The handler is serial, and a request that records
+    // waits up to 5 s for the chain's append lock while another writer holds it, so in one line the e-stop waited out
+    // every request ahead of it: behind four on a held chain `grants revoke` answered "did not answer within 15s" and the
+    // revocation landed about 25 s after it was pulled. Now it waits for the request being handled, and no other. A
+    // revocation only narrows: a request it overtakes is decided against less authority, never more. In `requests`,
+    // `None` is a wake — a revocation was handed over while the handler may be waiting on an empty line.
+    let (whole, requests) = std::sync::mpsc::sync_channel::<Option<Whole>>(MAX_READERS);
+    let (revocation, revocations) = std::sync::mpsc::sync_channel::<Whole>(MAX_READERS);
     let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
         let stopping = stopping.clone();
@@ -1789,9 +1832,9 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                 eprintln!("delulu broker: {MAX_READERS} connections already reading (dropping this one)");
                 continue;
             }
-            let (whole, reading, clock) = (whole.clone(), reading.clone(), clock.clone());
+            let (whole, revocation, reading, clock) = (whole.clone(), revocation.clone(), reading.clone(), clock.clone());
             std::thread::spawn(move || {
-                let read = (|| {
+                let read: Result<Request, String> = (|| {
                     // If a bound cannot be set, drop the connection rather than risk an unbounded read.
                     conn.set_read_timeout(Some(SERVE_READ_TIMEOUT)).map_err(|e| format!("could not bound read: {e}"))?;
                     conn.set_write_timeout(Some(SERVE_WRITE_EACH)).map_err(|e| format!("could not bound write: {e}"))?;
@@ -1801,8 +1844,15 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                         .map_err(|e| dropped_because(&e))
                 })();
                 match read {
+                    // ESTOP-QUEUE-1: into its own line, then a wake for a handler waiting on an empty one. A full line
+                    // needs no wake — the handler is not waiting, and reads the revocation before its next request.
+                    Ok(req) if req.body.is_revocation() => {
+                        if revocation.send((conn, req, std::time::Instant::now(), clock.now())).is_ok() {
+                            let _ = whole.try_send(None);
+                        }
+                    }
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
-                    Ok(req) => drop(whole.send((conn, req, std::time::Instant::now(), clock.now()))),
+                    Ok(req) => drop(whole.send(Some((conn, req, std::time::Instant::now(), clock.now())))),
                     Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
                 }
                 // Counted until its request is handed over, not only while it reads: a reader waiting on a busy
@@ -1812,8 +1862,11 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             });
         });
     }
-    // The receiving end is never closed while this loop runs: the accept thread holds a sender for as long
+    // The receiving ends are never closed while this loop runs: the accept thread holds a sender of each for as long
     // as it lives, so `recv` waits for the next whole request rather than ending.
+    // ESTOP-QUEUE-1: the requests already handed over, in the order they were, so that the dead-men are judged as of the
+    // earliest of them while a revocation goes first. Bounded as the line is: what does not fit waits in `requests`.
+    let mut waiting: std::collections::VecDeque<Whole> = std::collections::VecDeque::new();
     loop {
         // P8-04 step 5 (D-V2-106): wait for the next whole request — or, while a dead-man is armed, no longer
         // than its deadline. Dead-men are fired BEFORE the next request is handled, whichever woke the loop, so
@@ -1821,26 +1874,37 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // is on the hearing clock, which listens only while one is armed (DEADMAN-DEAF-1).
         let deadline = broker.next_deadman_deadline();
         clock.listen(deadline.is_some());
-        let next = match deadline {
-            None => match requests.recv() {
-                Ok(r) => Some(Some(r)),
-                Err(_) => None,
-            },
-            Some(at) => match requests.recv_timeout(at.saturating_duration_since(clock.now())) {
-                Ok(r) => Some(Some(r)),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Some(None),
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
-            },
-        };
-        let Some(next) = next else { break };
+        let urgent = revocations.try_recv().ok();
+        while waiting.len() < MAX_READERS {
+            match requests.try_recv() {
+                Ok(Some(w)) => waiting.push_back(w),
+                Ok(None) => {}
+                Err(_) => break,
+            }
+        }
+        if urgent.is_none() && waiting.is_empty() {
+            let next = match deadline {
+                None => requests.recv().map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected),
+                Some(at) => requests.recv_timeout(at.saturating_duration_since(clock.now())),
+            };
+            match next {
+                Ok(Some(w)) => waiting.push_back(w),
+                // A wake: a revocation was handed over — read first, at the top of the loop.
+                Ok(None) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
         let taken = std::time::Instant::now();
-        // DEADMAN-BUSY-1 (D-V2-127): as of the request's ARRIVAL — a beat queued behind a request the daemon was held on
-        // arrived in time, and is handled after this; on a wake with nothing waiting, as of now. An unbeaten dead-man still
-        // fires at the first request that arrived after its deadline, so a stream of requests cannot hold one off. Both on
-        // the hearing clock: a daemon woken from a stop judges nothing by the time it was stopped (DEADMAN-DEAF-1).
-        let as_of = next.as_ref().map_or_else(|| clock.now(), |(_, _, _, heard)| *heard);
+        // DEADMAN-BUSY-1 (D-V2-127): as of the EARLIEST arrival still waiting — a beat queued behind a request the daemon
+        // was held on arrived in time, and is handled after this; on a wake with nothing waiting, as of now. ESTOP-QUEUE-1:
+        // not as of a revocation's own arrival when it goes first, or a beat that arrived in time and waits behind it would
+        // lose its dead-man to the e-stop's place in the line. An unbeaten dead-man still fires at the first request that
+        // arrived after its deadline, so a stream of requests cannot hold one off. All on the hearing clock: a daemon woken
+        // from a stop judges nothing by the time it was stopped (DEADMAN-DEAF-1).
+        let as_of = urgent.iter().chain(waiting.iter()).map(|(_, _, _, heard)| *heard).min().unwrap_or_else(|| clock.now());
         fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of);
-        let Some((mut conn, req, arrived, heard)) = next else { continue };
+        let Some((mut conn, req, arrived, heard)) = urgent.or_else(|| waiting.pop_front()) else { continue };
         let kind = req.body.kind();
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, heard, &clock);
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
@@ -1889,11 +1953,28 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // Wake the accept thread so it ends rather than serving a daemon that has stopped: it sees the flag on
     // the next connection, this one.
     stopping.store(true, std::sync::atomic::Ordering::SeqCst);
+    drop(waiting);
     drop(requests);
+    drop(revocations);
     let _ = broker_transport::connect(state_dir);
 
     let _ = std::fs::remove_file(pid_path(state_dir));
     Ok(())
+}
+
+/// ESTOP-QUEUE-1: a broker that accepted a request and did not answer it in time is RUNNING — busy, or stuck — and is said
+/// so, never "not running": an operator told that starts a second broker, or believes there is nothing left to stop.
+/// `absent` is what the command says when no broker answered at all.
+fn not_answered(state_dir: &Path, e: &io::Error, absent: String) -> String {
+    let detail = crate::cli::broker_unreachable_detail(e);
+    if !crate::cli::broker_accepted_and_was_silent(&detail) {
+        return absent;
+    }
+    format!(
+        "broker did not answer (state `{}`): {detail} — {}",
+        state_dir.display(),
+        crate::cli::broker_unreachable_advice(&detail)
+    )
 }
 
 /// Why a connection's request was not taken, in the broker log's words (RW 4.39): one class of drop had been
@@ -1926,8 +2007,9 @@ fn dropped_because(e: &io::Error) -> String {
 /// How long [`request`] waits for the daemon's whole answer. Invariant 27 asks that an unreachable
 /// broker fail every effectful op "fast (bounded, never a hang)"; a broker that accepted the connection
 /// and never answered was waited for without end — every daemon-mode custody op and every operator
-/// command, the e-stop's revoke among them. Generous: the daemon answers in milliseconds, and a client
-/// ahead of this one in its one-connection loop holds it at most `SERVE_READ_TIMEOUT` twice over.
+/// command, the e-stop's revoke among them. Generous: the daemon answers in milliseconds. A request waits for
+/// every request handed over ahead of it — up to 5 s each while another writer holds the audit chain — and a
+/// revocation for the one being handled alone, its own line read first (ESTOP-QUEUE-1).
 pub const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// One quick request/response round-trip to a running daemon (each op is its own short connection,
@@ -2192,12 +2274,14 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
                 eprintln!("error: unexpected status response: {other:?}");
                 2
             }
-            Err(_) => {
+            Err(e) => {
                 if json {
                     crate::cli::note_json_emitted();
                     println!("{}", serde_json::json!({ "running": false }));
                 } else {
-                    println!("broker not running (state `{}`) — start it with `delulu broker start`", state_dir.display());
+                    let absent =
+                        format!("broker not running (state `{}`) — start it with `delulu broker start`", state_dir.display());
+                    println!("{}", not_answered(&state_dir, &e, absent));
                 }
                 1
             }
@@ -2222,8 +2306,8 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
                     }
                     0
                 }
-                Err(_) => {
-                    eprintln!("broker not running (nothing to stop)");
+                Err(e) => {
+                    eprintln!("{}", not_answered(&state_dir, &e, "broker not running (nothing to stop)".to_string()));
                     1
                 }
             }
@@ -2239,8 +2323,11 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
                 eprintln!("error: unexpected rotate-key response: {other:?}");
                 2
             }
-            Err(_) => {
-                eprintln!("broker not running — start it with `delulu broker start`");
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    not_answered(&state_dir, &e, "broker not running — start it with `delulu broker start`".to_string())
+                );
                 1
             }
         },
@@ -2903,6 +2990,119 @@ mod tests {
         assert!(live.is_empty(), "no node lives that the chain does not record: {live:?}");
     }
 
+    /// **ESTOP-QUEUE-1 (RW 4.53, routine run 18's red team F4): the operator's e-stop and a monitor's quarantine are
+    /// handled before the requests queued ahead of them.** The daemon is serial, and a request that records waits up to
+    /// 5 s for the chain's append lock while another writer holds it — so before this the e-stop waited out every
+    /// request ahead of it: behind four on a held chain `grants revoke` answered `did not answer within 15s` (DL1401,
+    /// exit 1, "start it with `delulu broker start`") and the revocation landed about 25 s after it was pulled. Here the
+    /// test holds the chain while four mints queue, then a revoke and a quarantine arrive; once the chain is free, the
+    /// chain's own order says which the daemon handled first. Red before: all three waiting mints were recorded before
+    /// the revoke.
+    #[test]
+    fn an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them() {
+        let state = temp_state("estopq");
+        let handle = start_daemon(&state);
+        let target = issue(&state);
+        let watched = issue(&state);
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        // The first mint is taken at once and waits on the held chain; the other three queue behind it, in order.
+        let mints: Vec<_> = (0..4u64)
+            .map(|i| {
+                let state = state.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(60 * i));
+                    request(&state, ReqBody::Issue(spec(&["Write"])))
+                })
+            })
+            .collect();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let estop = {
+            let (state, target) = (state.clone(), target.clone());
+            std::thread::spawn(move || request(&state, ReqBody::Revoke { caller: target.clone(), target }))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let quarantine = {
+            let (state, watched) = (state.clone(), watched.clone());
+            std::thread::spawn(move || {
+                request(&state, ReqBody::Quarantine { caller: watched.clone(), target: watched, why: "a test".to_string() })
+            })
+        };
+        // Every request read whole and handed to the daemon before the chain is free — well inside the first mint's 5 s.
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        drop(held);
+        let minted: Vec<_> = mints.into_iter().map(|m| m.join().unwrap()).collect();
+        let (estop, quarantine) = (estop.join().unwrap(), quarantine.join().unwrap());
+        let records = delulu_broker::audit::query(audit_dir(&state), &delulu_broker::audit::QueryFilter::default()).unwrap();
+        stop_daemon(&state, handle);
+        assert!(minted.iter().all(|m| matches!(m, Ok(Response::Issued { .. }))), "{minted:?}");
+        assert!(matches!(estop, Ok(Response::Revoked { unrecorded: None, .. })), "{estop:?}");
+        assert!(matches!(quarantine, Ok(Response::Revoked { unrecorded: None, .. })), "{quarantine:?}");
+        let seq_of = |action: &str, target: &str| {
+            records.iter().find(|r| r.action == action && r.target.as_deref() == Some(target)).map(|r| r.seq)
+        };
+        let (revoked_at, quarantined_at) =
+            (seq_of("revoke", &target).expect("the revoke's record"), seq_of("revoke", &watched).expect("the quarantine's"));
+        let watched_at = records.iter().find(|r| r.action == "issue" && r.actor_node.as_deref() == Some(&watched)).unwrap().seq;
+        let mints_at: Vec<u64> = records.iter().filter(|r| r.action == "issue" && r.seq > watched_at).map(|r| r.seq).collect();
+        assert_eq!(mints_at.len(), 4, "{records:?}");
+        assert!(revoked_at < quarantined_at, "the two in the order they arrived: {revoked_at}, {quarantined_at}");
+        for (what, at) in [("e-stop", revoked_at), ("quarantine", quarantined_at)] {
+            let ahead: Vec<u64> = mints_at.iter().copied().filter(|m| *m < at).collect();
+            assert_eq!(
+                ahead.len(),
+                1,
+                "only the mint the daemon was already handling goes before the {what} — mints at {mints_at:?}, the revoke \
+                 at {revoked_at}, the quarantine at {quarantined_at}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **A revocation taken ahead of the queue judges no dead-man by its own arrival** (ESTOP-QUEUE-1's rule, kept with
+    /// DEADMAN-BUSY-1's): dead-men are judged as of the EARLIEST arrival still waiting, so a beat that arrived in time and
+    /// waits behind a held request still keeps its dead-man when an e-stop that arrived after the deadline is handled
+    /// first. Judged as of the e-stop's arrival, the healthy holder's dead-man fired and quarantined its runs.
+    #[test]
+    fn a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man() {
+        let state = temp_state("estopbeat");
+        let handle = start_daemon(&state);
+        let watched = issue(&state);
+        let other = issue(&state);
+        let key = arm(&state, &watched, 2000);
+        let armed = std::time::Instant::now();
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let first = {
+            let state = state.clone();
+            std::thread::spawn(move || request(&state, ReqBody::Issue(spec(&["Write"]))))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        // In time: the beat arrives 0.3 s into a 2 s period, and waits behind the held mint.
+        let beat = {
+            let (state, node) = (state.clone(), watched.clone());
+            std::thread::spawn(move || request(&state, ReqBody::Beat { node, key }))
+        };
+        // The e-stop arrives after the dead-man's deadline, and is handled before the beat.
+        std::thread::sleep((armed + std::time::Duration::from_millis(2600)).saturating_duration_since(std::time::Instant::now()));
+        let estop = {
+            let (state, other) = (state.clone(), other.clone());
+            std::thread::spawn(move || request(&state, ReqBody::Revoke { caller: other.clone(), target: other }))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        drop(held);
+        let (first, beat, estop) = (first.join().unwrap(), beat.join().unwrap(), estop.join().unwrap());
+        let fired = deadman_revocations(&state, &watched);
+        let after = request(&state, ReqBody::NodeState { node: watched.clone() });
+        stop_daemon(&state, handle);
+        assert!(matches!(first, Ok(Response::Issued { .. })), "{first:?}");
+        assert!(matches!(estop, Ok(Response::Revoked { .. })), "{estop:?}");
+        assert!(fired.is_empty(), "a beat that arrived in time was overtaken by its dead-man: {fired:?}\nthe beat: {beat:?}");
+        assert!(matches!(beat, Ok(Response::Ok)), "the beat kept it: {beat:?}");
+        assert!(matches!(&after, Ok(Response::NodeState { state, .. }) if state == "live"), "{after:?}");
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
     /// RW 4.58's rest: a device command the run's envelope refused is recorded as a `deny` citing the `allow` it overrides
     /// (P8-04, D-V2-100) — the record a monitor reads. When that record could not be written, the answer must not be
     /// `Recorded { seq }` for a seq that names nothing: the client then says once that the chain lacks the refusal.
@@ -2993,6 +3193,42 @@ mod tests {
             Ok(Response::Error { code, message, .. }) => {
                 assert_eq!(code, "DL1401", "{message}");
                 assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
+        }
+    }
+
+    /// RW 4.79, under RW 4.61's rule: a use its capability refused whose record was lost is not answered `Recorded`; one the
+    /// tree's chain took is, and an op the broker does not know is refused in words, nothing recorded.
+    #[test]
+    fn a_capability_refusal_whose_record_was_lost_is_not_answered_as_recorded() {
+        let state = temp_state("lostcap");
+        let handle = start_daemon(&state);
+        let root = issue(&state);
+        let refusal = |op: &str| ReqBody::CapabilityRefused {
+            node: root.clone(),
+            op: op.to_string(),
+            target: Some("example.com".to_string()),
+            url_path: Some("/v2".to_string()),
+            method: None,
+            reason: "outside-path".to_string(),
+        };
+        let free = request(&state, refusal("Net"));
+        let unknown = request(&state, refusal("Teleport"));
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, refusal("Net"));
+        drop(held);
+        stop_daemon(&state, handle);
+        assert!(matches!(free, Ok(Response::Recorded { .. })), "the refusal is recorded when the chain is free: {free:?}");
+        assert!(
+            matches!(&unknown, Ok(Response::Error { code, message, .. }) if code == "DL0904" && message.contains("unknown op")),
+            "{unknown:?}"
+        );
+        match lost {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append") && message.contains("capability"), "{message}");
             }
             other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
         }
@@ -4484,6 +4720,43 @@ mod tests {
         );
         let _ = acceptor.join();
         let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **ESTOP-QUEUE-1's words: a broker that accepted the request and did not answer in time is RUNNING.** Before,
+    /// every DL1401 told its operator to "start it with `delulu broker start`", and `broker status` said "broker not
+    /// running" — F4's e-stop, queued behind a held chain, sent its operator after a broker that was never missing.
+    /// Such a one is pointed at its `broker.log`, which names each late answer; a missing broker is still told to start.
+    #[cfg(unix)]
+    #[test]
+    fn a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started() {
+        use std::os::unix::net::UnixListener;
+        let state = temp_state("silent_words");
+        let listener = UnixListener::bind(state.join("broker.sock")).unwrap();
+        let acceptor = std::thread::spawn(move || {
+            if let Ok((_s, _)) = listener.accept() {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        });
+        let silent = request_timed(&state, ReqBody::Status, std::time::Duration::from_millis(300)).expect_err("silent");
+        let _ = acceptor.join();
+        let none = temp_state("missing_words");
+        let missing = request_timed(&none, ReqBody::Status, std::time::Duration::from_millis(300)).expect_err("missing");
+        let said = |e: &io::Error| {
+            let detail = crate::cli::broker_unreachable_detail(e);
+            format!("{detail} — {}", crate::cli::broker_unreachable_advice(&detail))
+        };
+        let (silent_said, missing_said) = (said(&silent), said(&missing));
+        assert!(silent_said.contains("broker.log") && !silent_said.contains("broker start"), "{silent_said}");
+        assert!(
+            missing_said.contains("start it with `delulu broker start`") && !missing_said.contains("broker.log"),
+            "{missing_said}"
+        );
+        let absent = "broker not running (nothing to stop)".to_string();
+        let silent_verb = not_answered(&state, &silent, absent.clone());
+        assert!(silent_verb.starts_with("broker did not answer") && silent_verb.contains("broker.log"), "{silent_verb}");
+        assert_eq!(not_answered(&none, &missing, absent.clone()), absent);
+        let _ = std::fs::remove_dir_all(&state);
+        let _ = std::fs::remove_dir_all(&none);
     }
 
     /// FRAME-DRIP-1 (RW 4.32's per-frame deadline): the serve loop is one connection at a time, and its

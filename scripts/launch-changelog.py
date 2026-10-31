@@ -10,8 +10,10 @@ those sections, as `###`, above the first `###` under `## [2.0.0]`.
 It writes nothing unless every check holds: the sections it adds all sit above every section already folded, in
 `master`'s own order, and the launch side has its `## [2.0.0]` heading and a `###` below it. It does not decide the
 2.0.0 `**Breaking**` paragraph: read each section it lists, and add the ones that can stop a 1.x program, driver or
-deployment by hand. (On-demand routine run 8, 2026-10-30. The laptop had a script of the same purpose, never
-committed; each merge before this one wrote it again.)
+deployment by hand — every section that moves a surface `docs/design/STABILITY.md` §1 holds stable (a refused program's
+code, a command's exit code for an outcome, a JSON field's type or meaning, syntax that parsed) among them (on-demand
+routine run 9: C9 moved a refusal's code and C11 an exit code, each a refusal still). (On-demand routine run 8,
+2026-10-30. The laptop had a script of the same purpose, never committed; each merge before this one wrote it again.)
 
 usage (inside the launch worktree, during `git merge --no-ff origin/master`):
     python3 -I scripts/launch-changelog.py [SOURCE_REF]      # SOURCE_REF defaults to origin/master
@@ -73,7 +75,8 @@ def main():
     print(f"folded {len(new)} section(s) of {source} into `## [2.0.0]`:")
     for title, _ in new:
         print("  ### " + title)
-    print("Now judge the `**Breaking**` paragraph against each, by hand.")
+    print("Now judge the `**Breaking**` paragraph against each, by hand: a section that moves a surface STABILITY.md §1")
+    print("holds stable (a refused program's code, an exit code, a JSON field's type or meaning, syntax that parsed) is one.")
 
 
 if __name__ == "__main__":
