@@ -7026,6 +7026,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
   renamed: nothing.
 - For the laptop's memory: HANDOFF §11.4 (CTOR-SHADOW-1).
+- **A second commit on the same branch:** `loop_parity`'s CTOR-SHADOW-1 test also holds lowercase constructors
+  (`cell(8)`, `empty`), which the interpreter refused as *"unbound name"* before D-V2-201. RW 2.26 is opened (in a
+  pattern a lowercase name binds, so a lowercase nullary constructor cannot be matched by name). M (this commit):
+  `crates/delulu-wasm/tests/loop_parity.rs`, `docs/REMAINING_WORK.md` (row 2.26), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next, in order:** land #106, then this, on green runs; read the sweep's run `41246969522` and the launch runs
   `41247420596` and `41247423239`; bring `launch/2.0.0` current. There are two sections to fold:
   - LOCAL-CALLEE-1, not breaking, since v1.0.0 had no plugin export at run time;

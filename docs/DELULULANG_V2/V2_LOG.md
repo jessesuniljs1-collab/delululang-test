@@ -11142,3 +11142,14 @@ not taken: it would refuse programs that check today.
 **Gates.** `late_let_cli` (the escape) and `loop_parity` (`3 -1 10` on both engines), each red before; mutants M983–M987,
 all red. The bash heredoc that wrote the CLI test turned the `\n` in an assertion's message into a real line break,
 the trap HANDOFF §11.5 names; the result compiled, and was corrected with the editor before the commit.
+
+**Later the same day, before #107 landed: lowercase constructors.** The checker admits a constructor whose name is
+lowercase (`type Slot = cell(Int) | empty`). The interpreter's capitalized fallback never covered one, so `let e = empty`
+and `cell(8)` faulted *"unbound name"* in a program that checked clean. D-V2-201's `Home::ctors` resolves them, as the
+WASM engine did. `loop_parity`'s CTOR-SHADOW-1 test now holds them too, at `3 -1 10 80` on both engines, and M985 (a
+value asks the functions first) is still red with them in.
+
+In a pattern, a lowercase name is a binding by the parser's convention, so `match t { foo => 1, bar => 2 }` answers 1
+for every `t`, on both engines and to the checker alike. That is the language's meaning, not a runtime defect, and it is
+recorded as RW 2.26, open, with its three ways out: a warning, which is additive, or refusing such names, or reading
+them as constructors, both breaking.
