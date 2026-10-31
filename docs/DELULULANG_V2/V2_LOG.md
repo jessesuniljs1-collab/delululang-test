@@ -10940,3 +10940,10 @@ failed (run 16's numbers were clean on `0ebbc15`; F4's held chain was not), and 
 it is about (M970). `scripts/estop-measure.py` keeps both of RW 4.53's measurements — the e-stop beside N loops of chain
 writers, and behind a queue on a held chain — which this run rebuilt by hand from run 16's record. `HANDOFF.md` §11.4 and
 §11.5, `docs/assistant-memory/re-ask-the-shape-that-failed.md`.
+
+**Read after the push.** `294ddfa`'s push runs: CI `41221655879` — 14 jobs success, 2 skipped (`actors_pingpong` MEASURED
+on arm64, 2.91x where the machine gave 3.94x against a bar of 1.48x, passed; NOT MEASURED on Ubuntu and Windows — busy or
+SMT — and macOS, 3 hardware threads; disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91);
+OpenShell `41221655891` — success. `22e5c8c`'s (the records) `41221939225`: 14 success, 2 skipped (arm64 MEASURED 2.94x).
+**`master` green at the end of the run.** The merged branches stay on `origin`: the permission classifier refused `git
+push --delete` (recorded for the laptop).

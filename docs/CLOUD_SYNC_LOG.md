@@ -6797,8 +6797,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (landed in `ff0b4f6`); `launch/2.0.0`'s citations merge (run 13's Open / next 1) is `4127776`. The Survey and `doctor`
   healthy at the start (1575 nodes, 17887 edges; 26 checks). `gh` is installed (`/usr/local/bin/gh`), not used: CI read
   with the REST API and the GitHub MCP tools.
-- Commits: `294ddfa` (the fix and its three witnesses), and this entry's commit (the records and
-  `scripts/estop-measure.py`).
+- Commits: `294ddfa` (the fix and its three witnesses), `22e5c8c` (the records and `scripts/estop-measure.py`), and this
+  entry's closing commit (the push runs read).
 - Files and folders (`git diff --name-status 0ebbc15..HEAD`): A `scripts/estop-measure.py`,
   `docs/assistant-memory/re-ask-the-shape-that-failed.md`. M `crates/delulu/src/brokerd.rs`, `broker_ipc.rs`, `cli.rs`,
   `broker_client.rs`, `run_cmd.rs`; `crates/delulu-diag/src/codes.rs` (DL1401's explanation); `CHANGELOG.md`, `HANDOFF.md`
@@ -6814,7 +6814,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   - `witness.yml` at `294ddfa` (`bin:delulu`, `brokerd::tests`): macOS `41220699505` 57 passed, Windows `41220701916` 53
     (the words witness is Unix-only), Ubuntu `41220704527` and arm64 `41220706907` 58 each — all success, 0 failed, the
     new witnesses named in each log.
-  - `294ddfa`'s push runs, CI `41221655879` and OpenShell `41221655891`: running when this entry was written — Open / next 1.
+  - `294ddfa`'s push runs: CI `41221655879` — 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.91x
+    where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3
+    hardware threads, 2.15x observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+    OpenShell `41221655891` — success.
+  - `22e5c8c`'s push run `41221939225` (the records): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on arm64
+    (2.94x against 1.47x, passed), NOT MEASURED on the other three; disk as above but Windows 217 → 202 GB.
+  - On this entry's closing commit: Open / next 1.
 - **Loop engineering:** `scripts/estop-measure.py` keeps both of RW 4.53's measurements (the e-stop beside N loops of chain
   writers; behind a queue on a held chain), which this run rebuilt by hand from run 16's record — it reads 15.14 s DL1401
   on `0ebbc15`'s binary and 9.81 s revoked on the fix. `docs/CLOUD_ROUTINE.md` step 5: re-ask a clean measurement in the
@@ -6827,7 +6833,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   §11.5 (a clean measurement is re-asked in the shape that failed) and
   `docs/assistant-memory/re-ask-the-shape-that-failed.md`.
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `master`'s push runs on `294ddfa` (CI `41221655879`, OpenShell `41221655891`) and on this entry's commit.
+  1. Read `master`'s push run on this entry's closing commit (records only; `294ddfa`'s `41221655879` and `22e5c8c`'s
+     `41221939225` are green).
   2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
      read, an adversarial pass on the newest feature (the revocation line of D-V2-198, or RW 4.67's allocator window), and
      the live documents scanned for claims the code has overtaken.
