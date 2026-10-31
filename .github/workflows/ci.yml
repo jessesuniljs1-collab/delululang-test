@@ -81,6 +81,22 @@ jobs:
       - name: Fetch every platform's crates (egress_features resolves the whole graph offline)
         run: cargo fetch --locked
 
+      # RUNNER-DISK-1 (RW 7.26): a pull request's Ubuntu test job died of a full disk once in 223 runs
+      # (`41121497877`, 2026-10-30: `No space left on device` in the runner's own log about a minute into
+      # the suite, so after the cache restore) and kept no log to say how full it was. This step and its
+      # twin after the suite read the margin on every run: the workspace disk's free space and the size of
+      # `target/` (the restored cache here; the suite's build there), as a notice. Never fails the job: it
+      # is a measurement.
+      - name: RUNNER-DISK-1 — this runner's disk before the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk before the suite (${{ matrix.os }})::$v"
+
       # `--no-fail-fast`: without it cargo stops at the first failing test BINARY. On the first run
       # (2026-09-14) that made every x86 job report one failure and hide whatever came after it;
       # arm64, which already said `--no-fail-fast`, was the only job that showed the whole picture.
@@ -148,6 +164,16 @@ jobs:
       # the job's LAST step, and an annotation too, because a reader of the log through the API gets
       # only its last 5,000 lines, and the sweep and the fuzz campaign above print more than that
       # (measured by the first cloud routine run).
+      # RUNNER-DISK-1 (RW 7.26): the margin after the suite, beside the reading before it.
+      - name: RUNNER-DISK-1 — this runner's disk after the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk after the suite (${{ matrix.os }})::$v"
       # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's
       # report — read here before any profile requires them. Never fails the job: it is a measurement. It
       # comes before the ping-pong verdict, which stays the job's last step.
@@ -186,8 +212,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Fetch every platform's crates (egress_features resolves the whole graph offline)
         run: cargo fetch --locked
+      # RUNNER-DISK-1 (RW 7.26): the test job's two disk readings, here too.
+      - name: RUNNER-DISK-1 — this runner's disk before the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk before the suite (arm64)::$v"
       - name: Full workspace test suite (aarch64)
         run: cargo test --workspace --no-fail-fast
+      - name: RUNNER-DISK-1 — this runner's disk after the suite
+        if: always()
+        shell: bash
+        run: |
+          f="$(df -Ph . | awk 'NR==2 {print $4 " free of " $2}')" || true
+          t="$( { du -sh target 2>/dev/null || true; } | cut -f1)"
+          v="${f:-no df reading}; target/ ${t:-absent}"
+          echo "$v"
+          echo "::notice title=disk after the suite (arm64)::$v"
       # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's
       # report — read here before any profile requires them. Never fails the job: it is a measurement. It
       # comes before the ping-pong verdict, which stays the job's last step.
