@@ -1301,6 +1301,14 @@ spells the same thing?**
   the custody's answer (the egress client's, an envelope's) still follows it as an overriding `deny`. Never soften this to
   "the effect re-checks anyway": the chain is what a monitor and an auditor read, and never let a capability refusal go
   unrecorded either — a monitor's `denies=N/MS` counts it. Search key: `check_at(` reached before `capability_refusal`.
+- **RW 4.67 — a sent secret leaves no copy of its bytes behind** (on-demand routine run 12, 2026-10-31, D-V2-196). Under
+  the daemon a secret's bytes enter the run only to be sent, and the copies on the way to the wire are made by code that is
+  not ours: the copy run 25's red team found, and run 12 read again by scanning the run's memory, was hyper's serialized
+  request, in the arena of reqwest's runtime thread. No call site can clear a buffer it never sees, so the rule is the
+  allocator's: while a `delulu_runtime::scrub::Window` is open, the `delulu` binary zeroes every block it frees, on every
+  thread. Never soften this to "the runtime zeroes its own copies" — that was P17-F's stated limit, and the copy that stayed
+  was not ours. A new path that hands a secret's bytes to code outside the runtime opens a window around it. Search key:
+  `send_secret(` or `reveal()` with no `scrub::Window::open` around the call.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1956,6 +1964,17 @@ Added in V2 (2026-09-17 → 2026-09-28):
   exit 127) — a gate that did not run is a failure, never a skip. **And judge a launch's *Breaking* paragraph against 1.x
   itself**, not against the V2 state just before the change: `git fetch origin tag v1.0.0`, then `git show v1.0.0:PATH`.
   RW 4.79 moved an order 1.x already had (the daemon's custody asked before the capability), so its code move is breaking.
+- **A memory scan's scan point must not allocate** (on-demand routine run 12). A copy freed on the run's own thread is
+  overwritten as soon as that thread allocates again: the first witness scanned while the program waited in a second
+  request, and a mutant that left a copy there (the held secret's own zeroing removed, M968) survived it. Scanned while
+  the program waited on standard input (`console.readline`, which allocates nothing), M968 was red 3 of 3. Scan for a
+  fragment as well as the whole — a freed block's first 16 bytes are the allocator's own — and read only the pages in
+  memory (`/proc/PID/pagemap`): the interpreter's stack reservation made a whole-mapping scan take 34 s in a debug build.
+- **Never undo a mutant with `git stash push` and `git stash drop`** (on-demand routine run 12): it dropped the file's whole
+  diff, the fix with it, and the edit was re-applied from the run's own record. Apply a mutant by an anchored edit and
+  restore the exact text (`scripts/mutants.py`; `MUTANTS_KEEP=DIR` keeps each mutant's `delulu` for by-hand probes), and
+  compare `git diff` with a saved patch after each. And a by-hand run after a stashed red reading runs the binary the old
+  code built: four reds in a row were that binary, not the fix — `cargo build` first.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

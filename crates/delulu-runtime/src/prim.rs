@@ -914,6 +914,10 @@ pub fn call_cap_method_pinned(
             // the host, pins, and follows redirects through the same check. For a sandboxed guest this
             // line runs in the HOST — `HostChannel::decide` performs the request here — so one
             // implementation serves L0 and every guest.
+            // RW 4.67: a request carrying a secret copies its bytes — `reveal`'s copy, each header, the serialized request —
+            // into buffers that are not ours. While this window is open every one of them is zeroed as it is freed; the
+            // request's client is dropped, and its runtime thread joined, before `request_for_program` returns.
+            let _scrub = secret.as_ref().map(|_| crate::scrub::Window::open());
             let revealed = secret.as_ref().map(|(_, s)| s.reveal());
             let audience = secret.as_ref().and_then(|(_, s)| s.audience().cloned());
             let carried = match (&secret, &revealed) {

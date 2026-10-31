@@ -19,6 +19,7 @@ pub mod plugin;
 pub mod pqc;
 pub mod prim;
 pub mod python;
+pub mod scrub;
 pub mod sim;
 pub mod sink;
 pub mod trace;

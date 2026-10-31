@@ -595,6 +595,8 @@ dependencies = [
  "getrandom 0.3.4",
  "landlock",
  "libc",
+ "rcgen",
+ "rustls",
  "seccompiler",
  "serde",
  "serde_json",
