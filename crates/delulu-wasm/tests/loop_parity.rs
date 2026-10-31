@@ -234,6 +234,38 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "41 two 23 321001\n", "the values themselves");
 }
 
+/// **CTOR-SHADOW-1.** A function may share its name with a constructor of the module's own sum type, and the checker
+/// resolves the name to the constructor, as a call and as a value. The interpreter asked the module's functions first
+/// for a call, so `Circle(3)` ran the function (300, an `Int`, where the checker typed a `Shape`, and the `match` on it
+/// faulted). And it turned a capitalized name into a constructor before asking the functions for a value, so `Double`
+/// passed to `apply` was a constructor with no fields, *"not callable"* (DL0907). The WASM engine resolved both as the
+/// checker does.
+#[test]
+fn a_constructor_is_built_where_a_function_shares_its_name_and_a_function_is_passed_where_none_does() {
+    let src = r#"module m
+
+type Shape = Circle(Int) | Dot
+
+fn Circle(x: Int) -> Int { x * 100 }
+
+fn Dot() -> Int { 7 }
+
+fn Double(x: Int) -> Int { x * 2 }
+
+fn apply[T](g: fn(T) -> T, x: T) -> T { g(x) }
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let s: Shape = Circle(3)
+  let d = Dot
+  let a = match s { Circle(n) => n, Dot => 0 }
+  let b = match d { Circle(n) => n, Dot => 0 - 1 }
+  out.println(str(a) + " " + str(b) + " " + str(apply(Double, 5)))
+}
+"#;
+    assert_eq!(assert_parity(src), "3 -1 10\n", "the values themselves");
+}
+
 /// The host writes what it reads into the guest's heap too (`fs.read_text`), and grows the memory by the same rule — a
 /// file larger than the first heap was a refusal on WASM alone.
 #[test]

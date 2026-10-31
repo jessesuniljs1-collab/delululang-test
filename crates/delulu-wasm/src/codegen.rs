@@ -538,6 +538,10 @@ impl EnumEnv {
     }
     /// The named sum type a constructor builds, when exactly one declares it — the checker's rule (`variant_ctor`): a
     /// name two sums share (`IoErr`'s and `NetErr`'s `Other`) names neither.
+    /// Is `name` a constructor of any of the module's sum types, however many (CTOR-SHADOW-1)?
+    fn is_ctor(&self, name: &str) -> bool {
+        (0..self.descs.len() as u32).any(|i| self.desc(i).ctors.iter().any(|c| c.name == name))
+    }
     fn enum_of_ctor(&self, ctor: &str) -> Option<u32> {
         let mut owners = (0..self.descs.len() as u32).filter(|&i| self.desc(i).ctors.iter().any(|c| c.name == ctor));
         let first = owners.next()?;
@@ -2712,9 +2716,10 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
-            // So does binding a name that is one — `let h = double`, `let g = h` (RW 3.4).
+            // So does binding a name that is one — `let h = double`, `let g = h` (RW 3.4) — but never a constructor of the
+            // module's own types, which the checker resolves before a function of the same name (CTOR-SHADOW-1).
             if let Expr::Var { path, .. } = value {
-                if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() {
+                if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() && !cx.env.is_ctor(&path.segs[0].name) {
                     if let Ok(c) = resolve_callable(value, cx) {
                         cx.bind_after();
                         cx.callables.last_mut().unwrap().insert(name.name.clone(), c);

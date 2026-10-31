@@ -1327,6 +1327,12 @@ spells the same thing?**
   called the function instead, and a program `why Write` called unable to write, wrote. Never ask "is it a closure?" where
   the question is "does a local bind the name?". A new callable kind must not fall through to the module's functions.
   Search key: `eval_call`'s `env.get(name)` tested against one `Value` variant.
+- **CTOR-SHADOW-1 — a name a constructor and a function share is the constructor** (the laptop, 2026-11-01, D-V2-201).
+  The checker resolves such a name to the constructor of the module's sum type. The interpreter called the function, so
+  an effectful `fn Wrap` named like a pure constructor wrote from a program `authority` called pure, with no special
+  grant. Every runtime name lookup (`eval_var`, both paths of `eval_call`, the WASM `let`) asks in the checker's order:
+  local, then the module's constructor, then the module's function, then a prelude's. Search key: `funcs.get(` or
+  `funcs.contains_key(` reached before `ctors.contains(`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

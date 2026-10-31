@@ -7014,3 +7014,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   breaking, since v1.0.0 had no plugin export at run time, `PluginFn` and `load` being V2's P2, so no released surface
   moves); cite the newest launch runs; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — CTOR-SHADOW-1: a name a constructor and a function share is the constructor (RW 2.25, D-V2-201) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ctor-shadow` (stacked on `laptop/local-callee`, #106)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/tests/loop_parity.rs`, `crates/delulu/tests/late_let_cli.rs`, `docs/design/SOUNDNESS_AUDIT.md`
+  (entrenched: one paragraph in §D's box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 2.25), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-201),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- For the laptop's memory: HANDOFF §11.4 (CTOR-SHADOW-1).
+- **Open / next, in order:** land #106, then this, on green runs; read the sweep's run `41246969522` and the launch runs
+  `41247420596` and `41247423239`; bring `launch/2.0.0` current. There are two sections to fold:
+  - LOCAL-CALLEE-1, not breaking, since v1.0.0 had no plugin export at run time;
+  - CTOR-SHADOW-1, not breaking, since v1.0.0 had the same order and the checked meaning is 1.x's.
+  Then cite the newest launch runs. *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
