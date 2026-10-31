@@ -6433,8 +6433,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 ### 2026-10-31 — on-demand routine run 9: `launch/2.0.0` brought current with `master` at `9a82bf9` (release procedure step 1); #103 landed; RUNNER-DISK-1 measured
 - Session: `https://claude.ai/code/session_01Deh6W869fPE8rBr7jgXnC7`   Model: Claude Opus 5.5 (the routine; no fallback
   notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
-  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 222 at its records' first commit at its
-  close). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 222 at its records' first commit, 266 when its closing
+  commit was written). The setup script had run: the 1.96.1 toolchain was installed before the first command.
 - Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); `launch/2.0.0` in a worktree
   (`../launch-wt`, removed at the close). Pull request: none of this run's (#103, the laptop's, landed by fast-forward).
 - Base: `6516ae5` (`master` at the start; its push run `41127219112` green, 14 jobs success, 2 skipped).
@@ -6444,9 +6444,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   green on the merged tree, its `everything` run and release dry run dispatched, READ and cited. **Delivered:** the merge
   `1a7a1c3` on `launch/2.0.0` (pushed); the *Breaking* paragraph gains C9 (a refused module header's code, DL0209 →
   DL0201) and C11 (a non-UTF-8 source's exit code, 2 → 1), each a surface `STABILITY.md` §1 holds stable; every gate green
-  there; its release dry run `41163621006` read success; its `everything` `41163618866` read 16 of 18 success at this entry's
-  first commit, with the checker's and the broker's `miri-slow` running (Open / next 1). CHECKLIST-2.0 criteria 1, 3, 4
-  and 8 cite them in a records merge into `launch/2.0.0` once the run is read to its end.
+  there; its release dry run `41163621006` read success and its `everything` `41163618866` read **18 of 18 success** (1 h 49 min;
+  the broker's Miri 1 h 49 min); CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite both in the merge of this entry's closing
+  commit into `launch/2.0.0`, pushed after it (`git log -1 origin/launch/2.0.0`).
 - **Housekeeping:** `laptop/sandbox-fault-place` (#103, RW 6.39) was the one branch ahead of `master`, green on
   `41124338693`; read as a stranger's diff, its witnesses re-run in the VM and its witness read red on a mutant;
   `master` fast-forwarded to `9a82bf9` (GitHub closed #103 as merged). The newest autosave snapshot (`942c069`) landed
@@ -6454,9 +6454,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   installed (not used; CI read with the REST API and the GitHub MCP tools). `cargo-deny` 0.20.2 installed in the VM.
   **A finding:** #101's run `41121497877` died on its Ubuntu test job of a full runner disk — RUNNER-DISK-1, RW 7.26, the
   one such death in 223 CI runs; `f5a1d58` makes every test job read its disk's margin before and after the suite.
-- Commits: on `master`, `9a82bf9` (the laptop's #103, fast-forwarded), `f5a1d58` (the disk readings), this entry's
-  commit (these records, the loop's edits). On `launch/2.0.0`, `1a7a1c3` (the merge), then the merge of this entry's
-  commit (the citations).
+- Commits: on `master`, `9a82bf9` (the laptop's #103, fast-forwarded), `f5a1d58` (the disk readings), `dbfdac6` (these
+  records, the loop's edits), and this entry's closing commit (the runs read to their end). On `launch/2.0.0`, `1a7a1c3`
+  (the merge), then the merge of this entry's closing commit (the citations).
 - Files and folders (`master`, `git diff --name-status 9a82bf9..HEAD`): M `.github/workflows/ci.yml` (RUNNER-DISK-1's four
   steps), `scripts/launch-changelog.py` (its *Breaking* advice), `docs/CLOUD_ROUTINE.md` (steps 3 and 4.3),
   `docs/REMAINING_WORK.md` (row 7.26), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
@@ -6474,9 +6474,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
     limit"*) and those jobs passed cold. `f5a1d58`'s `41164074066`: 14 success, 2 skipped; the first disk readings, Ubuntu
     82 → 67 GB free (`target/` 2.9 → 18 GB), Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
   - `launch/2.0.0` `1a7a1c3`: the release dry run `41163621006` success (8 min 39 s; four `package` jobs; `release`
-    skipped, no tag); `everything` `41163618866` 16 of 18 success at this entry's first commit (`actors_pingpong` MEASURED
-    on arm64, 2.82x against 1.48x; NOT MEASURED on the other three), `miri-slow` (check, broker) running.
-  - On this entry's commit: Open / next 2.
+    skipped, no tag); `everything` `41163618866` **18 of 18 success** (1 h 49 min in all; `miri-slow` syntax 22 min, the
+    checker 1 h 31 min, the broker 1 h 49 min; `actors_pingpong` MEASURED on arm64, 2.82x against 1.48x, NOT MEASURED on
+    the other three).
+  - `dbfdac6`'s push run `41165974895` (this entry's first records): 14 jobs success, 2 skipped.
+  - On this entry's closing commit: Open / next 1.
 - **Loop engineering:** `docs/CLOUD_ROUTINE.md` step 4.3 says what decides the *Breaking* paragraph (a surface
   `STABILITY.md` §1 holds stable, moved), and `scripts/launch-changelog.py` says it when it folds; step 3 says a failed
   job with no failed step died with its runner, its log 404 and its annotations naming why; the test jobs read their disk.
@@ -6485,11 +6487,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.5 (a job whose runner died leaves no log, and its annotations say why; a
   runner's disk is a budget the suite spends).
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `everything` `41163618866` to its end — `miri-slow` (delulu-check) and (delulu-broker), the broker's 1 h 51 min
-     on `2667105` and 3 h 11 min on the 2026-10-30 nightly — then cite it and `41163621006` in CHECKLIST-2.0 criteria 1,
-     3, 4 and 8 by a records merge into `launch/2.0.0` (this run does it if it is read before the run closes; the entry's
-     last commit says).
-  2. Read `master`'s push run on this entry's commit (records only).
+  1. Read `master`'s push run on this entry's closing commit (records only; `dbfdac6`'s `41165974895` is green), and
+     record the hash of `launch/2.0.0`'s records merge that follows it.
+  2. Keep `launch/2.0.0` current as `master` moves (step 4.3); it is at `master` `9a82bf9` plus this run's records.
   3. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
      cap turns it red.
   4. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first. And if a test

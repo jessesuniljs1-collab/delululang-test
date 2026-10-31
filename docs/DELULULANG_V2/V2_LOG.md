@@ -10532,9 +10532,10 @@ check ok, findings 0 errors and 15 warnings; `doctor --check` 26 checks passed; 
 check advisories` ok and `bans licenses sources` ok (cargo-deny 0.20.2, the advisory database of 2026-10-31).
 
 **Read at `1a7a1c3`:**
-- `everything` `41163618866`: at this entry's first commit **16 of 18 jobs success** — the Linux, Windows, macOS and
-  arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`, `microvm-reproducible`,
-  `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax, 22 min) — with `miri-slow` (check, broker) still running.
+- `everything` `41163618866`: **18 of 18 jobs success** (1 h 49 min in all) — the Linux, Windows, macOS and arm64 test
+  jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`, `microvm-reproducible`, `miri`
+  (diag, atlas), `miri-ffi` and `miri-slow` (syntax 22 min, the checker 1 h 31 min, the broker 1 h 49 min). 16 of 18 were
+  read at this entry's first commit (`dbfdac6`), the two `miri-slow` at 05:05 UTC.
   `actors_pingpong` MEASURED on arm64 (2.82x where the machine gave 3.94x, against a bar of 1.48x: passed); NOT MEASURED
   on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 1.94x observed). The sandbox properties as
   recorded before (macOS `filesystem_confinement absent`, its reads not confined).
@@ -10543,7 +10544,10 @@ check advisories` ok and `bans licenses sources` ok (cargo-deny 0.20.2, the advi
 - `master`'s push runs: `9a82bf9` (#103) `41163006021` 14 jobs success, 2 skipped (`actors_pingpong` MEASURED on arm64,
   2.90x against 1.48x; NOT MEASURED on the other three). Its Linux and Windows test jobs could not restore their cache
   (*"Failed to restore: Egress is over the account limit"*, an Actions annotation) and passed on a cold build. `f5a1d58`
-  `41164074066` 14 jobs success, 2 skipped, with the first disk readings (below).
+  `41164074066` 14 jobs success, 2 skipped, with the first disk readings (below). `dbfdac6` (this entry's first records)
+  `41165974895` 14 jobs success, 2 skipped, the disk readings the same (Windows on a 220 GB disk: 217 → 202 GB free).
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41163618866` and `41163621006`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
 
 **RUNNER-DISK-1 (RW 7.26).** #101's Ubuntu test job (`124288578335`) died 2 min 50 s in: its annotation is the runner's
 own *"System.IO.IOException: No space left on device"* writing its diagnostic log, its suite step has no conclusion, and
