@@ -6774,3 +6774,72 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      needs one (P9's design).
   7. *[laptop]* delete the merged branches above from `origin`.
   8. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-31 — on-demand routine run 14: the e-stop goes before the requests waiting at the broker (ESTOP-QUEUE-1, RW 4.53, D-V2-198)
+- Session: `https://claude.ai/code/session_01Deh6W9Cuzh8r2TmRb8JSY4`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 332 when its
+  records were written). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `claude/peaceful-carson-0fcquc` (this session's) for the code's runner witnesses, then `master` moved to the same
+  commits and pushed (`docs/CLOUD_ROUTINE.md`, *Where a run works*). Pull request: none.
+- Base: `0ebbc15` (`master` at the start; its push run `41215074286` green, 14 jobs success, 2 skipped).
+- **The milestone, named before building:** RW 4.53 closed end to end — routine run 16's measurement and the red team's
+  F4 re-run on the current binary, what still failed witnessed red, fixed, mutants, the full suite, the runners, the
+  records. **Delivered:** `294ddfa` — run 16's measurement is clean on `0ebbc15` (a revoke beside 12 sandbox loops 22 ms
+  median, 49 ms max), but F4's shape still failed: with the audit chain held, an e-stop behind four queued requests
+  answered DL1401 "did not answer within 15s — start it with `delulu broker start`" at 15.18 s and landed ~25 s after the
+  pull (ESTOP-QUEUE-1). A revocation (`Revoke`, `Quarantine`) now has a line the serial handler reads first, dead-men
+  are judged as of the earliest arrival still waiting, and a broker that accepted and did not answer is said to be
+  running (every DL1401, `broker status`/`stop`/`rotate-key`, `explain E-DL1401`). After: 9.81 s, revoked, its record
+  said lost. Witnesses red then green; mutants M969–M973 red (M970 survived the witness's first form, which then placed
+  both revocations); the full suite 2,626 passed, 0 failed; the runners green before `master` moved. D-V2-198.
+- **Housekeeping:** no branch ahead of `master` but the archived ones; the newest autosave snapshot is still `942c069`
+  (landed in `ff0b4f6`); `launch/2.0.0`'s citations merge (run 13's Open / next 1) is `4127776`. The Survey and `doctor`
+  healthy at the start (1575 nodes, 17887 edges; 26 checks). `gh` is installed (`/usr/local/bin/gh`), not used: CI read
+  with the REST API and the GitHub MCP tools.
+- Commits: `294ddfa` (the fix and its three witnesses), and this entry's commit (the records and
+  `scripts/estop-measure.py`).
+- Files and folders (`git diff --name-status 0ebbc15..HEAD`): A `scripts/estop-measure.py`,
+  `docs/assistant-memory/re-ask-the-shape-that-failed.md`. M `crates/delulu/src/brokerd.rs`, `broker_ipc.rs`, `cli.rs`,
+  `broker_client.rs`, `run_cmd.rs`; `crates/delulu-diag/src/codes.rs` (DL1401's explanation); `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4, §11.5), `docs/CLOUD_ROUTINE.md` (step 5), `docs/REMAINING_WORK.md` (row 4.53), `docs/REPOSITORY_STRUCTURE.md`
+  (the script's line), `docs/book/THE_DELULULANG_BOOK.md` (*The e-stop is revocation*), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-198), `V2_PHASE_STATUS.md` (row 17), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- CI read:
+  - `0ebbc15`'s push run `41215074286` (run 13's close): 14 jobs success, 2 skipped; `actors_pingpong` MEASURED on macOS
+    (2.36x where the machine gave 3.59x, against 1.34x, passed) and arm64 (2.97x against 1.48x, passed), NOT MEASURED on
+    Ubuntu and Windows; disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
+  - `witness.yml` at `294ddfa` (`bin:delulu`, `brokerd::tests`): macOS `41220699505` 57 passed, Windows `41220701916` 53
+    (the words witness is Unix-only), Ubuntu `41220704527` and arm64 `41220706907` 58 each — all success, 0 failed, the
+    new witnesses named in each log.
+  - `294ddfa`'s push runs, CI `41221655879` and OpenShell `41221655891`: running when this entry was written — Open / next 1.
+- **Loop engineering:** `scripts/estop-measure.py` keeps both of RW 4.53's measurements (the e-stop beside N loops of chain
+  writers; behind a queue on a held chain), which this run rebuilt by hand from run 16's record — it reads 15.14 s DL1401
+  on `0ebbc15`'s binary and 9.81 s revoked on the fix. `docs/CLOUD_ROUTINE.md` step 5: re-ask a clean measurement in the
+  shape that failed, and place every member of an order in its witness. `HANDOFF.md` §11.5 and
+  `docs/assistant-memory/re-ask-the-shape-that-failed.md` keep the lesson.
+- **Redo on the laptop:** delete `claude/peaceful-carson-dfkzl9`, `claude/peaceful-carson-rx0bf9`,
+  `claude/peaceful-carson-ubupyf`, `laptop/sandbox-fault-place` and this session's `claude/peaceful-carson-0fcquc` from
+  `origin` once each is in `master`'s history — the cloud's proxy has refused every such deletion since run 7.
+- For the laptop's memory: `HANDOFF.md` §11.4 (ESTOP-QUEUE-1 — a revocation goes first; never put it back in the line),
+  §11.5 (a clean measurement is re-asked in the shape that failed) and
+  `docs/assistant-memory/re-ask-the-shape-that-failed.md`.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push runs on `294ddfa` (CI `41221655879`, OpenShell `41221655891`) and on this entry's commit.
+  2. **2026-11-01 is a Sunday: the weekly verification sweep** (step 4.6) — `ci.yml` `everything` at `master`, every job
+     read, an adversarial pass on the newest feature (the revocation line of D-V2-198, or RW 4.67's allocator window), and
+     the live documents scanned for claims the code has overtaken.
+  3. Bring `launch/2.0.0` current with `master` (step 4.3, `scripts/launch-gates.sh`; write criterion 2's row first):
+     fold this section's CHANGELOG (*Fixed* and *Changed*) and judge the *Breaking* paragraph — the words of DL1401 and of
+     `broker status`/`stop`/`rotate-key` change, their codes, exit codes and JSON do not; v1.0.0's daemon handled requests
+     in arrival order.
+  4. The broker's Miri: if a nightly or an `everything` run passes 3 h 45 min, shorten what that job runs before the 4 h
+     cap turns it red (`41204426153`'s took 2 h 07 min).
+  5. RW 7.25: if `a_long_chain_does_not_kill_a_healthy_monitor` goes red again, read its message first; and if a test job
+     dies with no failed step, read its `RUNNER-DISK-1` notices and its annotations first.
+  6. The work order's items 5–7: RW 2.12's last methods (PUT, PATCH, DELETE) only when a program needs one; RW 3.24 (the
+     interpreter's variables resolved to slots) is the largest open user-facing item a VM can build and verify.
+  7. *[laptop]* delete the merged branches above from `origin`.
+  8. *[laptop]* the launch, only on the owner's word.

@@ -5302,3 +5302,51 @@ which Tiers 0 and 1 do not contain and Tier 2 does (`docs/DEPLOYMENT.md` §5 now
   second account (Tier 2): it reaches neither the socket nor the directory.
 - **Revisit** if the secret store is ever sealed against its own user (a key the user's processes cannot read): then
   the socket would be the weaker door, and the binding worth building.
+
+## D-V2-198 — ESTOP-QUEUE-1 (RW 4.53): a revocation — the operator's e-stop, a monitor's quarantine — is handled before every request waiting at the broker daemon, and dead-men are judged as of the earliest arrival still waiting — TAKEN (head chef, 2026-10-31, under the owner's delegation)
+
+**Context.** The daemon is serial: one handler touches custody, in the order whole requests are handed to it (RW 4.40).
+A request that records takes the audit chain's append lock and waits for it up to 5 s while another writer — a sandboxed
+run's host, a CLI command — holds it (RW 4.48; one wait per request since RW 4.58's rest). Routine run 18's red team (F4)
+saw an e-stop behind four queued requests answer `did not answer within 15s` while the revoke landed at ~25 s; RW 4.53
+recorded it and the chain-length half was fixed by D-V2-159 and D-V2-160. On-demand routine run 14 re-measured on
+`0ebbc15`: beside 12 sandbox loops the revoke took 22 ms median, 49 ms max (control 29 / 50 ms) — the contention is gone —
+but with the chain HELD, F4's shape still held: `grants revoke` behind four queued mints answered DL1401 at 15.18 s with
+"start it with `delulu broker start`", and the node was revoked about 25 s after the pull. Devices park themselves after
+1 s of broker silence (DEADMAN-1), so the machine fails safe; the operator was told the e-stop failed, wrongly, and why.
+
+**Decision.**
+1. **A revocation goes first.** `ReqBody::is_revocation` (`Revoke`, `Quarantine`). A reader thread hands a revocation to
+   the serve loop on its own bounded line and then a wake on the ordinary line (`try_send`: a full line needs none — the
+   handler is not waiting, and reads the revocation line before its next request). The handler stays serial and alone in
+   touching custody; it reads the revocation line first. A revocation now waits for the request being handled and no
+   other: on the same held chain the e-stop answered in 9.81 s, `ok: revoked`, its record said lost (RW 4.58).
+2. **Overtaking only narrows.** A request a revocation overtakes is decided after it, against less authority: a mint or
+   delegation under the revoked node is refused instead of minted and revoked; a use under it is denied; a refusal record
+   needs only that its node exists (`record_*_refusal`), so none is lost; a `Shutdown` that arrived first no longer
+   swallows the e-stop.
+3. **Dead-men are judged as of the EARLIEST arrival still waiting** — the requests already handed over sit in a bounded
+   `waiting` line, in order — never as of a revocation's own arrival when it goes first: a beat that arrived in time and
+   waits behind a held request keeps its dead-man (DEADMAN-BUSY-1, D-V2-127, kept).
+4. **A broker that accepted a request and did not answer it in time is said to be running.** Every DL1401 site
+   (`grants`, `guard`, a lease run, the daemon custody) and `broker status`, `stop`, `rotate-key` point at `broker.log`,
+   which names each late answer (RW 7.17), instead of "start it" / "not running" / "nothing to stop". No new code; exit
+   codes and `broker status --json` unchanged.
+5. **Not taken:** a second handler for revocations (custody has one writer by design); not waiting for a revocation's
+   record on a held chain (RW 4.58 keeps the record whenever the chain frees within its wait — and a device parks after
+   1 s of silence anyway); remembering a held chain across requests so later ones fail at once (it would refuse
+   synchronous operations a short contention would have recorded).
+
+**Residual.** On a held chain each request, a revocation included, still waits its own 5 s, so several revocations at
+once are answered one after another; a continuous stream of revocations is served before everything else and holds
+dead-men to the earliest waiting arrival while it lasts — a stream only a process of the broker's own user can send
+(RW 4.4). Behind more than 64 waiting requests a reader's hand-over still waits for room, as before.
+
+**Evidence.** `brokerd` unit tests: `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`
+(the chain held while four mints queue, then a revoke and a quarantine; the chain's own seqs say the order — red on
+`0ebbc15`: mints at 4–7, the revoke at 8, the quarantine at 9),
+`a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man`,
+`a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Mutants M969 (revocations
+in the ordinary line: the old behaviour), M970 (the quarantine left out), M971 (dead-men judged by the revocation's own
+arrival), M972 (no wake: an idle daemon left eight tests' revocations unanswered), M973/M973a/M973b (the words): all red,
+control green. By hand (`f4.py`, F4's shape): 15.18 s DL1401 before, 9.81 s revoked after. The code is `294ddfa`.

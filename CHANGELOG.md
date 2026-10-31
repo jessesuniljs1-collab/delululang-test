@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an e-stop goes before the requests waiting at the broker, 2026-10-31
+
+- **Fixed: the operator's e-stop and a monitor's quarantine are handled before every request waiting at the broker
+  daemon** (ESTOP-QUEUE-1, RW 4.53, D-V2-198). The daemon answers one request at a time, and while another writer holds
+  the audit chain each request that records waits up to 5 s for it. A `grants revoke` behind four such requests answered
+  `DL1401 … did not answer within 15s`, told its operator to start a broker that was running, and the revocation landed
+  about 25 s after it was pulled. Now a revocation waits only for the request the daemon is handling: on the same held
+  chain it answered in 9.8 s, revoked, and said the chain could not record it. A request it overtakes is decided against
+  less authority, never more, and a dead-man is still judged as of the earliest request waiting, so a beat that arrived
+  in time keeps it.
+- **Changed: a broker that accepted a request and did not answer it in time is said to be running.** Every DL1401 said
+  "start it with `delulu broker start`", and `broker status`, `stop` and `rotate-key` said "broker not running" (`stop`:
+  "nothing to stop"); now they say it did not answer and point at its `broker.log`, which names each late answer, and
+  `delulu explain E-DL1401` says so. Exit codes, and `broker status --json`'s `{"running": false}`, are unchanged.
+
 ## Unreleased — a sent secret leaves no copy of its bytes in the run, 2026-10-31
 
 - **Fixed: once a run has sent a broker-held secret, no copy of its bytes stays in the run's memory** (RW 4.67,
