@@ -354,6 +354,38 @@ tell you which branch the implementation forgot to write. Until that mechanizati
 honest claim is: *the rules are believed sound, the implementation is tested against them, and the
 tests are the actual guarantee.*
 
+> **§D's claim was negated a second time — 2026-11-01, LATE-LET-1 (D-V2-199). Read this before
+> relying on step 1.**
+>
+> This time the checker was right and the runtime was not. A `let` is not recursive and binds a new
+> name, and the checker resolves a closure's names where the closure is written. Both engines read
+> them when it ran, in the scopes it was made over, where a later `let` had bound the same name:
+>
+> ```delulu
+> fn sneaky(out: Cap[Console]) -> Int {
+>     let g = fn() -> Int { 0 }
+>     let h = fn() -> Int { g() }
+>     let g = fn() -> Int ! {Write} { out.println("printed"); 1 }
+>     h()
+> }
+> fn main(root: Root) { let n = sneaky(root.console()) }
+> ```
+>
+> `delulu check` was clean; `delulu authority` said **"(none — provably pure)"**; `run --grant
+> console` **printed**, on the interpreter and on the WASM engine. With a `Secret.map` callback in
+> `h`'s place a plaintext secret was printed with no `Declassify`: R-4 and R-2 reopened again, by a
+> door no rule here names. Step 1 of the sketch, *"at any call, the callee value's static row is the
+> row the checker saw"*, assumes the runtime finds the value the checker typed. Here it found
+> another, which is the assumption carried as *"runtime correctness"*, failing. Both engines now bind
+> a `let` where no closure made before it can see.
+>
+> **The lesson, recorded because it generalizes:** the parity gates compare the two engines with
+> each other, and both were wrong in the same way, so 50,000 differential programs could not see it.
+> A gate that compares implementations finds where they differ. Only a gate that compares an
+> implementation with the checker's meaning finds what they share. The witnesses are `late_let_cli`
+> and `loop_parity`'s `a_function_value_never_reads_a_name_bound_after_it`, which assert the values
+> the checker's meaning gives.
+
 ## E. New test obligations (added to the laundering suite)
 
 | Test | Expects |

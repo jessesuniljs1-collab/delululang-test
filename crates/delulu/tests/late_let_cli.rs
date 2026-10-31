@@ -41,8 +41,9 @@ fn text(o: &Output) -> String {
 }
 
 /// Three ways a later `let` reached a closure: in the scope the closure was made in, in a scope above the one it was made
-/// in (the closure kept in a `var` from an inner block), and past a parameter of the same name. Each function is pure to
-/// the checker, so the program is; before, each printed its line.
+/// in (the closure kept in a `var` from an inner block, and the later value made elsewhere, so that only the closure's
+/// own making holds that scope), and past a parameter of the same name. Each function is pure to the checker, so the
+/// program is; before, each printed its line.
 const EFFECTS: &str = r#"module late
 
 fn swapped_callee(out: Cap[Console]) -> Int {
@@ -57,16 +58,20 @@ fn swapped_callee(out: Cap[Console]) -> Int {
 
 fn quiet() -> Int { 0 }
 
+fn loud(out: Cap[Console]) -> List[fn() -> Int ! {Write}] {
+    [fn() -> Int ! {Write} {
+        out.println("LEAK: through a var")
+        1
+    }]
+}
+
 fn through_a_var(out: Cap[Console]) -> Int {
     var k = quiet
     if true {
         let z = 0
         k = fn() -> Int { quiet() + z }
     }
-    let quiet = fn() -> Int ! {Write} {
-        out.println("LEAK: through a var")
-        1
-    }
+    let quiet = loud(out)[0]
     k()
 }
 
