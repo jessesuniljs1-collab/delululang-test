@@ -11068,3 +11068,35 @@ interpreter; `5` read through a closure on both engines).
   value in another function, and M976 prints `LEAK: through a var`.
 - `SOUNDNESS_AUDIT.md` §D records the second negation, with the lesson: a gate that compares two implementations finds
   where they differ; only one held to the checker's meaning finds what they share.
+
+## 2026-11-01 — the laptop: #104 landed; the weekly `everything` run and `launch/2.0.0` `3bf4f2f` dispatched
+
+#104 (LATE-LET-1, D-V2-199) landed by fast-forward on its read run `41245211274` (14 success, 2 skipped), and `master`
+is `cccb001`. The weekly verification sweep's `everything` run is `41246969522` at `cccb001`, dispatched on Saturday
+2026-10-31 at 22:10 UTC. The sweep itself began at 21:12 UTC; its adversarial pass and documents scan are in the entry
+above.
+
+`launch/2.0.0` was merged with `cccb001` at `3bf4f2f`, and the *Breaking* paragraph was judged unchanged:
+- Every program checks as before, with the same codes. The runtime now gives the meaning the typing and effect rules
+  already gave, and those are the surface STABILITY.md §1 holds.
+- v1.0.0 had the same defect: its interpreter's `let` called `env.define` into the scope a closure held as
+  `env.clone()`.
+- A program the WASM engine now compiles, where it refused DL1201 before, is the backend's subset widening.
+
+Criterion 2 is 358/358, written by `scripts/launch-criterion-2.py`, and the launch gates were `LAUNCH-GATES=ok`. The
+`everything` run `41247420596` and the release dry run `41247423239` were dispatched at 22:16 UTC.
+
+## 2026-11-01 — the laptop: RW 4.29 closed, its condition met since 2026-10-13 (the weekly sweep's documents scan, second pass)
+
+The sweep's first documents scan searched the live documents for this week's closures and found nothing stale. A second
+pass read the status cell of every open row in `REMAINING_WORK.md` §2–§7. Row 4.29 (*"No program can be checked against
+a boundary, and nothing asks the operator for authority"*) still said *"P9-04 and P9-05 next"*, but its own closing
+condition was met when P9-03 completed on 2026-10-13 (D-V2-126). That condition is `authority --within` (P9-01), `grants
+diff` (P9-02), and `grants propose`, `proposals`, `approve`, `reject` and `auto-approve` (P9-03), the OpenShell study's
+§4.8–§4.10. P9-04 and P9-05 came after, from §4.11–§4.12, and are not this row's.
+
+Checked against the binary of `cccb001`: every one of those commands is in `delulu help grants` or `authority --help`,
+and `within_cli` (24 tests) and `broker_cli` hold them. The row is closed as of today, and says when its condition was met.
+
+The lesson is HANDOFF §11.8's, applied in full this time: a scan for this week's closures cannot find a row that went
+stale weeks ago. The sweep reads the status of every open row, not only the rows that just moved.

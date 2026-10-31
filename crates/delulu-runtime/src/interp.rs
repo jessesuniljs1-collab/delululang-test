@@ -1157,14 +1157,14 @@ impl Interp {
     }
 
     fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
-        // A14: a call by name to one of the module's functions — what the order below reaches when no local closure has
-        // the name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
-        // callee's scope. Whether a local closure has the name cannot change while the arguments run: an argument
-        // binds nothing in this scope, and a binding keeps its type.
+        // A14: a call by name to one of the module's functions — what the order below reaches when no local binds the
+        // name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
+        // callee's scope. Whether a local binds the name cannot change while the arguments run: an argument binds
+        // nothing in this scope.
         if let Expr::Var { path, .. } = callee {
             if let [seg] = path.segs.as_slice() {
                 let name = seg.name.as_str();
-                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && !matches!(env.get(name), Some(Value::Closure(_))) {
+                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && env.get(name).is_none() {
                     let home = self.home();
                     if let Some(f) = home.funcs.get(name) {
                         let callee_env = Scope::child(&home.globals);
@@ -1190,9 +1190,21 @@ impl Interp {
         if let Expr::Var { path, .. } = callee {
             if path.segs.len() == 1 {
                 let name = &path.segs[0].name;
-                // A locally-bound closure value takes precedence (e.g. `f` inside `apply`).
-                if let Some(Value::Closure(clo)) = env.get(name) {
-                    return self.call_closure(&clo, argvals);
+                // A local binding of the name takes precedence over everything below (e.g. `f` inside `apply`), whatever
+                // it holds, as the checker resolves the name. LOCAL-CALLEE-1: only a closure was asked for, so a plugin's
+                // export kept in a local named like one of the module's functions called that function — the checker
+                // had typed a pure export there, and the function wrote.
+                match env.get(name) {
+                    Some(Value::Closure(clo)) => return self.call_closure(&clo, argvals),
+                    Some(Value::PluginFn(f)) => return self.call_plugin_export(&f, argvals, span),
+                    Some(other) => {
+                        return Err(Escape::Fault(Fault::at(
+                            "DL0907",
+                            format!("value `{}` is not callable", other.display()),
+                            span,
+                        )))
+                    }
+                    None => {}
                 }
                 // P2 — `load(host, path, grant)` is handled HERE rather than in `prim`, for the
                 // reason `root.foreign` is: it mints a custody node and reads a container through the
