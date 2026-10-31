@@ -10978,3 +10978,83 @@ SMT — and macOS, 3 hardware threads; disk Ubuntu 82 → 67 GB free, Windows 14
 OpenShell `41221655891` — success. `22e5c8c`'s (the records) `41221939225`: 14 success, 2 skipped (arm64 MEASURED 2.94x).
 **`master` green at the end of the run.** The merged branches stay on `origin`: the permission classifier refused `git
 push --delete` (recorded for the laptop).
+
+## 2026-10-31 — on-demand routine run 15: `launch/2.0.0` brought current with `master` at `19629a7` (ESTOP-QUEUE-1; release procedure step 1)
+
+**Read first.**
+- Run 14's three commits (`294ddfa`, `22e5c8c`, `19629a7`) were `master`'s newest; `19629a7`'s push run `41223529177`:
+  14 jobs success, 2 skipped (`heavy-gates`, `miri-slow`; 15 min). `actors_pingpong` MEASURED on arm64 (2.91x where the
+  machine gave 3.94x, against a bar of 1.48x: passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3
+  hardware threads, 2.32x observed). The disk: Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 →
+  91.
+- Run 14's three witnesses re-run in the VM on `19629a7`, each passed among `brokerd::tests`' 58 (`cargo test -p delulu
+  --bin delulu brokerd::tests::`): `an_e_stop_and_a_quarantine_are_handled_before_the_requests_queued_ahead_of_them`,
+  `a_revocation_taken_ahead_of_a_waiting_beat_does_not_fire_that_beats_dead_man` and
+  `a_silent_broker_is_said_to_be_running_and_a_missing_one_to_be_started`. Its records checked against the tree: RW 4.53
+  struck, D-V2-198 in the decision log, `scripts/estop-measure.py` and its row, the memory file.
+- No branch held a commit `master` lacks but the archived ones (`autosave/*`); `origin/autosave/laptop`'s newest snapshot
+  is still `942c069` (landed in `ff0b4f6`, as runs 13 and 14 recorded). The VM's local `master` was the setup snapshot's
+  `6516ae5`; fast-forwarded before any edit. `claude/peaceful-carson-dfkzl9`, `-rx0bf9`, `-0fcquc`, this session's
+  `-xmq3m4` and `laptop/sandbox-fault-place` are each in `master`'s history; the session's permission classifier refused
+  `git push --delete` (*"Git Destructive"*), so they stay for the laptop.
+- The Survey and `doctor` at the start: `ok: the Survey matches the tree (1577 nodes, 17931 edges)`; `ok: 26 check(s)
+  passed`. `gh` is installed (`/usr/local/bin/gh`), not used: CI read with the REST API and the GitHub MCP tools.
+  `cargo-deny` 0.20.2 installed in the VM.
+
+**The milestone.** `master` held three commits `launch/2.0.0` lacked. Release procedure step 1 in a worktree, `git merge
+--no-ff origin/master`, as `fc7faff`:
+- `scripts/launch-changelog.py` folded the one new `## Unreleased` section (ESTOP-QUEUE-1's *Fixed* and *Changed*) into
+  `## [2.0.0]`. `CHANGELOG.md` and the map were the only conflicts; the decision log merged clean (D-V2-155 kept, D-V2-198
+  in).
+- **The *Breaking* paragraph is unchanged**, judged against `STABILITY.md` §1 and against v1.0.0 (`git fetch origin tag
+  v1.0.0`). The *Changed* line moves words only, and §2 holds diagnostic messages unstable: every DL1401 keeps its code,
+  and `broker status`, `stop` and `rotate-key` keep exit 1 and `{"running": false}` for a broker they cannot reach —
+  v1.0.0's three arms read the same (`git show v1.0.0:crates/delulu/src/brokerd.rs`). The *Fixed* line moves no §1
+  surface: the wire is unchanged (`ReqBody` gains a method, `is_revocation`, not a variant), and the order in which a
+  revocation and another client's request are decided was a race under 1.x as well — v1.0.0's daemon decided requests in
+  accept order, which no client observes or can rely on, and a request decided after a revocation was refused then as
+  it is now.
+- CHECKLIST-2.0 criterion 2 re-measured on the merged tree before the gates: `delulu-conform --coverage` 358/358 (diag
+  155, prim 86, grammar 27, audit 7, cli 29, rule 54); `--check-reference` in sync (24 chapters); `delulu fmt --check
+  examples docs/book/samples` 0 would change, 26 clean.
+- The merged tree's Rust under `crates/` and `fuzz/` is `master`'s at `19629a7`, so `master`'s push runs on three systems
+  already cover its code.
+
+**Gates on the merged tree, by `scripts/launch-gates.sh`:** `LAUNCH-GATES=ok` — the Survey 1578 nodes, 17975 edges, check
+ok, findings 0 errors and 15 warnings; `scripts/clippy.sh -j 4` clean and stamped; `doctor --check` 26 checks passed;
+`book` 9, `core_invariance` 1, `distribution` 10, `doctor_cli` 11, `editor_contract` 7, `evidence_claims` 3, `governance`
+11, `release` 6, `repository_structure` 6 passed, 0 failed; `delulu-survey`'s own suite passed; criterion 2's three as
+above; `criterion-2-cited` ok (`19629a7` at 358/358); `cargo deny --all-features check advisories` ok and `bans licenses
+sources` ok.
+
+**Read at `fc7faff`** (dispatched 17:33 UTC):
+- The release dry run `41225115918`: **success** in 2 min 54 s, its four `package` jobs success (x86-64 and arm64 Linux,
+  macOS arm64, Windows; each step read: the archive is for the target the job claims, the binary names its target and
+  commit, installed the way `INSTALL.md` says), its attestation and keep steps and its `release` job skipped (no tag).
+- `everything` `41225113353`: **18 of 18 jobs success** (3 h 15 min in all, 17:33 → 20:48 UTC) — the Linux, Windows,
+  macOS and arm64 test jobs, `heavy-gates`, `fuzz`, `formal`, `lints`, `supply-chain`, `editor`, `microvm`,
+  `microvm-reproducible`, `miri` (diag, atlas), `miri-ffi` and `miri-slow` (syntax 20 min, the checker 1 h 09 min, **the
+  broker 3 h 14 min** — the longest of the eleven broker-Miri times CHECKLIST-2.0 criterion 3 cites (the ten before it
+  1 h 39 min to 3 h 12 min), 46 min under the 240-minute cap and 31 min under the 3 h 45 min line at which *Open / next*
+  says to shorten that job). `actors_pingpong` MEASURED on arm64 (2.89x where the machine gave 3.95x, against a bar of 1.48x: passed);
+  NOT MEASURED on Ubuntu and Windows (busy or SMT) and on macOS (3 hardware threads, 2.24x observed). Disk: Ubuntu 82 → 67
+  GB free, Windows 217 → 202, macOS 92 → 89 GiB, arm64 104 → 91.
+- CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `41225113353` and `41225115918`, in the merge of this entry's closing commit
+  into `launch/2.0.0`.
+- `master`'s push run on `e2354df` (this entry's first records) `41225469666`: 14 jobs success, 2 skipped (22 min);
+  `actors_pingpong` MEASURED on arm64 (2.87x where the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on the other three (macOS 1.56x
+  observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 91 → 89 GiB, arm64 104 → 91.
+
+**Loop engineering: criterion 2's line is written by a tool.** Runs 8, 9, 11, 13 and this one each ran criterion 2's three
+commands and wrote its sentence into CHECKLIST-2.0 by hand, and since run 13 the gate `criterion-2-cited` greps that
+sentence back in one shape (`` `HASH`: **N/N (100%)** ``). `scripts/launch-criterion-2.py LABEL [BASE]` runs the three,
+refuses to write unless all three are clean (every anchor and every kind covered, the kinds adding up to the anchors —
+a new kind is refused, not dropped — the reference in sync, nothing to reformat or refused), and appends the sentence in
+that shape; it says *already cited* and writes nothing when the row names BASE at the count. `--self-test` checks its
+parsers on canned reports (one accepted, five coverage reports, one reference check and two `fmt` checks refused), and
+five mutants of its walls were each killed by it (one survived at first: a kind short of its total was caught only by the
+sum check, which then summed the kinds' own totals). On the launch tree its `--dry-run` printed, byte for byte, the line
+this run had written by hand; a write citing `22e5c8c` appended exactly one sentence to the row, and a second call wrote
+nothing; with `examples/demo.delulu` put out of format it exited 1 and wrote nothing (each probe restored, the tree
+clean). `scripts/launch-gates.sh` names it when `criterion-2-cited` fails, and step 4.3 of `docs/CLOUD_ROUTINE.md` names
+it.

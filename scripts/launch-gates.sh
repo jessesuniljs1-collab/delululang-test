@@ -70,7 +70,8 @@ rust_note() {
 # Step 4.3 re-measures CHECKLIST-2.0's criterion 2 on the merged tree and writes it into that row; runs 8, 9, 11 and 13
 # wrote it by hand and nothing read it back (on-demand routine run 13). The row's newest citation at the anchor count
 # measured now ("`HASH`: **N/N (100%)**") must be BASE, or a commit whose criterion-2 inputs are BASE's — a records-only
-# merge (the citations merge after a run's closing commit) needs no new line. Write the row first, then run the gates.
+# merge (the citations merge after a run's closing commit) needs no new line. Write the row first, then run the gates —
+# `scripts/launch-criterion-2.py` measures the three and writes the line in the shape this reads (on-demand run 15).
 criterion_2_inputs=(crates tests examples docs/reference docs/book/samples Cargo.toml Cargo.lock)
 criterion_2_cited() {
     local measured row cited
@@ -80,7 +81,8 @@ criterion_2_cited() {
     row=$(grep '^| 2 |' docs/release/CHECKLIST-2.0.md)
     cited=$(printf '%s\n' "$row" | grep -o "\`[0-9a-f]\{7,40\}\`: \*\*$measured (100%)\*\*" | grep -o '[0-9a-f]\{7,40\}' | tail -1)
     if [ -z "$cited" ]; then
-        echo "CHECKLIST-2.0 criterion 2 cites no commit at **$measured (100%)** — re-measure it on this tree and write it"
+        echo "CHECKLIST-2.0 criterion 2 cites no commit at **$measured (100%)** — re-measure it on this tree and write it:"
+        echo "  python3 -I scripts/launch-criterion-2.py 'LABEL' $base"
         return 1
     fi
     if ! git cat-file -e "$cited^{commit}" 2>/dev/null; then
@@ -92,7 +94,8 @@ criterion_2_cited() {
     else
         echo "CHECKLIST-2.0 criterion 2's newest citation \`$cited\` (at $measured) predates a change to criterion 2's inputs:"
         git diff --name-only "$cited" "$base" -- "${criterion_2_inputs[@]}" | sed 's/^/  /' | head -10
-        echo "  — re-measure it on this tree and write it, citing \`$(git rev-parse --short=7 "$base")\`"
+        echo "  — re-measure it on this tree and write it, citing \`$(git rev-parse --short=7 "$base")\`:"
+        echo "  python3 -I scripts/launch-criterion-2.py 'LABEL' $base"
         return 1
     fi
 }

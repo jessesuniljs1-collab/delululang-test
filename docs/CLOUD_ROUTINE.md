@@ -303,7 +303,9 @@ another OS, and then takes about seven minutes itself (run 5).
    refused program's code, a command's exit code for an outcome, a JSON field's type or meaning, syntax that parsed) is
    breaking, though the program stays refused (on-demand run 9: C9's DL0209 → DL0201, C11's exit 2 → 1); keep both sides of the
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*`
-   (`git checkout --theirs docs/survey/`); re-measure CHECKLIST-2.0's criterion 2 and write it; then, after the merge's
+   (`git checkout --theirs docs/survey/`); re-measure CHECKLIST-2.0's criterion 2 and write it — `python3 -I
+   scripts/launch-criterion-2.py 'on-demand routine run N'` runs the three, refuses a tree under 100%, and writes the line
+   in the one shape the gate reads (on-demand run 15; runs 8–15 wrote it by hand); then, after the merge's
    last edit, **`scripts/launch-gates.sh`** (on-demand run 11) — the map rebuilt, `check`, `findings` with its errors
    counted (the command itself exits 0 whatever it finds), `scripts/clippy.sh` (the hook asks for it on a merge that brings
    in Rust), `doctor --check`, the document gates (`book`, `core_invariance`, `distribution`, `doctor_cli`,
