@@ -27,12 +27,12 @@ files, so it still opens when the tree does not build.
 | Rust lines | 196447 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 277 |
-| Markdown lines | 91597 |
+| Markdown lines | 91644 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1579 / 17974 |
+| Nodes / edges in this map | 1579 / 17978 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests

@@ -6952,3 +6952,33 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   job; bring `launch/2.0.0` current (step 4.3: this section's CHANGELOG and the *Breaking* paragraph judged for it); RW
   3.24; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — #104 landed; the weekly `everything` run and `launch/2.0.0` `3bf4f2f` dispatched (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-1101`   Pull request: opened with this commit
+- **#104 landed** by fast-forward: `master` `a999e71` → `cccb001` (LATE-LET-1, RW 2.23, D-V2-199). Its run
+  `41245211274` was read green (14 success, 2 skipped). `cccb001`'s push run `41246950036` was dispatched with it.
+- **The weekly verification sweep's `everything` run** at `master` `cccb001`: `41246969522`, dispatched on Saturday
+  2026-10-31 at 22:10 UTC (Sunday 03:40 IST). The sweep's adversarial pass and documents scan are in the previous entry
+  and in V2_LOG. **The sweep's run is dispatched: do not dispatch another; read this one.**
+- **`launch/2.0.0` brought current** (release procedure step 1), in the laptop's worktree `D:\nelan\dl-launch`: the
+  merge `3bf4f2f` of `master` `cccb001`.
+  - `scripts/launch-changelog.py` folded the one new section.
+  - The *Breaking* paragraph is unchanged, judged against STABILITY.md §1 and v1.0.0. Every program checks as before
+    with the same codes, and the runtime now gives the meaning those rules already gave. v1.0.0 had the same defect:
+    its `let` called `env.define` into the scope a closure held. A program the WASM engine now compiles is the subset
+    widening.
+  - Criterion 2 was written by `scripts/launch-criterion-2.py` (358/358).
+  - `LAUNCH-GATES=ok`: Survey 1580 nodes, 18018 edges, 0 errors, 15 warnings; doctor 29 checks; the nine document
+    gates; cargo deny ok.
+  - Its `everything` run `41247420596` and release dry run `41247423239` were dispatched at 22:16 UTC.
+- Files and folders (`master`): M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read `41246969522` (the sweep, at `cccb001`) and `41247420596` and `41247423239` (at `3bf4f2f`) to their ends,
+     every job. Then cite the launch runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a merge of the records into
+     `launch/2.0.0`. Watch the broker's Miri: 3 h 14 min last time, and the cap is 4 h.
+  2. **[laptop, in progress] RW 3.24, the interpreter's speed.** It is the laptop's next milestone, on a `laptop/`
+     branch; a routine run picks another item.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

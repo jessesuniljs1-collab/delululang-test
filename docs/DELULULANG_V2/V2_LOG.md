@@ -11068,3 +11068,20 @@ interpreter; `5` read through a closure on both engines).
   value in another function, and M976 prints `LEAK: through a var`.
 - `SOUNDNESS_AUDIT.md` §D records the second negation, with the lesson: a gate that compares two implementations finds
   where they differ; only one held to the checker's meaning finds what they share.
+
+## 2026-11-01 — the laptop: #104 landed; the weekly `everything` run and `launch/2.0.0` `3bf4f2f` dispatched
+
+#104 (LATE-LET-1, D-V2-199) landed by fast-forward on its read run `41245211274` (14 success, 2 skipped), and `master`
+is `cccb001`. The weekly verification sweep's `everything` run is `41246969522` at `cccb001`, dispatched on Saturday
+2026-10-31 at 22:10 UTC. The sweep itself began at 21:12 UTC; its adversarial pass and documents scan are in the entry
+above.
+
+`launch/2.0.0` was merged with `cccb001` at `3bf4f2f`, and the *Breaking* paragraph was judged unchanged:
+- Every program checks as before, with the same codes. The runtime now gives the meaning the typing and effect rules
+  already gave, and those are the surface STABILITY.md §1 holds.
+- v1.0.0 had the same defect: its interpreter's `let` called `env.define` into the scope a closure held as
+  `env.clone()`.
+- A program the WASM engine now compiles, where it refused DL1201 before, is the backend's subset widening.
+
+Criterion 2 is 358/358, written by `scripts/launch-criterion-2.py`, and the launch gates were `LAUNCH-GATES=ok`. The
+`everything` run `41247420596` and the release dry run `41247423239` were dispatched at 22:16 UTC.
