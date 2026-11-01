@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 197500 |
+| Rust lines | 197594 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 301 |
-| Markdown lines | 93776 |
+| Markdown lines | 93815 |
 | DeluluLang programs | 256 |
 | Registered diagnostic codes | 156 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1608 / 18312 |
+| Nodes / edges in this map | 1608 / 18320 |
 | Open discrepancies | 44 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -384,7 +384,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 13831 lines
+- **Modules:** 9 files, 13913 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -392,7 +392,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 | `src/artifact.rs` | 344 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
 | `src/codegen.rs` | 6404 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
-| `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
+| `src/gen.rs` | 439 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
 | `src/host.rs` | 3332 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 1196 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |

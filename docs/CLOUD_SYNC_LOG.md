@@ -7305,3 +7305,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. The broker's Miri.
   4. *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — the two-engine generator writes sum types of its own (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/gen-sum-types` (from `master` `656ea71`)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name. Mutants M1016 and M1017 were red; M1017 is green under the old
+  generator.
+- Files and folders: M `crates/delulu-wasm/src/gen.rs`, `crates/delulu-wasm/tests/conformance_parity.rs`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** as the entry for #116 says. Land #116 and this pull request, each on its green run. Then set
+  `docs/AI_ONBOARDING.md`'s counter to M1017, left out here so as not to conflict with #116's.

@@ -96,7 +96,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
    `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md` and `code:DL0501`.
 2. **Witness the defect failing before you fix it.** Stash the fix and watch the new test go red. Then **falsify the test
    with mutants**: reintroduce the defect, or break the fix, and watch it go red. Mutants are numbered (`M<n>`) in the
-   records; the last one used is **M1015**, so continue from M1016. Run one cargo test target at a time when you do this.
+   records; the last one used is **M1017**, so continue from M1018. Run one cargo test target at a time when you do this.
 3. **Lint after the LAST `.rs` edit**, tests included: `cargo fmt --all`, then `bash scripts/clippy.sh -j 4`. That is
    fmt check plus `clippy --workspace --all-targets -D warnings`, and it writes a stamp the pre-commit hook demands.
 4. **Test.** `cargo test --workspace --no-fail-fast -j 4`, or `scripts/suite.sh`. Freeze the tree while it runs, and read
@@ -285,7 +285,7 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   4. The launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-204;
-  - the last mutant is M1015;
+  - the last mutant is M1017;
   - there are 156 DL codes and 359 reference anchors;
   - pull requests are numbered on GitHub, and #114 was the last opened.
 
