@@ -11287,4 +11287,8 @@ lib` on macOS `41274938848` (lib 311 passed, `step_allocations` 6), arm64 `41274
 
 **What is left.** The tree-walker's own shape — the dispatch, the result, the drop glue, the walk. The next step is the one
 the row already names: variables resolved to slots before the run, or a compiled form. `scripts/interp-profile.sh` keeps
-this run's harness and benchmarks for it (loop engineering, below).
+this run's harness and benchmarks for it (loop engineering, in the sync log).
+
+**The push run** `41276447349` on `f1c693d` (it holds `0a658f6`): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64
+(2.95x where the machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu, Windows and macOS (1.56x observed);
+the disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.

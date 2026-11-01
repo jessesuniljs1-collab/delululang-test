@@ -7128,8 +7128,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `d31c09a`, citing `3bf4f2f`'s and `05eb884`'s `everything` and dry runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8,
   `LAUNCH-GATES=ok`. The Survey and `doctor` healthy at the start (1579 nodes, 18050 edges; 26 checks). `gh` is installed
   (not used). `cargo-deny` 0.20.2 installed in the VM. No branch was ahead of `master` but #110's and the archived ones.
-- Commits: on `master`, `a4da001` and `e67e9bf` (#110, the laptop's), `0a658f6` (the code), then this entry's records
-  commit. On `launch/2.0.0`, `1548766` (the citations merge).
+- Commits: on `master`, `a4da001` and `e67e9bf` (#110, the laptop's), `0a658f6` (the code), `f1c693d` (the records), then
+  this entry's closing commit (the push run read). On `launch/2.0.0`, `1548766` (the citations merge).
 - Files and folders (`master`, `git diff --name-status a4da001..HEAD`): A `scripts/interp-profile.sh`,
   `scripts/ci-annotations.py`. M `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/value.rs`,
   `crates/delulu-runtime/tests/step_allocations.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 3.24),
@@ -7143,7 +7143,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `41274937091`, macOS `41274938848` and arm64 `41274940306`, each green; mutants M994–M1003 red, the control green. CI
   read: the sweep's `everything` `41246969522`, `3bf4f2f`'s `41247420596` and `41247423239`, `05eb884`'s `41255633510` and
   `41255635829`, push runs `41256993252` and `41271950047`, #110's `41257609952` — every one green, each to its end
-  (V2_LOG has the verdicts and the disks). This entry's push runs: Open / next 1.
+  (V2_LOG has the verdicts and the disks). **The milestone's push run** `41276447349` on `f1c693d` (it holds `0a658f6`;
+  a push runs CI on its head alone): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.95x where the machine
+  gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3 hardware threads,
+  1.56x observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91. On this entry's
+  closing commit: Open / next 1.
 - **Loop engineering:** `scripts/interp-profile.sh [--base REF] [--profile NAME]` keeps this run's harness — a release build
   of this checkout's interpreter outside the tree, RW 3.24's five benchmarks, instructions under callgrind, the minimum time
   and the output's hash, `--base` interleaved against another ref. `scripts/ci-annotations.py RUN_ID…` prints a run's test
@@ -7151,12 +7155,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   hand-written loop matched the message and printed nothing). `scripts/suite.sh` refuses the `-j` and `--no-fail-fast` it
   passes itself (run 16 lost one start to `suite.sh OUT -j 4`). CLOUD_ROUTINE steps 3 and 5 name the two scripts;
   HANDOFF §11.5 keeps the lesson.
-- **Redo on the laptop:** nothing. (`for-agents.md`'s merge-sort figure, 5.0 s, is the laptop's machine; this run's numbers
-  are the VM's, in RW 3.24.)
+- **Redo on the laptop:** delete `claude/peaceful-carson-rhqacp` (`0a658f6`), `laptop/flag-values` (`a4da001`) and
+  `laptop/sandbox-fault-place` (`9a82bf9`) from `origin` — each in `master`'s history (`git merge-base --is-ancestor`, this
+  run); the session's permission classifier refused `git push --delete` (*"Git Destructive"*), as in run 15.
+  (`for-agents.md`'s merge-sort figure, 5.0 s, is the laptop's machine; this run's numbers are the VM's, in RW 3.24.)
 - For the laptop's memory: `HANDOFF.md` §11.5 (an interpreter's cut is judged by its instruction count, beside an
   interleaved timing).
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `master`'s push runs on `0a658f6` and on this entry's records commit.
+  1. Read `master`'s push run on this entry's closing commit (records only); `41276447349` on `f1c693d` is read green.
   2. **Bring `launch/2.0.0` current** (step 4.3): two sections to fold — RW 6.49 (#110) and this run's RW 3.24. Judge RW
      6.49 against STABILITY.md §1 and v1.0.0: `run --seed abc` (and `--clock bogus`, `test --seed abc`, the atlas query verbs'
      unknown options) exited 0 under 1.x and exits 2 now — an exit code for an outcome, so very likely a *Breaking* clause,
