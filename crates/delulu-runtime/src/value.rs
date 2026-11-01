@@ -5,7 +5,7 @@
 //! user data. Secrets never render: `Display`/`Debug` print «secret», and the bytes are
 //! best-effort zeroized on drop.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::path::PathBuf;
@@ -1053,13 +1053,68 @@ pub struct RootVal {
 
 // ----- environments --------------------------------------------------------
 
+/// The hasher of the interpreter's maps from a program's names — its functions, constructors and record fields, and a
+/// wide scope's index (RW 3.24). The profile (callgrind, 2026-11-01) spent about a tenth of a call in SipHash, the
+/// default, which is keyed per process to resist an adversary choosing colliding keys; these keys are the names the
+/// program itself declares, so a program that collided them could only slow its own run, which its budget bounds.
+/// This is the multiply-rotate hash of rustc's own name tables: a word at a time, no key, the same on every run.
+#[derive(Default, Clone, Copy)]
+pub(crate) struct NameHasher(u64);
+
+impl NameHasher {
+    #[inline]
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl std::hash::Hasher for NameHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let mut words = bytes.chunks_exact(8);
+        for w in &mut words {
+            self.add(u64::from_le_bytes([w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]]));
+        }
+        let rest = words.remainder();
+        if !rest.is_empty() {
+            let mut w = 0u64;
+            for (i, &b) in rest.iter().enumerate() {
+                w |= u64::from(b) << (8 * i);
+            }
+            self.add(w);
+        }
+    }
+    #[inline]
+    fn write_u8(&mut self, i: u8) {
+        self.add(u64::from(i));
+    }
+    #[inline]
+    fn write_usize(&mut self, i: usize) {
+        self.add(i as u64);
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// A map from a program's names, hashed by [`NameHasher`].
+pub(crate) type NameMap<V> = HashMap<String, V, std::hash::BuildHasherDefault<NameHasher>>;
+/// A set of a program's names, hashed by [`NameHasher`].
+pub(crate) type NameSet = std::collections::HashSet<String, std::hash::BuildHasherDefault<NameHasher>>;
+
 pub type Env = Rc<Scope>;
 
 pub struct Scope {
     vars: RefCell<Vars>,
+    /// RW 3.24: which names this scope may bind — the [`Key::bit`] of each name it ever bound, set by
+    /// [`Scope::define`]. A name whose bit is clear is not bound here, so a walk passes this scope without borrowing
+    /// it or reading one name; a set bit says only *perhaps*, and the slots decide. The profile (callgrind, 2026-11-01)
+    /// put a read of a variable at about 150 instructions, most of them comparing names in scopes that did not hold it.
+    filter: Cell<u64>,
     parent: Option<Env>,
     /// LATE-LET-1: a closure was made over this scope, or over one inside it ([`Scope::hold`]).
-    held: std::cell::Cell<bool>,
+    held: Cell<bool>,
 }
 
 /// How many bindings a scope finds by comparing names before it keeps an index (A14).
@@ -1075,31 +1130,34 @@ const SCAN_BINDINGS: usize = 16;
 struct Vars {
     slots: Vec<(Name, Value)>,
     /// Each name's place in `slots`, kept only once there are more than [`SCAN_BINDINGS`] of them.
-    index: HashMap<String, usize>,
+    index: NameMap<usize>,
 }
 
 impl Vars {
-    fn find(&self, name: &str) -> Option<usize> {
+    #[inline(always)]
+    fn find(&self, key: &Key<'_>) -> Option<usize> {
         if self.slots.len() > SCAN_BINDINGS {
-            self.index.get(name).copied()
+            self.index.get(key.name).copied()
         } else {
-            self.slots.iter().position(|(n, _)| n.is(name))
+            self.slots.iter().position(|(n, _)| n.is(key))
         }
     }
 
-    /// Bind `name`, or rebind it here. Gives back the value it replaced, to be dropped once the scope is no
-    /// longer borrowed.
-    fn put(&mut self, name: &str, value: Value) -> Option<Value> {
-        if let Some(i) = self.find(name) {
-            return Some(std::mem::replace(&mut self.slots[i].1, value));
+    /// Bind `key`'s name, or rebind it here. `fresh` says the scope's filter has already shown it unbound here, so it
+    /// is pushed without a search. Gives back the value it replaced, to be dropped once the scope is no longer borrowed.
+    fn put(&mut self, key: &Key<'_>, fresh: bool, value: Value) -> Option<Value> {
+        if !fresh {
+            if let Some(i) = self.find(key) {
+                return Some(std::mem::replace(&mut self.slots[i].1, value));
+            }
         }
-        self.slots.push((Name::new(name), value));
+        self.slots.push((Name::new(key.name), value));
         let n = self.slots.len();
         if n > SCAN_BINDINGS {
             if self.index.is_empty() {
                 self.index = self.slots.iter().enumerate().map(|(i, (k, _))| (k.to_string(), i)).collect();
             } else {
-                self.index.insert(name.to_string(), n - 1);
+                self.index.insert(key.name.to_string(), n - 1);
             }
         }
         None
@@ -1108,6 +1166,29 @@ impl Vars {
 
 /// How long a binding's name can be and still be held inline.
 const SHORT_NAME: usize = 22;
+
+/// A name as a lookup asks for it: computed once per lookup, then compared with each binding it passes (RW 3.24).
+#[derive(Clone, Copy)]
+struct Key<'a> {
+    name: &'a str,
+    /// The name's one bit in a scope's filter ([`Scope::filter`]), from its length and its first and last bytes — read
+    /// without a loop, since the profile counted every instruction of a lookup.
+    bit: u64,
+}
+
+impl<'a> Key<'a> {
+    #[inline]
+    fn new(name: &'a str) -> Key<'a> {
+        let bytes = name.as_bytes();
+        let (first, last) = match bytes {
+            [] => (0, 0),
+            [only] => (*only, *only),
+            [first, .., last] => (*first, *last),
+        };
+        let mixed = (u64::from(first) | u64::from(last) << 8 | (bytes.len() as u64) << 16).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        Key { name, bit: 1 << (mixed >> 58) }
+    }
+}
 
 /// A binding's name. A short one is held inline (A14: a call allocated each parameter's name, and nearly every name
 /// is short).
@@ -1128,10 +1209,23 @@ impl Name {
         }
     }
 
-    fn is(&self, name: &str) -> bool {
+    /// Is this `name`? As [`Name::is`], for a lookup that has no key.
+    #[inline]
+    fn is_name(&self, name: &str) -> bool {
+        self.is(&Key { name, bit: 0 })
+    }
+
+    /// Is this `key`'s name? A short name is compared by its length, then byte by byte in this function (RW 3.24: the
+    /// profile counted a `memcmp` call for each binding a lookup passed, though most names are a few bytes long).
+    #[inline]
+    fn is(&self, key: &Key<'_>) -> bool {
         match self {
-            Name::Short { len, bytes } => &bytes[..*len as usize] == name.as_bytes(),
-            Name::Long(s) => **s == *name,
+            Name::Short { len, bytes } => {
+                let want = key.name.as_bytes();
+                let len = *len as usize;
+                len == want.len() && (len == 0 || bytes[0] == want[0] && (len == 1 || bytes[1..len] == want[1..]))
+            }
+            Name::Long(s) => **s == *key.name,
         }
     }
 }
@@ -1148,10 +1242,20 @@ impl fmt::Display for Name {
 
 impl Scope {
     pub fn root() -> Env {
-        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: None, held: std::cell::Cell::new(false) })
+        Rc::new(Scope { vars: RefCell::new(Vars::default()), filter: Cell::new(0), parent: None, held: Cell::new(false) })
     }
     pub fn child(parent: &Env) -> Env {
-        Rc::new(Scope { vars: RefCell::new(Vars::default()), parent: Some(parent.clone()), held: std::cell::Cell::new(false) })
+        Scope::child_sized(parent, 0)
+    }
+    /// A child scope with room for `bindings` names, so that binding them reallocates nothing (RW 3.24: the profile of a
+    /// merge sort spent a fifth of its instructions allocating and freeing, a scope's bindings growing among them).
+    pub fn child_sized(parent: &Env, bindings: usize) -> Env {
+        Rc::new(Scope {
+            vars: RefCell::new(Vars { slots: Vec::with_capacity(bindings), index: NameMap::default() }),
+            filter: Cell::new(0),
+            parent: Some(parent.clone()),
+            held: Cell::new(false),
+        })
     }
     /// LATE-LET-1: a closure is being made over this scope. It reads its names here and in every scope above, for as long
     /// as it lives, and the checker resolved each of them where the closure was written — so a `let` made in any of these
@@ -1168,7 +1272,10 @@ impl Scope {
         self.held.get()
     }
     pub fn define(&self, name: &str, value: Value) {
-        let old = self.vars.borrow_mut().put(name, value);
+        let key = Key::new(name);
+        let fresh = self.filter.get() & key.bit == 0;
+        let old = self.vars.borrow_mut().put(&key, fresh, value);
+        self.filter.set(self.filter.get() | key.bit);
         drop(old);
     }
     /// Visit every binding's value (Stage 10 cycle collector, `cycles.rs`).
@@ -1181,21 +1288,46 @@ impl Scope {
     /// proven unreachable from every root; the drop cascade collapses the rest of the cycle.
     pub fn clear_for_collector(&self) {
         let old = std::mem::take(&mut *self.vars.borrow_mut());
+        self.filter.set(0);
         drop(old);
     }
     /// This scope's own binding of `name`, not a parent's.
     pub fn get_here(&self, name: &str) -> Option<Value> {
+        self.get_key_here(&Key::new(name))
+    }
+    /// This scope's own binding of `key`'s name — `None` at once when the filter shows it is not bound here.
+    #[inline]
+    fn get_key_here(&self, key: &Key<'_>) -> Option<Value> {
+        if self.filter.get() & key.bit == 0 {
+            return None;
+        }
         let vars = self.vars.borrow();
-        vars.find(name).map(|i| vars.slots[i].1.clone())
+        vars.find(key).map(|i| vars.slots[i].1.clone())
     }
     pub fn get(&self, name: &str) -> Option<Value> {
+        let key = Key::new(name);
         let mut scope = self;
         loop {
-            if let Some(v) = scope.get_here(name) {
+            if let Some(v) = scope.get_key_here(&key) {
                 return Some(v);
             }
             scope = scope.parent.as_deref()?;
         }
+    }
+    /// [`Scope::get`], asking this scope by name alone before it builds a key for the scopes above: most reads in a loop
+    /// find their variable in the scope they run in, and there the key costs more than it saves (RW 3.24).
+    #[inline]
+    pub fn get_near(&self, name: &str) -> Option<Value> {
+        {
+            let vars = self.vars.borrow();
+            if vars.slots.len() <= SCAN_BINDINGS {
+                if let Some((_, v)) = vars.slots.iter().find(|(n, _)| n.is_name(name)) {
+                    return Some(v.clone());
+                }
+                return self.parent.as_deref()?.get(name);
+            }
+        }
+        self.get(name)
     }
     /// The parent scope, if any (Stage 7: the actor boundary flattens capture chains).
     pub fn parent(&self) -> Option<&Env> {
@@ -1209,10 +1341,38 @@ impl Scope {
     }
 
     /// Assign to an existing binding in the nearest enclosing scope. Returns false if unbound.
+    ///
+    /// This scope is asked by name alone first, as [`Scope::get_near`] asks it (RW 3.24).
     pub fn assign(&self, name: &str, value: Value) -> bool {
+        let here = {
+            let vars = self.vars.borrow();
+            if vars.slots.len() <= SCAN_BINDINGS {
+                match vars.slots.iter().position(|(n, _)| n.is_name(name)) {
+                    Some(i) => Some(Some(i)),
+                    None => Some(None),
+                }
+            } else {
+                None
+            }
+        };
+        match here {
+            Some(Some(i)) => {
+                let old = std::mem::replace(&mut self.vars.borrow_mut().slots[i].1, value);
+                drop(old);
+                return true;
+            }
+            Some(None) => return self.parent.as_deref().is_some_and(|p| p.assign_keyed(&Key::new(name), value)),
+            None => {}
+        }
+        self.assign_keyed(&Key::new(name), value)
+    }
+
+    /// [`Scope::assign`] from this scope up, by `key`.
+    fn assign_keyed(&self, key: &Key<'_>, value: Value) -> bool {
+        let key = *key;
         let mut scope = self;
         loop {
-            let found = scope.vars.borrow().find(name);
+            let found = if scope.filter.get() & key.bit == 0 { None } else { scope.vars.borrow().find(&key) };
             if let Some(i) = found {
                 let old = std::mem::replace(&mut scope.vars.borrow_mut().slots[i].1, value);
                 drop(old);
@@ -1273,6 +1433,73 @@ mod scope_tests {
         assert!(s.get("xx").is_none(), "a name only the longer ones begin with");
         let names: Vec<String> = s.vars_snapshot().into_iter().map(|(k, _)| k).collect();
         assert_eq!(names, [past, at, "x".to_string()]);
+    }
+
+    /// RW 3.24: two names that share a bit of a scope's filter are two bindings; and a name a child does not bind, whose
+    /// bit another name set in the child's filter, is still found in the parent, read and assigned — a set bit says only
+    /// *perhaps*.
+    #[test]
+    fn a_shared_filter_bit_hides_nothing() {
+        let names: Vec<String> = (0..4096).map(|k| format!("n{k}")).collect();
+        let bit = Key::new(&names[0]).bit;
+        let same: Vec<&str> = names.iter().map(String::as_str).filter(|n| Key::new(n).bit == bit).take(3).collect();
+        assert_eq!(same.len(), 3, "no three names share a bit among {}", names.len());
+        let (a, b, c) = (same[0], same[1], same[2]);
+        let parent = Scope::root();
+        parent.define(a, Value::Int(1));
+        let child = Scope::child(&parent);
+        child.define(b, Value::Int(2));
+        assert_ne!(child.filter.get() & Key::new(a).bit, 0, "the witness needs `a`'s bit set in the child");
+        for read in [child.get(a), child.get_near(a)] {
+            assert_eq!(int(read), Some(1), "`{a}` is the parent's");
+        }
+        assert!(child.get_here(a).is_none());
+        assert!(child.assign(a, Value::Int(5)));
+        assert_eq!(int(parent.get_here(a)), Some(5), "the assignment reached the parent");
+        assert!(child.get_here(a).is_none(), "an assignment through made a binding here");
+        assert!(child.get(c).is_none() && child.get_near(c).is_none() && !child.assign(c, Value::Unit));
+        // In one scope: both found, and a rebinding replaces in place.
+        child.define(c, Value::Int(3));
+        child.define(b, Value::Int(20));
+        assert_eq!((int(child.get(b)), int(child.get_near(c))), (Some(20), Some(3)));
+        assert_eq!(child.vars.borrow().slots.len(), 2, "a rebinding added a name");
+    }
+
+    /// RW 3.24: [`Scope::get_near`] and [`Scope::assign`] ask the nearest scope by name before any key — at every size,
+    /// below the width a scope scans and past it — and it answers before its parent: its own `v3` shadows the parent's.
+    #[test]
+    fn the_nearest_scope_answers_first_at_every_size() {
+        let parent = Scope::root();
+        parent.define("outer", Value::Int(-1));
+        parent.define("v3", Value::Int(300));
+        let child = Scope::child(&parent);
+        for n in 0..3 * SCAN_BINDINGS {
+            child.define(&format!("v{n}"), Value::Int(n as i64));
+            for k in 0..=n {
+                assert_eq!(int(child.get_near(&format!("v{k}"))), Some(k as i64), "v{k} among {} names", n + 1);
+            }
+            assert_eq!(int(child.get_near("outer")), Some(-(n as i64) - 1), "the parent's, among {} names", n + 1);
+            assert!(child.assign("outer", Value::Int(-(n as i64) - 2)), "assigned through, among {} names", n + 1);
+            assert!(child.get_near("absent").is_none() && !child.assign("absent", Value::Unit));
+            assert!(child.assign(&format!("v{n}"), Value::Int(n as i64)));
+            assert_eq!(child.vars.borrow().slots.len(), n + 1, "an assignment added a name");
+        }
+        assert_eq!(int(parent.get_here("v3")), Some(300), "the child's `v3` shadowed it");
+        assert!(child.get_here("outer").is_none(), "an assignment through made a binding here");
+    }
+
+    /// The collector's clear empties a scope's filter with its bindings: nothing stays found, and a name bound again is
+    /// bound once.
+    #[test]
+    fn a_cleared_scope_finds_nothing_and_binds_afresh() {
+        let s = Scope::root();
+        s.define("x", Value::Int(1));
+        s.clear_for_collector();
+        assert_eq!(s.filter.get(), 0);
+        assert!(s.get("x").is_none() && s.get_near("x").is_none() && !s.assign("x", Value::Unit));
+        s.define("x", Value::Int(2));
+        assert_eq!(int(s.get_near("x")), Some(2));
+        assert_eq!(s.vars.borrow().slots.len(), 1);
     }
 
     /// A child finds its parent's names and assigns through to them; its own `let` shadows only itself.

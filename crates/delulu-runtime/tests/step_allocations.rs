@@ -146,6 +146,64 @@ fn main(root: Root) ! {{Write}} {{
     assert_at_most(made, 2, "a call");
 }
 
+/// A call to a five-parameter function: its scope and the room for its five names, made once (RW 3.24). The room was
+/// made for four and grown when the fifth name arrived, a third allocation on every call.
+#[test]
+fn a_call_of_five_parameters_makes_its_room_once() {
+    let program = |n: u64| {
+        format!(
+            "module m
+fn add5(a: Int, b: Int, c: Int, d: Int, e: Int) -> Int {{
+    a + b + c + d + e
+}}
+fn main(root: Root) ! {{Write}} {{
+    let out = root.console()
+    var i = 0
+    var s = 0
+    while i < {n} {{
+        s = s + add5(i, 1, 2, 3, 4)
+        i = i + 1
+    }}
+    out.println(str(s))
+}}
+"
+        )
+    };
+    let made = allocations_of_steps(program, |n| format!("{}\n", n * (n - 1) / 2 + 10 * n));
+    assert_at_most(made, 2, "a call of five parameters");
+}
+
+/// A block of five `let`s: its scope and the room for its five names, made once (RW 3.24) — as a call's are, and for
+/// the same reason.
+#[test]
+fn a_block_of_five_lets_makes_its_room_once() {
+    let program = |n: u64| {
+        format!(
+            "module m
+fn main(root: Root) ! {{Write}} {{
+    let out = root.console()
+    var i = 0
+    var s = 0
+    while i < {n} {{
+        if i >= 0 {{
+            let a = i
+            let b = a + 1
+            let c = b + 1
+            let d = c + 1
+            let e = d + 1
+            s = s + e
+        }}
+        i = i + 1
+    }}
+    out.println(str(s))
+}}
+"
+        )
+    };
+    let made = allocations_of_steps(program, |n| format!("{}\n", n * (n - 1) / 2 + 4 * n));
+    assert_at_most(made, 2, "a block of five lets");
+}
+
 /// The merge's inner read, `at0(xs, i)`: the call (2), the method's argument (1), the `Some` it answers (2: the shared
 /// payload and its vector — the name `Some` is shared), and the arm that binds `v` (2: its scope and its name's room).
 #[test]
