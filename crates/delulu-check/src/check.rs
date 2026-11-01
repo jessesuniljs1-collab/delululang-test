@@ -524,11 +524,13 @@ struct FnCtx {
     let_index: Vec<HashMap<String, usize>>,
 }
 
-/// One `let` or `var` binding (DL0414): its name, where it is written, and whether a read has reached it.
+/// One `let` or `var` binding (DL0414): its name, where it is written, whether a read has reached it, and each
+/// assignment to it (`x = v`), which the repair renames with it.
 struct LetUse {
     name: String,
     span: Span,
     read: std::cell::Cell<bool>,
+    writes: std::cell::RefCell<Vec<Span>>,
 }
 
 impl FnCtx {
@@ -559,7 +561,26 @@ impl FnCtx {
         self.bind(name, ty);
         let (Some(lets), Some(index)) = (self.lets.last_mut(), self.let_index.last_mut()) else { return };
         index.insert(name.to_string(), lets.len());
-        lets.push(LetUse { name: name.to_string(), span, read: std::cell::Cell::new(false) });
+        lets.push(LetUse {
+            name: name.to_string(),
+            span,
+            read: std::cell::Cell::new(false),
+            writes: std::cell::RefCell::new(Vec::new()),
+        });
+    }
+    /// An assignment `name = v` at `at`: the binding it reaches keeps the place, so a repair that renames the binding
+    /// renames the assignment too (DL0414's `prefix-underscore`).
+    fn note_write(&self, name: &str, at: Span) {
+        for (i, scope) in self.locals.iter().enumerate().rev() {
+            if scope.contains_key(name) {
+                if let Some(&k) = self.let_index.get(i).and_then(|index| index.get(name)) {
+                    if let Some(l) = self.lets.get(i).and_then(|lets| lets.get(k)) {
+                        l.writes.borrow_mut().push(at);
+                    }
+                }
+                return;
+            }
+        }
     }
     /// A read of `name`: its type, and the binding it reaches marked read (DL0414).
     fn lookup(&self, name: &str) -> Option<Type> {
@@ -1525,9 +1546,23 @@ impl<'a> Checker<'a> {
     /// `var` only ever assigned is named too. A name that begins with `_` says the binding is meant to go unread.
     fn report_unread_lets(&mut self, lets: Vec<LetUse>) {
         for l in lets.into_iter().filter(|l| !l.read.get() && !l.name.starts_with('_')) {
+            // The repair names the binding and every assignment to it `_x`, which changes nothing the program does. A
+            // human decides: an unread binding may be a mistake that renaming would hide (the Book's `ok`, D-V2-206).
+            let edits = std::iter::once(l.span)
+                .chain(l.writes.take())
+                .map(|at| Edit { file: at.file, start_byte: at.start, end_byte: at.start, insert: "_".to_string() })
+                .collect();
             self.diags.push(
                 Diagnostic::warning("DL0414", format!("`{}` is bound here and never read", l.name))
-                    .with_span(l.span, format!("never read: remove it, or name it `_{}` to say so", l.name)),
+                    .with_span(l.span, format!("never read: remove it, or name it `_{}` to say so", l.name))
+                    .with_repair(Repair {
+                        id: "prefix-underscore",
+                        confidence: Confidence::Safe,
+                        authority_widening: false,
+                        requires_human: true,
+                        edits,
+                        reason: None,
+                    }),
             );
         }
     }
@@ -1545,7 +1580,12 @@ impl<'a> Checker<'a> {
     fn check_lvalue_at(&mut self, lv: &LValue, ctx: &mut FnCtx, whole: bool) -> (Type, RowAcc) {
         match lv {
             LValue::Var(name) => match if whole { ctx.lookup_to_assign(&name.name) } else { ctx.lookup(&name.name) } {
-                Some(t) => (t, RowAcc::default()),
+                Some(t) => {
+                    if whole {
+                        ctx.note_write(&name.name, name.span);
+                    }
+                    (t, RowAcc::default())
+                }
                 None => {
                     self.diags.push(
                         Diagnostic::error("DL0301", format!("unknown name `{}`", name.name))

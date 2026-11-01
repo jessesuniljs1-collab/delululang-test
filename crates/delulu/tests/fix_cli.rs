@@ -415,6 +415,12 @@ fn repair_corpus() -> Vec<(&'static str, &'static str)> {
             "val_over_ref.delulu",
             "module valoverref\n\nfn f() {\n    let a: ref List[Int] = [1, 2]\n    let rows: val List[List[Int]] = [a]\n}\n",
         ),
+        // DL0414 `prefix-underscore` (D-V2-207) — safe, with edits at the binding and each assignment, and a human
+        // decides: an unread binding may be a mistake that renaming would hide.
+        (
+            "unread_binding.delulu",
+            "module unreadbinding\n\nfn f() -> Int {\n    var n = 0\n    n = 5\n    0\n}\n",
+        ),
         // DL0302 `match-the-constructor` (RW 2.26, D-V2-203) — a suggestion, with edits: `foo` -> `foo()`.
         (
             "binding_like_ctor.delulu",
