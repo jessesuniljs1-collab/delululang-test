@@ -10,7 +10,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 | Severity | Class | Count |
 |---|---|---:|
 | warning | `prose-cites-missing-path` | 6 |
-| warning | `stale-count` | 1 |
+| warning | `stale-count` | 3 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
@@ -28,11 +28,13 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
 
-## warning — `stale-count` (1)
+## warning — `stale-count` (3)
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/DELULULANG_V2/V2_LOG.md:1145` — says 154 registered diagnostic codes; the tree has 156
+- `docs/DELULULANG_V2/V2_LOG.md:1145` — says 154 registered diagnostic codes; the tree has 157
+- `docs/design/LOCALIZATION_PLUGIN_GUIDE.md:40` — says 156 registered diagnostic codes; the tree has 157
+- `docs/lang/delulu-slang.md:9` — says 156 registered diagnostic codes; the tree has 157
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

@@ -7333,3 +7333,33 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 now says. First, read `41299813712`, then merge
   `master` into `launch/2.0.0` with the citations.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — WORK IN PROGRESS, not verified: DL0414, a `let`/`var` never read (made on the laptop; stopped at the owner's 97%)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/unread-lets` (from `master` `9b3be30`). **No pull request**: the slice is unverified, and it must not
+  land as it stands.
+- **What is written:**
+  - `FnCtx` keeps each scope's `let` and `var` bindings with a read mark (`lets`, `let_index`, `LetUse`). A read
+    (`lookup`) marks the binding it reaches. An assignment uses `lookup_to_assign`, which does not mark.
+  - `check_block` reports the unread ones when the block closes (`report_unread_lets`), as **DL0414**, a warning. A
+    name beginning with `_` is exempt.
+  - The code is registered in `codes.rs`, with its title and explanation.
+- **What is NOT done:**
+  - built (only `cargo check` and clippy ran);
+  - the unit tests;
+  - the conformance rows (`witnesses.toml`, entrenched: an `ENTRENCHED_CHANGE_RECORD.md` entry with a D-V2-205);
+  - the reference regenerated;
+  - the documents quoting 156 codes;
+  - every shipped program and test judged for new warnings, `core_invariance` included;
+  - mutants;
+  - the records.
+  The work is scoped in `docs/AI_ONBOARDING.md` section 10.
+- `launch/2.0.0` is at `9a33f6c`: the records merge of `master` `9b3be30`, citing `005372f`'s and `415eb2e`'s runs in
+  CHECKLIST-2.0 criteria 1, 3, 4 and 8. `415eb2e`'s `everything` run `41299813712` is green 18/18 (the broker's Miri
+  took 3 h 07 min); `LAUNCH-GATES=ok`. That merge is not yet recorded on `master` except here.
+- **Open / next, in order:**
+  1. Finish or drop `laptop/unread-lets`: build it, write the tests, judge the corpus's new warnings, do the
+     conformance rows and D-V2-205, then land it on a green run. If dropped, archive the branch, never delete the work.
+  2. Record `launch/2.0.0` `9a33f6c` on `master`.
+  3. RW 3.24: a compiled form.
+  4. *[laptop]* The launch, only on the owner's word.

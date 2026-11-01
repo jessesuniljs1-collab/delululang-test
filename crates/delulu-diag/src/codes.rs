@@ -65,6 +65,7 @@ registry! {
     "DL0411" => "`for` iterates something that is not a list",
     "DL0412" => "`break` or `continue` outside a loop",
     "DL0413" => "unreachable match arm",
+    "DL0414" => "a `let` or `var` binding never read",
 
     // DL05xx — effects
     "DL0501" => "function performs an effect not declared in its row",
@@ -1000,6 +1001,9 @@ pub fn code_explain(code: &str) -> Option<String> {
              above `Some(Red)`, a `_` after every constructor. The program still checks and does \
              what its arms say; the arm is dead. Remove it, or move it above the arm that takes its \
              values. The checker reports an arm only when it has proved it unreachable.",
+        "DL0414" => "A warning: this `let` or `var` binding is never read before its block ends. \
+             A write is not a read, so a `var` that is only ever assigned is named too. Remove \
+             it, or begin its name with `_` to say it is meant to go unread.",
 
         // ===== DL05xx — effects ============================================
         "DL0501" => "This function performs an effect its row does not declare. This is the \
