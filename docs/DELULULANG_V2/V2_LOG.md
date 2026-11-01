@@ -11176,3 +11176,15 @@ unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | w
 
 `cli_contract`'s `a_flag_value_nobody_understood_is_refused` was red before (`--engine wsam` ran). It also holds
 `--isolation` and `--broker`, which refused already, and that `interp` and `wasm` still run.
+
+## 2026-11-01 — the laptop: #106–#108 landed; `launch/2.0.0` `05eb884` (one *Breaking* clause) dispatched
+
+- **Landed by fast-forward.** #106 on its run `41249223011`. #107 and #108 together at `4dfe67e`, on #108's run
+  `41251294523`, which holds #107's commits.
+- **#107's own run `41251053019` was cancelled.** Its `microvm-reproducible` job spent its whole 60-minute timeout in
+  `sudo apt-get update && apt-get install`, the first step, before any of our code ran. On #106's run that job took 15
+  minutes. A runner's package mirror can stall like that; the job was re-run, and its result was not needed.
+- **`launch/2.0.0` merged with `4dfe67e` at `05eb884`.** One *Breaking* clause was added for RW 6.48: `run --engine`
+  with a value other than `interp` or `wasm` is refused, exit 2, where v1.0.0 ran the interpreter. LOCAL-CALLEE-1,
+  CTOR-SHADOW-1 and WASM-BUILTIN-SHADOW-1 were judged not breaking. `LAUNCH-GATES=ok`. Its `everything` run
+  `41255633510` and release dry run `41255635829` were dispatched.
