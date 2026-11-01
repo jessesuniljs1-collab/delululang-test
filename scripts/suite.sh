@@ -17,6 +17,17 @@
 set -uo pipefail
 out=${1:?usage: scripts/suite.sh OUTFILE [cargo test args…]}
 shift
+# On-demand run 16: `scripts/suite.sh OUT -j 4` gave cargo the `-j 4` below twice, and it stopped before a test ran
+# ("the argument '--jobs <N>' cannot be used multiple times", EXIT=1 — read at first as a red suite). Refuse both flags
+# this passes itself, before anything runs.
+for arg in "$@"; do
+    case $arg in
+        -j | -j[0-9]* | --jobs | --jobs=* | --no-fail-fast)
+            { echo "NOT STARTED: \`$arg\` — this script passes \`--no-fail-fast -j 4\` itself, and cargo refuses either twice"; echo "EXIT=3"; } | tee "$out" >&2
+            exit 3 ;;
+        --) break ;;
+    esac
+done
 fingerprint() {
     # Every file the map and the document gates read — tracked and untracked — by its CONTENT, never by its diff
     # against HEAD: a commit made while the suite runs (the routine allows one) moves `git status` and `git diff`

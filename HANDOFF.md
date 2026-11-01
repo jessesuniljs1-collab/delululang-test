@@ -2023,6 +2023,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   so all of them stayed green on a program that escaped its effect row. Assert the VALUE the checker's meaning gives, not
   only that the engines match. And **a witness exercises the rule it names alone**: M976 survived because the witness's
   later value was a lambda made in the very scope the mutant stopped holding, which held it anyway.
+- **An interpreter's cut is judged by its instruction count, beside an interleaved timing** (on-demand routine run 16, RW
+  3.24). Callgrind's count is deterministic where the VM's wall time moved ±10% between identical runs, and a baseline timed
+  while another job ran reads every cut as a win. Two cuts that each looked right lost on the count: four bindings held
+  inline in a scope (+2–5% on every benchmark, as the laptop's timing had found) and an inlined clone of scalars (+3%) —
+  each made a hot function bigger than it saved. `scripts/interp-profile.sh --base REF` builds both and prints both.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

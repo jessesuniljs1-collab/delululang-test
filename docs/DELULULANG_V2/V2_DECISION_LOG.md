@@ -5490,3 +5490,30 @@ function that shares a constructor's name) were all red, and the control green. 
 `loop_parity`'s `a_local_named_like_a_builtin_is_called_on_both_engines` holds WASM-BUILTIN-SHADOW-1. `delulu-runtime` (351), `delulu-wasm` (217),
 `late_let_cli`, `plugin_load_cli`, `examples_run`, `core_invariance`, `conformance`, `actors_cli`, `stdlib_p3`,
 `wasm_cli`, `book`, `corpus_cli` and `deep_values_cli` passed.
+
+## D-V2-202 — the interpreter's maps from a program's names hash without a key (RW 3.24) — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** RW 3.24's profile (callgrind, `a4da001`, on-demand routine run 16): a call by name to one of the module's
+functions asked `Home::funcs` and `Home::ctors`, a `HashMap` and a `HashSet` with the standard library's SipHash-1-3 under
+a per-process random key, and spent about 120 of a call's 1,800 instructions there in `nested_calls_macro` (73 million over 600,000 calls). The same hasher
+served a record type's field places (`Home::records`) and a scope's index past sixteen bindings (`Vars::index`).
+
+**Decision.** Those four maps hash with `NameHasher` (`crates/delulu-runtime/src/value.rs`): the multiply-rotate hash of
+rustc's own name tables, a word at a time, with no key, the same on every run. It is twenty lines and no dependency.
+
+**Why it is safe.** SipHash's key resists an adversary who chooses keys so that they collide. The keys of these four maps
+are names the program itself declares: its functions, its sum types' constructors, its record types' fields, its own
+`let`s. They are fixed when it is checked, and no input the program reads at run time becomes one. A program that
+collided its own names would slow only its own run, which its processor budget bounds: 5 minutes unless `--limits` sets
+another, sampled every 25 ms on every engine (PS-B-01, D-V2-25). Its author could as well write a slow loop. A plugin's
+nested interpreter holds the plugin's names, and a plugin that collided them would make its own steps slower: its fuel
+counts steps, not time, so that is a slower plugin, and the run's processor budget still bounds the run. None of these
+maps is iterated to produce anything (read 2026-11-01: each is only looked up), so a fixed order is not observable.
+Maps whose keys can come from outside the program — the broker's, the egress client's, the actors' — keep SipHash.
+
+**Alternatives.** Keep SipHash: the measured cost. A crate (`rustc-hash`, `ahash`): a dependency for twenty lines.
+Indices resolved before the run: the larger change RW 3.24 still names, which would retire these lookups altogether.
+
+**Evidence.** With run 16's other cuts (`V2_LOG.md`, RW 3.24), `nested_calls_macro` −15.9% in instructions and −19% in time;
+the full suite green. The hasher's own share was measured with the scope sizing and the call order together: those three
+took `nested_calls_macro` from 1,449 to 1,371 million instructions.
