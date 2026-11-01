@@ -2206,10 +2206,30 @@ mod constructor_binding_tests {
     #[test]
     fn a_binding_spelled_like_a_constructor_of_the_matched_type_is_refused() {
         for (what, src, ctor, insert) in [
-            ("a nullary constructor at the top", "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { foo => 1, _ => 2 } }\n", "foo", "()"),
-            ("a constructor with a field", "module m\ntype T = empty | cell(Int)\nfn f(t: T) -> Int { match t { cell => 1 } }\n", "cell", "(_)"),
-            ("inside `Some`", "module m\ntype T = empty | cell(Int)\nfn f(o: Option[T]) -> Int { match o { Some(empty) => 1, _ => 0 } }\n", "empty", "()"),
-            ("a generic sum type", "module m\ntype Opt[A] = nothing | just(A, A)\nfn f(o: Opt[Int]) -> Int { match o { just => 1 } }\n", "just", "(_, _)"),
+            (
+                "a nullary constructor at the top",
+                "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { foo => 1, _ => 2 } }\n",
+                "foo",
+                "()",
+            ),
+            (
+                "a constructor with a field",
+                "module m\ntype T = empty | cell(Int)\nfn f(t: T) -> Int { match t { cell => 1 } }\n",
+                "cell",
+                "(_)",
+            ),
+            (
+                "inside `Some`",
+                "module m\ntype T = empty | cell(Int)\nfn f(o: Option[T]) -> Int { match o { Some(empty) => 1, _ => 0 } }\n",
+                "empty",
+                "()",
+            ),
+            (
+                "a generic sum type",
+                "module m\ntype Opt[A] = nothing | just(A, A)\nfn f(o: Opt[Int]) -> Int { match o { just => 1 } }\n",
+                "just",
+                "(_, _)",
+            ),
         ] {
             let got = refusals(src);
             assert_eq!(got.len(), 1, "{what}: exactly one refusal, the binding's: {got:?}");
@@ -2225,10 +2245,16 @@ mod constructor_binding_tests {
     #[test]
     fn a_binding_that_names_no_constructor_of_the_matched_type_checks() {
         for (what, src) in [
-            ("another type's constructor", "module m\ntype T = foo | bar\ntype U = other | more\nfn f(u: U) -> Int { match u { foo => 1 } }\n"),
+            (
+                "another type's constructor",
+                "module m\ntype T = foo | bar\ntype U = other | more\nfn f(u: U) -> Int { match u { foo => 1 } }\n",
+            ),
             ("the call form", "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { foo() => 1, bar() => 2 } }\n"),
             ("an ordinary binding", "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { x => 1 } }\n"),
-            ("capitalized constructors", "module m\ntype C = Red | Green\nfn f(c: C) -> Int { match c { Red => 1, green => 2 } }\n"),
+            (
+                "capitalized constructors",
+                "module m\ntype C = Red | Green\nfn f(c: C) -> Int { match c { Red => 1, green => 2 } }\n",
+            ),
         ] {
             assert!(refusals(src).is_empty(), "{what} must check clean: {:?}", refusals(src));
         }

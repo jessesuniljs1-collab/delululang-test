@@ -96,7 +96,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
    `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md` and `code:DL0501`.
 2. **Witness the defect failing before you fix it.** Stash the fix and watch the new test go red. Then **falsify the test
    with mutants**: reintroduce the defect, or break the fix, and watch it go red. Mutants are numbered (`M<n>`) in the
-   records; the last one used is **M1003**, so continue from M1004. Run one cargo test target at a time when you do this.
+   records; the last one used is **M1007**, so continue from M1008. Run one cargo test target at a time when you do this.
 3. **Lint after the LAST `.rs` edit**, tests included: `cargo fmt --all`, then `bash scripts/clippy.sh -j 4`. That is
    fmt check plus `clippy --workspace --all-targets -D warnings`, and it writes a stamp the pre-commit hook demands.
 4. **Test.** `cargo test --workspace --no-fail-fast -j 4`, or `scripts/suite.sh`. Freeze the tree while it runs, and read
@@ -110,7 +110,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-202**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-203**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -272,13 +272,13 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
      6.48's. RW 3.24's cuts move no surface. Then the launch gates, and the `everything` run and the release dry run,
      dispatched and read.
   3. RW 3.24, structurally: variables resolved to slots before the run, mirroring every scope the interpreter makes.
-  4. RW 2.26 needs a decision: a lowercase nullary constructor cannot be matched by name. The additive option is a
-     warning.
+  4. RW 2.26 is decided (D-V2-203, `laptop/ctor-binding`): a pattern binding spelled like a constructor of the
+     matched type is refused with DL0302. It is a *Breaking* clause for the next launch fold.
   5. Watch the broker's Miri time.
   6. The launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-202;
-  - the last mutant is M1003;
+  - the last decision is D-V2-203;
+  - the last mutant is M1007;
   - there are 155 DL codes;
   - pull requests are numbered on GitHub, and #110 was the last landed.
 

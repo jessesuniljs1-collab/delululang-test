@@ -5517,3 +5517,51 @@ Indices resolved before the run: the larger change RW 3.24 still names, which wo
 **Evidence.** With run 16's other cuts (`V2_LOG.md`, RW 3.24), `nested_calls_macro` −15.9% in instructions and −19% in time;
 the full suite green. The hasher's own share was measured with the scope sizing and the call order together: those three
 took `nested_calls_macro` from 1,449 to 1,371 million instructions.
+
+## D-V2-203 — RW 2.26: a pattern binding spelled like a constructor of the matched type is refused (DL0302) — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** The checker admits lowercase constructors (`type T = foo | bar`), and since D-V2-201 both engines build
+them as values. In a pattern the parser reads a lowercase name as a fresh binding and a capitalized one as a constructor
+(`parse_pattern_inner`). So `match t { foo => 1, bar => 2 }` checked clean and answered 1 for `bar`, on both engines:
+the first arm bound every `T` and the second never ran. That is the language's defined meaning, not an engine defect,
+but every reader takes those arms for the constructors. The call form `foo()` already matched the constructor on both
+engines (probed on the binary, 2026-11-01).
+
+**Decision.** In a `match`, a binding spelled like a constructor of the type matched at that position is refused,
+**DL0302**, at every depth: at the top, inside `Some(…)`, and inside another constructor's fields. The message names the
+constructor and the type. The repair `match-the-constructor` (a suggestion, with edits) writes the call form, `foo()`,
+or `cell(_)` with one `_` per field. A binding spelled like another type's constructor, and every other binding, check
+as before.
+
+**Why DL0302, not a new code.** DL0302's rule is that a second definition of one name is refused rather than shadowing
+the first. A binding spelled like the matched type's own constructor would shadow it in the arm, and would take every
+value. Its explanation now says so. The precedent is D-V2-179, which reused DL0211. No conformance entry or entrenched
+file changes. A rejecting and an accepting program carry `ref.diag.DL0302` in their headers, and coverage stays 358 of
+358.
+
+**Why a refusal, not a warning.** Every program holding such a binding computes something other than what it reads as,
+silently: its later arms never run. A warning can be scrolled past, and the fix is mechanical. Rust refuses the same
+shape by default (E0170, `bindings_with_variant_name`). The refusal is also the other half of an existing one: a
+capitalized name that is no constructor of the type is refused, DL0405.
+
+**The alternatives.**
+- (b) Refuse lowercase constructors at their declaration: it refuses every such type, its correct uses included, and
+  the conformance witness of D-V2-201 holds lowercase constructors as values.
+- (c) Read such a name in a pattern as the constructor, as Rust resolves it: it changes what programs that check today
+  mean, without a word.
+- A warning, option (a) as first written: above.
+
+**Breaking.** A program that checked under 1.x is refused under 2.0.0 when it holds such a binding. Its 2.0.0 entry
+goes into the *Breaking* paragraph when `launch/2.0.0` next takes `master`.
+
+**Evidence.**
+- Tests: `delulu-check`'s `a_binding_spelled_like_a_constructor_of_the_matched_type_is_refused`. Its four shapes each
+  checked clean before: a nullary constructor, one with a field, one inside `Some`, and a generic sum type.
+  `a_binding_that_names_no_constructor_of_the_matched_type_checks` covers what stays. Also the conformance pair,
+  `loop_parity`'s call-form parity (`1 2 -1 9` on both engines), and `fix_cli`'s repair corpus.
+- Mutants, each red:
+  - M1004: the binding is never asked about. Unit tests and conformance went red.
+  - M1005: only a nullary constructor counts.
+  - M1006: the repair writes `()` whatever the fields.
+  - M1007: a generic sum type is not asked.
+- The core-invariance snapshot is blessed; it gained only the two new programs.

@@ -11320,3 +11320,29 @@ What was done:
   The cloud's notes were carried to the laptop first. Then the folder was refreshed from the laptop, 80 files, sanitized
   by a script that refuses if the banned word survives. The new files were scanned for credentials and personal
   addresses: none.
+
+## 2026-11-01 — the laptop: a pattern binding spelled like a constructor of the matched type is refused (RW 2.26, D-V2-203)
+
+RW 2.26 waited for a decision. In a `match`, a lowercase name binds, so over `type T = foo | bar` the arms
+`foo => 1, bar => 2` answered 1 for `bar` on both engines, and the checker said nothing. Probed first on the binary: the
+call form `foo() => 1, bar() => 2` already answered 2 on both engines. So the language had a spelling for the
+constructor, and the trap was the bare name.
+
+**Decided (D-V2-203):** such a binding is refused with DL0302, at any depth of a pattern. The repair
+`match-the-constructor` writes `foo()` or `cell(_)`. DL0302 is an existing code (a second definition refused rather than
+shadowing), so no new code, no entrenched file and no conformance entry was needed. DL0302's explanation now says it.
+Also fixed: the comment on `Pattern::Bind` in `ast.rs`, which said the checker resolved such a name Rust-style. It never
+had.
+
+**Evidence:**
+- `delulu-check` has two new tests: four refused shapes, each clean before, and four that still check.
+- The conformance pair carries `ref.diag.DL0302`.
+- `loop_parity`'s call-form test passes on both engines (`1 2 -1 9`).
+- `fix_cli`'s repair corpus gains `match-the-constructor`.
+- Mutants M1004–M1007 were each red.
+- `delulu-conform --coverage`: 358 of 358. `--check-reference` is in sync.
+- These targets passed: `core_invariance` (blessed, +190 lines: the two programs), `conformance`, `corpus_cli`,
+  `fix_cli` (13), `late_let_cli` and `delulu-check` (260).
+
+**Breaking** under STABILITY.md section 1: a program that checked under 1.x is refused. It is noted in the CHANGELOG
+section, for the *Breaking* paragraph at the next fold into `launch/2.0.0`.

@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a pattern binding spelled like a constructor of the matched type is refused, 2026-11-01
+
+- **Changed: in a `match`, a lowercase name spelled like a constructor of the type being matched is refused, DL0302**
+  (RW 2.26, D-V2-203). A lowercase name in a pattern is a new binding, so over `type T = foo | bar` the arms
+  `foo => 1, bar => 2` matched every `T` with the first arm and answered 1 for `bar`, on both engines and with no word
+  from the checker. Such a binding would shadow the constructor as a second definition would, so it is refused. The
+  message names the constructor, and a repair (`match-the-constructor`) writes its call form: `foo()`, or `cell(_)`
+  for a constructor with a field. That form already matched the constructor on both engines. A binding spelled like
+  another type's constructor is not affected. **Breaking** for a program holding such a binding: it checked under 1.x,
+  and its later arms never ran.
+
 ## Unreleased — the interpreter's measured costs cut, 2026-11-01
 
 - **Changed: the interpreter runs loops and calls faster, with the same output** (RW 3.24, D-V2-202). Measured on a Linux
