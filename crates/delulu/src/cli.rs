@@ -3815,7 +3815,11 @@ impl ScopeWalk {
         use delulu_syntax::ast::Stmt::*;
         match s {
             Let { value, .. } => self.walk_expr(value),
-            Assign { value, .. } => self.walk_expr(value),
+            // INDEX-TARGET-1: what `xs[…]` holds is asked for as any other expression.
+            Assign { target, value, .. } => {
+                self.walk_expr(value);
+                target.index_exprs().into_iter().for_each(|i| self.walk_expr(i));
+            }
             While { cond, body, .. } => {
                 self.walk_expr(cond);
                 self.walk_block(body);
@@ -4540,7 +4544,11 @@ fn collect_plugin_loads(block: &delulu_syntax::ast::Block, out: &mut Vec<PluginL
                     }
                     walk_expr(value, out, &grants);
                 }
-                Stmt::Assign { value, .. } => walk_expr(value, out, &grants),
+                Stmt::Assign { target, value, .. } => {
+                    walk_expr(value, out, &grants);
+                    // INDEX-TARGET-1: a `load(…)` written in `xs[…]` loads as any other.
+                    target.index_exprs().into_iter().for_each(|i| walk_expr(i, out, &grants));
+                }
                 Stmt::For { iter, body, .. } => {
                     walk_expr(iter, out, &grants);
                     walk_block(body, out, &grants);
@@ -9852,7 +9860,11 @@ impl PyWalk {
         use delulu_syntax::ast::Stmt::*;
         match s {
             Let { value, .. } => self.walk_expr(value),
-            Assign { value, .. } => self.walk_expr(value),
+            // INDEX-TARGET-1: what `xs[…]` holds is asked for as any other expression.
+            Assign { target, value, .. } => {
+                self.walk_expr(value);
+                target.index_exprs().into_iter().for_each(|i| self.walk_expr(i));
+            }
             While { cond, body, .. } => {
                 self.walk_expr(cond);
                 self.walk_block(body);

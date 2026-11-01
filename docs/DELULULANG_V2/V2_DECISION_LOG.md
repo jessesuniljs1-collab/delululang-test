@@ -5565,3 +5565,55 @@ goes into the *Breaking* paragraph when `launch/2.0.0` next takes `master`.
   - M1006: the repair writes `()` whatever the fields.
   - M1007: a generic sum type is not asked.
 - The core-invariance snapshot is blessed; it gained only the two new programs.
+
+## D-V2-204 — a `match` arm no value reaches is reported, DL0413, a new warning — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** Arms are tried in order and the first that matches wins, on both engines. So an arm whose every value an
+earlier arm already matches never runs. Five such arms checked clean on the binary (`check` exit 0), and the run took
+the earlier arms. Examples are `x => …` above `Red => …`, `Red` or `0` twice, `Some(_)` above `Some(Red)`, and a `_`
+after `true` and `false`. RW 2.26 (D-V2-203) closed the commonest way to write one by accident, a binding spelled like a
+constructor. The rest are an arm in the wrong order, or one left behind by an edit.
+
+**Decision.**
+- The checker asks each arm whether some value reaches it past the arms above. This is Maranget's usefulness, the
+  question the exhaustiveness search (MATCH-EXHAUST-1) already asks of a row that holds any value, generalized to any
+  row.
+- An arm no value reaches is reported with **DL0413**, *unreachable match arm*, a **warning**, at the arm's pattern.
+- It is asked only when every pattern of the `match` passed, with its own copy of the exhaustiveness search's limit
+  (`EXHAUSTIVE_BUDGET`). It reports an arm only when it has proved it unreachable. A search that spends its limit
+  stops asking, and says nothing more about that `match`.
+
+**Why a warning.** The program does what its arms say; nothing escapes or faults. rustc, OCaml and GHC each warn on
+the same shape. A refusal would make a dead arm in generated code, or one kept while editing, a build failure, for no
+safety gain.
+
+**Why a new code.** No existing code says it. DL0407 is the opposite claim (an arm missing). DL0502, the one typing
+warning, is about effects. The owner's delegation of 2026-10-17 covers a new `DL` code where one is needed. Under
+`STABILITY.md` §5 a new diagnostic code is a minor, additive change.
+
+**What it touches.**
+- `codes.rs`: the title and the explanation.
+- `witnesses.toml`, entrenched (`ENTRENCHED_CHANGE_RECORD.md`), gains two rows:
+  - the producing one is `an_arm_no_value_reaches_warns_dl0413`. A warning cannot be a `.delulu` reject file, which
+    must be refused.
+  - the accepting one is `an_arm_some_value_reaches_is_not_reported`.
+- The generated reference: 359 of 359 anchors, 156 codes.
+- The documents that quote the count of codes (156 now).
+
+**Cost.** Each arm is asked against the arms above it, so a `match` of n arms reads about n²/2 cells, within the limit.
+On a debug build, 6,000 literal arms check in 0.27 s against 0.06 s before (the limit is reached near arm 4,500), and
+1,000 in 0.04 s. No program the repository ships has a dead arm: `core_invariance` is unchanged by the check.
+
+**Evidence.**
+- The two tests above, each red before.
+- Mutants, each red:
+  - M1008: the arms are never asked, the defect itself.
+  - M1009: any literal covers any literal.
+  - M1010: a constructor every arm covers is read as a value left.
+  - M1011: a row's fields are read as any value.
+- One mutant was equivalent: reading the constructors some arms name as all of them. For a finite set of constructors,
+  trying each in turn, the missing ones included, gives the same answer as the default rows, at more cost. The
+  `all(...)` that selects the default rows is a matter of cost, not correctness.
+- Coverage is 100% (359/359), and the reference is in sync.
+- These targets passed: `delulu-check` (262), `delulu-diag` (57), `conformance`, `core_invariance`, `corpus_cli`,
+  `book`, `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.

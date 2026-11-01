@@ -1848,7 +1848,12 @@ fn walk_exprs(module: &delulu_syntax::ast::Module, f: &mut impl FnMut(&delulu_sy
     fn block(b: &delulu_syntax::ast::Block, f: &mut impl FnMut(&delulu_syntax::ast::Expr)) {
         for s in &b.stmts {
             match s {
-                Stmt::Let { value, .. } | Stmt::Assign { value, .. } => expr(value, f),
+                Stmt::Let { value, .. } => expr(value, f),
+                // INDEX-TARGET-1: the expressions in `xs[…]` are expressions of the module too.
+                Stmt::Assign { target, value, .. } => {
+                    expr(value, f);
+                    target.index_exprs().into_iter().for_each(|i| expr(i, f));
+                }
                 Stmt::While { cond, body, .. } => {
                     expr(cond, f);
                     block(body, f);

@@ -11346,3 +11346,97 @@ had.
 
 **Breaking** under STABILITY.md section 1: a program that checked under 1.x is refused. It is noted in the CHANGELOG
 section, for the *Breaking* paragraph at the next fold into `launch/2.0.0`.
+
+## 2026-11-01 — the laptop: a `match` arm no value reaches is reported, DL0413 (D-V2-204, RW 2.28)
+
+After RW 2.26 the laptop asked the wider question: does the checker say anything about an arm no value can reach? It
+did not. Five dead arms (`x` above `Red`, `Red` twice, `Some(_)` above `Some(Red)`, `0` twice, a `_` after `true` and
+`false`) checked clean, exit 0, and the run took the earlier arms.
+
+**Built:** `check_reachable_arms` asks each arm Maranget's usefulness question against the arms above it (`useful`, the
+general form of the question `uncovered` asks for exhaustiveness). It shares a new `specialize` with `uncovered`. It
+warns **DL0413** at the arm's pattern, and only when it has proved the arm unreachable, within its own copy of the
+search's limit. DL0413 is a new code (D-V2-204), a warning. The entrenched witness file gains two rows
+(`ENTRENCHED_CHANGE_RECORD.md`), the reference was regenerated (359 of 359, 156 codes), and the documents quoting the
+count say 156.
+
+**Evidence:**
+- Ten dead shapes are each warned at their own line. Six live matches are not reported.
+- Mutants: M1008–M1011 were each red. One more was equivalent and is recorded in D-V2-204.
+- Cost: 6,000 literal arms check in 0.27 s against 0.06 s, on a debug build. No program the repository ships has a dead
+  arm.
+- These passed: `delulu-check` (262), `delulu-diag`, `conformance`, `core_invariance`, `corpus_cli`, `book`,
+  `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.
+
+## 2026-11-01 — the laptop: FMT-CTOR-1, `delulu fmt` printed `foo()` as `foo`
+
+#112's first run (`41282442664`) was red on Ubuntu and macOS, in `delulu-syntax`'s
+`laws_hold_over_the_repository_corpus`. The formatter's identity law holds over every `.delulu` file in the repository,
+and RW 2.26's new accepting program was one of them. `pattern_text` printed a nullary constructor pattern bare whatever
+its name, so `foo() => 1` became `foo => 1`. The parser reads a lone lowercase name as a binding, so `delulu fmt` had
+changed what the program meant: the arm matched every value. Before D-V2-203 the result checked clean and took the
+first arm; after it, the result is refused. The defect is as old as lowercase constructors (1.x).
+
+**Fixed:** a lone lowercase name keeps its call form (`foo()`). A capitalized or qualified name prints bare, as both
+parse to a constructor. `a_lowercase_nullary_constructor_pattern_keeps_its_call_form` holds it; mutant M1012 (the call
+form dropped) turns it and the corpus law red; `delulu-syntax`'s lib tests pass (131).
+
+The laptop had not run `delulu-syntax`'s tests for #112: a new `.delulu` file in `tests/conformance/` is also the
+formatter's corpus, so a change that adds one runs them. (HANDOFF §11.5.)
+
+## 2026-11-01 — the laptop: the Survey holds the memory notes as records, not claims about now
+
+Refreshing `docs/assistant-memory/` (the same day: 79 notes and their index) made ten of the map's sixteen warnings `stale-count`
+findings in memory notes. An example is "12 shipped language crates" in a note of 2026-08: a record of that day, as true
+as the archive's. Ten old warnings bury a new one.
+
+**Changed:** `describes_the_present` (`crates/delulu-survey/src/verify.rs`) exempts `docs/assistant-memory/`, as it
+exempts `docs/archive/`. Its README says the notes are dated as written and never edited on the way in. `HANDOFF.md` §11
+and the V2 documents state the present, and are still checked. The rule had no test. Now
+`only_documents_that_describe_the_present_are_held_to_the_tree` names the documents on each side, and mutant M1013 (the
+exemption removed) turns it red.
+
+**Result:** findings went from 0 errors and 16 warnings to 0 errors and 7. Four are memory notes naming a path not in
+the tree, kept as warnings because a path that dangles may be a real one moved. Two are in a design prompt, and one is an
+old V2_LOG count.
+
+## 2026-11-01 — the laptop: DL0413 names the arm that completes the cover
+
+A DL0413 said that an arm was dead, but not why. In a long `match`, the arm that takes its values can be far above it.
+The warning now carries a second span at the first arm `k` for which arms `0..=k` already match every value the dead
+one does. When `k` is the first arm, its label is *"the first arm already matches every value it does"*. Otherwise it
+is *"with the arms above it, this arm already matches every value it does"*. The search for it shares the warning's
+limit. If that runs out, the proved warning stands without the pointer.
+
+`an_arm_no_value_reaches_warns_dl0413` now holds each of its ten shapes to the line of the arm that covers it.
+Mutants M1014 (the cover never named) and M1015 (the arm after the cover named) were red. These passed: `delulu-check`
+(262), `json_contract`, `core_invariance`, `lsp_cli`, `cli` and `conformance`.
+
+## 2026-11-01 — the laptop: the two-engine generator writes sum types of its own
+
+`delulu-wasm`'s program generator (`gen.rs`) feeds `conformance_parity` (2,000 programs) and the differential gate
+(50,000). It never wrote a sum type of the program's own. So none of the shapes this weekend turned on was ever drawn
+at random:
+- CTOR-SHADOW-1's lowercase constructors (D-V2-201);
+- their call-form patterns (D-V2-203);
+- a test inside a constructor (MATCH-NEST-1).
+Every such check was hand-written.
+
+**Added:** `gen_sum`, from a stream of its own in `random_console_program`, in half the programs. It writes:
+- a type `K` of two to four constructors, lowercase and capitalized, each with no field or with one or two `Int`
+  fields;
+- a `pick` whose arms come in a shuffled order. A pattern names a lowercase nullary constructor by its call form, and a
+  capitalized one bare or called. A field is bound, ignored, or tested against a literal. A final `_` keeps the match
+  exhaustive, and a general arm above a narrower one sometimes takes its values, a DL0413 warning both engines must
+  honour alike;
+- a line printing `pick` of three to five of its values.
+`conformance_parity` counts what it drew and fails below its floors: more than 700 sum-type programs, more than 300
+matching a lowercase constructor by its call form, and more than 200 testing a field.
+
+**Evidence:**
+- All 2,000 programs check clean, compile, and print alike on both engines. The differential gate passes on 6,000
+  seeds, in 64 s on a debug build.
+- M1016 (the generator never writes a sum type) turns the floors red.
+- M1017 (the interpreter reads a literal inside a constructor as any value) turns the parity red: 488 programs differ.
+  Under the generator as it was before this change, M1017 stays **green**: no generated program tested inside a
+  constructor. That difference is the coverage this adds.

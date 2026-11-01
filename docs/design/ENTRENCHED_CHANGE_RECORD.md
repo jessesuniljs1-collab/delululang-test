@@ -689,3 +689,41 @@ alternative that would change a rule, refusing a function named like a construct
 ```
 git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
 ```
+
+## 2026-11-01 — `tests/conformance/witnesses.toml`: DL0413, an arm no value reaches
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: two `[[witness]]` rows for the new anchor `ref.diag.DL0413`. The producing (negative) one comes after DL0502's producing row, with a two-line comment. The accepting (positive) one comes after DL0412's accepting row. No existing row changes. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | the laptop session of 2026-11-01, after RW 2.26; `REMAINING_WORK.md` 2.28; decision D-V2-204 |
+| Approved by | **the head chef, 2026-11-01, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, a new `DL` code where one is needed among them |
+
+**Why**
+
+D-V2-204 registers DL0413, a warning for a `match` arm no value reaches. The coverage law (invariant 42) demands an
+accepting and a producing witness for every registered code. Without these rows the reference would carry an uncovered
+anchor, and `delulu-conform --coverage` fails. A warning cannot be witnessed by a `.delulu` reject file, which
+`rejecting_programs_produce_their_named_code` requires to be refused. So both rows name the checker's own tests:
+- `an_arm_no_value_reaches_warns_dl0413` (producing): ten shapes, each warned at its own line;
+- `an_arm_some_value_reaches_is_not_reported` (accepting): six matches whose every arm is reached, none reported.
+
+**Why this is not an RFC**
+
+`STABILITY.md` §5 lists a new diagnostic code as a minor, additive change, and a warning changes no program's verdict.
+No rule changes meaning, and no rule lists the code: DL0413 enforces nothing, it reports.
+
+**Verified before the change**
+
+1. Both tests are red without D-V2-204's check (M1008) and green with it. Mutants M1009–M1011 turn them red.
+2. `delulu-conform --coverage`: *PASS: 100% anchor coverage*, 359 of 359, 156 codes. `--reference` regenerated the
+   reference, and `--check-reference` is in sync.
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- tests/conformance/witnesses.toml
+```
+— together with D-V2-204's check and the registry entry, or the coverage gate fails on an unwitnessed DL0413.

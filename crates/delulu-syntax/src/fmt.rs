@@ -842,8 +842,8 @@ fn pattern_text(p: &Pattern) -> String {
                 // `foo()` printed as `foo` became a binding that matches every value, and the next check refused it
                 // (DL0302, D-V2-203) or, before that, the arm took every value. A capitalized or qualified name is a
                 // constructor either way, and stays bare.
-                let lone_lowercase = path.segs.len() == 1
-                    && !path.segs[0].name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+                let lone_lowercase =
+                    path.segs.len() == 1 && !path.segs[0].name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
                 if lone_lowercase {
                     format!("{}()", path.dotted())
                 } else {

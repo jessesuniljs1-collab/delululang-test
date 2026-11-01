@@ -78,7 +78,7 @@ digest. The full texts are in the files each line names, and the head chef's who
 | Claim what did not run, or invent a result, contact, key or compliance claim. | "Prepared", "dispatched" and "green" are different words. A CI run counts only once its result is READ and recorded. Failed runs are recorded, not tidied away. |
 | Change what Authority and the Guard *mean*. | Harden, never redefine: closing a hole is welcome, redefining is the owner's. |
 | Edit an entrenched file casually. | Entrenched files: `docs/design/` CONSTITUTION, DELULU_CORE, STABILITY, SOUNDNESS_AUDIT; `SECURITY.md`; `rfcs/`; `docs/security/`; `crates/delulu-check/tests/laundering.rs`; `crates/delulu-conform/`; `tests/conformance/witnesses.toml`; CODEOWNERS "entrenched"; the licence. Each change needs a `D-V2-nn` decision plus an `ENTRENCHED_CHANGE_RECORD.md` entry. Ask `cargo run -p delulu-survey -- query doc:<path>` before editing under `docs/design/`. |
-| Add a new `DL` diagnostic code casually. | There are 155. A new one needs a `D-V2-nn`, and several documents quote the count. |
+| Add a new `DL` diagnostic code casually. | There are 156. A new one needs a `D-V2-nn`, and several documents quote the count. |
 | Commit or ship a built Linux kernel or microVM image. | D-NE-27: GPL obligations first. |
 | Change the licence (Apache-2.0 + `NOTICE` + `TRADEMARK.md`, ruling D27). | The owner's intent of 2026-07-24 is the evidence any change must serve. |
 
@@ -96,7 +96,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
    `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md` and `code:DL0501`.
 2. **Witness the defect failing before you fix it.** Stash the fix and watch the new test go red. Then **falsify the test
    with mutants**: reintroduce the defect, or break the fix, and watch it go red. Mutants are numbered (`M<n>`) in the
-   records; the last one used is **M1007**, so continue from M1008. Run one cargo test target at a time when you do this.
+   records; the last one used is **M1017**, so continue from M1018. Run one cargo test target at a time when you do this.
 3. **Lint after the LAST `.rs` edit**, tests included: `cargo fmt --all`, then `bash scripts/clippy.sh -j 4`. That is
    fmt check plus `clippy --workspace --all-targets -D warnings`, and it writes a stamp the pre-commit hook demands.
 4. **Test.** `cargo test --workspace --no-fail-fast -j 4`, or `scripts/suite.sh`. Freeze the tree while it runs, and read
@@ -105,12 +105,13 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
      2026-10-19). Push the branch, dispatch `ci.yml` with `-f jobs=everything`, read the run to its end, and land only
      on green.
 5. **Regenerate the map LAST**: `cargo run -p delulu-survey -- build`, then `-- check` and `-- findings`, which must show
-   0 errors. A warning is for you to judge: on 2026-11-01 there were 16, nearly all of them dated memory notes quoting
-   what was true when they were written. Then `cargo run -p delulu -- doctor --check`.
+   0 errors. A warning is for you to judge: on 2026-11-01 there were 7, each a path some prose names that is not in the
+   tree, or an old log entry's count. Dated records (the archive, the memory notes) are not held to today's counts.
+   Then `cargo run -p delulu -- doctor --check`.
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-203**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-204**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -260,27 +261,37 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - `docs/REPOSITORY_STRUCTURE.md` lists every file and what it is for.
 - `docs/for-agents.md` is different: it is for agents that *use* DeluluLang, not for developers of it.
 
-## 10. Where the project stands (2026-11-01, 06:30 UTC) — the newest sync-log entry supersedes this
+## 10. Where the project stands (2026-11-01, 12:15 UTC) — the newest sync-log entry supersedes this
 
-- `master` is at `d8dcc3b` (on-demand routine run 16's close). Its push run on that commit had not been read when this
-  was written.
-- `launch/2.0.0` is at `1548766`, **prepared, not launched**, with `LAUNCH-GATES=ok`. CHECKLIST-2.0 is the release gate.
-  The launch itself (a fresh history in the public repository, the tag, the release) waits for the owner's word.
-- **Open / next, in order** (from run 16's entry):
-  1. Read `master`'s push run.
-  2. Bring `launch/2.0.0` current. RW 6.49 (#110: an unreadable flag value now exits 2) is a *Breaking* clause beside RW
-     6.48's. RW 3.24's cuts move no surface. Then the launch gates, and the `everything` run and the release dry run,
-     dispatched and read.
-  3. RW 3.24, structurally: variables resolved to slots before the run, mirroring every scope the interpreter makes.
-  4. RW 2.26 is decided (D-V2-203, `laptop/ctor-binding`): a pattern binding spelled like a constructor of the
-     matched type is refused with DL0302. It is a *Breaking* clause for the next launch fold.
-  5. Watch the broker's Miri time.
-  6. The launch, only on the owner's word.
+- `master` is at `699ee44`. It holds #111 to #117:
+  - this brief;
+  - RW 2.26 (DL0302, D-V2-203) with FMT-CTOR-1;
+  - DL0413 (D-V2-204), which now names the arm that completes the cover;
+  - the Survey reading memory notes as records;
+  - the two-engine generator writing sum types.
+  Each landed on a green run.
+- `launch/2.0.0` is at `415eb2e`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` up to #114.
+  - Its release dry run, `41299815972`, is green.
+  - Its `everything` run, `41299813712`, was green on every finished job at 12:15 UTC, with the broker's and the
+    checker's Miri-slow still running (about 3 hours).
+  CHECKLIST-2.0 is the release gate. The launch itself (a fresh history in the public repository, the tag, the release)
+  waits for the owner's word.
+- **Open / next, in order:**
+  1. Read `41299813712` to its end. Then merge `master` into `launch/2.0.0`, taking #116's CHANGELOG line into the
+     DL0413 section, and cite `415eb2e`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
+  2. A warning for a binding never read (a new code). It is scoped, not started:
+     - the checker's scopes map a name to its type alone, so each binding needs its span and a read mark;
+     - parameters, `let`, patterns, `for` and closures each bind;
+     - a leading `_` would silence it;
+     - every shipped program and every test that expects no diagnostics must be judged.
+  3. RW 3.24: a compiled form. Slots alone buy about a tenth.
+  4. Watch the broker's Miri time (3 h 10 min on the last run, against a 4-hour cap).
+  5. The launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-203;
-  - the last mutant is M1007;
-  - there are 155 DL codes;
-  - pull requests are numbered on GitHub, and #110 was the last landed.
+  - the last decision is D-V2-204;
+  - the last mutant is M1017;
+  - there are 156 DL codes and 359 reference anchors;
+  - pull requests are numbered on GitHub, and #117 was the last opened.
 
 ## 11. Keep this file true
 

@@ -7121,6 +7121,77 @@ error[DL0412]: `break` is only valid inside a `while` or `for` loop
 
 1 error(s)
 
+===== tests/conformance/reject/DL0501_effect_in_an_index_target.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `f` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL0501_effect_in_an_index_target.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 309,
+                "start_byte": 309
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 282,
+            "col": 5,
+            "line": 11
+          },
+          "file": "tests/conformance/reject/DL0501_effect_in_an_index_target.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 281,
+            "col": 4,
+            "line": 11
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0501_effect_in_an_index_target.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0501]: function `f` performs effect `Write` not declared in its row
+  --> tests/conformance/reject/DL0501_effect_in_an_index_target.delulu:11:4
+   |
+11 | fn f(out: Cap[Console]) -> Int {
+   |    ^ declared row is here
+  repair: add_effect_to_row (exact)  [widens authority — review before applying]
+  explain: delulu explain E-DL0501
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0501_test_undeclared_write.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -7768,6 +7839,77 @@ error[DL1601]: a `ref` value cannot cross this actor boundary as `val` — only 
 15 |   s.feed(xs)
    |          ^^ not sendable
   explain: delulu explain E-DL1601
+
+1 error(s)
+
+===== tests/conformance/reject/DL1602_consume_in_an_index_target.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL1602",
+      "explanation_id": "E-DL1602",
+      "message": "use of `xs` after `consume` — the binding is dead",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 596,
+            "col": 13,
+            "line": 22
+          },
+          "file": "tests/conformance/reject/DL1602_consume_in_an_index_target.delulu",
+          "label": "used here",
+          "start": {
+            "byte": 594,
+            "col": 11,
+            "line": 22
+          }
+        },
+        {
+          "end": {
+            "byte": 577,
+            "col": 24,
+            "line": 21
+          },
+          "file": "tests/conformance/reject/DL1602_consume_in_an_index_target.delulu",
+          "label": "consumed here",
+          "secondary": true,
+          "start": {
+            "byte": 567,
+            "col": 14,
+            "line": 21
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL1602_consume_in_an_index_target.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL1602]: use of `xs` after `consume` — the binding is dead
+  --> tests/conformance/reject/DL1602_consume_in_an_index_target.delulu:22:11
+   |
+22 |   let n = xs.len()
+   |           ^^ used here
+  --- tests/conformance/reject/DL1602_consume_in_an_index_target.delulu:21:14
+   |
+21 |   ys[give(s, consume xs)] = 1
+   |              ---------- consumed here
+  explain: delulu explain E-DL1602
 
 1 error(s)
 
