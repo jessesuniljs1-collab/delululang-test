@@ -7217,3 +7217,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Unreachable arms after an arm that binds everything get no warning either (`match t { x => 1, Foo => 2 }`). It is a
   candidate row; not filed yet.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — a `match` arm no value reaches is reported, DL0413 (D-V2-204, RW 2.28) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/dead-arms` (stacked on `laptop/ctor-binding`, #112)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs` (tests),
+  `crates/delulu-diag/src/codes.rs` (DL0413), `tests/conformance/witnesses.toml` (two rows, entrenched),
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/reference/README.md`, `coverage.md`, `diagnostics.md` (regenerated),
+  `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`, `docs/lang/delulu-slang.md` and `docs/REMAINING_WORK.md` (the count of
+  codes, 156; row 2.28), `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-204), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/AI_ONBOARDING.md` (the counters), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #112, then this branch, each on its green run.
+  2. Read `launch/2.0.0` `005372f`'s `41281508881` and `41281511250`.
+  3. Fold `master` into `launch/2.0.0`. RW 2.26 is a *Breaking* clause. DL0413 is additive, a new section with no
+     clause. Run `launch-criterion-2.py` (359 anchors now), the gates, and the `everything` run and release dry run.
+  4. RW 3.24, structural.
+  5. The broker's Miri.
+  6. *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

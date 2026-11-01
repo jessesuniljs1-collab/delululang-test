@@ -11346,3 +11346,24 @@ had.
 
 **Breaking** under STABILITY.md section 1: a program that checked under 1.x is refused. It is noted in the CHANGELOG
 section, for the *Breaking* paragraph at the next fold into `launch/2.0.0`.
+
+## 2026-11-01 — the laptop: a `match` arm no value reaches is reported, DL0413 (D-V2-204, RW 2.28)
+
+After RW 2.26 the laptop asked the wider question: does the checker say anything about an arm no value can reach? It
+did not. Five dead arms (`x` above `Red`, `Red` twice, `Some(_)` above `Some(Red)`, `0` twice, a `_` after `true` and
+`false`) checked clean, exit 0, and the run took the earlier arms.
+
+**Built:** `check_reachable_arms` asks each arm Maranget's usefulness question against the arms above it (`useful`, the
+general form of the question `uncovered` asks for exhaustiveness). It shares a new `specialize` with `uncovered`. It
+warns **DL0413** at the arm's pattern, and only when it has proved the arm unreachable, within its own copy of the
+search's limit. DL0413 is a new code (D-V2-204), a warning. The entrenched witness file gains two rows
+(`ENTRENCHED_CHANGE_RECORD.md`), the reference was regenerated (359 of 359, 156 codes), and the documents quoting the
+count say 156.
+
+**Evidence:**
+- Ten dead shapes are each warned at their own line. Six live matches are not reported.
+- Mutants: M1008–M1011 were each red. One more was equivalent and is recorded in D-V2-204.
+- Cost: 6,000 literal arms check in 0.27 s against 0.06 s, on a debug build. No program the repository ships has a dead
+  arm.
+- These passed: `delulu-check` (262), `delulu-diag`, `conformance`, `core_invariance`, `corpus_cli`, `book`,
+  `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.

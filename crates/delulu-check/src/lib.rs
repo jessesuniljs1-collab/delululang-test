@@ -2260,3 +2260,78 @@ mod constructor_binding_tests {
         }
     }
 }
+
+// ----- an arm no value reaches (DL0413, D-V2-204) ------------------------------------------------
+
+#[cfg(test)]
+mod unreachable_arm_tests {
+    use super::check_source;
+
+    /// The line of each DL0413, and every error's code.
+    fn dead_arms(src: &str) -> (Vec<u32>, Vec<String>) {
+        let c = check_source(0, src);
+        let lines = c
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "DL0413")
+            .map(|d| {
+                assert!(!d.is_error(), "DL0413 is a warning: {}", d.message);
+                let at = d.primary_span().expect("DL0413 points at the arm").start as usize;
+                1 + src[..at].matches('\n').count() as u32
+            })
+            .collect();
+        let errors = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect();
+        (lines, errors)
+    }
+
+    const TYPES: &str = "module m\ntype C = Red | Green | Blue\ntype P[A] = none | one(A) | two(A, A)\n";
+
+    /// **D-V2-204.** Each match below checked clean, with no word, and its marked arm never ran: the first arm that
+    /// matches wins on both engines. The line each warning must name is the arm's own.
+    #[test]
+    fn an_arm_no_value_reaches_warns_dl0413() {
+        for (what, body, dead_line) in [
+            ("a name above a constructor", "fn f(c: C) -> Int { match c {\nx => 1,\nRed => 2,\n} }\n", 6),
+            ("a constructor twice", "fn f(c: C) -> Int { match c {\nRed => 1,\nRed => 2,\n_ => 3,\n} }\n", 6),
+            ("`Some(_)` above `Some(Red)`", "fn f(o: Option[C]) -> Int { match o {\nSome(_) => 1,\nNone => 2,\nSome(Red) => 3,\n} }\n", 7),
+            ("an integer twice", "fn f(n: Int) -> Int { match n {\n0 => 1,\n0 => 2,\n_ => 3,\n} }\n", 6),
+            ("a string twice", "fn f(s: Str) -> Int { match s {\n\"a\" => 1,\n\"a\" => 2,\n_ => 3,\n} }\n", 6),
+            ("`_` after `true` and `false`", "fn f(b: Bool) -> Int { match b {\ntrue => 1,\nfalse => 2,\n_ => 3,\n} }\n", 7),
+            ("`_` after every constructor", "fn f(c: C) -> Int { match c {\nRed => 1,\nGreen => 2,\nBlue => 3,\n_ => 4,\n} }\n", 8),
+            ("nested, two deep", "fn f(o: Option[Option[C]]) -> Int { match o {\nSome(Some(_)) => 1,\nSome(None) => 2,\nNone => 3,\nSome(Some(Blue)) => 4,\n} }\n", 8),
+            ("a field of a generic sum", "fn f(p: P[Int]) -> Int { match p {\ntwo(_, 0) => 1,\ntwo(x, y) => 2,\ntwo(1, 0) => 3,\n_ => 4,\n} }\n", 7),
+            ("`Ok(_)` above `Ok(1)`", "fn f(r: Result[Int, Str]) -> Int { match r {\nOk(_) => 1,\nOk(1) => 2,\nErr(_) => 3,\n} }\n", 6),
+        ] {
+            let (lines, errors) = dead_arms(&format!("{TYPES}{body}"));
+            assert!(errors.is_empty(), "{what}: the program still checks: {errors:?}");
+            assert_eq!(lines, vec![dead_line], "{what}: one DL0413, at the dead arm");
+        }
+    }
+
+    /// Every arm here is reached by some value, so none is reported: a constructor before `_`, literals before `_`, a
+    /// narrower pattern above a wider one, and a pair of fields that differ in either.
+    #[test]
+    fn an_arm_some_value_reaches_is_not_reported() {
+        for (what, body) in [
+            ("constructors then `_`", "fn f(c: C) -> Int { match c {\nRed => 1,\nGreen => 2,\n_ => 3,\n} }\n"),
+            (
+                "the narrow above the wide",
+                "fn f(o: Option[C]) -> Int { match o {\nSome(Red) => 1,\nSome(_) => 2,\nNone => 3,\n} }\n",
+            ),
+            ("literals then `_`", "fn f(n: Int) -> Int { match n {\n0 => 1,\n1 => 2,\n_ => 3,\n} }\n"),
+            ("`true` and `false`", "fn f(b: Bool) -> Int { match b {\ntrue => 1,\nfalse => 2,\n} }\n"),
+            (
+                "fields that differ",
+                "fn f(p: P[Int]) -> Int { match p {\ntwo(0, _) => 1,\ntwo(_, 0) => 2,\ntwo(_, _) => 3,\n_ => 4,\n} }\n",
+            ),
+            (
+                "a lowercase constructor's call form",
+                "fn f(p: P[Int]) -> Int { match p {\nnone() => 1,\none(_) => 2,\ntwo(_, _) => 3,\n} }\n",
+            ),
+        ] {
+            let (lines, errors) = dead_arms(&format!("{TYPES}{body}"));
+            assert!(errors.is_empty(), "{what}: {errors:?}");
+            assert!(lines.is_empty(), "{what}: no arm is dead, but DL0413 named lines {lines:?}");
+        }
+    }
+}

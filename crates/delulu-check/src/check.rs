@@ -3211,6 +3211,9 @@ impl<'a> Checker<'a> {
         if !pattern_errors && self.diags.len() == at {
             self.check_nested_exhaustive(&st, arms, span);
         }
+        if !pattern_errors {
+            self.check_reachable_arms(&st, arms);
+        }
         (result_ty, acc)
     }
 
@@ -3426,22 +3429,7 @@ impl<'a> Checker<'a> {
             if sig.iter().all(|(n, _)| heads.contains(n)) {
                 for (name, fts) in sig {
                     let k = fts.len();
-                    let spec: Vec<Vec<Option<&Pattern>>> = rows
-                        .iter()
-                        .filter_map(|r| {
-                            let fields: Vec<Option<&Pattern>> = match r[0] {
-                                None => vec![None; k],
-                                Some(Pattern::Variant { path, fields, .. })
-                                    if path.segs.last().is_some_and(|s| s.name == *name) && fields.len() == k =>
-                                {
-                                    fields.iter().map(refutable).collect()
-                                }
-                                Some(Pattern::Lit(LitKind::Bool(b), _)) if b.to_string() == *name => Vec::new(),
-                                _ => return None,
-                            };
-                            Some(fields.into_iter().chain(r[1..].iter().copied()).collect())
-                        })
-                        .collect();
+                    let spec = specialize(rows, name, k);
                     let tys2: Vec<Type> = fts.iter().cloned().chain(rest.iter().cloned()).collect();
                     if let Some(mut w) = self.uncovered(&spec, &tys2, search) {
                         let tail = w.split_off(k);
@@ -3467,6 +3455,101 @@ impl<'a> Checker<'a> {
             _ => "_".into(),
         };
         Some(std::iter::once(c).chain(w).collect())
+    }
+
+    /// DL0413 (D-V2-204): an arm no value reaches, because the arms above it match every value its pattern matches —
+    /// `x => …` above `Red => …`, `Red` twice, `Some(_)` above `Some(Red)`, `0` twice, a `_` after `true` and `false`.
+    /// The first arm that matches wins, on both engines, so such an arm never runs; it checked clean and said nothing.
+    /// A warning, since what the program does is what its arms say. Asked when every pattern passed, with its own search
+    /// limit: an arm is reported only when it is proved unreachable, and a search that spends its limit stops asking.
+    fn check_reachable_arms(&mut self, scrut: &Type, arms: &[Arm]) {
+        let mut search = Search { left: EXHAUSTIVE_BUDGET, spent: false };
+        let mut rows: Vec<Vec<Option<&Pattern>>> = Vec::with_capacity(arms.len());
+        for arm in arms {
+            let row = vec![refutable(&arm.pattern)];
+            if !rows.is_empty() && !self.useful(&rows, &row, std::slice::from_ref(scrut), &mut search) {
+                self.diags.push(
+                    Diagnostic::warning(
+                        "DL0413",
+                        "this arm is never reached: the arms above it match every value its pattern matches",
+                    )
+                    .with_span(arm.pattern.span(), "no value reaches this pattern"),
+                );
+            }
+            if search.spent {
+                return;
+            }
+            rows.push(row);
+        }
+    }
+
+    /// Whether the row `q` matches a value of the types `tys` that no row of `rows` matches: Maranget's usefulness,
+    /// the question `uncovered` asks of a row that holds any value. A search that spends its limit answers `true`, and
+    /// records it (`Search::spent`), so nothing is called unreachable unproved.
+    fn useful(&mut self, rows: &[Vec<Option<&Pattern>>], q: &[Option<&Pattern>], tys: &[Type], search: &mut Search) -> bool {
+        // A row that holds any value in every column matches everything `q` could.
+        if rows.iter().any(|r| r.iter().all(Option::is_none)) {
+            return false;
+        }
+        let Some((t0, rest)) = tys.split_first() else {
+            return true;
+        };
+        let cost = u32::try_from(rows.len().saturating_add(1).saturating_mul(tys.len())).unwrap_or(u32::MAX).max(1);
+        if search.left < cost {
+            search.spent = true;
+            return true;
+        }
+        search.left -= cost;
+        let t0 = self.cx.apply_type(t0);
+        let sig = self.ctor_sig(&t0).filter(|s| !s.is_empty());
+        match q[0] {
+            // A constructor (or `true`, `false`): the rows that can match a value it builds, field by field.
+            Some(p @ (Pattern::Variant { .. } | Pattern::Lit(LitKind::Bool(_), _))) => {
+                let name = head_name(Some(p)).unwrap_or_default();
+                let Some((_, fts)) = sig.as_ref().and_then(|s| s.iter().find(|(n, _)| *n == name)) else {
+                    return true;
+                };
+                let k = fts.len();
+                let q2: Vec<Option<&Pattern>> = specialize(std::slice::from_ref(&q.to_vec()), &name, k).pop().unwrap_or_default();
+                if q2.len() != k + rest.len() {
+                    return true;
+                }
+                let tys2: Vec<Type> = fts.iter().cloned().chain(rest.iter().cloned()).collect();
+                self.useful(&specialize(rows, &name, k), &q2, &tys2, search)
+            }
+            // Another literal, of a type no finite set of constructors names: the rows with the same literal or any value.
+            Some(Pattern::Lit(lit, _)) => {
+                let same: Vec<Vec<Option<&Pattern>>> = rows
+                    .iter()
+                    .filter(|r| match r[0] {
+                        None => true,
+                        Some(Pattern::Lit(l, _)) => l == lit,
+                        Some(_) => false,
+                    })
+                    .map(|r| r[1..].to_vec())
+                    .collect();
+                self.useful(&same, &q[1..], rest, search)
+            }
+            Some(_) => true,
+            // Any value: useful if some constructor the rows leave, or every constructor in turn, leaves a value.
+            None => {
+                let heads: BTreeSet<String> = rows.iter().filter_map(|r| head_name(r[0])).collect();
+                if let Some(sig) = sig.filter(|s| s.iter().all(|(n, _)| heads.contains(n))) {
+                    for (name, fts) in &sig {
+                        let k = fts.len();
+                        let q2: Vec<Option<&Pattern>> = std::iter::repeat_n(None, k).chain(q[1..].iter().copied()).collect();
+                        let tys2: Vec<Type> = fts.iter().cloned().chain(rest.iter().cloned()).collect();
+                        if self.useful(&specialize(rows, name, k), &q2, &tys2, search) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                let default: Vec<Vec<Option<&Pattern>>> =
+                    rows.iter().filter(|r| r[0].is_none()).map(|r| r[1..].to_vec()).collect();
+                self.useful(&default, &q[1..], rest, search)
+            }
+        }
     }
 
     /// The constructors of `t` and each one's field types — `true` and `false` for a `Bool` — or `None` for a type whose
@@ -4250,6 +4333,27 @@ const EXHAUSTIVE_BUDGET: u32 = if cfg!(miri) { 10_000 } else { 10_000_000 };
 struct Search {
     left: u32,
     spent: bool,
+}
+
+/// The rows of `rows` that can match a value built by the constructor `name` of `k` fields, each with its first cell
+/// replaced by that constructor's `k` field cells: a row that holds any value there holds any value in each field, and
+/// a row naming another constructor is dropped.
+fn specialize<'p>(rows: &[Vec<Option<&'p Pattern>>], name: &str, k: usize) -> Vec<Vec<Option<&'p Pattern>>> {
+    rows.iter()
+        .filter_map(|r| {
+            let fields: Vec<Option<&Pattern>> = match r[0] {
+                None => vec![None; k],
+                Some(Pattern::Variant { path, fields, .. })
+                    if path.segs.last().is_some_and(|s| s.name == name) && fields.len() == k =>
+                {
+                    fields.iter().map(refutable).collect()
+                }
+                Some(Pattern::Lit(LitKind::Bool(b), _)) if b.to_string() == name => Vec::new(),
+                _ => return None,
+            };
+            Some(fields.into_iter().chain(r[1..].iter().copied()).collect())
+        })
+        .collect()
 }
 
 /// A pattern as a cell of the exhaustiveness search: `None` for one that matches any value (`_`, a name).

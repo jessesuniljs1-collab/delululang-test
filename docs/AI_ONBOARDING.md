@@ -78,7 +78,7 @@ digest. The full texts are in the files each line names, and the head chef's who
 | Claim what did not run, or invent a result, contact, key or compliance claim. | "Prepared", "dispatched" and "green" are different words. A CI run counts only once its result is READ and recorded. Failed runs are recorded, not tidied away. |
 | Change what Authority and the Guard *mean*. | Harden, never redefine: closing a hole is welcome, redefining is the owner's. |
 | Edit an entrenched file casually. | Entrenched files: `docs/design/` CONSTITUTION, DELULU_CORE, STABILITY, SOUNDNESS_AUDIT; `SECURITY.md`; `rfcs/`; `docs/security/`; `crates/delulu-check/tests/laundering.rs`; `crates/delulu-conform/`; `tests/conformance/witnesses.toml`; CODEOWNERS "entrenched"; the licence. Each change needs a `D-V2-nn` decision plus an `ENTRENCHED_CHANGE_RECORD.md` entry. Ask `cargo run -p delulu-survey -- query doc:<path>` before editing under `docs/design/`. |
-| Add a new `DL` diagnostic code casually. | There are 155. A new one needs a `D-V2-nn`, and several documents quote the count. |
+| Add a new `DL` diagnostic code casually. | There are 156. A new one needs a `D-V2-nn`, and several documents quote the count. |
 | Commit or ship a built Linux kernel or microVM image. | D-NE-27: GPL obligations first. |
 | Change the licence (Apache-2.0 + `NOTICE` + `TRADEMARK.md`, ruling D27). | The owner's intent of 2026-07-24 is the evidence any change must serve. |
 
@@ -96,7 +96,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
    `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md` and `code:DL0501`.
 2. **Witness the defect failing before you fix it.** Stash the fix and watch the new test go red. Then **falsify the test
    with mutants**: reintroduce the defect, or break the fix, and watch it go red. Mutants are numbered (`M<n>`) in the
-   records; the last one used is **M1007**, so continue from M1008. Run one cargo test target at a time when you do this.
+   records; the last one used is **M1011**, so continue from M1012. Run one cargo test target at a time when you do this.
 3. **Lint after the LAST `.rs` edit**, tests included: `cargo fmt --all`, then `bash scripts/clippy.sh -j 4`. That is
    fmt check plus `clippy --workspace --all-targets -D warnings`, and it writes a stamp the pre-commit hook demands.
 4. **Test.** `cargo test --workspace --no-fail-fast -j 4`, or `scripts/suite.sh`. Freeze the tree while it runs, and read
@@ -110,7 +110,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-203**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-204**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -277,9 +277,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   5. Watch the broker's Miri time.
   6. The launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-203;
-  - the last mutant is M1007;
-  - there are 155 DL codes;
+  - the last decision is D-V2-204;
+  - the last mutant is M1011;
+  - there are 156 DL codes;
   - pull requests are numbered on GitHub, and #110 was the last landed.
 
 ## 11. Keep this file true
