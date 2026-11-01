@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 196779 |
+| Rust lines | 196780 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 277 |
 | Markdown lines | 92113 |
