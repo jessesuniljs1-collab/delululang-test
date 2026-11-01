@@ -24,7 +24,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/assistant-memory/delulu-p21-crossaccount.md:61` — prose names `tests/lib.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delulu-survey-map.md:64` — prose names `crates/.../ty.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delululang-project.md:309` — prose names `docs/playbooks/README+STAGE4..10_PLAYBOOK`, which is nowhere in the tree
-- `docs/assistant-memory/release-program-progress.md:71` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
+- `docs/assistant-memory/release-program-progress.md:73` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
 
@@ -32,7 +32,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/DELULULANG_V2/V2_LOG.md:1145` — says 154 registered diagnostic codes; the tree has 155
+- `docs/DELULULANG_V2/V2_LOG.md:1145` — says 154 registered diagnostic codes; the tree has 156
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
@@ -44,7 +44,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** a current document should cite the archived path
 
-- `CHANGELOG.md:2407` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
+- `CHANGELOG.md:2431` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:30` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:31` — prose names `docs/design/PRODUCTION_READINESS_REVIEW.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:32` — prose names `docs/design/PRODUCTION_READINESS_2026-08-09.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md` in V2-0; the citation is historical and left as written
@@ -80,7 +80,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** add a row to `UNALLOCATED` in the registry saying which it is, or fix the citation
 
-- `crates/delulu-diag/src/codes.rs` — 3 code(s) are named in the tree, are not allocated by the registry, and have no recorded disposition — so nothing says whether each is a retired code or a typo: DL0000 (crates/delulu/tests/terminal_text_cli.rs:270); DL0413 (docs/assistant-memory/release-program-progress.md:18); DL1700 (docs/assistant-memory/delululang-project.md:546)
+- `crates/delulu-diag/src/codes.rs` — 2 code(s) are named in the tree, are not allocated by the registry, and have no recorded disposition — so nothing says whether each is a retired code or a typo: DL0000 (crates/delulu/tests/terminal_text_cli.rs:270); DL1700 (docs/assistant-memory/delululang-project.md:546)
 
 ## note — `dependency-never-used-in-source` (3)
 

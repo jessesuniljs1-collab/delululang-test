@@ -5,8 +5,13 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 0e8e52cb-64cc-4b7e-8b51-b9e94c1813f1
-  modified: 2026-10-28T23:05:32.148Z
+  modified: 2026-11-01T07:10:27.196Z
 ---
+
+**2026-11-01: again** — a `python3 - <<'EOF'` patching a mutant script turned `'\\n'` into a real newline (SyntaxError,
+caught before any repo edit). A QUOTED delimiter does not protect a doubled backslash inside a Python string that itself
+writes code. Rust test code appended with `cat >> file <<'EOF'` kept its single `\n` escapes (verified with `cat -A`).
+Rule stays: any Python that writes `\n`-bearing code → Write a .py file; never a heredoc.
 
 **2026-10-29: twice more in one session** — both times a heredoc whose Python held `\n` or `\\` inside string literals (a test generator; a records patch) — failed only at its own `assert`, so nothing was half-written. Before typing `python - <<'EOF'` or `cat > x.py <<'EOF'`, check for ANY backslash in the body; if there is one, use Write for the .py file or Edit on the target. No exceptions.
 

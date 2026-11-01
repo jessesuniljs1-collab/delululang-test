@@ -11321,6 +11321,69 @@ What was done:
   by a script that refuses if the banned word survives. The new files were scanned for credentials and personal
   addresses: none.
 
+## 2026-11-01 — the laptop: a pattern binding spelled like a constructor of the matched type is refused (RW 2.26, D-V2-203)
+
+RW 2.26 waited for a decision. In a `match`, a lowercase name binds, so over `type T = foo | bar` the arms
+`foo => 1, bar => 2` answered 1 for `bar` on both engines, and the checker said nothing. Probed first on the binary: the
+call form `foo() => 1, bar() => 2` already answered 2 on both engines. So the language had a spelling for the
+constructor, and the trap was the bare name.
+
+**Decided (D-V2-203):** such a binding is refused with DL0302, at any depth of a pattern. The repair
+`match-the-constructor` writes `foo()` or `cell(_)`. DL0302 is an existing code (a second definition refused rather than
+shadowing), so no new code, no entrenched file and no conformance entry was needed. DL0302's explanation now says it.
+Also fixed: the comment on `Pattern::Bind` in `ast.rs`, which said the checker resolved such a name Rust-style. It never
+had.
+
+**Evidence:**
+- `delulu-check` has two new tests: four refused shapes, each clean before, and four that still check.
+- The conformance pair carries `ref.diag.DL0302`.
+- `loop_parity`'s call-form test passes on both engines (`1 2 -1 9`).
+- `fix_cli`'s repair corpus gains `match-the-constructor`.
+- Mutants M1004–M1007 were each red.
+- `delulu-conform --coverage`: 358 of 358. `--check-reference` is in sync.
+- These targets passed: `core_invariance` (blessed, +190 lines: the two programs), `conformance`, `corpus_cli`,
+  `fix_cli` (13), `late_let_cli` and `delulu-check` (260).
+
+**Breaking** under STABILITY.md section 1: a program that checked under 1.x is refused. It is noted in the CHANGELOG
+section, for the *Breaking* paragraph at the next fold into `launch/2.0.0`.
+
+## 2026-11-01 — the laptop: a `match` arm no value reaches is reported, DL0413 (D-V2-204, RW 2.28)
+
+After RW 2.26 the laptop asked the wider question: does the checker say anything about an arm no value can reach? It
+did not. Five dead arms (`x` above `Red`, `Red` twice, `Some(_)` above `Some(Red)`, `0` twice, a `_` after `true` and
+`false`) checked clean, exit 0, and the run took the earlier arms.
+
+**Built:** `check_reachable_arms` asks each arm Maranget's usefulness question against the arms above it (`useful`, the
+general form of the question `uncovered` asks for exhaustiveness). It shares a new `specialize` with `uncovered`. It
+warns **DL0413** at the arm's pattern, and only when it has proved the arm unreachable, within its own copy of the
+search's limit. DL0413 is a new code (D-V2-204), a warning. The entrenched witness file gains two rows
+(`ENTRENCHED_CHANGE_RECORD.md`), the reference was regenerated (359 of 359, 156 codes), and the documents quoting the
+count say 156.
+
+**Evidence:**
+- Ten dead shapes are each warned at their own line. Six live matches are not reported.
+- Mutants: M1008–M1011 were each red. One more was equivalent and is recorded in D-V2-204.
+- Cost: 6,000 literal arms check in 0.27 s against 0.06 s, on a debug build. No program the repository ships has a dead
+  arm.
+- These passed: `delulu-check` (262), `delulu-diag`, `conformance`, `core_invariance`, `corpus_cli`, `book`,
+  `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.
+
+## 2026-11-01 — the laptop: FMT-CTOR-1, `delulu fmt` printed `foo()` as `foo`
+
+#112's first run (`41282442664`) was red on Ubuntu and macOS, in `delulu-syntax`'s
+`laws_hold_over_the_repository_corpus`. The formatter's identity law holds over every `.delulu` file in the repository,
+and RW 2.26's new accepting program was one of them. `pattern_text` printed a nullary constructor pattern bare whatever
+its name, so `foo() => 1` became `foo => 1`. The parser reads a lone lowercase name as a binding, so `delulu fmt` had
+changed what the program meant: the arm matched every value. Before D-V2-203 the result checked clean and took the
+first arm; after it, the result is refused. The defect is as old as lowercase constructors (1.x).
+
+**Fixed:** a lone lowercase name keeps its call form (`foo()`). A capitalized or qualified name prints bare, as both
+parse to a constructor. `a_lowercase_nullary_constructor_pattern_keeps_its_call_form` holds it; mutant M1012 (the call
+form dropped) turns it and the corpus law red; `delulu-syntax`'s lib tests pass (131).
+
+The laptop had not run `delulu-syntax`'s tests for #112: a new `.delulu` file in `tests/conformance/` is also the
+formatter's corpus, so a change that adds one runs them. (HANDOFF §11.5.)
+
 ## 2026-11-01 — the laptop: the Survey holds the memory notes as records, not claims about now
 
 Refreshing `docs/assistant-memory/` (the same day: 79 notes and their index) made ten of the map's sixteen warnings `stale-count`

@@ -78,7 +78,7 @@ digest. The full texts are in the files each line names, and the head chef's who
 | Claim what did not run, or invent a result, contact, key or compliance claim. | "Prepared", "dispatched" and "green" are different words. A CI run counts only once its result is READ and recorded. Failed runs are recorded, not tidied away. |
 | Change what Authority and the Guard *mean*. | Harden, never redefine: closing a hole is welcome, redefining is the owner's. |
 | Edit an entrenched file casually. | Entrenched files: `docs/design/` CONSTITUTION, DELULU_CORE, STABILITY, SOUNDNESS_AUDIT; `SECURITY.md`; `rfcs/`; `docs/security/`; `crates/delulu-check/tests/laundering.rs`; `crates/delulu-conform/`; `tests/conformance/witnesses.toml`; CODEOWNERS "entrenched"; the licence. Each change needs a `D-V2-nn` decision plus an `ENTRENCHED_CHANGE_RECORD.md` entry. Ask `cargo run -p delulu-survey -- query doc:<path>` before editing under `docs/design/`. |
-| Add a new `DL` diagnostic code casually. | There are 155. A new one needs a `D-V2-nn`, and several documents quote the count. |
+| Add a new `DL` diagnostic code casually. | There are 156. A new one needs a `D-V2-nn`, and several documents quote the count. |
 | Commit or ship a built Linux kernel or microVM image. | D-NE-27: GPL obligations first. |
 | Change the licence (Apache-2.0 + `NOTICE` + `TRADEMARK.md`, ruling D27). | The owner's intent of 2026-07-24 is the evidence any change must serve. |
 
@@ -96,7 +96,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
    `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md` and `code:DL0501`.
 2. **Witness the defect failing before you fix it.** Stash the fix and watch the new test go red. Then **falsify the test
    with mutants**: reintroduce the defect, or break the fix, and watch it go red. Mutants are numbered (`M<n>`) in the
-   records; the last one used is **M1003**, so continue from M1004. Run one cargo test target at a time when you do this.
+   records; the last one used is **M1013**, so continue from M1014. Run one cargo test target at a time when you do this.
 3. **Lint after the LAST `.rs` edit**, tests included: `cargo fmt --all`, then `bash scripts/clippy.sh -j 4`. That is
    fmt check plus `clippy --workspace --all-targets -D warnings`, and it writes a stamp the pre-commit hook demands.
 4. **Test.** `cargo test --workspace --no-fail-fast -j 4`, or `scripts/suite.sh`. Freeze the tree while it runs, and read
@@ -111,7 +111,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-202**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-204**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -261,27 +261,33 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - `docs/REPOSITORY_STRUCTURE.md` lists every file and what it is for.
 - `docs/for-agents.md` is different: it is for agents that *use* DeluluLang, not for developers of it.
 
-## 10. Where the project stands (2026-11-01, 06:30 UTC) — the newest sync-log entry supersedes this
+## 10. Where the project stands (2026-11-01, 08:00 UTC) — the newest sync-log entry supersedes this
 
-- `master` is at `d8dcc3b` (on-demand routine run 16's close). Its push run on that commit had not been read when this
-  was written.
-- `launch/2.0.0` is at `1548766`, **prepared, not launched**, with `LAUNCH-GATES=ok`. CHECKLIST-2.0 is the release gate.
-  The launch itself (a fresh history in the public repository, the tag, the release) waits for the owner's word.
-- **Open / next, in order** (from run 16's entry):
-  1. Read `master`'s push run.
-  2. Bring `launch/2.0.0` current. RW 6.49 (#110: an unreadable flag value now exits 2) is a *Breaking* clause beside RW
-     6.48's. RW 3.24's cuts move no surface. Then the launch gates, and the `everything` run and the release dry run,
-     dispatched and read.
-  3. RW 3.24, structurally: variables resolved to slots before the run, mirroring every scope the interpreter makes.
-  4. RW 2.26 needs a decision: a lowercase nullary constructor cannot be matched by name. The additive option is a
-     warning.
-  5. Watch the broker's Miri time.
-  6. The launch, only on the owner's word.
+- `master` holds #111 to #113: this brief; RW 2.26 (DL0302 refusal, D-V2-203) with FMT-CTOR-1; the DL0413 warning
+  (D-V2-204). #114 (the Survey reads memory notes as records) lands next.
+- `launch/2.0.0` is at `005372f`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds RW 6.49 and RW 3.24, not
+  yet #112 to #114. CHECKLIST-2.0 is the release gate. The launch itself (a fresh history in the public repository, the
+  tag, the release) waits for the owner's word.
+  - Its release dry run, `41281511250`, is green.
+  - Its `everything` run, `41281508881`, had one job fail at toolchain download, `miri (delulu-atlas)`, a runner
+    network timeout. Re-run that job when the run completes.
+- **Open / next, in order:**
+  1. Fold `master` into `launch/2.0.0`.
+     - RW 2.26 is a *Breaking* clause: a program that checked under 1.x is refused.
+     - DL0413 is additive: a new section, no clause.
+     - FMT-CTOR-1 is a fix.
+     - Then `launch-criterion-2.py` (359 anchors now), the gates, and the `everything` run and the dry run, dispatched
+       and read.
+  2. RW 3.24, structurally: what is left is the tree-walker's own shape. That is dispatch, the result's size and drop
+     glue, with a variable's read about 150 of a loop step's 2,069 instructions. So slots alone buy about a tenth, and a
+     compiled form is the real step.
+  3. Watch the broker's Miri time.
+  4. The launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-202;
-  - the last mutant is M1003;
-  - there are 155 DL codes;
-  - pull requests are numbered on GitHub, and #110 was the last landed.
+  - the last decision is D-V2-204;
+  - the last mutant is M1013;
+  - there are 156 DL codes and 359 reference anchors;
+  - pull requests are numbered on GitHub, and #114 was the last opened.
 
 ## 11. Keep this file true
 

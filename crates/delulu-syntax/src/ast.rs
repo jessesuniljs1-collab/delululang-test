@@ -621,8 +621,10 @@ pub struct Arm {
 pub enum Pattern {
     Wildcard(Span),
     Lit(LitKind, Span),
-    /// A single lowercase-or-uppercase identifier; the checker decides whether
-    /// it binds or names a variant of the scrutinee's type (Rust-style resolution).
+    /// A single lowercase identifier: a fresh binding. The parser reads a capitalized one as a
+    /// nullary variant (`parse_pattern_inner`), so this name never resolves to a constructor. The
+    /// checker refuses one spelled like a constructor of the matched type (DL0302, RW 2.26,
+    /// D-V2-203). This comment said the checker resolved it, Rust-style, which it never did.
     Bind(Ident),
     Variant {
         path: Path,
