@@ -7257,3 +7257,32 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** as the entry for RW 2.28 says. This branch lands after #112 and #113, by a merge of `master` with the
   map rebuilt. The onboarding doc's counters then read M1013.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — #111–#114 landed; `launch/2.0.0` `415eb2e` takes RW 2.26 (Breaking), FMT-CTOR-1 and DL0413 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0101c`   Pull request: opened with this commit.
+- **Landed on `master`** by fast-forward, each on its green pull-request run, each push run read green:
+  - #111 at `bfdda95`: PR run `41281234716`, push run `41282449943`;
+  - #112 at `fb6a7ef`: its first run `41282442664` was red, which is how FMT-CTOR-1 was found; then `41283525831`
+    green; push run `41284941561`;
+  - #113 at `5a29588`: PR run `41283656030`, push run `41285136107`;
+  - #114 at `8138039`: PR run `41285347309`, push run `41286818647`.
+  Their branches were deleted from `origin` after `merge-base --is-ancestor`.
+- **`launch/2.0.0`:**
+  - `005372f` (RW 6.49 and RW 3.24): release dry run `41281511250` success. `everything` `41281508881`, attempt 1:
+    every job green but `miri (delulu-atlas)`. That job failed at the toolchain download (`static.rust-lang.org`,
+    a connect timeout), not in a test. Miri-slow took 3 h 10 min for the broker and 2 h 33 for the checker. Attempt 2
+    re-runs the failed job; not yet read.
+  - **`415eb2e`** folds `master` `8138039`. RW 2.26 joins the *Breaking* paragraph after RW 6.49's clause. DL0413
+    is additive, and FMT-CTOR-1 is a fix. CHECKLIST-2.0 criterion 2: 359/359, diag 156. `LAUNCH-GATES=ok`.
+    `everything` `41299813712` and release dry run `41299815972` were dispatched 10:57 UTC; not yet read.
+- The routine is paused, with its 4-hour cron kept. Only the owner resumes it.
+- Files and folders (`master`): M `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read `41281508881` attempt 2, and `41299813712` and `41299815972` to their ends. Then cite `415eb2e`'s runs in
+     CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a records merge into `launch/2.0.0`.
+  2. Land this pull request on its green run.
+  3. RW 3.24: a compiled form, the step slots alone cannot take.
+  4. Watch the broker's Miri: 3 h 10 min, under the 4-hour cap.
+  5. *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
