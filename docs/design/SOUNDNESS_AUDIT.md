@@ -400,6 +400,27 @@ tests are the actual guarantee.*
 > from a function this report called pure. The witness is
 > `late_let_cli`'s `a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name`.
 > The three share one lesson: read every runtime name lookup against the checker's order.
+>
+> **And a fourth, the next day — INDEX-TARGET-1 (D-V2-205), the checker's own.** `xs[e] = v` evaluates
+> `e` when it runs, and the checker never checked it: every walk of an assignment read only `v`.
+>
+> ```delulu
+> fn quiet(c: Cap[Console]) -> Int {
+>     var xs = [1, 2, 3]
+>     xs[noisy(c)] = 9
+>     xs[0]
+> }
+> ```
+>
+> With `noisy` a function that prints, `delulu check` was clean, `delulu authority` listed `quiet`
+> under **pure fns**, and `run --grant console` **printed**. Step 2 of the sketch, *"T-Call puts
+> `row(callee)` into the caller's inferred row"*, assumes the checker visits every call the runtime
+> makes; this one it never saw. The reference-capability pass missed a `consume` there, so a list
+> already sent to an actor was read after it, and `authority --within` missed a write there that it
+> judged *exceeds* one line up. The witnesses are `index_target_cli` and the conformance reject
+> programs `DL0501_effect_in_an_index_target` and `DL1602_consume_in_an_index_target`. The lesson:
+> a walk that names a statement's parts with `..` skips the ones it does not name — list what the
+> runtime evaluates, and walk each.
 
 ## E. New test obligations (added to the laundering suite)
 

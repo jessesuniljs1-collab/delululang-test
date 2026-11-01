@@ -7333,3 +7333,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 now says. First, read `41299813712`, then merge
   `master` into `launch/2.0.0` with the citations.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-02 — INDEX-TARGET-1: what an assignment's index holds is checked, asked for and judged (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WAoHjZ5jxkZ1RtCCft`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/index-target`   Pull request: opened with this commit.
+- Base: `9b3be30`.
+- What: D-V2-205, RW 2.29 (`V2_LOG.md`, 2026-11-02). Every walk of an assignment read its value and skipped its
+  index: the checker, the reference-capability pass, `--within`, the requirements, the foreign report, the atlas, the
+  plugin list and the editor. Mutants M1018–M1030.
+- Files and folders:
+  A `crates/delulu/tests/index_target_cli.rs`, `tests/conformance/reject/DL0501_effect_in_an_index_target.delulu`,
+    `tests/conformance/reject/DL1602_consume_in_an_index_target.delulu`
+  M `crates/delulu-syntax/src/ast.rs`, `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/rcap_check.rs`,
+    `crates/delulu/src/within.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/src/lsp.rs`,
+    `crates/delulu-atlas/src/build.rs`, `crates/delulu-wasm/src/codegen.rs`
+  M `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/lsp_cli.rs`, `tests/core-invariance/SNAPSHOT.txt`
+  M `docs/design/SOUNDNESS_AUDIT.md` (entrenched), `docs/design/ENTRENCHED_CHANGE_RECORD.md`
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+    `V2_LOG.md`, `V2_PHASE_STATUS.md`, `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`,
+    `docs/assistant-memory/`, `docs/survey/*`
+  Deleted, renamed: nothing.
+- `laptop/unread-lets` (`8be0bdc`, DL0414) stays parked and must not land as it stands. Its decision becomes D-V2-206,
+  and it must take this fix first: its read marks must count a read in an index, and the base of `xs[i] = v` is read.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says.
+- Survey and doctor (after the last edit): in the commit message.

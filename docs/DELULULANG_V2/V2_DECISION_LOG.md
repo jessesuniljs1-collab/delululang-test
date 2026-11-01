@@ -5617,3 +5617,55 @@ On a debug build, 6,000 literal arms check in 0.27 s against 0.06 s before (the 
 - Coverage is 100% (359/359), and the reference is in sync.
 - These targets passed: `delulu-check` (262), `delulu-diag` (57), `conformance`, `core_invariance`, `corpus_cli`,
   `book`, `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.
+
+## D-V2-205 — INDEX-TARGET-1 (RW 2.29): what an assignment's index holds is checked, asked for and judged as any other expression — TAKEN (head chef, 2026-11-02, under the owner's delegation)
+
+**Context.** `xs[e] = v` evaluates `e` when it runs: the interpreter's `assign` evaluates `v`, then walks the target and
+evaluates each index, the innermost first. Every walk of `Stmt::Assign` in the repository read only `v`. Found 2026-11-02
+by the laptop while writing DL0414 (a binding never read, `laptop/unread-lets`), whose first draft named `i` in `xs[i] = 9`
+unread, because the checker never looked inside the index. Each shape below was witnessed on `master` `9b3be30`:
+- **The checker** (`check_lvalue`) never checked `e`. An effect there joined no row: `fn quiet(c: Cap[Console]) -> Int {
+  var xs = [1, 2, 3]; xs[noisy(c)] = 9; xs[0] }` checked clean, `delulu authority` listed `quiet` under *pure fns*, and
+  `run --grant console` printed. §D's claim of `SOUNDNESS_AUDIT.md` negated a fourth time, by the checker this time: step 2
+  assumes the checker visits every call the runtime makes. A name there was never resolved (`xs[no_such_name] = 9`
+  checked clean and faulted DL0907 when it ran), a `Str` index passed, and a base that is no list got a fresh type.
+- **The reference-capability pass** never walked `e`, nor did its loop pre-scan: `ys[give(s, consume xs)] = 1` followed by
+  `xs.len()` was accepted — the unique list already sent to an actor, read after. Bound one line up, the same call is
+  DL1602.
+- **`authority`, `--grants` and `--within`** never saw a mint, a file use, a request or a send there.
+  `xs[wipe(root.fs_write("./ix4-out"))] = 9` was *"--grant console"* alone, and `--within console` answered *within*.
+  A write of `../escape.txt` through a capability for `./out` was *exceeds* (DL0904) one line up and *within* in an index.
+  The walk listing what a loop assigns missed a secret bound again in an index, so a send on the loop's second turn kept
+  its first secret's attribution.
+- **The foreign report and the atlas** never saw `py.import("socket")` in an index: *"imports seen: (none seen
+  statically)"*, no `foreign:py:socket` edge, *"--grant foreign.python=PATTERN"*, and DL0502 told the author the
+  declared `ForeignCall` was never performed. Through a call in the index, `foreign:` said *"(none — no code outside the
+  guarantee)"* for a program that embeds Python.
+- **A plugin `load(…)`** in an index was never listed among the program's plugins.
+- **The LSP** hovered nothing in an index; the two WASM walks that collect strings and test a module skipped it too, which
+  matters to nothing yet because the WASM engine refuses an index target (`compile_assign`).
+The capability check held throughout: a mint the grants did not cover still refused when it ran.
+
+**Decision.**
+1. `LValue::index_exprs` (`delulu-syntax`) names a target's indices in the order they run. Every walk of `Stmt::Assign`
+   walks them after the value: the checker, the reference-capability pass and its loop pre-scan, `--within`'s two walks,
+   the walk behind `authority`'s requirements, the plugin-load walk, the Python and compute walk, the atlas's foreign
+   reach, the LSP's expression walk, and the two WASM walks.
+2. **The checker checks an index as it checks `xs[i]` read**: an `Int`, its row the statement's, its names resolved, and a
+   base that is no list DL0405, *"cannot index a value of type …"* (a poisoned base says nothing more). No new code.
+3. **Programs refused now that checked before** are each a program whose run faulted, lied or raced: an undeclared effect
+   in an index (DL0501), an unknown name (DL0301, a DL0907 fault when it ran), a non-`Int` index (DL0401, DL0907 when it
+   ran), a use after a `consume` in an index (DL1602), an index into a value that is no list (DL0405; the
+   reference-capability pass already refused most as DL1604). None is in the programs the repository ships.
+4. **Not taken:** refusing a call or a `consume` inside an index, which would change the language to excuse the walks.
+
+**Residual.** The constructor walk that lists the fields `self.f = …` assigns (`collect_self_field_assigns`) reads no
+expression of a `let` or an assignment, the index among them, so a field assigned only inside a block in an index is
+reported unassigned (DL0405): a refusal, the safe direction, and unchanged.
+
+**Evidence.** `index_target_cli` (7 tests, the real binary: the row, the index's own checks, the consume with its loop,
+the mint, the file use against its control one line up, the foreign import across `check`, `authority`, `--grants` and
+the atlas, the plugin), `within_cli` `a_secret_bound_again_inside_an_index_in_a_loop_is_not_attributed_to_its_first_value`,
+and `lsp_cli` `hover_shows_the_type_of_a_name_in_an_index_target`; conformance reject programs
+`DL0501_effect_in_an_index_target` and `DL1602_consume_in_an_index_target`. Each was red on `9b3be30`.
+Mutants, each red on its own assertion: M1018 (the index's row dropped), M1019 (no DL0405 for a base that is no list), M1020 (the index never checked), M1021 (the reference-capability walk skips the index), M1022 (its loop pre-scan does), M1023 (`--within`'s send walk does), M1024 (its assigned-names walk does), M1025 (the requirements walk does), M1026 (the Python and compute walk does), M1027 (the plugin-load walk does), M1028 (the atlas's foreign reach does), M1029 (the LSP's walk does) and M1030 (`index_exprs` names nothing). The suites: `delulu-syntax`'s library (the formatter's corpus law over the two new programs), `delulu-check`, `delulu-atlas` and `delulu-wasm` whole; `delulu`'s `conformance`, `core_invariance` (the two new programs added, no existing answer changed), `index_target_cli`, `within_cli`, `lsp_cli`, `plugin_load_cli`, `atlas_cli`, `atlas_e2e`, `cli`, `examples_run` and `late_let_cli`.

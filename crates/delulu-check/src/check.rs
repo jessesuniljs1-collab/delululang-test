@@ -1377,7 +1377,8 @@ impl<'a> Checker<'a> {
                     value_ty = Type::Unit;
                 }
                 Stmt::Assign { target, value, span } => {
-                    let tt = self.check_lvalue(target, ctx);
+                    let (tt, tr) = self.check_lvalue(target, ctx);
+                    acc.add_row_acc(&tr);
                     let (vt, vr) = self.check_expr(value, ctx);
                     acc.add_row_acc(&vr);
                     self.expect_type(&tt, &vt, *span, "assignment type mismatch");
@@ -1468,28 +1469,44 @@ impl<'a> Checker<'a> {
         (value_ty, acc)
     }
 
-    fn check_lvalue(&mut self, lv: &LValue, ctx: &mut FnCtx) -> Type {
+    /// An assignment's target: the type it stores, and the row of the index expressions it holds. INDEX-TARGET-1: the
+    /// index was never checked — its effects joined no row (a function the checker and `authority` called pure printed
+    /// when it ran), a name in it was never resolved, a `Str` index passed, and a non-list base got a fresh type. An index
+    /// is checked here as `xs[i]` is read: an `Int`, its row the statement's, a base that is no list DL0405.
+    fn check_lvalue(&mut self, lv: &LValue, ctx: &mut FnCtx) -> (Type, RowAcc) {
         match lv {
             LValue::Var(name) => match ctx.lookup(&name.name) {
-                Some(t) => t,
+                Some(t) => (t, RowAcc::default()),
                 None => {
                     self.diags.push(
                         Diagnostic::error("DL0301", format!("unknown name `{}`", name.name))
                             .with_span(name.span, "not found in this scope"),
                     );
-                    self.fresh_poisoned()
+                    (self.fresh_poisoned(), RowAcc::default())
                 }
             },
             LValue::Field(base, field) => {
-                let bt = self.check_lvalue(base, ctx);
-                self.field_type(&bt, field, ctx)
+                let (bt, acc) = self.check_lvalue(base, ctx);
+                (self.field_type(&bt, field, ctx), acc)
             }
-            LValue::Index(base, _idx) => {
-                let bt = self.check_lvalue(base, ctx);
-                match self.cx.apply_type(&bt) {
+            LValue::Index(base, idx) => {
+                let (bt, mut acc) = self.check_lvalue(base, ctx);
+                let (it, ir) = self.check_expr(idx, ctx);
+                acc.add_row_acc(&ir);
+                self.expect_type(&Type::Int, &it, idx.span(), "index must be Int");
+                let elem = match self.cx.apply_type(&bt) {
                     Type::List(inner) => *inner,
-                    _ => self.cx.fresh_type(),
-                }
+                    other => {
+                        if !self.is_poisoned(&other) {
+                            self.diags.push(
+                                Diagnostic::error("DL0405", format!("cannot index a value of type `{}`", self.ty(&other)))
+                                    .with_span(base.span(), "not indexable"),
+                            );
+                        }
+                        self.cx.fresh_type()
+                    }
+                };
+                (elem, acc)
             }
         }
     }

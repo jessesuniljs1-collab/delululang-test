@@ -1347,6 +1347,13 @@ spells the same thing?**
   module's constructor, then the module's generic or function. WASM-BUILTIN-SHADOW-1, the same day: the WASM call asked
   the builtins before a local, so a local `str` was never called there. Search key: `funcs.get(` or
   `funcs.contains_key(` reached before `ctors.contains(`.
+- **INDEX-TARGET-1 — every walk of an assignment walks its index** (the laptop, 2026-11-02, D-V2-205). `xs[e] = v`
+  evaluates `e`, and every walk of `Stmt::Assign` read only `v`: the checker (a function it called pure printed), the
+  reference-capability pass (a `consume` there was never seen), `--within` (*within* for a write it judges *exceeds*
+  one line up), the requirements, the foreign report, the atlas, the plugin list and the editor. Since v1.0.0.
+  `LValue::index_exprs` names the indices in the order they run. A new walk of a statement names every part the
+  runtime evaluates; never write `Assign { value, .. }`. Search key: `Assign { value, .. }` and a
+  `Stmt::Let { value, .. } | Stmt::Assign { value, .. }` arm.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

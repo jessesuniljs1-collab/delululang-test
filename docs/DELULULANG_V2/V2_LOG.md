@@ -11440,3 +11440,40 @@ matching a lowercase constructor by its call form, and more than 200 testing a f
 - M1017 (the interpreter reads a literal inside a constructor as any value) turns the parity red: 488 programs differ.
   Under the generator as it was before this change, M1017 stays **green**: no generated program tested inside a
   constructor. That difference is the coverage this adds.
+
+## 2026-11-02 — the laptop: INDEX-TARGET-1, what an assignment's index holds is checked, asked for and judged
+
+Found while writing DL0414, a warning for a binding never read (`laptop/unread-lets`, parked, not landed). Its first
+draft named `i` in `xs[i] = 9` unread. The binding was read; the checker had never looked inside the index.
+
+`xs[e] = v` evaluates `e` when it runs, and every walk of `Stmt::Assign` read only `v`. Witnessed on `master` `9b3be30`,
+each against the same line written one statement up as its control:
+- `fn quiet(c: Cap[Console]) -> Int { var xs = [1, 2, 3]; xs[noisy(c)] = 9; xs[0] }` checked clean, `authority` listed
+  `quiet` under *pure fns*, and the run printed. That is §D of `SOUNDNESS_AUDIT.md` negated a fourth time, by the checker.
+- `xs[no_such_name] = 9` and `xs["two"] = 9` checked clean, and faulted DL0907 when they ran.
+- `ys[give(s, consume xs)] = 1`, then `xs.len()`: accepted, with the list already sent to an actor. One line up it is
+  DL1602.
+- A mint in the index: `--grants` named only `console`, and `--within console` answered *within*.
+- A write of `../escape.txt` through a capability for `./out`: *exceeds* (DL0904) one line up, *within* in the index.
+- `py.import("socket")` in the index: no import seen, no atlas edge, a placeholder grant, and DL0502 calling the
+  declared `ForeignCall` unperformed. A plugin `load` there was not listed. The editor hovered nothing there.
+The capability check held at run time throughout.
+
+**Fixed** (D-V2-205, RW 2.29). `LValue::index_exprs` names a target's indices in the order they run, and the twelve
+walks of an assignment each walk them after the value. The checker checks an index as one that is read: an `Int`, its
+row the statement's, a base that is no list DL0405. Two conformance reject programs witness the language's side.
+
+**Evidence.**
+- `index_target_cli`: 7 tests, all red on `9b3be30`'s code and green after. `within_cli` (a secret bound again inside an
+  index in a loop) and `lsp_cli` (a hover inside an index): red before as well.
+- Mutants M1018–M1030, each red on its own assertion. M1022 (the loop pre-scan skipping the index) died on the loop
+  case alone.
+- `core_invariance` gained the two new programs' sections and changed no other answer.
+- These passed: `delulu-syntax`'s library, `delulu-check`, `delulu-atlas` and `delulu-wasm` whole, and eleven `delulu`
+  targets.
+- `delulu-conform --coverage` passed at 100%, and `--check-reference` is in sync.
+
+Also recorded here: `launch/2.0.0` `9a33f6c` merged `master` `9b3be30` (#115–#118). Its `CHECKLIST-2.0` criteria 1, 3,
+4 and 8 now cite `005372f`'s `everything` `41281508881` (attempt 2) and dry run `41281511250`, and `415eb2e`'s
+`41299813712` (18 of 18; the broker's Miri 3 h 07 min) and `41299815972`, all read green. `LAUNCH-GATES=ok`. No run was
+dispatched for `9a33f6c`, a records merge.
