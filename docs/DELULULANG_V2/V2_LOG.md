@@ -11533,3 +11533,32 @@ bind a value they never use (left as recorded evidence). The eighteen recorded A
 - Mutants M1031–M1034, M1036 and M1037 red. M1035 survived and is equivalent.
 - `delulu-conform --coverage` passes at 100% (360 of 360, 157 codes).
 - `core_invariance` changed three reject programs by one added warning each.
+
+## 2026-11-02 — the laptop: RENAME-TYPES-1, the editor renames a type or an effect everywhere
+
+After INDEX-TARGET-1, every walk of the syntax tree in the repository was listed. A script names, for each function that
+matches three or more forms of expression, the forms it never names and whether it ends in a catch-all
+(`walk_audit.py` in the session's scratchpad, not shipped). Of the 17 it listed:
+- 14 are predicates handed to a full walk, compile paths whose catch-all refuses, the resolution of an assignment's
+  target, the formatter's line breaking or the parser;
+- two are the constructor field scan, which errs toward refusal (DL0405), the safe direction (D-V2-205's residual);
+- the language server's `name_occurrences` is a defect.
+
+The walks that build `authority`'s foreign report and plugin list visit functions and constants alone, not actors. A
+capability cannot be sent to an actor (DL1601, probed with `val Cap[Python]`), so an actor's body reaches neither Python
+nor a plugin, and those walks miss nothing reachable.
+
+**RENAME-TYPES-1.** `name_occurrences` serves rename and find-references. It looked for a type in function signatures
+and constants alone, and for an effect in function rows alone. Renaming `Shape` in a program that writes it in a type's
+field, an actor's field, constructor and behaviour, a `let` annotation and a closure changed 2 of its 9 uses, and the
+program it produced did not check.
+
+**Fixed.**
+- The walk now visits every signature an item writes, every field and variant type, and every row an actor, a closure
+  or a test writes.
+- `walk_module` hands its visitor each expression and each type a `let` writes. `walk_exprs` is unchanged for its two
+  other callers.
+
+**Evidence:** `lsp_cli` `rename_finds_a_type_and_an_effect_wherever_one_is_written` renames a type and an effect, applies
+the edits the server returns, and checks the program. It was red before. Mutants M1038–M1043 drop one arm each, and
+each is red. The `lsp_cli` suite passes, 40 tests.

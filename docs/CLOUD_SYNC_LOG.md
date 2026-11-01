@@ -7446,3 +7446,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Deleted, renamed: nothing.
 - **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-02 — RENAME-TYPES-1: the editor renames a type or an effect everywhere (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WAoHjZ5jxkZ1RtCCft`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/rename-types`   Pull request: opened with this commit.
+- **Landed on `master`** by fast-forward, each on its green run: #119 (INDEX-TARGET-1) at `11df603`, run `41341255443`,
+  and its push runs `41342920464` and `41342920504` green; #120 (DL0414) at `f6f1306`, run `41343108643`. Their branches
+  were deleted from `origin`.
+- What: RW 2.31 (`V2_LOG.md`, 2026-11-02): an audit of every syntax-tree walk, and `name_occurrences` fixed. Mutants
+  M1038–M1043.
+- Files and folders:
+  M `crates/delulu/src/lsp.rs`, `crates/delulu/tests/lsp_cli.rs`
+  M `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says; the last mutant is now M1043.
+- Survey and doctor (after the last edit): in the commit message.

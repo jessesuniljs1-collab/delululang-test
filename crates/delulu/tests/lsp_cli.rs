@@ -510,6 +510,82 @@ fn criterion1_rename_updates_both_open_documents() {
     c.shutdown();
 }
 
+/// Apply an LSP `WorkspaceEdit`'s edits for one document (ASCII text: a character is a byte).
+fn apply_edits(text: &str, edits: &Value) -> String {
+    let offset = |pos: &Value| -> usize {
+        let line = pos["line"].as_u64().unwrap() as usize;
+        let character = pos["character"].as_u64().unwrap() as usize;
+        text.split_inclusive('\n').take(line).map(str::len).sum::<usize>() + character
+    };
+    let mut spans: Vec<(usize, usize, String)> = edits
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (offset(&e["range"]["start"]), offset(&e["range"]["end"]), e["newText"].as_str().unwrap().to_string()))
+        .collect();
+    spans.sort_by_key(|s| std::cmp::Reverse(s.0));
+    let mut out = text.to_string();
+    for (start, end, new) in spans {
+        out.replace_range(start..end, &new);
+    }
+    out
+}
+
+/// RENAME-TYPES-1: a rename finds a type and an effect wherever the language lets one be written — another type's
+/// field, an actor's field, constructor and behaviour, a `let` annotation, a closure's signature and row — and the
+/// renamed program still checks. Before, it looked in function signatures and constants alone, so a rename of `Shape`
+/// left seven `Shape`s behind and the program it produced did not check.
+#[test]
+fn rename_finds_a_type_and_an_effect_wherever_one_is_written() {
+    let src = "module m\n\
+               effect Paint\n\
+               type Shape = Circle(Int) | Square(Int)\n\
+               type Canvas { s: Shape, shapes: List[Shape] }\n\
+               actor Holder {\n  var held: Shape\n  new(s: Shape) { self.held = s }\n  \
+               be take(s: Shape) ! {Paint} { self.held = s }\n}\n\
+               fn area(s: Shape) -> Int ! {Paint} { match s { Circle(r) => r * r, Square(a) => a * a } }\n\
+               fn main(root: Root) ! {Async, Paint} {\n  let x: Shape = Circle(2)\n  \
+               let f = fn(t: Shape) -> Int ! {Paint} { area(t) }\n  let c = Canvas { s: x, shapes: [x] }\n  \
+               let h = spawn Holder(x)\n  let n = f(c.s)\n}\n\
+               test \"paints\" ! {Paint} {\n  let k: Shape = Square(3)\n  let a = area(k)\n}\n";
+    let mut c = Client::start();
+    c.open("file:///shapes.delulu", src);
+    let _ = c.wait_diagnostics("file:///shapes.delulu");
+    let rename = |c: &mut Client, word: &str, to: &str| -> String {
+        let (line, text) = src
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains(&format!("{} {word}", if word == "Paint" { "effect" } else { "type" })))
+            .unwrap();
+        let edit = c.request(
+            "textDocument/rename",
+            json!({
+                "textDocument": { "uri": "file:///shapes.delulu" },
+                "position": { "line": line, "character": text.find(word).unwrap() },
+                "newName": to
+            }),
+        );
+        apply_edits(src, &edit["changes"]["file:///shapes.delulu"])
+    };
+    for (word, to) in [("Shape", "Figure"), ("Paint", "Draw")] {
+        let renamed = rename(&mut c, word, to);
+        assert!(!renamed.contains(word), "every `{word}` is renamed:\n{renamed}");
+        assert_eq!(renamed.matches(to).count(), src.matches(word).count(), "{renamed}");
+        let dir = std::env::temp_dir().join(format!("delulu-rename-{}-{to}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("shapes.delulu");
+        std::fs::write(&file, &renamed).unwrap();
+        let o = std::process::Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(["check", file.to_str().unwrap()])
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .expect("run delulu check");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(o.status.success(), "the renamed program checks:\n{}", String::from_utf8_lossy(&o.stderr));
+    }
+    c.shutdown();
+}
+
 #[test]
 fn rename_of_a_local_is_refused_honestly() {
     let src = "module m\nfn f() -> Int {\n    let local_x = 1\n    local_x\n}\n";
