@@ -5457,8 +5457,11 @@ LOCAL-CALLEE-1. On the release binary of `cccb001`, with no special grant:
   printed. This is C88's shape, R-4.
 - `Circle(3)` was the function's `Int`, and a `match` on it as a `Shape` faulted.
 - `apply(Double, 5)`, with no constructor `Double`, faulted *"value `Double` is not callable"* (DL0907).
-- The WASM engine built the constructor for a call, and refused `let d = Dot` (DL1201: its `let` bound the bare name to
-  the function value).
+- The WASM engine built the constructor for a call with an expected type (`Wrap(c)` as `hold`'s result), but called
+  the function for one without (`let h = Wrap(c)`), and printed. It refused `let d = Dot` (DL1201: its `let` bound the
+  bare name to the function value).
+- And the WASM engine compiled the prelude's builtins (`str`, `int`, `float`, `parse_int`, `parse_float`, `Map`) before
+  it asked for a local function value, so a local `str` was never called there (WASM-BUILTIN-SHADOW-1, RW 2.27).
 - v1.0.0's interpreter had the same order.
 
 **Decision.**
@@ -5468,7 +5471,10 @@ LOCAL-CALLEE-1. On the release binary of `cccb001`, with no special grant:
    serves a prelude's constructors (`None`, `NotFound`), now comes after the functions in `eval_var`, as it already did
    for a call. A prelude constructor cannot be a function (DL0302), so the fallback never meets one.
 2. **The WASM engine never binds a constructor as a function value** (`EnumEnv::is_ctor`, asked over every sum type,
-   since `enum_of_ctor` answers nothing for a name two types share).
+   since `enum_of_ctor` answers nothing for a name two types share). **Its call asks in the checker's order:** a local
+   function value first, then the builtins, then a constructor of the module (built even where a generic or a function
+   shares its name, and refused in words where two of the module's types share it, never falling through to the
+   function), then the generics and the functions.
 3. **Not taken:** refusing a function named like one of the module's constructors (DL0302 widened). That would refuse
    programs that check today, which STABILITY.md §1 forbids within a major and asks a decision of its own for 2.0. The
    runtime now gives the meaning the checker already gives, so no program changes verdict.
@@ -5478,7 +5484,9 @@ before: the `LEAK` line). `loop_parity`'s
 `a_constructor_is_built_where_a_function_shares_its_name_and_a_function_is_passed_where_none_does` holds both engines to
 `3 -1 10`; red before: the WASM engine refused the program, and the interpreter faulted. Mutants M983 (the general path
 asks the functions first), M984 (the fast path takes a function that shares a constructor's name), M985 (a value asks
-the functions first), M986 (a capitalized value is a constructor before a function) and M987 (the WASM `let` binds a
-constructor as a function value) were all red, and the control green. `delulu-runtime` (351), `delulu-wasm` (217),
+the functions first), M986 (a capitalized value is a constructor before a function), M987 (the WASM `let` binds a
+constructor as a function value), M988 (the WASM call asks a local after the builtins) and M989 (the WASM call takes a
+function that shares a constructor's name) were all red, and the control green. The CLI test runs both engines, and
+`loop_parity`'s `a_local_named_like_a_builtin_is_called_on_both_engines` holds WASM-BUILTIN-SHADOW-1. `delulu-runtime` (351), `delulu-wasm` (217),
 `late_let_cli`, `plugin_load_cli`, `examples_run`, `core_invariance`, `conformance`, `actors_cli`, `stdlib_p3`,
 `wasm_cli`, `book`, `corpus_cli` and `deep_values_cli` passed.

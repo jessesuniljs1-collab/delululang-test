@@ -163,8 +163,8 @@ fn a_closure_reads_each_name_as_it_was_where_the_closure_was_written() {
 }
 
 /// **CTOR-SHADOW-1.** `Wrap` is a constructor of the module's `Holder` and a function that prints. The checker resolves
-/// `Wrap(c)` to the constructor, so `hold` is pure and so is the program. The interpreter called the function, and the
-/// run printed.
+/// `Wrap(c)` to the constructor, so `hold` is pure and so is the program. The interpreter called the function, and so did
+/// the WASM engine where the call had no expected type (`let h = Wrap(c)`), and the run printed on both.
 const CTOR: &str = r#"module ctor_shadow
 
 type Holder = Wrap(Cap[Console]) | Empty
@@ -175,7 +175,8 @@ fn Wrap(c: Cap[Console]) -> Holder ! {Write} {
 }
 
 fn hold(c: Cap[Console]) -> Holder {
-    Wrap(c)
+    let h = Wrap(c)
+    h
 }
 
 fn main(root: Root) {
@@ -187,7 +188,13 @@ fn main(root: Root) {
 fn a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name() {
     let authority = delulu(CTOR, &["authority"]);
     assert!(text(&authority).contains("(none — provably pure)"), "{}", text(&authority));
-    let run = delulu(CTOR, &["run", "--grant", "console"]);
-    assert!(run.status.success(), "{}", text(&run));
-    assert!(!text(&run).contains("LEAK"), "a function `authority` called pure performed an effect:\n{}", text(&run));
+    for (engine, flags) in [("the interpreter", &[][..]), ("the WASM engine", &["--engine", "wasm"][..])] {
+        let run = delulu(CTOR, &[&["run", "--grant", "console"][..], flags].concat());
+        assert!(run.status.success(), "{engine}: {}", text(&run));
+        assert!(
+            !text(&run).contains("LEAK"),
+            "{engine}: a function `authority` called pure performed an effect:\n{}",
+            text(&run)
+        );
+    }
 }

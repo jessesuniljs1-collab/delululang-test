@@ -7026,9 +7026,67 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
   renamed: nothing.
 - For the laptop's memory: HANDOFF §11.4 (CTOR-SHADOW-1).
+- **A second commit on the same branch:** `loop_parity`'s CTOR-SHADOW-1 test also holds lowercase constructors
+  (`cell(8)`, `empty`), which the interpreter refused as *"unbound name"* before D-V2-201. RW 2.26 is opened (in a
+  pattern a lowercase name binds, so a lowercase nullary constructor cannot be matched by name). M (this commit):
+  `crates/delulu-wasm/tests/loop_parity.rs`, `docs/REMAINING_WORK.md` (row 2.26), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **A third commit on the same branch:** the WASM call orders its lookups as the checker does. CTOR-SHADOW-1 reached
+  WASM where a call had no expected type, and WASM-BUILTIN-SHADOW-1 (RW 2.27): a local named like a builtin was never
+  called there. M: `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/late_let_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (rows 2.25, 2.27),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-201), `docs/DELULULANG_V2/V2_LOG.md`, `docs/design/SOUNDNESS_AUDIT.md`
+  (the CTOR paragraph, not yet landed), `HANDOFF.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Mutants M988, M989.
 - **Open / next, in order:** land #106, then this, on green runs; read the sweep's run `41246969522` and the launch runs
   `41247420596` and `41247423239`; bring `launch/2.0.0` current. There are two sections to fold:
   - LOCAL-CALLEE-1, not breaking, since v1.0.0 had no plugin export at run time;
   - CTOR-SHADOW-1, not breaking, since v1.0.0 had the same order and the checked meaning is 1.x's.
   Then cite the newest launch runs. *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — `run --engine` refuses a value it does not know (RW 6.48) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/engine-value` (stacked on `laptop/ctor-shadow`, #107)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/cli_contract.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.48), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next:** as #107's entry says: land #107, then this. Read the sweep's run and the launch runs. Bring
+  `launch/2.0.0` current: the sections to fold are LOCAL-CALLEE-1, CTOR-SHADOW-1 with WASM-BUILTIN-SHADOW-1, and this
+  one. This one is a usage error where a run happened, so judge it against STABILITY.md §1's exit codes: `run` with an
+  unknown `--engine` exited 0 under 1.x.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — #106, #107 and #108 landed; `launch/2.0.0` `05eb884` dispatched (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0101b`   Pull request: opened with this commit
+- **Landed by fast-forward:**
+  - #106 (`9992a45`: LOCAL-CALLEE-1, RW 4.29 closed, RW 3.24 measured), on its run `41249223011` (14 success, 2
+    skipped). `9992a45`'s push run `41250919446` was green.
+  - #107 (CTOR-SHADOW-1, WASM-BUILTIN-SHADOW-1, RW 2.26 opened) and #108 (RW 6.48) together, at `4dfe67e`, on #108's run
+    `41251294523` (14 success, 2 skipped), whose head holds #107's three commits.
+  - #107's own run `41251053019` was CANCELLED: 13 jobs success, and `microvm-reproducible` hit its 60-minute timeout
+    in its first step, `sudo apt-get update && apt-get install …`, before anything of ours ran. That job took 15
+    minutes on #106's run. It was the runner's package mirror, not the tree, so the job was re-run (`gh run rerun
+    --failed`), and the result is not needed to land: #108's green run holds the same commits.
+  - Two superseded runs of #107 were cancelled by hand (`41250161687`, `41250439832`) to give their runners back while
+    two `everything` runs held most of them.
+- **`launch/2.0.0` brought current again**, in the laptop's worktree: the merge `05eb884` of `master` `4dfe67e`.
+  - Three sections folded (`scripts/launch-changelog.py`).
+  - **One *Breaking* clause added**, judged against STABILITY.md §1 and v1.0.0: `run --engine` takes `interp` or
+    `wasm` and refuses any other value, exit 2, where v1.0.0 ran the interpreter for any value but `wasm` (RW 6.48).
+  - Not breaking: LOCAL-CALLEE-1 (v1.0.0 had no plugin export at run time); CTOR-SHADOW-1 and WASM-BUILTIN-SHADOW-1
+    (every program checks as before, and the runtime now gives 1.x's checked meaning).
+  - Criterion 2: 358/358 (`scripts/launch-criterion-2.py`).
+  - `LAUNCH-GATES=ok`: Survey 1580 nodes, 18091 edges, 0 errors, 15 warnings; doctor 29 checks; the nine document
+    gates; cargo deny ok.
+  - Its `everything` run `41255633510` and release dry run `41255635829` were dispatched at 00:11 UTC.
+- Files and folders (`master`): M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read to their ends, every job: the weekly sweep's `41246969522` at `cccb001` (at 00:07 UTC only the broker's Miri
+     was still running); `3bf4f2f`'s `41247420596` (the same); `05eb884`'s `41255633510` and `41255635829`. Then cite
+     `05eb884`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a merge of the records into `launch/2.0.0`.
+  2. RW 2.26 (a lowercase nullary constructor cannot be matched by name) waits for a decision: the warning is additive.
+  3. RW 3.24, profile first. *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.

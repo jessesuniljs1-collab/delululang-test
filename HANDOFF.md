@@ -1330,8 +1330,10 @@ spells the same thing?**
 - **CTOR-SHADOW-1 — a name a constructor and a function share is the constructor** (the laptop, 2026-11-01, D-V2-201).
   The checker resolves such a name to the constructor of the module's sum type. The interpreter called the function, so
   an effectful `fn Wrap` named like a pure constructor wrote from a program `authority` called pure, with no special
-  grant. Every runtime name lookup (`eval_var`, both paths of `eval_call`, the WASM `let`) asks in the checker's order:
-  local, then the module's constructor, then the module's function, then a prelude's. Search key: `funcs.get(` or
+  grant (on the WASM engine too, where the call had no expected type). Every runtime name lookup (`eval_var`, both
+  paths of `eval_call`, the WASM `let` and the WASM call) asks in the checker's order: a local, then a builtin, then the
+  module's constructor, then the module's generic or function. WASM-BUILTIN-SHADOW-1, the same day: the WASM call asked
+  the builtins before a local, so a local `str` was never called there. Search key: `funcs.get(` or
   `funcs.contains_key(` reached before `ctors.contains(`.
 
 ### 11.5 Operational traps, recorded because each one cost time

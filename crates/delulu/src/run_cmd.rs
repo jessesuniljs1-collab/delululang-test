@@ -1217,6 +1217,15 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             return 2;
         }
     }
+    // The engine, decided before anything runs as the isolation is: any value but these ran on the interpreter and
+    // reported success, so `--engine wsam` was a run on the other engine (found 2026-11-01).
+    match opts.engine.as_deref() {
+        None | Some("interp") | Some("wasm") => {}
+        Some(other) => {
+            eprintln!("error: unknown --engine `{other}` (interp | wasm)");
+            return 2;
+        }
+    }
     if opts.isolation.as_deref() == Some("process") && opts.foreign_isolation.is_none() {
         // The process profile's v0.5 mechanism: force the code OUTSIDE the proof (foreign libs)
         // into minimum-privilege worker subprocesses (phase 5h). The verified program itself stays

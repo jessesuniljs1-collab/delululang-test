@@ -11142,3 +11142,49 @@ not taken: it would refuse programs that check today.
 **Gates.** `late_let_cli` (the escape) and `loop_parity` (`3 -1 10` on both engines), each red before; mutants M983–M987,
 all red. The bash heredoc that wrote the CLI test turned the `\n` in an assertion's message into a real line break,
 the trap HANDOFF §11.5 names; the result compiled, and was corrected with the editor before the commit.
+
+**Later the same day, before #107 landed: lowercase constructors.** The checker admits a constructor whose name is
+lowercase (`type Slot = cell(Int) | empty`). The interpreter's capitalized fallback never covered one, so `let e = empty`
+and `cell(8)` faulted *"unbound name"* in a program that checked clean. D-V2-201's `Home::ctors` resolves them, as the
+WASM engine did. `loop_parity`'s CTOR-SHADOW-1 test now holds them too, at `3 -1 10 80` on both engines, and M985 (a
+value asks the functions first) is still red with them in.
+
+In a pattern, a lowercase name is a binding by the parser's convention, so `match t { foo => 1, bar => 2 }` answers 1
+for every `t`, on both engines and to the checker alike. That is the language's meaning, not a runtime defect, and it is
+recorded as RW 2.26, open, with its three ways out: a warning, which is additive, or refusing such names, or reading
+them as constructors, both breaking.
+
+**Later still, the WASM call (CTOR-SHADOW-1's WASM half, and WASM-BUILTIN-SHADOW-1).** The order of the WASM engine's
+call was read the same way. It compiled the prelude's builtins first, then a local function value, then the generics,
+then a constructor, but the constructor only where no module function had the name. So:
+- `let h = Wrap(c)`, a call with no expected type, ran the effectful `fn Wrap` on WASM as well, and printed. Its first
+  witness had `Wrap(c)` as the function's result, whose expected type took the constructor's path.
+- `let str = fn …; str(5)` ran the builtin `str` on WASM (`5 builtin`, where the interpreter printed
+  `local seventy-seven`).
+
+D-V2-201 now orders the WASM call as the checker does: a local, the builtins, a constructor of the module, the generics
+and the functions. The CLI test takes the unannotated form and runs both engines, and `loop_parity` gains
+`a_local_named_like_a_builtin_is_called_on_both_engines`. M988 and M989 are red. RW 2.27 closes the builtin half.
+
+## 2026-11-01 — the laptop: `run --engine` refuses a value it does not know (RW 6.48)
+
+Writing LATE-LET-1's two-engine CLI test, the laptop passed `--engine interp` and found that any value but `wasm` ran
+the interpreter. `--engine wsam` ran on the interpreter and exited 0. A typo of the engine was a silent run on the
+other one, the shape `refuse_unknown_flags` exists to prevent, one step further in. A sandboxed run refuses `--engine`
+and a `.dwx` refuses anything but `wasm`, so only a source or package run was open. `cmd_run_inner` now refuses an
+unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | wasm)`.
+
+`cli_contract`'s `a_flag_value_nobody_understood_is_refused` was red before (`--engine wsam` ran). It also holds
+`--isolation` and `--broker`, which refused already, and that `interp` and `wasm` still run.
+
+## 2026-11-01 — the laptop: #106–#108 landed; `launch/2.0.0` `05eb884` (one *Breaking* clause) dispatched
+
+- **Landed by fast-forward.** #106 on its run `41249223011`. #107 and #108 together at `4dfe67e`, on #108's run
+  `41251294523`, which holds #107's commits.
+- **#107's own run `41251053019` was cancelled.** Its `microvm-reproducible` job spent its whole 60-minute timeout in
+  `sudo apt-get update && apt-get install`, the first step, before any of our code ran. On #106's run that job took 15
+  minutes. A runner's package mirror can stall like that; the job was re-run, and its result was not needed.
+- **`launch/2.0.0` merged with `4dfe67e` at `05eb884`.** One *Breaking* clause was added for RW 6.48: `run --engine`
+  with a value other than `interp` or `wasm` is refused, exit 2, where v1.0.0 ran the interpreter. LOCAL-CALLEE-1,
+  CTOR-SHADOW-1 and WASM-BUILTIN-SHADOW-1 were judged not breaking. `LAUNCH-GATES=ok`. Its `everything` run
+  `41255633510` and release dry run `41255635829` were dispatched.

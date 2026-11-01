@@ -4421,6 +4421,12 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Expr::Var { path, .. } if path.segs.len() == 1 => path.segs[0].name.clone(),
                 _ => return Err(CompileError::Unsupported("an indirect or builtin call".into())),
             };
+            // Phase 3r: a call to a function VALUE (a bound lambda, or a generic's function parameter) → inline it. Asked
+            // first, as the checker resolves a name to its innermost binding: a local `str` or `int` is called, never the
+            // builtin of its name (WASM-BUILTIN-SHADOW-1 — the builtin ran, and a checked program printed other values).
+            if let Some(c) = cx.lookup_callable(&name) {
+                return inline_call(&c.params, &c.body, args, cx, Lexical::Value(&c));
+            }
             // Phase 3j: `str(x)` — Int formats via `__int_to_str`; a Str is already a string (identity).
             // RW 3.4: `parse_int(s)`, parsed host-side by the interpreter's own rule into `Some(n)` or `None`.
             if name == "parse_int" && args.len() == 1 {
@@ -4508,15 +4514,12 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     )),
                 };
             }
-            // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
-            if let Some(c) = cx.lookup_callable(&name) {
-                return inline_call(&c.params, &c.body, args, cx, Lexical::Value(&c));
-            }
-            if let Some(g) = cx.generics.get(&name).cloned() {
-                return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
-            }
             // A constructor with no expected type: `Some(x)` takes its payload's type; another, its sum's or the checker's.
-            if !cx.index.contains_key(&name) {
+            // CTOR-SHADOW-1: a constructor of the module's own types is built even where a function or a generic shares its
+            // name, as the checker resolves it, and never falls through to that function — `let h = Wrap(c)` ran an
+            // effectful `fn Wrap` from a program `authority` called pure.
+            let ctor = cx.env.is_ctor(&name);
+            if ctor || !cx.index.contains_key(&name) {
                 if let ("Some", [arg]) = (name.as_str(), &args[..]) {
                     return compile_some(arg, cx);
                 }
@@ -4524,6 +4527,14 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     compile_ctor(&name, args, cx, t)?;
                     return Ok(t);
                 }
+                if ctor {
+                    return Err(CompileError::Unsupported(format!(
+                        "the constructor `{name}`, whose type two of the module's types share"
+                    )));
+                }
+            }
+            if let Some(g) = cx.generics.get(&name).cloned() {
+                return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
             }
             let (fidx, ptys, ret) = {
                 let e = cx
