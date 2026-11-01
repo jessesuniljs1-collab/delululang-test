@@ -7315,3 +7315,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - **Open / next:** as the entry for #116 says. Land #116 and this pull request, each on its green run. Then set
   `docs/AI_ONBOARDING.md`'s counter to M1017, left out here so as not to conflict with #116's.
+
+### 2026-11-01 — #115, #116 and #117 landed; the onboarding brief's state brought current (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0101d`   Pull request: opened with this commit.
+- **Landed on `master`** by fast-forward, each on its green run:
+  - #115 at `656ea71`: `41299974193`.
+  - #117 at `96749fd`: `41302438112`.
+  - #116 at `699ee44`: `41303990131`, after a merge of #117. Its first run, `41301763500` on `c571b18`, was red on
+    Ubuntu alone, because the linker died with SIGBUS (`ld` signal 7) before any test ran. The failed job, re-run, was
+    green.
+  Their branches were deleted from `origin`.
+- `launch/2.0.0`: `005372f`'s `41281508881`, attempt 2, is read green. `415eb2e`'s dry run `41299815972` is read
+  green. Its `everything` run `41299813712` is green on every job finished, with the Miri-slow jobs still running.
+- Files and folders: M `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 now says. First, read `41299813712`, then merge
+  `master` into `launch/2.0.0` with the citations.
+- Survey and doctor (after the last edit): in the commit message.

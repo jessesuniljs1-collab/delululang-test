@@ -261,33 +261,37 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - `docs/REPOSITORY_STRUCTURE.md` lists every file and what it is for.
 - `docs/for-agents.md` is different: it is for agents that *use* DeluluLang, not for developers of it.
 
-## 10. Where the project stands (2026-11-01, 08:00 UTC) — the newest sync-log entry supersedes this
+## 10. Where the project stands (2026-11-01, 12:15 UTC) — the newest sync-log entry supersedes this
 
-- `master` holds #111 to #113: this brief; RW 2.26 (DL0302 refusal, D-V2-203) with FMT-CTOR-1; the DL0413 warning
-  (D-V2-204). #114 (the Survey reads memory notes as records) lands next.
-- `launch/2.0.0` is at `005372f`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds RW 6.49 and RW 3.24, not
-  yet #112 to #114. CHECKLIST-2.0 is the release gate. The launch itself (a fresh history in the public repository, the
-  tag, the release) waits for the owner's word.
-  - Its release dry run, `41281511250`, is green.
-  - Its `everything` run, `41281508881`, had one job fail at toolchain download, `miri (delulu-atlas)`, a runner
-    network timeout. Re-run that job when the run completes.
+- `master` is at `699ee44`. It holds #111 to #117:
+  - this brief;
+  - RW 2.26 (DL0302, D-V2-203) with FMT-CTOR-1;
+  - DL0413 (D-V2-204), which now names the arm that completes the cover;
+  - the Survey reading memory notes as records;
+  - the two-engine generator writing sum types.
+  Each landed on a green run.
+- `launch/2.0.0` is at `415eb2e`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` up to #114.
+  - Its release dry run, `41299815972`, is green.
+  - Its `everything` run, `41299813712`, was green on every finished job at 12:15 UTC, with the broker's and the
+    checker's Miri-slow still running (about 3 hours).
+  CHECKLIST-2.0 is the release gate. The launch itself (a fresh history in the public repository, the tag, the release)
+  waits for the owner's word.
 - **Open / next, in order:**
-  1. Fold `master` into `launch/2.0.0`.
-     - RW 2.26 is a *Breaking* clause: a program that checked under 1.x is refused.
-     - DL0413 is additive: a new section, no clause.
-     - FMT-CTOR-1 is a fix.
-     - Then `launch-criterion-2.py` (359 anchors now), the gates, and the `everything` run and the dry run, dispatched
-       and read.
-  2. RW 3.24, structurally: what is left is the tree-walker's own shape. That is dispatch, the result's size and drop
-     glue, with a variable's read about 150 of a loop step's 2,069 instructions. So slots alone buy about a tenth, and a
-     compiled form is the real step.
-  3. Watch the broker's Miri time.
-  4. The launch, only on the owner's word.
+  1. Read `41299813712` to its end. Then merge `master` into `launch/2.0.0`, taking #116's CHANGELOG line into the
+     DL0413 section, and cite `415eb2e`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
+  2. A warning for a binding never read (a new code). It is scoped, not started:
+     - the checker's scopes map a name to its type alone, so each binding needs its span and a read mark;
+     - parameters, `let`, patterns, `for` and closures each bind;
+     - a leading `_` would silence it;
+     - every shipped program and every test that expects no diagnostics must be judged.
+  3. RW 3.24: a compiled form. Slots alone buy about a tenth.
+  4. Watch the broker's Miri time (3 h 10 min on the last run, against a 4-hour cap).
+  5. The launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-204;
   - the last mutant is M1017;
   - there are 156 DL codes and 359 reference anchors;
-  - pull requests are numbered on GitHub, and #114 was the last opened.
+  - pull requests are numbered on GitHub, and #117 was the last opened.
 
 ## 11. Keep this file true
 
