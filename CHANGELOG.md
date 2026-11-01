@@ -30,6 +30,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   for a constructor with a field. That form already matched the constructor on both engines. A binding spelled like
   another type's constructor is not affected. **Breaking** for a program holding such a binding: it checked under 1.x,
   and its later arms never ran.
+- **Fixed: `delulu fmt` printed a lowercase nullary constructor's pattern `foo()` as `foo`** (FMT-CTOR-1). That is a
+  binding, so formatting changed what the program meant: the arm matched every value. It keeps the call form now. A
+  capitalized or qualified name prints bare, as before. Found by the formatter's identity law over the repository's
+  programs, on this change's own accepting program.
 
 ## Unreleased — the interpreter's measured costs cut, 2026-11-01
 

@@ -2041,6 +2041,8 @@ Added in V2 (2026-09-17 → 2026-09-28):
   inline in a scope (+2–5% on every benchmark, as the laptop's timing had found) and an inlined clone of scalars (+3%) —
   each made a hot function bigger than it saved. `scripts/interp-profile.sh --base REF` builds both and prints both.
 
+- **A new `.delulu` file is also the formatter's corpus** (FMT-CTOR-1, 2026-11-01). `delulu-syntax`'s `laws_hold_over_the_repository_corpus` formats every `.delulu` file in the repository and requires the same program back. A change that adds a conformance program runs `cargo test -p delulu-syntax --lib`, not only the checker's and the CLI's tests. #112 skipped it, and its first run was red on Ubuntu and macOS. The law had found a real defect: `fmt` printed `foo()` as `foo`, a binding.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 197423 |
+| Rust lines | 197447 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 300 |
-| Markdown lines | 93620 |
+| Markdown lines | 93652 |
 | DeluluLang programs | 256 |
 | Registered diagnostic codes | 156 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1607 / 18284 |
+| Nodes / edges in this map | 1607 / 18289 |
 | Open discrepancies | 54 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -364,12 +364,12 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 7586 lines
+- **Modules:** 9 files, 7610 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/ast.rs` | 643 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
-| `src/fmt.rs` | 1519 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
+| `src/fmt.rs` | 1543 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
 | `src/grammar.rs` | 115 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
 | `src/lexer.rs` | 985 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
