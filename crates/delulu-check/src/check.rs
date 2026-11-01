@@ -516,7 +516,7 @@ struct FnCtx {
     /// How many `while`/`for` bodies enclose the statement being checked. `break`/`continue` are
     /// legal only when this is > 0 (Tier 1); a bare `break` at function level is DL0412.
     loop_depth: u32,
-    /// DL0414 (D-V2-205): each scope's `let` and `var` bindings in the order bound, each with whether anything has read
+    /// DL0414 (D-V2-206): each scope's `let` and `var` bindings in the order bound, each with whether anything has read
     /// it. Kept beside `locals`, one entry a scope (`sync_lets` keeps the lengths equal).
     lets: Vec<Vec<LetUse>>,
     /// Per scope, a name's newest binding when that binding is a `let` or `var`: its place in `lets`. A parameter or
@@ -1428,7 +1428,8 @@ impl<'a> Checker<'a> {
                     value_ty = Type::Unit;
                 }
                 Stmt::Assign { target, value, span } => {
-                    let tt = self.check_lvalue(target, ctx);
+                    let (tt, tr) = self.check_lvalue(target, ctx);
+                    acc.add_row_acc(&tr);
                     let (vt, vr) = self.check_expr(value, ctx);
                     acc.add_row_acc(&vr);
                     self.expect_type(&tt, &vt, *span, "assignment type mismatch");
@@ -1520,7 +1521,7 @@ impl<'a> Checker<'a> {
         (value_ty, acc)
     }
 
-    /// DL0414 (D-V2-205): a `let` or `var` binding nothing read before its block closed. A write is not a read, so a
+    /// DL0414 (D-V2-206): a `let` or `var` binding nothing read before its block closed. A write is not a read, so a
     /// `var` only ever assigned is named too. A name that begins with `_` says the binding is meant to go unread.
     fn report_unread_lets(&mut self, lets: Vec<LetUse>) {
         for l in lets.into_iter().filter(|l| !l.read.get() && !l.name.starts_with('_')) {
@@ -1531,28 +1532,50 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_lvalue(&mut self, lv: &LValue, ctx: &mut FnCtx) -> Type {
+    /// An assignment's target: the type it stores, and the row of the index expressions it holds. INDEX-TARGET-1: the
+    /// index was never checked — its effects joined no row (a function the checker and `authority` called pure printed
+    /// when it ran), a name in it was never resolved, a `Str` index passed, and a non-list base got a fresh type. An index
+    /// is checked here as `xs[i]` is read: an `Int`, its row the statement's, a base that is no list DL0405.
+    fn check_lvalue(&mut self, lv: &LValue, ctx: &mut FnCtx) -> (Type, RowAcc) {
+        self.check_lvalue_at(lv, ctx, true)
+    }
+
+    /// `whole`: `lv` is the whole target, so a name there is written and not read (DL0414). The base of `p.f = v` or
+    /// `xs[i] = v` is read: the binding is how the write reaches a record or a list another name may share.
+    fn check_lvalue_at(&mut self, lv: &LValue, ctx: &mut FnCtx, whole: bool) -> (Type, RowAcc) {
         match lv {
-            LValue::Var(name) => match ctx.lookup_to_assign(&name.name) {
-                Some(t) => t,
+            LValue::Var(name) => match if whole { ctx.lookup_to_assign(&name.name) } else { ctx.lookup(&name.name) } {
+                Some(t) => (t, RowAcc::default()),
                 None => {
                     self.diags.push(
                         Diagnostic::error("DL0301", format!("unknown name `{}`", name.name))
                             .with_span(name.span, "not found in this scope"),
                     );
-                    self.fresh_poisoned()
+                    (self.fresh_poisoned(), RowAcc::default())
                 }
             },
             LValue::Field(base, field) => {
-                let bt = self.check_lvalue(base, ctx);
-                self.field_type(&bt, field, ctx)
+                let (bt, acc) = self.check_lvalue_at(base, ctx, false);
+                (self.field_type(&bt, field, ctx), acc)
             }
-            LValue::Index(base, _idx) => {
-                let bt = self.check_lvalue(base, ctx);
-                match self.cx.apply_type(&bt) {
+            LValue::Index(base, idx) => {
+                let (bt, mut acc) = self.check_lvalue_at(base, ctx, false);
+                let (it, ir) = self.check_expr(idx, ctx);
+                acc.add_row_acc(&ir);
+                self.expect_type(&Type::Int, &it, idx.span(), "index must be Int");
+                let elem = match self.cx.apply_type(&bt) {
                     Type::List(inner) => *inner,
-                    _ => self.cx.fresh_type(),
-                }
+                    other => {
+                        if !self.is_poisoned(&other) {
+                            self.diags.push(
+                                Diagnostic::error("DL0405", format!("cannot index a value of type `{}`", self.ty(&other)))
+                                    .with_span(base.span(), "not indexable"),
+                            );
+                        }
+                        self.cx.fresh_type()
+                    }
+                };
+                (elem, acc)
             }
         }
     }

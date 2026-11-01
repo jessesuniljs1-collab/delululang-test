@@ -11,13 +11,40 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a warning for a binding never read (DL0414), 2026-11-02
+
+- **Added: DL0414, a warning for a `let` or `var` binding never read** (D-V2-206, RW 2.30). A binding nothing reads
+  before its block ends is named at its line: a value computed and dropped, a name shadowed before it was used, a `var`
+  only ever assigned. Writing through a binding to a field or an element reads it, since the record or list may be
+  shared. A name that begins with `_` is exempt. It is a warning: the program still checks and runs. A new diagnostic
+  code is a minor, additive change (`STABILITY.md` §5).
+- **Fixed: the Book's `05_secrets` sample printed *match* whatever the check answered.** It now branches on the answer.
+
+## Unreleased — what an assignment's index holds is checked, asked for and judged, 2026-11-02
+
+- **Fixed: the index in `xs[e] = v` was never checked** (INDEX-TARGET-1, D-V2-205, RW 2.29). The interpreter evaluates
+  `e`, but the checker never looked at it. So an effect there joined no row: a function with no row printed through
+  `xs[noisy(c)] = 9`, `delulu check` was clean and `delulu authority` listed it under *pure fns*. An unknown name, a
+  `Str` index and a base that is no list passed too, and faulted when they ran. Now the index is checked as one that is
+  read: its effects are the function's (DL0501), its names resolve (DL0301), it is an `Int`, and the base is a list
+  (DL0405).
+- **Fixed: a `consume` in an index ends its binding** (the same). The reference-capability pass never walked the index,
+  so a list sent to an actor there could be read after it. That is DL1602, as it is one line up.
+- **Fixed: `authority`, `--grants`, `--within`, the atlas and the editor see the index** (the same). A capability minted
+  there, a file written, a request or a secret sent, an embedded-Python import and a plugin `load` were missing from
+  what each reports. `--within` answered *within* for a write it answers *exceeds* for one line up. The capability check
+  held at run time throughout.
+- A program `delulu check` passed can now be refused. Each one broke a rule the reference already states, and none of
+  the programs the repository ships is among them.
+
 ## Unreleased — a warning for a `match` arm no value reaches (DL0413), 2026-11-01
 
 - **Added: DL0413, a warning for an arm no value can reach** (D-V2-204, RW 2.28). The first arm that matches wins, so an
   arm whose every value an earlier arm already matches never runs. Examples: `x => …` above `Red => …`, `Red` or `0`
   twice, `Some(_)` above `Some(Red)`, a `_` after `true` and `false`. Each of these checked clean, with no word. The
-  checker now names the arm, and, in a second span, the earlier arm that completes its cover. It reports an arm only when it has proved it unreachable, under the exhaustiveness search's
-  own limit. It is a warning: the program still checks and runs as its arms say. A new diagnostic code is a minor,
+  checker now names the arm, and, in a second span, the earlier arm that completes its cover. It reports an arm
+  only when it has proved it unreachable, under the exhaustiveness search's own limit. It is a warning: the program
+  still checks and runs as its arms say. A new diagnostic code is a minor,
   additive change (`STABILITY.md` §5), and no program the repository ships has such an arm.
 
 ## Unreleased — a pattern binding spelled like a constructor of the matched type is refused, 2026-11-01

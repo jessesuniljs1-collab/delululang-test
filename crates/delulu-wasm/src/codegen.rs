@@ -1221,7 +1221,11 @@ fn module_matches_inside(env: &EnumEnv, module: &Module) -> bool {
 fn module_any(env: &EnumEnv, module: &Module, hit: &dyn Fn(&Expr) -> bool, fors: bool) -> bool {
     fn block(b: &Block, hit: &dyn Fn(&Expr) -> bool, fors: bool) -> bool {
         b.stmts.iter().any(|s| match s {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => expr(value, hit, fors),
+            Stmt::Let { value, .. } => expr(value, hit, fors),
+            // INDEX-TARGET-1: `xs[…] = v` does not compile yet (`compile_assign`), but its index is named here all the same.
+            Stmt::Assign { target, value, .. } => {
+                expr(value, hit, fors) || target.index_exprs().into_iter().any(|i| expr(i, hit, fors))
+            }
             Stmt::While { cond, body, .. } => expr(cond, hit, fors) || block(body, hit, fors),
             Stmt::For { iter, body, .. } => fors || expr(iter, hit, fors) || block(body, hit, fors),
             Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => expr(e, hit, fors),
@@ -2155,7 +2159,11 @@ fn result_valtypes(ret: Ty) -> Vec<ValType> {
 fn collect_strings_block(b: &Block, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
     for s in &b.stmts {
         match s {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => collect_strings_expr(value, off, data),
+            Stmt::Let { value, .. } => collect_strings_expr(value, off, data),
+            Stmt::Assign { target, value, .. } => {
+                collect_strings_expr(value, off, data);
+                target.index_exprs().into_iter().for_each(|i| collect_strings_expr(i, off, data));
+            }
             Stmt::For { iter, body, .. } => {
                 collect_strings_expr(iter, off, data);
                 collect_strings_block(body, off, data);

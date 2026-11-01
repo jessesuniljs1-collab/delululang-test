@@ -1,0 +1,23 @@
+// anchors: ref.grammar.actor_decl
+module reject1602
+
+// INDEX-TARGET-1 (D-V2-205): a `consume` in an assignment's index ends the binding as one anywhere
+// else does — the list went to the actor, and reading it after is a use of a dead binding.
+actor Sink {
+  var n: Int
+  new() { self.n = 0 }
+  be take(vs: iso List[Int]) ! {} { self.n = vs.len() }
+}
+
+fn give(s: Sink, vs: iso List[Int]) -> Int ! {Async} {
+  s.take(consume vs)
+  0
+}
+
+fn main(root: Root) ! {Async} {
+  let s = spawn Sink()
+  let xs: iso List[Int] = recover { [1] }
+  var ys = [0, 0]
+  ys[give(s, consume xs)] = 1
+  let n = xs.len()
+}

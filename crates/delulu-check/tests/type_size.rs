@@ -38,9 +38,12 @@ fn check_within_a_minute(src: String) -> Vec<(&'static str, Option<usize>)> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let checked = delulu_check::check_source(0, &src);
+        // DL0414 (a binding never read) is left out: these programs build the chain to time the type-size bound, and its
+        // last link, or the comparison made of it, is never read. Every other diagnostic counts.
         let found = checked
             .diagnostics
             .iter()
+            .filter(|d| d.code != "DL0414")
             .map(|d| (d.code, d.spans.first().map(|s| src[..s.span.start as usize].matches('\n').count() + 1)))
             .collect::<Vec<_>>();
         let _ = tx.send(found);

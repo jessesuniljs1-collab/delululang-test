@@ -7363,3 +7363,45 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. Record `launch/2.0.0` `9a33f6c` on `master`.
   3. RW 3.24: a compiled form.
   4. *[laptop]* The launch, only on the owner's word.
+
+### 2026-11-02 — INDEX-TARGET-1: what an assignment's index holds is checked, asked for and judged (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WAoHjZ5jxkZ1RtCCft`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/index-target`   Pull request: opened with this commit.
+- Base: `9b3be30`.
+- What: D-V2-205, RW 2.29 (`V2_LOG.md`, 2026-11-02). Every walk of an assignment read its value and skipped its
+  index: the checker, the reference-capability pass, `--within`, the requirements, the foreign report, the atlas, the
+  plugin list and the editor. Mutants M1018–M1030.
+- Files and folders:
+  A `crates/delulu/tests/index_target_cli.rs`, `tests/conformance/reject/DL0501_effect_in_an_index_target.delulu`,
+    `tests/conformance/reject/DL1602_consume_in_an_index_target.delulu`
+  M `crates/delulu-syntax/src/ast.rs`, `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/rcap_check.rs`,
+    `crates/delulu/src/within.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/src/lsp.rs`,
+    `crates/delulu-atlas/src/build.rs`, `crates/delulu-wasm/src/codegen.rs`
+  M `crates/delulu/tests/within_cli.rs`, `crates/delulu/tests/lsp_cli.rs`, `tests/core-invariance/SNAPSHOT.txt`
+  M `docs/design/SOUNDNESS_AUDIT.md` (entrenched), `docs/design/ENTRENCHED_CHANGE_RECORD.md`
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+    `V2_LOG.md`, `V2_PHASE_STATUS.md`, `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`,
+    `docs/assistant-memory/`, `docs/survey/*`
+  Deleted, renamed: nothing.
+- `laptop/unread-lets` (`8be0bdc`, DL0414) stays parked and must not land as it stands. Its decision becomes D-V2-206,
+  and it must take this fix first: its read marks must count a read in an index, and the base of `xs[i] = v` is read.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-02 — DL0414, a binding never read: the draft finished (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WAoHjZ5jxkZ1RtCCft`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/unread-lets`, the draft of 2026-11-01 (its entry above), with `laptop/index-target` (#119) merged in.
+  Pull request: opened with this commit. It lands after #119.
+- What: D-V2-206, RW 2.30 (`V2_LOG.md`, 2026-11-02). Mutants M1031–M1037 (M1035 equivalent).
+- Files and folders (besides #119's):
+  M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-diag/src/codes.rs`
+  M `crates/delulu-check/tests/type_size.rs`, `crates/delulu/tests/cli.rs`
+  M `examples/demo.delulu`, `docs/book/samples/05_secrets.delulu`
+  M `tests/conformance/witnesses.toml` (entrenched), `docs/design/ENTRENCHED_CHANGE_RECORD.md`
+  M `docs/reference/README.md`, `coverage.md`, `diagnostics.md` (regenerated)
+  M `docs/lang/delulu-slang.md`, `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (157 codes)
+  M `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`,
+    `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`, `tests/core-invariance/SNAPSHOT.txt`, `docs/survey/*`
+  Deleted, renamed: nothing.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says.
+- Survey and doctor (after the last edit): in the commit message.

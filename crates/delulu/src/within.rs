@@ -1024,6 +1024,8 @@ fn assigned(b: &delulu_syntax::ast::Block) -> std::collections::BTreeSet<String>
                         out.insert(name.name.clone());
                     }
                     expr(value, out);
+                    // INDEX-TARGET-1: a block or closure written in `xs[…]` assigns as any other.
+                    target.index_exprs().into_iter().for_each(|i| expr(i, out));
                 }
                 Stmt::While { cond, body, .. } => {
                     expr(cond, out);
@@ -1124,6 +1126,11 @@ impl SendWalk<'_> {
             }
             Stmt::Assign { target, value, .. } => {
                 self.expr(value);
+                // INDEX-TARGET-1: a request, a file use or a send written in `xs[…]` is made as any other (it was never
+                // read, and `--within` answered *within* for a write it answers *exceeds* for one line up).
+                for idx in target.index_exprs() {
+                    self.expr(idx);
+                }
                 if let LValue::Var(name) = target {
                     let held = self.held(value);
                     self.vars.insert(name.name.clone(), held);

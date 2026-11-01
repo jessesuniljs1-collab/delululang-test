@@ -261,37 +261,28 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - `docs/REPOSITORY_STRUCTURE.md` lists every file and what it is for.
 - `docs/for-agents.md` is different: it is for agents that *use* DeluluLang, not for developers of it.
 
-## 10. Where the project stands (2026-11-01, 12:15 UTC) — the newest sync-log entry supersedes this
+## 10. Where the project stands (2026-11-02) — the newest sync-log entry supersedes this
 
-- `master` is at `699ee44`. It holds #111 to #117:
-  - this brief;
-  - RW 2.26 (DL0302, D-V2-203) with FMT-CTOR-1;
-  - DL0413 (D-V2-204), which now names the arm that completes the cover;
-  - the Survey reading memory notes as records;
-  - the two-engine generator writing sum types.
-  Each landed on a green run.
-- `launch/2.0.0` is at `415eb2e`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` up to #114.
-  - Its release dry run, `41299815972`, is green.
-  - Its `everything` run, `41299813712`, was green on every finished job at 12:15 UTC, with the broker's and the
-    checker's Miri-slow still running (about 3 hours).
-  CHECKLIST-2.0 is the release gate. The launch itself (a fresh history in the public repository, the tag, the release)
-  waits for the owner's word.
+- `master` is at `9b3be30`, holding #111 to #118. Each landed on a green run.
+- `laptop/index-target` carries INDEX-TARGET-1 (D-V2-205, RW 2.29). Every walk of an assignment skipped its index, so a
+  function the checker called pure printed through `xs[noisy(c)] = 9`. It lands on its green run.
+- `launch/2.0.0` is at `9a33f6c`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `9b3be30`.
+  CHECKLIST-2.0 cites `005372f`'s and `415eb2e`'s runs, all read green. The launch itself (a fresh history in the public
+  repository, the tag, the release) waits for the owner's word.
 - **Open / next, in order:**
-  1. Read `41299813712` to its end. Then merge `master` into `launch/2.0.0`, taking #116's CHANGELOG line into the
-     DL0413 section, and cite `415eb2e`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
-  2. A warning for a binding never read (a new code). It is scoped, not started:
-     - the checker's scopes map a name to its type alone, so each binding needs its span and a read mark;
-     - parameters, `let`, patterns, `for` and closures each bind;
-     - a leading `_` would silence it;
-     - every shipped program and every test that expects no diagnostics must be judged.
+  1. Land `laptop/index-target` on its green run. Then merge `master` into `launch/2.0.0` and judge INDEX-TARGET-1 for
+     the *Breaking* paragraph: the programs it refuses broke rules the reference already states (DL0501's
+     `ref.rule.effects.declared-row` among them), and v1.0.0 had the same defect.
+  2. Land `laptop/unread-lets`, DL0414 (D-V2-206), after #119, on its green run. Then fold it into
+     `launch/2.0.0`: a new warning is additive; criterion 2 becomes 360 anchors.
   3. RW 3.24: a compiled form. Slots alone buy about a tenth.
-  4. Watch the broker's Miri time (3 h 10 min on the last run, against a 4-hour cap).
+  4. Watch the broker's Miri time (3 h 07 min on the last run, against a 4-hour cap).
   5. The launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-204;
-  - the last mutant is M1017;
-  - there are 156 DL codes and 359 reference anchors;
-  - pull requests are numbered on GitHub, and #117 was the last opened.
+  - the last decision is D-V2-206;
+  - the last mutant is M1037;
+  - there are 157 DL codes and 360 reference anchors;
+  - pull requests are numbered on GitHub, and #118 was the last opened.
 
 ## 11. Keep this file true
 

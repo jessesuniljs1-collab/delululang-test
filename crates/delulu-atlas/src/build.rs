@@ -407,7 +407,11 @@ fn walk_block_for_foreign(b: &Block, c_syms: &BTreeSet<String>, out: &mut Foreig
     for s in &b.stmts {
         match s {
             Stmt::Let { value, .. } => walk_expr_for_foreign(value, c_syms, out),
-            Stmt::Assign { value, .. } => walk_expr_for_foreign(value, c_syms, out),
+            // INDEX-TARGET-1: a foreign call written in `xs[…]` reaches outside the guarantee as any other.
+            Stmt::Assign { target, value, .. } => {
+                walk_expr_for_foreign(value, c_syms, out);
+                target.index_exprs().into_iter().for_each(|i| walk_expr_for_foreign(i, c_syms, out));
+            }
             Stmt::While { cond, body, .. } => {
                 walk_expr_for_foreign(cond, c_syms, out);
                 walk_block_for_foreign(body, c_syms, out);

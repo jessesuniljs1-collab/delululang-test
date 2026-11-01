@@ -410,6 +410,28 @@ impl LValue {
             LValue::Index(base, _) => base.span(),
         }
     }
+
+    /// The index expressions this target holds, in the order the interpreter evaluates them: the innermost first, and
+    /// all of them after the assigned value (`assign` evaluates the value, then walks the target). INDEX-TARGET-1: every
+    /// walk of an assignment read only its value, so an effect, a name, a `consume`, a mint or a foreign call written
+    /// inside `xs[…] = v` went unseen — the checker called a printing function pure, and `authority --within` answered
+    /// *within* for a write it answers *exceeds* for one line up. A walk of `Stmt::Assign` walks these too.
+    pub fn index_exprs(&self) -> Vec<&Expr> {
+        let mut out = Vec::new();
+        let mut at = self;
+        loop {
+            match at {
+                LValue::Var(_) => break,
+                LValue::Field(base, _) => at = base,
+                LValue::Index(base, idx) => {
+                    out.push(idx);
+                    at = base;
+                }
+            }
+        }
+        out.reverse();
+        out
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
