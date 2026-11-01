@@ -24,7 +24,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/assistant-memory/delulu-p21-crossaccount.md:61` — prose names `tests/lib.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delulu-survey-map.md:64` — prose names `crates/.../ty.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delululang-project.md:309` — prose names `docs/playbooks/README+STAGE4..10_PLAYBOOK`, which is nowhere in the tree
-- `docs/assistant-memory/release-program-progress.md:87` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
+- `docs/assistant-memory/release-program-progress.md:91` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
 

@@ -11531,3 +11531,27 @@ program it produced did not check.
 **Evidence:** `lsp_cli` `rename_finds_a_type_and_an_effect_wherever_one_is_written` renames a type and an effect, applies
 the edits the server returns, and checks the program. It was red before. Mutants M1038–M1043 drop one arm each, and
 each is red. The `lsp_cli` suite passes, 40 tests.
+
+## 2026-11-02 — the laptop: #119–#121 landed and folded into `launch/2.0.0`; the actor probe in full
+
+**Landed on `master`** by fast-forward, each on its green run:
+- #119, INDEX-TARGET-1: `11df603`, run `41341255443`.
+- #120, DL0414: `f6f1306`, run `41343108643`.
+- #121, RENAME-TYPES-1: `bbcaade`, run `41345208398`.
+
+**`launch/2.0.0`, merged twice**:
+- `add7f18` (master `f6f1306`) folded INDEX-TARGET-1 and DL0414. INDEX-TARGET-1 joins the *Breaking* paragraph,
+  judged against v1.0.0's own code: its `check_lvalue` ignored the index, so a program 1.x checked is refused under
+  2.0.0. Each such program broke a rule 1.x's reference already stated, but a refused program is a surface
+  `STABILITY.md` §1 holds stable. DL0414 is additive.
+- `e361f0b` (master `bbcaade`) folded RENAME-TYPES-1, which is not *Breaking*.
+- Criterion 2 was re-measured on each: 360/360, diag 157. `scripts/launch-gates.sh`: `LAUNCH-GATES=ok` on each.
+- `e361f0b`'s `everything` run `41347076820` and its release dry run `41347080030` were dispatched, and are unread at
+  this entry.
+
+**The actor probe, in full.** RENAME-TYPES-1's entry said a capability cannot reach an actor, probed with `val` on the
+constructor's parameter (DL1601). The value was then annotated, as DL1601 asks. Each spelling was refused:
+- `let p: val Cap[Python] = py`: DL1603;
+- `let p: iso Cap[Python] = recover { py }` sent with `consume p`: DL1605 and DL1603;
+- `let p: tag Cap[Python] = py`: DL1603.
+So the foreign-report and plugin-list walks, which visit functions and constants alone, miss nothing an actor can reach.
