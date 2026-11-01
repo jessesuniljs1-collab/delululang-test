@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 198254 |
+| Rust lines | 198345 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 302 |
 | Markdown lines | 94278 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1613 / 18488 |
+| Nodes / edges in this map | 1613 / 18494 |
 | Open discrepancies | 44 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 48002 lines
+- **Modules:** 44 files, 48003 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -113,7 +113,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/doctor.rs` | 1010 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/edit.rs` | 572 | P4-04 and P4-05: `delulu edit` — checked edits for an agent that is not the only writer. |
 | `src/examples.rs` | 171 | P4-10: `delulu examples [--json]` — the shipped example programs, each with its authority and the |
-| `src/fix.rs` | 438 | `delulu fix` — apply the repairs the checker already computed. |
+| `src/fix.rs` | 439 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 513 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 705 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/guest.rs` | 3086 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
@@ -192,17 +192,17 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 16988 lines
+- **Modules:** 18 files, 17072 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 4655 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 4695 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1539 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 863 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
-| `src/lib.rs` | 2409 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
+| `src/lib.rs` | 2453 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 573 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
 | `src/manifest.rs` | 380 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 236 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |

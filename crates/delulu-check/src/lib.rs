@@ -2385,6 +2385,50 @@ mod unread_binding_tests {
         }
     }
 
+    /// **D-V2-207.** The repair `prefix-underscore` names the binding and every assignment to it `_x`. Applied to each
+    /// shape above, the program checks with no DL0414 and no error, and a `var` only written has each write renamed.
+    #[test]
+    fn the_repair_names_the_binding_and_each_assignment_to_it_unread() {
+        let apply = |src: &str| -> String {
+            let c = check_source(0, src);
+            let mut edits: Vec<(u32, String)> = c
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == "DL0414")
+                .flat_map(|d| {
+                    let r = d.repairs.iter().find(|r| r.id == "prefix-underscore").expect("DL0414 offers prefix-underscore");
+                    assert!(r.requires_human && !r.authority_widening, "a human decides; nothing widens");
+                    r.edits.iter().map(|e| {
+                        assert_eq!(e.start_byte, e.end_byte, "an insertion");
+                        (e.start_byte, e.insert.clone())
+                    })
+                })
+                .collect();
+            edits.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+            let mut out = src.to_string();
+            for (at, insert) in edits {
+                out.insert_str(at as usize, &insert);
+            }
+            out
+        };
+        for body in [
+            "fn f() -> Int {\nlet x = 1\n0\n}\n",
+            "fn f() -> Int {\nvar n = 0\nn = 5\nn = 6\n0\n}\n",
+            "fn f() -> Int {\nlet x = 1\nlet x = 2\nx\n}\n",
+            "fn f(b: Bool) -> Int {\nif b {\nlet y = 3\n0\n} else {\n1\n}\n}\n",
+            "fn f() -> Int {\nvar n = 0\nlet g = fn() -> Int {\nn = 1\n0\n}\ng()\n}\n",
+            "fn f() -> Int {\nfor i in [1, 2] {\nlet w = i\n}\n0\n}\n",
+        ] {
+            let fixed = apply(&format!("{HEAD}{body}"));
+            let (found, errors) = unread(&fixed);
+            assert!(errors.is_empty() && found.is_empty(), "the repaired program checks clean: {errors:?} {found:?}\n{fixed}");
+        }
+        assert!(
+            apply(&format!("{HEAD}fn f() -> Int {{\nvar n = 0\nn = 5\nn = 6\n0\n}}\n")).contains("var _n = 0\n_n = 5\n_n = 6\n"),
+            "each assignment is renamed with the binding"
+        );
+    }
+
     /// Every binding here is read, so none is reported: in an expression, only in an assignment's index (INDEX-TARGET-1),
     /// as the base a field or an element is written through, only in a closure, in a loop's condition, by a later
     /// statement after it was written, from either branch after a shadow in one, and one whose name begins with `_`.
