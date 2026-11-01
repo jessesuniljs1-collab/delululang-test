@@ -7286,3 +7286,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. Watch the broker's Miri: 3 h 10 min, under the 4-hour cap.
   5. *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — DL0413 names the arm that completes the cover (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/dead-arm-names-its-cover` (from `master` `656ea71`, where #115 landed on its green run `41299974193`)
+  Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name. Mutants M1014 and M1015 were red.
+- In flight: `launch/2.0.0` `415eb2e`. Its release dry run `41299815972` is read green. Its `everything` run
+  `41299813712` is green on every job finished; at 11:25 UTC only the broker's and the checker's Miri-slow were still
+  running. `005372f`'s `41281508881`, attempt 2 (the re-run Miri job), is read green.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs` (the test), `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/AI_ONBOARDING.md` (the counter), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read `41299813712` to its end. Then cite `415eb2e`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a records
+     merge into `launch/2.0.0`. That merge carries this change's CHANGELOG line into the DL0413 section.
+  2. RW 3.24: a compiled form.
+  3. The broker's Miri.
+  4. *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.

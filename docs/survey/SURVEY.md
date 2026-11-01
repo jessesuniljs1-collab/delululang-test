@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 197477 |
+| Rust lines | 197500 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 301 |
-| Markdown lines | 93745 |
+| Markdown lines | 93776 |
 | DeluluLang programs | 256 |
 | Registered diagnostic codes | 156 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1608 / 18303 |
+| Nodes / edges in this map | 1608 / 18312 |
 | Open discrepancies | 44 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -192,17 +192,17 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 16799 lines
+- **Modules:** 18 files, 16822 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 4548 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 4569 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1539 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 863 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
-| `src/lib.rs` | 2337 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
+| `src/lib.rs` | 2339 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 573 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
 | `src/manifest.rs` | 380 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 236 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |

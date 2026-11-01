@@ -11399,3 +11399,15 @@ exemption removed) turns it red.
 **Result:** findings went from 0 errors and 16 warnings to 0 errors and 7. Four are memory notes naming a path not in
 the tree, kept as warnings because a path that dangles may be a real one moved. Two are in a design prompt, and one is an
 old V2_LOG count.
+
+## 2026-11-01 — the laptop: DL0413 names the arm that completes the cover
+
+A DL0413 said that an arm was dead, but not why. In a long `match`, the arm that takes its values can be far above it.
+The warning now carries a second span at the first arm `k` for which arms `0..=k` already match every value the dead
+one does. When `k` is the first arm, its label is *"the first arm already matches every value it does"*. Otherwise it
+is *"with the arms above it, this arm already matches every value it does"*. The search for it shares the warning's
+limit. If that runs out, the proved warning stands without the pointer.
+
+`an_arm_no_value_reaches_warns_dl0413` now holds each of its ten shapes to the line of the arm that covers it.
+Mutants M1014 (the cover never named) and M1015 (the arm after the cover named) were red. These passed: `delulu-check`
+(262), `json_contract`, `core_invariance`, `lsp_cli`, `cli` and `conformance`.
