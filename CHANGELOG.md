@@ -37,13 +37,37 @@ or refused the next line's item (RW 6.42); a source file that is not UTF-8 is DL
 1.x made it a usage error, exit 2 (RW 6.43); under `--broker daemon`, a call the program's own capability refuses is
 DL0904 before its custody is asked, where 1.x let a Guard rule (DL1410–DL1413) or a revoked or expired lease (DL0801,
 DL1402, DL1403) answer it first (RW 4.79, D-V2-195); `run --engine` takes `interp` or `wasm` and refuses any other
-value, exit 2, where 1.x ran the interpreter (RW 6.48).
+value, exit 2, where 1.x ran the interpreter (RW 6.48); a flag value that cannot be read is refused, exit 2, with
+nothing run, where 1.x ran on the default. That covers `run --seed abc`, `--clock bogus`, an unreadable `--epoch-ms`,
+`--actors-threads` or `--foreign-max-ret`, `test --seed abc`, `test --seed` with no value, and `atlas --budget abc`. The
+same goes for an option `atlas`'s query verbs do not know or are given with no value (RW 6.49).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### the interpreter's measured costs cut, 2026-11-01
+
+- **Changed: the interpreter runs loops and calls faster, with the same output** (RW 3.24, D-V2-202). Measured on a Linux
+  VM of four vCPUs, each the minimum of three rounds interleaved with the previous build: Study C's
+  `nested_calls_macro` 144 → 117 ms, `fib_recursive_24` 42 → 38 ms and `loop_sum_1m` 157 → 148 ms, and a merge sort and a
+  quicksort of 100,000 `Int`s 3.9 → 3.5 s. A lookup passes a scope that cannot hold the name without reading it, a call's
+  scope is made with room for its parameters, and the module's maps from names no longer hash with SipHash. The
+  interpreter is still a tree-walker, about 100× slower than `--engine wasm` on computation: `docs/for-agents.md` says
+  which engine to choose.
+
+### a flag's value that cannot be read is refused, 2026-11-01
+
+- **Fixed: a value a flag cannot read is a usage error (exit 2), and nothing runs** (RW 6.49). Each was read as no value,
+  the default: `run --seed abc` ran unseeded, `--clock bogus` on the real clock, and `--epoch-ms`, `--actors-threads`,
+  `--foreign-max-ret` and `--sim-step` on their defaults. So did `test --seed abc`, and `test --seed` with no value at
+  all. `atlas --budget abc` built under the default budget. Now each says `was given a value it cannot read: --seed
+  `abc``. A readable value runs as before.
+- **Fixed: `atlas`'s query verbs (`node`, `callers`, `calls`, `why`, `path`) refuse an option they do not know, an
+  option with no value, and a value they cannot read** (RW 6.49). They refused none, though they share the graph
+  command's parser, which did.
 
 ### `run --engine` refuses a value it does not know, 2026-11-01
 

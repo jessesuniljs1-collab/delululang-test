@@ -316,6 +316,11 @@ DeluluLang/
 │   ├── launch-criterion-2.py       # that merge's criterion 2 measured (coverage, the reference, the
 │   │                               #   samples) and written into CHECKLIST-2.0 in the shape the gate
 │   │                               #   reads; refuses a tree under 100% — on-demand run 15
+│   ├── interp-profile.sh           # the interpreter on RW 3.24's benchmarks: instructions (callgrind),
+│   │                               #   the minimum time and the output's hash; `--base REF` interleaved;
+│   │                               #   `--profile NAME` the top functions — on-demand run 16
+│   ├── ci-annotations.py           # a CI run's test jobs, one line each: the `actors_pingpong` verdict
+│   │                               #   and the disk before → after, from the annotations — on-demand run 16
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught

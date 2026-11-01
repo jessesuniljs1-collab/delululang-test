@@ -7131,3 +7131,88 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. RW 2.26 (a lowercase nullary constructor cannot be matched by name) waits for a decision: the warning is additive.
   3. RW 3.24, profile first. *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — a flag's value that cannot be read is refused (RW 6.49) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/flag-values` (stacked on `laptop/records-0101b`, #109)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli_contract.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.49), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next:** as #109's entry says, with one more section to fold into `launch/2.0.0`. It is **Breaking** as RW
+  6.48 is: under 1.x each such command line ran on the default and exited 0, and now it is refused with exit 2. Add it
+  to 6.48's clause in the *Breaking* paragraph.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — on-demand routine run 16: RW 3.24 profiled and its measured costs cut (D-V2-202); #110 landed; `launch/2.0.0` `1548766` cites `05eb884`'s runs
+- Session: `https://claude.ai/code/session_01Deh6WBtbWC8Gzr6PTzzYhm`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run, 362 at
+  its records). The setup script had run: the 1.96.1 toolchain was installed before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); the code commit first went to the
+  session's branch `claude/peaceful-carson-rhqacp` for its runner witnesses (deleted from `origin` at the close);
+  `launch/2.0.0` in a worktree (`../launch-wt`, removed). Pull request: none (#110, the laptop's, landed by fast-forward).
+- Base: `d31c09a` (`master` at the start; its push run `41256993252` green, 14 success, 2 skipped).
+- **The milestone, named before building:** RW 3.24, profile first — callgrind on the row's benchmarks, each cost it names
+  cut and measured by instruction count and by time with the same output; *done* = a measured speedup on loops and calls,
+  the full suite green, the records written. **Delivered:** the profile (V2_LOG, RW 3.24's last cell); six cuts in
+  `delulu-runtime` (`0a658f6`): a per-scope filter of the names bound, the nearest scope asked first, a first-byte
+  comparison, a keyless hasher for the module's name maps (D-V2-202), scopes sized for their bindings, the call path's
+  conditions cheapest first. Interleaved against `a4da001`, the minimum of three rounds: `loop_sum_1m` −6%,
+  `fib_recursive_24` −9%, `nested_calls_macro` −19%, the micro set −15%, the sorts of 100,000 −10%; instructions −12.3%,
+  −13.1%, −15.9%, −13.4% and −12.4%; the outputs byte for byte the old build's. Refuted by the count and reverted: four
+  inline bindings (+2–5%), an inlined scalar clone (+3%), two other forms of the lookup. RW 3.24 stays open: what is left
+  is the tree-walker's shape (Open / next 3).
+- **Housekeeping:** #110 (RW 6.49) verified and landed: `d31c09a` → `a4da001` by fast-forward on its green run
+  `41257609952`, its witnesses re-run in the VM and its refusals probed on the binary. The newest autosave snapshots are
+  in later commits (`60dccc5` in `e67e9bf`, `d020bec` in `3bf4f2f`). `launch/2.0.0`: the records merge `1548766` of
+  `d31c09a`, citing `3bf4f2f`'s and `05eb884`'s `everything` and dry runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8,
+  `LAUNCH-GATES=ok`. The Survey and `doctor` healthy at the start (1579 nodes, 18050 edges; 26 checks). `gh` is installed
+  (not used). `cargo-deny` 0.20.2 installed in the VM. No branch was ahead of `master` but #110's and the archived ones.
+- Commits: on `master`, `a4da001` and `e67e9bf` (#110, the laptop's), `0a658f6` (the code), `f1c693d` (the records), then
+  this entry's closing commit (the push run read). On `launch/2.0.0`, `1548766` (the citations merge).
+- Files and folders (`master`, `git diff --name-status a4da001..HEAD`): A `scripts/interp-profile.sh`,
+  `scripts/ci-annotations.py`. M `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/value.rs`,
+  `crates/delulu-runtime/tests/step_allocations.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 3.24),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-202), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md` (steps 3 and 5), `docs/REPOSITORY_STRUCTURE.md`
+  (the two scripts), `scripts/suite.sh`, `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed:
+  nothing. On `launch/2.0.0` (`1548766`): `master`'s records of `d31c09a`, its release checklist (CHECKLIST-2.0,
+  criteria 1, 3, 4 and 8), `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,640 passed, 0 failed, 16 ignored, 191 binaries, the tree unmoved), and the two-engine differential by hand (`cargo test -p delulu-wasm --release --test differential -- --ignored`: 1 passed, 166 s); `witness.yml` `delulu-runtime` `step_allocations lib` on Windows
+  `41274937091`, macOS `41274938848` and arm64 `41274940306`, each green; mutants M994–M1003 red, the control green. CI
+  read: the sweep's `everything` `41246969522`, `3bf4f2f`'s `41247420596` and `41247423239`, `05eb884`'s `41255633510` and
+  `41255635829`, push runs `41256993252` and `41271950047`, #110's `41257609952` — every one green, each to its end
+  (V2_LOG has the verdicts and the disks). **The milestone's push run** `41276447349` on `f1c693d` (it holds `0a658f6`;
+  a push runs CI on its head alone): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64 (2.95x where the machine
+  gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3 hardware threads,
+  1.56x observed); disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91. On this entry's
+  closing commit: Open / next 1.
+- **Loop engineering:** `scripts/interp-profile.sh [--base REF] [--profile NAME]` keeps this run's harness — a release build
+  of this checkout's interpreter outside the tree, RW 3.24's five benchmarks, instructions under callgrind, the minimum time
+  and the output's hash, `--base` interleaved against another ref. `scripts/ci-annotations.py RUN_ID…` prints a run's test
+  jobs with their `actors_pingpong` verdicts and disks, one line each (the verdict is the annotation's title; run 16's first
+  hand-written loop matched the message and printed nothing). `scripts/suite.sh` refuses the `-j` and `--no-fail-fast` it
+  passes itself (run 16 lost one start to `suite.sh OUT -j 4`). CLOUD_ROUTINE steps 3 and 5 name the two scripts;
+  HANDOFF §11.5 keeps the lesson.
+- **Redo on the laptop:** delete `claude/peaceful-carson-rhqacp` (`0a658f6`), `laptop/flag-values` (`a4da001`) and
+  `laptop/sandbox-fault-place` (`9a82bf9`) from `origin` — each in `master`'s history (`git merge-base --is-ancestor`, this
+  run); the session's permission classifier refused `git push --delete` (*"Git Destructive"*), as in run 15.
+  (`for-agents.md`'s merge-sort figure, 5.0 s, is the laptop's machine; this run's numbers are the VM's, in RW 3.24.)
+- For the laptop's memory: `HANDOFF.md` §11.5 (an interpreter's cut is judged by its instruction count, beside an
+  interleaved timing).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `master`'s push run on this entry's closing commit (records only); `41276447349` on `f1c693d` is read green.
+  2. **Bring `launch/2.0.0` current** (step 4.3): two sections to fold — RW 6.49 (#110) and this run's RW 3.24. Judge RW
+     6.49 against STABILITY.md §1 and v1.0.0: `run --seed abc` (and `--clock bogus`, `test --seed abc`, the atlas query verbs'
+     unknown options) exited 0 under 1.x and exits 2 now — an exit code for an outcome, so very likely a *Breaking* clause,
+     as RW 6.48's was. RW 3.24 moves no surface (the same output, faster). Then `scripts/launch-criterion-2.py`,
+     `scripts/launch-gates.sh`, and the `everything` run and dry run dispatched and read.
+  3. RW 3.24's next step is structural: variables resolved to slots before the run (a resolver that mirrors every scope the
+     interpreter makes — LATE-LET-1's split, the `let`-less block, the binding arm, a named function as a value, the actor
+     boundary's flattened closures), or a compiled form. Start from `scripts/interp-profile.sh --profile loop_sum_1m`.
+  4. RW 2.26 (a lowercase nullary constructor cannot be matched by name) waits for a decision; (a), a warning, is additive.
+  5. The broker's Miri: 3 h 05 min and 3 h 07 min on the newest `everything` runs, under the 240-minute cap. If a nightly or
+     an `everything` run passes 3 h 45 min, shorten what that job runs.
+  6. *[laptop]* the launch, only on the owner's word.
