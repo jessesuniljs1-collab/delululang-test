@@ -553,6 +553,11 @@ impl<'a> Pass<'a> {
                         self.mark_escaped(&path.segs[0].name);
                     }
                 }
+                // INDEX-TARGET-1: the target's indices run after the value, so a `consume` written in `xs[…]` kills its
+                // binding for what follows (it was never walked, and a use after it was accepted).
+                for idx in target.index_exprs() {
+                    self.walk_expr(idx);
+                }
                 self.check_write(target, vk, *span);
             }
             Stmt::While { cond, body, .. } => {
@@ -1781,7 +1786,12 @@ fn consumed_free_names(b: &Block, bound: &mut HashSet<String>, out: &mut Vec<(St
                     local_added.push(name.name.clone());
                 }
             }
-            Stmt::Assign { value, .. } => consumed_free_in_expr(value, bound, out),
+            Stmt::Assign { target, value, .. } => {
+                consumed_free_in_expr(value, bound, out);
+                for idx in target.index_exprs() {
+                    consumed_free_in_expr(idx, bound, out);
+                }
+            }
             Stmt::While { cond, body, .. } => {
                 consumed_free_in_expr(cond, bound, out);
                 consumed_free_names(body, bound, out);

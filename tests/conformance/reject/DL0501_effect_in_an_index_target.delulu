@@ -1,0 +1,15 @@
+// anchors: ref.prim.console.println
+module conf
+
+// INDEX-TARGET-1 (D-V2-205): an assignment's index runs, so its effect is the function's.
+// `f` writes through the index it assigns and declares no row.
+fn noisy(out: Cap[Console]) -> Int ! {Write} {
+  out.println("x")
+  0
+}
+
+fn f(out: Cap[Console]) -> Int {
+  var xs = [1, 2]
+  xs[noisy(out)] = 9
+  xs[0]
+}

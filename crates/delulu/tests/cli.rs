@@ -1051,7 +1051,7 @@ fn one_over_deep_expression_yields_exactly_one_diagnostic() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let f = dir.join("deep.delulu");
-    let src = format!("module deep\n\nfn main(root: Root) {{\n    let x = {}1{}\n}}\n", "(".repeat(200), ")".repeat(200));
+    let src = format!("module deep\n\nfn main(root: Root) {{\n    let _x = {}1{}\n}}\n", "(".repeat(200), ")".repeat(200));
     std::fs::write(&f, src).unwrap();
 
     let o = delulu(&["check", f.to_str().unwrap(), "--json"]);
@@ -1072,7 +1072,7 @@ fn one_over_deep_expression_yields_exactly_one_diagnostic() {
     // diagnostic per overflow site, not one per file. Without this the "fix" would be a silencer.
     let g = dir.join("two.delulu");
     let one = format!("{}1{}", "(".repeat(200), ")".repeat(200));
-    std::fs::write(&g, format!("module two\n\nfn main(root: Root) {{\n    let a = {one}\n    let b = {one}\n}}\n")).unwrap();
+    std::fs::write(&g, format!("module two\n\nfn main(root: Root) {{\n    let _a = {one}\n    let _b = {one}\n}}\n")).unwrap();
     let o2 = delulu(&["check", g.to_str().unwrap(), "--json"]);
     let v2: Value = serde_json::from_str(&stdout(&o2)).expect("one envelope");
     let codes2: Vec<&str> = v2["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
@@ -1092,7 +1092,7 @@ fn one_over_deep_expression_yields_exactly_one_diagnostic() {
 fn g(a: Int, b: Int, c: Int, d: Int, e: Int) -> Int {{ a }}
 
              fn main(root: Root) {{
-    let x = {}{inner}{}
+    let _x = {}{inner}{}
 }}
 ",
             "(".repeat(126),

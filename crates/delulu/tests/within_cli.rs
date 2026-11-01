@@ -1807,6 +1807,34 @@ fn a_url_named_by_a_let_or_a_constant_is_decided_by_its_literal() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// INDEX-TARGET-1 with SEND-REBIND-1: a loop that sends `tok` and then binds it again inside an assignment's index sends
+/// `B` on its second turn. The walk that lists what a loop assigns read only an assignment's value, so the send stayed
+/// attributed to `A` and `--within` answered *within* for a boundary giving `B` no audience.
+#[test]
+fn a_secret_bound_again_inside_an_index_in_a_loop_is_not_attributed_to_its_first_value() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-index-rebind-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("looped.delulu");
+    std::fs::write(
+        &f,
+        "module looped\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"api.example.com\"])\n    \
+         var tok = root.secret(\"A\")\n    var xs = [0]\n    var i = 0\n    while i < 2 {\n        \
+         let ok = match h.get_with_secret(\"https://api.example.com/v1\", Map(), \"Authorization\", tok) {\n            \
+         Ok(b) => true\n            Err(e) => false\n        }\n        xs[if i > 0 {\n            \
+         tok = root.secret(\"B\")\n            0\n        } else {\n            0\n        }] = 1\n        i = i + 1\n    }\n}\n",
+    )
+    .unwrap();
+    let f = f.to_string_lossy().to_string();
+    let grants =
+        |b: &str| vec!["net=api.example.com".to_string(), "secret:A@api.example.com=v".to_string(), format!("secret:B{b}=v")];
+    let (code, v) = within(&f, &grants(""));
+    assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "B may be the one sent: {v:#}");
+    let (code, v) = within(&f, &grants("@api.example.com"));
+    assert_eq!((code, v["result"].as_str()), (0, Some("within")), "either secret may go there: {v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// SEND-REBIND-1 (D-V2-180's walk): a secret the program sends is attributed to the name it was bound to only where nothing
 /// may have bound it again. The walk restored each block's bindings at its end, which also undid an assignment made inside it,
 /// so after `if c { tok = root.secret("B") }`, in a loop that assigns after it sends, and in a closure called after

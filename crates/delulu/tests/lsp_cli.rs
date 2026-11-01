@@ -288,6 +288,23 @@ fn hover_shows_the_declared_and_the_performed_row_when_they_differ() {
     c.shutdown();
 }
 
+/// INDEX-TARGET-1: an expression in an assignment's index is an expression of the module — hover shows its type. Before,
+/// the walk read only the assigned value, and the checker typed nothing in the index, so the hover found no expression.
+#[test]
+fn hover_shows_the_type_of_a_name_in_an_index_target() {
+    let src = "module m\nfn f(name: Str) -> Int {\n    var xs = [1, 2]\n    xs[name.len()] = 5\n    xs[0]\n}\n";
+    let mut c = Client::start();
+    c.open("file:///index.delulu", src);
+    let _ = c.wait_diagnostics("file:///index.delulu");
+    let h = c.request(
+        "textDocument/hover",
+        json!({ "textDocument": { "uri": "file:///index.delulu" }, "position": { "line": 3, "character": 8 } }),
+    );
+    let md = h["contents"]["value"].as_str().unwrap_or_default().to_string();
+    assert!(md.contains("Str"), "`name` in `xs[name.len()]` is a Str: {h}");
+    c.shutdown();
+}
+
 /// P4-07: the Guard, read-only, in the editor. `delulu.guardStatus` is advertised and answers with
 /// exactly what `delulu guard status --json` prints for the same state directory — with no broker,
 /// the CLI's own fail-closed "broker unreachable" (DL1401); with one, the Guard's mode and rules —

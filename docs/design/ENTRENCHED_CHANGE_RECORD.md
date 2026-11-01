@@ -727,3 +727,77 @@ No rule changes meaning, and no rule lists the code: DL0413 enforces nothing, it
 git checkout <this-commit>^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-204's check and the registry entry, or the coverage gate fails on an unwitnessed DL0413.
+
+## 2026-11-02 — `docs/design/SOUNDNESS_AUDIT.md`: §D's claim negated a fourth time (INDEX-TARGET-1)
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/SOUNDNESS_AUDIT.md`: one paragraph, with its program, appended to §D's box of 2026-11-01, after CTOR-SHADOW-1's. It records the fourth negation of §D's claim, the checker's own this time (INDEX-TARGET-1), names its witnesses, and states its lesson. No other sentence changes. |
+| Entrenched by | `.github/CODEOWNERS:27` → `@jessesuniljs1-collab` |
+| Campaign | the laptop session of 2026-11-02, while writing DL0414; `REMAINING_WORK.md` 2.29; decision D-V2-205 |
+| Approved by | **the head chef, 2026-11-02, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+§D's claim was negated again. The checker never checked the index of an assignment, so a call there joined no row,
+and a function the checker and `authority` called pure printed when it ran. The box is where a reader of §D looks, and
+step 2 of the sketch assumes exactly what failed: that the checker visits every call the runtime makes.
+
+**Why this is not an RFC**
+
+No rule changes. `ref.rule.effects.declared-row` already says a function may perform only the effects its row declares;
+the checker now enforces it in the one position it skipped. The alternative that would change the language, refusing a
+call or a `consume` inside an index, was not taken (D-V2-205).
+
+**Verified before the change**
+
+1. On `master` `9b3be30`, the paragraph's program checked clean, `authority` listed `quiet` under *pure fns*, and
+   `run --grant console` printed. After D-V2-205, `check` refuses it with DL0501.
+2. The witnesses are red on `9b3be30`'s code and green after it, and mutants M1018–M1030 turn them red (the decision's
+   evidence).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
+```
+
+## 2026-11-02 — `tests/conformance/witnesses.toml`: DL0414, a binding never read
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: two `[[witness]]` rows for `ref.diag.DL0414`, one producing and one accepting, each beside DL0413's, with a comment saying why a warning is witnessed by a test. No other row changes. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | the laptop session of 2026-11-02; `REMAINING_WORK.md` 2.30; decision D-V2-206 |
+| Approved by | **the head chef, 2026-11-02, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, a new `DL` code where one is needed among them |
+
+**Why**
+
+D-V2-206 registers DL0414, a warning for a `let` or `var` binding never read. The coverage law (invariant 42) demands an
+accepting and a producing witness for every registered code. A warning cannot be witnessed by a `.delulu` reject file,
+which must be refused, so both rows name the checker's own tests:
+- `a_binding_never_read_warns_dl0414` (producing): seven shapes, each warned at its own line with its own name;
+- `a_binding_read_is_not_reported` (accepting): nine programs whose every binding is read, none reported.
+
+**Why this is not an RFC**
+
+`STABILITY.md` §5 lists a new diagnostic code as a minor, additive change, and a warning changes no program's verdict.
+No rule changes meaning, and no rule lists the code: DL0414 enforces nothing, it reports.
+
+**Verified before the change**
+
+1. Both tests are green with D-V2-206's check. Mutants M1031–M1034, M1036 and M1037 turn them red; M1035 is
+   equivalent (D-V2-206).
+2. `delulu-conform --coverage`: *PASS: 100% anchor coverage*, 360 of 360, 157 codes. `--reference` regenerated the
+   reference, and `--check-reference` is in sync.
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- tests/conformance/witnesses.toml
+```
+— together with D-V2-206's check and the registry entry, or the coverage gate fails on an unwitnessed DL0414.
