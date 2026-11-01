@@ -3468,13 +3468,34 @@ impl<'a> Checker<'a> {
         for arm in arms {
             let row = vec![refutable(&arm.pattern)];
             if !rows.is_empty() && !self.useful(&rows, &row, std::slice::from_ref(scrut), &mut search) {
-                self.diags.push(
-                    Diagnostic::warning(
-                        "DL0413",
-                        "this arm is never reached: the arms above it match every value its pattern matches",
-                    )
-                    .with_span(arm.pattern.span(), "no value reaches this pattern"),
-                );
+                let mut diag = Diagnostic::warning(
+                    "DL0413",
+                    "this arm is never reached: the arms above it match every value its pattern matches",
+                )
+                .with_span(arm.pattern.span(), "no value reaches this pattern");
+                // The arm that completes the cover — the first `k` for which arms `0..=k` take every value this one
+                // matches — so a reader knows which arm to move, not only that one is dead. Not asked again once the
+                // search has spent its limit: the warning stands, proved, and only this pointer is left out.
+                let mut cover = None;
+                for k in 1..=rows.len() {
+                    let reached = self.useful(&rows[..k], &row, std::slice::from_ref(scrut), &mut search);
+                    if search.spent {
+                        break;
+                    }
+                    if !reached {
+                        cover = Some(k);
+                        break;
+                    }
+                }
+                if let Some(k) = cover {
+                    let label = if k == 1 {
+                        "the first arm already matches every value it does"
+                    } else {
+                        "with the arms above it, this arm already matches every value it does"
+                    };
+                    diag = diag.with_secondary_span(arms[k - 1].pattern.span(), label);
+                }
+                self.diags.push(diag);
             }
             if search.spent {
                 return;

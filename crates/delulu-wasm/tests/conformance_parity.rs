@@ -114,6 +114,9 @@ fn random_console_programs_match_across_engines() {
     // Programs printing `str`, `==` and `!=` of a list and an option of `Float`s (the host's value interface), how many
     // of those lists were equal, and how many printed a NaN inside one.
     let (mut shown, mut same, mut nan_inside) = (0u32, 0u32, 0u32);
+    // Programs with a sum type of their own, those whose patterns name a lowercase constructor by its call form, and those
+    // where a pattern tests a field against a literal (2026-11-01).
+    let (mut sums, mut call_forms, mut field_tests) = (0u32, 0u32, 0u32);
     let mut mismatches: Vec<String> = Vec::new();
     for k in 0..2000u64 {
         let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -153,6 +156,11 @@ fn random_console_programs_match_across_engines() {
                     same += u32::from(line.ends_with("truefalse"));
                     nan_inside += u32::from(line.contains("NaN"));
                 }
+                if src.contains("type K = ") {
+                    sums += 1;
+                    call_forms += u32::from(["leaf()", "empty()", "solo()", "cell()"].iter().any(|m| src.contains(m)));
+                    field_tests += u32::from(src.lines().any(|l| l.contains("=> ") && (l.contains("(0") || l.contains(" 1)"))));
+                }
                 if src.contains(" == ") {
                     compares += 1;
                     equal += u32::from(wo.lines().last().is_some_and(|l| l.starts_with("true")));
@@ -183,6 +191,10 @@ fn random_console_programs_match_across_engines() {
     assert!(
         shown > 500 && same > 150 && shown - same > 150 && nan_inside > 10,
         "lists and options of Floats: {shown} programs, {same} equal, {nan_inside} with a NaN inside"
+    );
+    assert!(
+        sums > 700 && call_forms > 300 && field_tests > 200,
+        "sum types: {sums} programs, {call_forms} matching a lowercase constructor by its call form, {field_tests} testing a field"
     );
 }
 

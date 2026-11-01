@@ -55,7 +55,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Added: DL0413, a warning for an arm no value can reach** (D-V2-204, RW 2.28). The first arm that matches wins, so an
   arm whose every value an earlier arm already matches never runs. Examples: `x => …` above `Red => …`, `Red` or `0`
   twice, `Some(_)` above `Some(Red)`, a `_` after `true` and `false`. Each of these checked clean, with no word. The
-  checker now names the arm. It reports an arm only when it has proved it unreachable, under the exhaustiveness search's
+  checker now names the arm, and, in a second span, the earlier arm that completes its cover. It reports an arm only when it has proved it unreachable, under the exhaustiveness search's
   own limit. It is a warning: the program still checks and runs as its arms say. A new diagnostic code is a minor,
   additive change (`STABILITY.md` §5), and no program the repository ships has such an arm.
 

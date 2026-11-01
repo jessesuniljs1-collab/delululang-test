@@ -7298,3 +7298,79 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:** as the entry for RW 2.28 says. This branch lands after #112 and #113, by a merge of `master` with the
   map rebuilt. The onboarding doc's counters then read M1013.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — #111–#114 landed; `launch/2.0.0` `415eb2e` takes RW 2.26 (Breaking), FMT-CTOR-1 and DL0413 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0101c`   Pull request: opened with this commit.
+- **Landed on `master`** by fast-forward, each on its green pull-request run, each push run read green:
+  - #111 at `bfdda95`: PR run `41281234716`, push run `41282449943`;
+  - #112 at `fb6a7ef`: its first run `41282442664` was red, which is how FMT-CTOR-1 was found; then `41283525831`
+    green; push run `41284941561`;
+  - #113 at `5a29588`: PR run `41283656030`, push run `41285136107`;
+  - #114 at `8138039`: PR run `41285347309`, push run `41286818647`.
+  Their branches were deleted from `origin` after `merge-base --is-ancestor`.
+- **`launch/2.0.0`:**
+  - `005372f` (RW 6.49 and RW 3.24): release dry run `41281511250` success. `everything` `41281508881`, attempt 1:
+    every job green but `miri (delulu-atlas)`. That job failed at the toolchain download (`static.rust-lang.org`,
+    a connect timeout), not in a test. Miri-slow took 3 h 10 min for the broker and 2 h 33 for the checker. Attempt 2
+    re-runs the failed job; not yet read.
+  - **`415eb2e`** folds `master` `8138039`. RW 2.26 joins the *Breaking* paragraph after RW 6.49's clause. DL0413
+    is additive, and FMT-CTOR-1 is a fix. CHECKLIST-2.0 criterion 2: 359/359, diag 156. `LAUNCH-GATES=ok`.
+    `everything` `41299813712` and release dry run `41299815972` were dispatched 10:57 UTC; not yet read.
+- The routine is paused, with its 4-hour cron kept. Only the owner resumes it.
+- Files and folders (`master`): M `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read `41281508881` attempt 2, and `41299813712` and `41299815972` to their ends. Then cite `415eb2e`'s runs in
+     CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a records merge into `launch/2.0.0`.
+  2. Land this pull request on its green run.
+  3. RW 3.24: a compiled form, the step slots alone cannot take.
+  4. Watch the broker's Miri: 3 h 10 min, under the 4-hour cap.
+  5. *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — DL0413 names the arm that completes the cover (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/dead-arm-names-its-cover` (from `master` `656ea71`, where #115 landed on its green run `41299974193`)
+  Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name. Mutants M1014 and M1015 were red.
+- In flight: `launch/2.0.0` `415eb2e`. Its release dry run `41299815972` is read green. Its `everything` run
+  `41299813712` is green on every job finished; at 11:25 UTC only the broker's and the checker's Miri-slow were still
+  running. `005372f`'s `41281508881`, attempt 2 (the re-run Miri job), is read green.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs` (the test), `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/AI_ONBOARDING.md` (the counter), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read `41299813712` to its end. Then cite `415eb2e`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a records
+     merge into `launch/2.0.0`. That merge carries this change's CHANGELOG line into the DL0413 section.
+  2. RW 3.24: a compiled form.
+  3. The broker's Miri.
+  4. *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — the two-engine generator writes sum types of its own (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/gen-sum-types` (from `master` `656ea71`)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name. Mutants M1016 and M1017 were red; M1017 is green under the old
+  generator.
+- Files and folders: M `crates/delulu-wasm/src/gen.rs`, `crates/delulu-wasm/tests/conformance_parity.rs`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** as the entry for #116 says. Land #116 and this pull request, each on its green run. Then set
+  `docs/AI_ONBOARDING.md`'s counter to M1017, left out here so as not to conflict with #116's.
+
+### 2026-11-01 — #115, #116 and #117 landed; the onboarding brief's state brought current (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0101d`   Pull request: opened with this commit.
+- **Landed on `master`** by fast-forward, each on its green run:
+  - #115 at `656ea71`: `41299974193`.
+  - #117 at `96749fd`: `41302438112`.
+  - #116 at `699ee44`: `41303990131`, after a merge of #117. Its first run, `41301763500` on `c571b18`, was red on
+    Ubuntu alone, because the linker died with SIGBUS (`ld` signal 7) before any test ran. The failed job, re-run, was
+    green.
+  Their branches were deleted from `origin`.
+- `launch/2.0.0`: `005372f`'s `41281508881`, attempt 2, is read green. `415eb2e`'s dry run `41299815972` is read
+  green. Its `everything` run `41299813712` is green on every job finished, with the Miri-slow jobs still running.
+- Files and folders: M `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 now says. First, read `41299813712`, then merge
+  `master` into `launch/2.0.0` with the citations.
+- Survey and doctor (after the last edit): in the commit message.

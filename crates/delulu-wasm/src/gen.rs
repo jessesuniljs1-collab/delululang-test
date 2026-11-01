@@ -154,6 +154,16 @@ pub fn random_console_program(seed: u64) -> String {
             xs[0]
         ));
     }
+    // A sum type of the program's own (2026-11-01), from a stream of its own. The generator wrote none before, so neither
+    // CTOR-SHADOW-1's lowercase constructors (D-V2-201) nor their call-form patterns (D-V2-203) nor a test inside a
+    // constructor (MATCH-NEST-1) was ever drawn at random. Its line comes before the comparison line, which stays last.
+    let mut c = Rng::new(seed ^ 0x510E_527F_ADE6_82D1);
+    let mut decls = String::new();
+    if c.chance(1, 2) {
+        let (decl, line) = gen_sum(&mut c);
+        decls = decl;
+        body.push_str(&line);
+    }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.
     let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);
@@ -162,7 +172,79 @@ pub fn random_console_program(seed: u64) -> String {
         let same = if q.chance(1, 2) { a.clone() } else { b.clone() };
         body.push_str(&format!("  out.println(str({a} == {same}) + str({a} != {b}))\n"));
     }
-    format!("module gc\nfn main(root: Root) ! {{Write}} {{\n{body}}}\n")
+    format!("module gc\n{decls}fn main(root: Root) ! {{Write}} {{\n{body}}}\n")
+}
+
+/// A sum type `K` of two to four constructors — lowercase and capitalized names, each with no field or with one or two
+/// `Int` fields — a `pick` that matches it, and a line printing `pick` of several of its values. A pattern names a
+/// lowercase nullary constructor by its call form, `leaf()` (a bare lowercase name binds, and one spelled like a
+/// constructor of `K` is refused, DL0302), and a capitalized one bare or called; a field is bound, ignored, or tested
+/// against a literal the values sometimes hold. The arms come in a shuffled order, so a general arm sometimes stands above
+/// a narrower one and takes its values (a DL0413 warning, which the engines must honour alike), and a final `_` keeps the
+/// match exhaustive.
+fn gen_sum(r: &mut Rng) -> (String, String) {
+    const NAMES: [&str; 8] = ["leaf", "Node", "empty", "Pair", "solo", "Wrap", "cell", "Mark"];
+    let n = 2 + r.below(3) as usize;
+    let mut ctors: Vec<(&str, usize)> = Vec::new();
+    while ctors.len() < n {
+        let name = NAMES[r.below(NAMES.len() as u64) as usize];
+        if !ctors.iter().any(|(c, _)| *c == name) {
+            ctors.push((name, r.below(3) as usize));
+        }
+    }
+    let decl = ctors
+        .iter()
+        .map(|(c, k)| if *k == 0 { c.to_string() } else { format!("{c}({})", vec!["Int"; *k].join(", ")) })
+        .collect::<Vec<_>>()
+        .join(" | ");
+    let mut arms: Vec<String> = Vec::new();
+    for (i, (c, k)) in ctors.iter().enumerate() {
+        for rep in 0..1 + r.below(2) {
+            let mut bound: Vec<String> = Vec::new();
+            let pattern = if *k == 0 {
+                let lowercase = c.starts_with(|ch: char| ch.is_ascii_lowercase());
+                if lowercase || r.chance(1, 2) {
+                    format!("{c}()")
+                } else {
+                    c.to_string()
+                }
+            } else {
+                let fields: Vec<String> = (0..*k)
+                    .map(|j| match r.below(3) {
+                        0 => {
+                            let v = format!("v{j}");
+                            bound.push(v.clone());
+                            v
+                        }
+                        1 => "_".to_string(),
+                        _ => r.below(3).to_string(),
+                    })
+                    .collect();
+                format!("{c}({})", fields.join(", "))
+            };
+            let tag = 100 * (i as u64 + 1) + 10 * rep;
+            let value = if bound.is_empty() { tag.to_string() } else { format!("{} + {tag}", bound.join(" + ")) };
+            arms.push(format!("    {pattern} => {value},"));
+        }
+    }
+    for i in (1..arms.len()).rev() {
+        arms.swap(i, r.below(i as u64 + 1) as usize);
+    }
+    arms.push("    _ => 0 - 1,".to_string());
+    let values: Vec<String> = (0..3 + r.below(3))
+        .map(|_| {
+            let (c, k) = ctors[r.below(n as u64) as usize];
+            if k == 0 {
+                c.to_string()
+            } else {
+                format!("{c}({})", (0..k).map(|_| r.below(4).to_string()).collect::<Vec<_>>().join(", "))
+            }
+        })
+        .collect();
+    let decls = format!("type K = {decl}\nfn pick(k: K) -> Int {{\n  match k {{\n{}\n  }}\n}}\n", arms.join("\n"));
+    let line =
+        format!("  out.println({})\n", values.iter().map(|v| format!("str(pick({v}))")).collect::<Vec<_>>().join(" + \" \" + "));
+    (decls, line)
 }
 
 fn gen_str_expr(r: &mut Rng, depth: u32) -> String {
