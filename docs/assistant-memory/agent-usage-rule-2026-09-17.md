@@ -77,3 +77,8 @@ Related: [[head-chef-handoff]] rule 7, [[delulu-next-evolution-2026]].
 **Update 2026-09-28 (evening), Jesse:** *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"* → agents = Sonnet 5.5; Haiku 5.5 only after it is released (check the official models page); NO Haiku 4.5 meanwhile; head chef Opus 5.5 at xhigh. Always name the model an agent ACTUALLY ran.
 
 **Update 2026-10-17, Jesse:** *"Claude code cloud routine can run sonnet 5.5 and haiku 5.5 as sub agents if and whenever needed just like for u claude code local sessions, But it consumes more usage when running parallely"* — Haiku 5.5 (`claude-haiku-5-5`) is released; Sonnet 5.5 and Haiku 5.5 sous-chefs are allowed in routine runs and laptop sessions where they add value; prefer one at a time (parallel agents burn usage faster). Recorded in AGENTS.md and docs/CLOUD_ROUTINE.md.
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**⚠ AGENT RULE (Jesse, 2026-09-17, REVISED; 2026-10-17: Sonnet 5.5 + Haiku 5.5 sous-chefs OK in routine and local, one at a time preferred — parallel costs more usage)**](agent-usage-rule-2026-09-17.md) — Opus/Sonnet only, and only where an agent adds real value (credits); high effort for difficult briefs (tool has no switch — say so); on a session limit STOP agents gracefully and preserve completed work: progress, decisions, actions, pending tasks, outputs, state → the phase's .md progress files + project storage (`D:\nelan\DeluluLang-agent-transcripts\`); NEVER save or reproduce chain-of-thought/hidden reasoning; verify every agent claim before use.

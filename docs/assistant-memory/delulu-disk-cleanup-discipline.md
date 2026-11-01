@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: c99ba5c5-c39b-4a1f-b406-92fbf2c601b0
-  modified: 2026-08-09T17:46:32.346Z
+  modified: 2026-10-17T10:53:12.202Z
 ---
 
 When Jesse asks to delete junk/useless files on C:/D: for this project, follow this discipline
@@ -42,6 +42,19 @@ cache; reuse via `CARGO_TARGET_DIR=/home/user/delulu-target`), plus preserved *s
 `STAGE10_BUILD_ORDER.md`) — **these are NOT junk, they carry unique bytes**; and unrelated
 OS-coursework files. Full record: `docs/maintenance/DISK-CLEANUP-2026-08-09.md`.
 
+**2026-10-17 outcome:** `D:\nelan` had reached 180 GB — 178.4 GB of it `DeluluLang\target` (cargo never removes
+superseded artifacts: `debug\deps` 127 GB, `incremental` 42 GB). At the gate Jesse chose **"Delete all, rebuild
+delulu"** → `cargo clean` (36 s, 320,697 files) + `cargo build -p delulu -p delulu-survey` (86 s); also deleted the
+two P5 dry-run clones `delulu-build-5065be1`/`-p5b` (verified clean, HEADs in master, dist .md = git objects) and
+`delulu-build-target`. D: free 84 → 249 GB; `D:\nelan` 5.07 GB. Record: `docs/maintenance/DISK-CLEANUP-2026-10-17.md`
+(new records go in `docs/maintenance/`, listed in REPOSITORY_STRUCTURE §5 — the old two are archived). WSL's
+`ext4.vhdx` on C: was 57.9 GB → Jesse: "clean it" → same method as 08-09 (caches 45 GB, 3 verified clones, kernel
+build tree, 5,098 /tmp/delulu-* dirs; warm `~/delulu-gnu-target` rebuilt; fstrim; shutdown; diskpart compact
+started elevated via `Start-Process cmd -Verb RunAs -Wait` with output redirected to a log — worked) → vhdx
+12.84 GB, C: free 100.7 → 147.5. Trap: git run AS ROOT on user-owned clones declines them (dubious ownership) →
+a guard reading `git status` refuses; run clone checks as the owning user. Measure fast with `robocopy <dir> C:\__x /L /S /NFL /NDL /NJH
+/BYTES /XJ` (MSYS `du` over 360k files timed out at 10 min).
+
 **How to apply:** the command-safety scanner blocks `Remove-Item` with *variable* paths (reads a
 drive letter like `D:` as the target) or arithmetic near it (`/1MB,2`). Issue deletes with **full
 inline literal paths, no adjacent math**. Run WSL work via **script files** (`wsl.exe -- bash x.sh`),
@@ -51,3 +64,8 @@ compaction on a used-up guest before deleting+trimming is a **no-op** (verified 
 compact reclaimed 0; the full sequence then reclaimed 49.8 GB). Never delete `.claude\worktrees\`
 ([[delulu-stale-worktree]]), transcripts, or memory. Discovery-over-checklist still applies
 ([[discovery-over-checklist]]).
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**Disk-cleanup discipline**](delulu-disk-cleanup-discipline.md) — **never delete any `.md`**; confirm at a gate before permanent deletion; keep build caches + one warm target per platform; record to `docs/maintenance/`; **2026-10-17: Jesse chose `cargo clean` of the 178 GB `target` (D:\nelan 180 → 5 GB)**. WSL cleaned only with content-hash verification vs D: HEAD. Ops: inline literal paths (the scanner blocks variable-path `Remove-Item`); reclaim = delete→`fstrim`→`wsl --shutdown`→`diskpart compact`.

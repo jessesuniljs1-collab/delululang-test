@@ -11292,3 +11292,31 @@ this run's harness and benchmarks for it (loop engineering, in the sync log).
 **The push run** `41276447349` on `f1c693d` (it holds `0a658f6`): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64
 (2.95x where the machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu, Windows and macOS (1.56x observed);
 the disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+
+## 2026-11-01 — the laptop: one AI at a time, an onboarding brief for any AI, the memory refreshed, the routine every four hours and paused
+
+The owner, in the morning:
+- *"Change routine schedule to every 4 hours"* at 9:55 PM, 1:55 AM, 5:55 AM, 9:55 AM, 1:55 PM and 5:55 PM.
+- *"There maybe another AI also working on delululang, Update the ur memory and docs. Give me doc containing everything
+  another AI should know before that AI start working like imp things to know and things in ur memory. I don't want
+  everything to be mess. So I will be running either of u or another ai at time, Not both of u together"*.
+- Minutes later: *"Let routine be paused, I will resume it whenever I want"*.
+
+What was done:
+- **The routine** `trig_01HFG6usfzmDAPQigiDu9DLq` was set through the API to `25 */4 * * *` UTC, which is the owner's six
+  IST times, and renamed *Head Chef — every 4 hours*. It was read back with its next run at 08:25 UTC, then set to
+  `enabled: false` with the cron kept. It had been disabled since 2026-10-29 and fired by hand, run 16 included. Its
+  prompt is unchanged: the owner edits it himself.
+- **`docs/AI_ONBOARDING.md`** is the brief for any AI, Claude or not:
+  - the one-AI rule, and the hand-over through git;
+  - the checklists for the start and end of a session;
+  - the hard rules, and the change loop with its counters (D-V2-202, M1003);
+  - the commands, the traps, and the memory digested;
+  - where the work stands.
+  `AGENTS.md` sends every new AI there first, and `HANDOFF.md` §11.1 holds the instruction.
+- **`docs/assistant-memory/`** had diverged both ways since its snapshot of 2026-09-28:
+  - The laptop held 21 topic files the folder lacked, and newer text in 20 more.
+  - The cloud runs had written 6 lessons and DEADMAN-DEAF-1's paragraph that the laptop lacked.
+  The cloud's notes were carried to the laptop first. Then the folder was refreshed from the laptop, 80 files, sanitized
+  by a script that refuses if the banned word survives. The new files were scanned for credentials and personal
+  addresses: none.

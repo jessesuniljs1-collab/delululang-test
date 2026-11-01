@@ -900,3 +900,8 @@ sweep gated to Wall). [[skip-branch-verification-rule]] applied (wedged-program 
   .gitattributes (D19d) auto-normalized CRLF→LF on 3 .rs files at commit — the guardrail working as
   designed (committed blobs all i/lf).
 Next: awaiting Jesse's direction.
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [DeluluLang project](delululang-project.md) — authority/effect-typed language, Rust workspace at `D:\nelan\DeluluLang`. Stages 1–10 BUILT; **v1.0.0 tagged 2026-07-20** (`198bf44`; pushed to the private remote 2026-09-14); 23 rulings (D1–D23) + the three 2026-07-22 commissioned dishes (device scope, broker federation RFC 0001 F1–F6, first hardware adapter). **Push ONLY to the testing remote** (next line; PUBLIC since 2026-09-17) — never to the final public repo, which will be a different one. Full ledger, dispositions and per-phase model attribution in the topic file. Still true: no real-device driver in-tree, every demo drives the simulator, certification NONE.

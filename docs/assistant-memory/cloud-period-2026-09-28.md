@@ -267,3 +267,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   Then the OCSF mapping of a `send` (HTTP Activity) and **step (e)** (D-V2-135, `authority --json`'s `secret_destinations`):
   **P9-04 complete**; P9-05 read against the code; **NET-WILDCARD-1** (D-V2-136): a pattern `net` grant refused under the
   daemon (exact-string compare) — one host matcher now.
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**CLOUD PERIOD 2026-09-28 → 2026-10-16 — ENDED; laptop synced 2026-10-17**](cloud-period-2026-09-28.md) — 25 routine runs; laptop fast-forwarded `cfbfbdc`→`b82a145` (281 commits), master green (push + nightly incl. miri-slow); routine `trig_01GG41tCGxZXyt7bZUid8Vuu` DISABLED (Jesse edited its prompt; routines are now "scheduled tasks" in the product, per Jesse); the cloud's log = `docs/CLOUD_SYNC_LOG.md` (closing entry at its top); repo copies of this memory = `docs/assistant-memory/` + HANDOFF §11

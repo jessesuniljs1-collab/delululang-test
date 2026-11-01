@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: eb34182b-835b-44af-b5ec-07064fcae52c
-  modified: 2026-09-26T19:28:12.835Z
+  modified: 2026-10-17T10:53:09.000Z
 ---
 
 On 2026-09-26 Jesse said "go-ahead — so with wsl … no need to ask" for PS-C, and WSL2 (Ubuntu 20.04,
@@ -28,6 +28,10 @@ The PS-C toolchain in WSL (2026-09-27): kernel source cache `~/.cache/delulu-mic
 built image at `~/microvm-image-a` (rebuild with `scripts/microvm/build-image.sh`, ~450 s). Gated
 tests: `DELULU_MICROVM_IMAGE=~/microvm-image-a DELULU_FIRECRACKER=~/bin/firecracker
 RUSTFLAGS="--cfg delulu_kvm" cargo test -p delulu --test microvm_cli --test microvm_criterion8`.
+**2026-10-17 WSL cleanup:** every cargo cache deleted except a fresh `~/delulu-gnu-target` (delulu + survey);
+`~/delulu-target`, `-kvm-target`, `-img-target`, the Linux-fs clone `~/delulu-src-img` and the kernel build tree
+`~/.cache/delulu-microvm/work` are GONE (tarballs + Firecracker kept). `microvm-image-a/-b` are STALE (channel `/3`):
+rebuild from a FRESH clone on ext4 (~450 s+), then the gated tests rebuild `~/delulu-kvm-target`. vhdx 57.97 → 12.84 GB.
 Pins are in D-V2-39 (Firecracker v1.17.0 sha256 `06094a11…`, linux 6.18.54 sha256 `9df30b02…`); the
 first probe's v1.10.1 + vendor 6.1.102 kernel are superseded. A built kernel is never committed or
 shipped (D-NE-27, owner). Related: [[delulu-v2-execution]].

@@ -26,14 +26,14 @@ files, so it still opens when the tree does not build.
 | Rust files | 339 |
 | Rust lines | 197072 |
 | Rust files outside `src/` (test/bench targets) | 168 |
-| Markdown documents | 277 |
-| Markdown lines | 92322 |
+| Markdown documents | 300 |
+| Markdown lines | 93369 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1581 / 18068 |
-| Open discrepancies | 53 |
+| Nodes / edges in this map | 1605 / 18199 |
+| Open discrepancies | 54 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -410,7 +410,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | `DL01xx` | 8 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-syntax` |
 | `DL02xx` | 13 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-syntax` |
 | `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
-| `DL04xx` | 12 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
+| `DL04xx` | 13 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |
 | `DL06xx` | 5 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm` |
 | `DL07xx` | 3 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |

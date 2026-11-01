@@ -391,6 +391,7 @@ DeluluLang/
     ├── DELULULANG_V2/              # the ACTIVE V2 source of truth — see V2_README.md
     ├── CLOUD_SYNC_LOG.md           # the cloud period's change ledger (2026-09-28 → 2026-10-16)
     ├── CLOUD_ROUTINE.md            # the loop every scheduled cloud run follows
+    ├── AI_ONBOARDING.md            # what any AI must know before it starts (one AI at a time)
     ├── assistant-memory/           # the laptop's auto-memory, snapshotted for cloud sessions
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
@@ -564,7 +565,8 @@ account for everything and check nothing.
 | --- | --- |
 | `CLOUD_ROUTINE.md` | **The loop every scheduled cloud run follows until 2026-10-16** — the authority a run has (everything but the owner's five reserved decisions), where it works (`master`), and the run step by step: orient, health, verify the previous run, choose, build, close, watch CI, record. |
 | `CLOUD_SYNC_LOG.md` | **The cloud period's change ledger (2026-09-28 → 2026-10-16).** Every cloud session appends the commits and the files and folders it touched, what it verified, and what the laptop must redo; with the procedure for syncing the laptop afterwards. |
-| `docs/assistant-memory/` | The head chef's auto-memory directory from the owner's laptop — `MEMORY.md` and one file per topic — snapshotted on 2026-09-28 for cloud sessions, which have no auto memory; sanitized for a public repository (its `README.md` says how). `HANDOFF.md` §11 and the V2 documents outrank it where they disagree. |
+| `AI_ONBOARDING.md` | **What any AI must know before it starts on DeluluLang** (the owner, 2026-11-01: one AI at a time, Claude or another): the hand-over through git, the start and end checklists, the hard rules, the change loop, the commands, the traps, the head chef's memory digested, and where the work stands. `AGENTS.md` sends every new AI here first. |
+| `docs/assistant-memory/` | The head chef's auto-memory directory from the owner's laptop — `MEMORY.md` and one file per topic — snapshotted on 2026-09-28 for cloud sessions, which have no auto memory, and refreshed from the laptop on 2026-11-01 (80 files) so that another AI reads the same memory; sanitized for a public repository (its `README.md` says how). `HANDOFF.md` §11 and the V2 documents outrank it where they disagree. |
 | `GETTING_STARTED.md` | Install to first program to real programs to your editor. The path a new developer walks. |
 | `for-agents.md` | **Driving the toolchain as an AI agent**: exit codes, JSON envelopes, why to batch `check` and nothing else, and what to ask the language server instead of shelling out. |
 | `QUESTIONS.md` | The hard questions answered with evidence — can an agent bypass Authority, is any of this real mathematics — and an enumerated list of known leaks. |

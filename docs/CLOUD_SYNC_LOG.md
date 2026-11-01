@@ -7175,3 +7175,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   5. The broker's Miri: 3 h 05 min and 3 h 07 min on the newest `everything` runs, under the 240-minute cap. If a nightly or
      an `everything` run passes 3 h 45 min, shorten what that job runs.
   6. *[laptop]* the launch, only on the owner's word.
+
+### 2026-11-01 — one AI at a time: `docs/AI_ONBOARDING.md`, the memory refreshed both ways, the routine every four hours and paused (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ai-onboarding`   Pull request: opened with this commit. Base: `d8dcc3b` (routine run 16's close).
+- **What:** see V2_LOG's entry of the same date and name. The routine is now `25 */4 * * *` UTC (01:55, 05:55, 09:55,
+  13:55, 17:55, 21:55 IST) and **paused**; only the owner resumes it. Another AI may work here, never at the same time as
+  Claude. Every AI reads `docs/AI_ONBOARDING.md` first.
+- Files and folders: A `docs/AI_ONBOARDING.md`, and 21 files in `docs/assistant-memory/` (the laptop's topic files the
+  folder lacked). M `AGENTS.md` (*Read first*), `HANDOFF.md` (the routine paragraph; §11.1, one AI at a time),
+  `docs/CLOUD_ROUTINE.md` (the schedule), `docs/REPOSITORY_STRUCTURE.md` (§5.2, the tree),
+  `docs/assistant-memory/README.md`, `MEMORY.md` and 20 topic files refreshed, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- For the laptop's memory: done in this session. `one-ai-at-a-time-2026-11-01.md` is new. `cloud-routine-on-demand-2026-10-17.md`
+  and `release-program-progress.md` are updated. The 6 cloud lessons and DEADMAN-DEAF-1 were carried in.
+- **Open / next, in order:** run 16's list stands. (1) Read `master`'s push run on `d8dcc3b`. (2) Bring `launch/2.0.0`
+  current: RW 6.49 as a *Breaking* clause beside RW 6.48, and RW 3.24. (3) RW 3.24, structural. (4) RW 2.26's decision.
+  (5) The broker's Miri. (6) *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
