@@ -11346,3 +11346,19 @@ had.
 
 **Breaking** under STABILITY.md section 1: a program that checked under 1.x is refused. It is noted in the CHANGELOG
 section, for the *Breaking* paragraph at the next fold into `launch/2.0.0`.
+
+## 2026-11-01 — the laptop: FMT-CTOR-1, `delulu fmt` printed `foo()` as `foo`
+
+#112's first run (`41282442664`) was red on Ubuntu and macOS, in `delulu-syntax`'s
+`laws_hold_over_the_repository_corpus`. The formatter's identity law holds over every `.delulu` file in the repository,
+and RW 2.26's new accepting program was one of them. `pattern_text` printed a nullary constructor pattern bare whatever
+its name, so `foo() => 1` became `foo => 1`. The parser reads a lone lowercase name as a binding, so `delulu fmt` had
+changed what the program meant: the arm matched every value. Before D-V2-203 the result checked clean and took the
+first arm; after it, the result is refused. The defect is as old as lowercase constructors (1.x).
+
+**Fixed:** a lone lowercase name keeps its call form (`foo()`). A capitalized or qualified name prints bare, as both
+parse to a constructor. `a_lowercase_nullary_constructor_pattern_keeps_its_call_form` holds it; mutant M1012 (the call
+form dropped) turns it and the corpus law red; `delulu-syntax`'s lib tests pass (131).
+
+The laptop had not run `delulu-syntax`'s tests for #112: a new `.delulu` file in `tests/conformance/` is also the
+formatter's corpus, so a change that adds one runs them. (HANDOFF §11.5.)

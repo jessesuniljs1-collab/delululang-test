@@ -837,7 +837,18 @@ fn pattern_text(p: &Pattern) -> String {
         Pattern::Bind(i) => i.name.clone(),
         Pattern::Variant { path, fields, .. } => {
             if fields.is_empty() {
-                path.dotted()
+                // FMT-CTOR-1 (2026-11-01): the parser reads a lone lowercase name in a pattern as a binding
+                // (`parse_pattern_inner`), so a nullary constructor spelled in lowercase keeps its call form —
+                // `foo()` printed as `foo` became a binding that matches every value, and the next check refused it
+                // (DL0302, D-V2-203) or, before that, the arm took every value. A capitalized or qualified name is a
+                // constructor either way, and stays bare.
+                let lone_lowercase =
+                    path.segs.len() == 1 && !path.segs[0].name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+                if lone_lowercase {
+                    format!("{}()", path.dotted())
+                } else {
+                    path.dotted()
+                }
             } else {
                 format!("{}({})", path.dotted(), fields.iter().map(pattern_text).collect::<Vec<_>>().join(", "))
             }
@@ -1202,6 +1213,19 @@ fn f() -> Int { 1 }
             "the own-line comment survives:
 {out}"
         );
+    }
+
+    /// **FMT-CTOR-1** (2026-11-01, found by `laws_hold_over_the_repository_corpus` on RW 2.26's accepting program). A
+    /// lone lowercase name in a pattern is a binding, so `foo()`, a nullary constructor in its call form, printed as
+    /// `foo` became a binding that matched every value: `fmt` changed what the program meant. A capitalized name and a
+    /// qualified one are constructors bare or not, and print bare; a constructor with fields keeps them.
+    #[test]
+    fn a_lowercase_nullary_constructor_pattern_keeps_its_call_form() {
+        let out = laws(
+            "module m\ntype T = foo | Bar | cell(Int)\nfn f(t: T) -> Int { match t { foo() => 1, Bar() => 2, cell(n) => n } }\n",
+        );
+        assert!(out.contains("foo() => 1"), "the call form stays: {out}");
+        assert!(out.contains("Bar => 2") && out.contains("cell(n) => n"), "{out}");
     }
 
     #[test]

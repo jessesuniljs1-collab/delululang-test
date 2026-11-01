@@ -7217,3 +7217,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Unreachable arms after an arm that binds everything get no warning either (`match t { x => 1, Foo => 2 }`). It is a
   candidate row; not filed yet.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — FMT-CTOR-1: `delulu fmt` kept a lowercase constructor's call form (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ctor-binding` (#112), a second commit after #112's first run was read red (`41282442664`: Ubuntu and
+  macOS, `laws_hold_over_the_repository_corpus`).
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-syntax/src/fmt.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 2.26),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- **Open / next:** as the entry for RW 2.28 says. `laptop/dead-arms` (#113) merges this branch.
+- Survey and doctor (after the last edit): in the commit message.
