@@ -727,3 +727,39 @@ No rule changes meaning, and no rule lists the code: DL0413 enforces nothing, it
 git checkout <this-commit>^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-204's check and the registry entry, or the coverage gate fails on an unwitnessed DL0413.
+
+## 2026-11-02 — `docs/design/SOUNDNESS_AUDIT.md`: §D's claim negated a fourth time (INDEX-TARGET-1)
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/SOUNDNESS_AUDIT.md`: one paragraph, with its program, appended to §D's box of 2026-11-01, after CTOR-SHADOW-1's. It records the fourth negation of §D's claim, the checker's own this time (INDEX-TARGET-1), names its witnesses, and states its lesson. No other sentence changes. |
+| Entrenched by | `.github/CODEOWNERS:27` → `@jessesuniljs1-collab` |
+| Campaign | the laptop session of 2026-11-02, while writing DL0414; `REMAINING_WORK.md` 2.29; decision D-V2-205 |
+| Approved by | **the head chef, 2026-11-02, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+§D's claim was negated again. The checker never checked the index of an assignment, so a call there joined no row,
+and a function the checker and `authority` called pure printed when it ran. The box is where a reader of §D looks, and
+step 2 of the sketch assumes exactly what failed: that the checker visits every call the runtime makes.
+
+**Why this is not an RFC**
+
+No rule changes. `ref.rule.effects.declared-row` already says a function may perform only the effects its row declares;
+the checker now enforces it in the one position it skipped. The alternative that would change the language, refusing a
+call or a `consume` inside an index, was not taken (D-V2-205).
+
+**Verified before the change**
+
+1. On `master` `9b3be30`, the paragraph's program checked clean, `authority` listed `quiet` under *pure fns*, and
+   `run --grant console` printed. After D-V2-205, `check` refuses it with DL0501.
+2. The witnesses are red on `9b3be30`'s code and green after it, and mutants M1018–M1030 turn them red (the decision's
+   evidence).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
+```
