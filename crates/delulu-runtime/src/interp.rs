@@ -13,7 +13,7 @@ use crate::custody::{Custody, CustodyDecision, EmbeddedCustody, Op as CustodyOp}
 use crate::foreign::{self, FKind, FVal, ForeignBinder, ForeignHandle, ForeignSig, InProcBinder};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
-use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
+use crate::value::{CapScope, CapVal, Closure, Env, Fault, NameMap, NameSet, Scope, SecretVal, Value};
 
 /// The default logical call-depth bound, and the native stack it assumes.
 ///
@@ -246,13 +246,16 @@ type R<T> = Result<T, Escape>;
 /// wrote a file of its choosing through a host callback's `FsWrite` by naming its own function like the
 /// host's.
 pub struct Home {
-    funcs: HashMap<String, FnDecl>,
+    funcs: NameMap<FnDecl>,
     globals: Env,
     /// Each record type's fields, by name, at their place in the order the type declares them — the order its values
     /// hold them in, whatever order a literal writes them (RECORD-ORDER-1: `==` pairs fields by position, and `str`
     /// prints them in it). A name maps to its place so that putting a literal in order and finding a field in a wide
     /// record cost no scan of the declaration (RW 2.10): a 1,600-field literal written out of order took 39 ms to build.
-    records: HashMap<String, HashMap<String, usize>>,
+    records: NameMap<NameMap<usize>>,
+    /// The constructors of the module's own sum types. CTOR-SHADOW-1: a function may share a name with one, and the
+    /// checker resolves the name to the constructor, as a call and as a value; so does this interpreter.
+    ctors: NameSet,
 }
 
 /// A record at most this wide has its field found by a scan; a wider one asks its type's places first (RW 2.10). A
@@ -345,12 +348,13 @@ pub struct Interp {
 
 impl Interp {
     pub fn new(module: &Module) -> Interp {
-        let mut funcs = HashMap::new();
+        let mut funcs = NameMap::default();
         let mut consts = Vec::new();
         let mut foreign_blocks = HashMap::new();
         let mut actors = HashMap::new();
         let mut tests = HashMap::new();
-        let mut records = HashMap::new();
+        let mut records = NameMap::default();
+        let mut ctors = NameSet::default();
         for item in &module.items {
             match item {
                 Item::Fn(f) => {
@@ -358,11 +362,14 @@ impl Interp {
                 }
                 Item::Type(td) => {
                     if let TypeDeclKind::Record(fields) = &td.kind {
-                        let mut at = HashMap::new();
+                        let mut at = NameMap::default();
                         for (i, f) in fields.iter().enumerate() {
                             at.entry(f.name.name.clone()).or_insert(i);
                         }
                         records.insert(td.name.name.clone(), at);
+                    }
+                    if let TypeDeclKind::Sum(variants) = &td.kind {
+                        ctors.extend(variants.iter().map(|v| v.name.name.clone()));
                     }
                 }
                 Item::Const(c) => consts.push((c.name.name.clone(), c.value.clone())),
@@ -393,7 +400,7 @@ impl Interp {
             }
         }
         Interp {
-            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root(), records })),
+            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root(), records, ctors })),
             tests,
             consts,
             depth: Cell::new(0),
@@ -798,7 +805,7 @@ impl Interp {
             None => return Err(Escape::Fault(Fault::new("DL0907", format!("unknown function `{name}`")))),
         };
         self.enter()?;
-        let env = Scope::child(&self.home().globals);
+        let env = Scope::child_sized(&home.globals, f.params.len());
         for (p, v) in f.params.iter().zip(args) {
             env.define(&p.name.name, v);
         }
@@ -809,7 +816,7 @@ impl Interp {
 
     fn call_closure(&self, clo: &Rc<Closure>, args: Vec<Value>) -> R<Value> {
         self.enter()?;
-        let env = Scope::child(&clo.env);
+        let env = Scope::child_sized(&clo.env, clo.params.len());
         for (p, v) in clo.params.iter().zip(args) {
             env.define(p, v);
         }
@@ -851,8 +858,8 @@ impl Interp {
     fn exec_block_value(&self, block: &Block, parent: &Env) -> R<Value> {
         // A14: a block binds names in its own scope only by `let`. Without one its scope would stay empty, and every
         // read, write and capture passes through an empty scope to its parent — so the block runs in the parent's.
-        let mut env =
-            if block.stmts.iter().any(|s| matches!(s, Stmt::Let { .. })) { Scope::child(parent) } else { Rc::clone(parent) };
+        let lets = block.stmts.iter().filter(|s| matches!(s, Stmt::Let { .. })).count();
+        let mut env = if lets > 0 { Scope::child_sized(parent, lets) } else { Rc::clone(parent) };
         let mut value = Value::Unit;
         let n = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
@@ -912,7 +919,7 @@ impl Interp {
                 // loop skip, repeat, or run forever — the length is fixed the moment the loop starts.
                 let snapshot: Vec<Value> = items.borrow().clone();
                 for item in snapshot {
-                    let loop_env = Scope::child(env);
+                    let loop_env = Scope::child_sized(env, 1);
                     loop_env.define(&var.name, item);
                     match self.exec_block_value(body, &loop_env) {
                         Ok(_) | Err(Escape::Continue) => {} // continue: move to the next element
@@ -1123,12 +1130,12 @@ impl Interp {
 
     fn eval_var(&self, path: &Path, span: delulu_diag::Span, env: &Env) -> R<Value> {
         let name = &path.segs[0].name;
-        if let Some(v) = env.get(name) {
+        if let Some(v) = env.get_near(name) {
             return Ok(v);
         }
-        // A nullary variant constructor as a value (`None`, a user enum's `Red`, prelude `NotFound`).
-        // The checker has already resolved it, so a capitalized unbound name is a nullary variant.
-        if name.chars().next().is_some_and(char::is_uppercase) {
+        // A nullary constructor of the module's own types as a value (a user enum's `Red`) — before a function of the same
+        // name, as the checker resolves it (CTOR-SHADOW-1).
+        if self.home().ctors.contains(name.as_str()) {
             return Ok(Value::variant(name, vec![]));
         }
         // A top-level function used AS A VALUE — `apply(double, 21)`, `xs.map(double)`.
@@ -1153,32 +1160,45 @@ impl Interp {
             self.note_alloc(&v);
             return Ok(v);
         }
+        // A prelude's nullary constructor as a value (`None`, `NotFound`): the checker has resolved the name, and a
+        // capitalized name no binding, constructor of the module or function claims is one. Asked after the functions:
+        // before them a capitalized function passed as a value became a constructor with no fields, "not callable"
+        // (CTOR-SHADOW-1).
+        if name.chars().next().is_some_and(char::is_uppercase) {
+            return Ok(Value::variant(name, vec![]));
+        }
         Err(Escape::Fault(Fault::at("DL0907", format!("unbound name `{name}`"), span)))
     }
 
     fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
-        // A14: a call by name to one of the module's functions — what the order below reaches when no local closure has
-        // the name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
-        // callee's scope. Whether a local closure has the name cannot change while the arguments run: an argument
-        // binds nothing in this scope, and a binding keeps its type.
+        // A14: a call by name to one of the module's functions — what the order below reaches when no local binds the
+        // name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
+        // callee's scope. Whether a local binds the name cannot change while the arguments run: an argument binds
+        // nothing in this scope.
         if let Expr::Var { path, .. } = callee {
             if let [seg] = path.segs.as_slice() {
                 let name = seg.name.as_str();
-                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && !matches!(env.get(name), Some(Value::Closure(_))) {
-                    let home = self.home();
-                    if let Some(f) = home.funcs.get(name) {
-                        let callee_env = Scope::child(&home.globals);
-                        for (i, a) in args.iter().enumerate() {
-                            let v = self.eval_expr(a, env)?;
-                            if let Some(p) = f.params.get(i) {
-                                callee_env.define(&p.name.name, v);
-                            }
+                let home = self.home();
+                // The same four conditions as before, asked cheapest first, the one that most often decides leading — none
+                // has an effect, so the order changes nothing but the cost (RW 3.24: the walk of every scope for a local
+                // of the name, which the call to a function always misses, came first). CTOR-SHADOW-1: never a function
+                // that shares its name with one of the module's constructors.
+                if let Some(f) = home.funcs.get(name).filter(|_| {
+                    !home.ctors.contains(name)
+                        && !delulu_check::check::PRELUDE_BUILTINS.contains(&name)
+                        && env.get(name).is_none()
+                }) {
+                    let callee_env = Scope::child_sized(&home.globals, f.params.len());
+                    for (i, a) in args.iter().enumerate() {
+                        let v = self.eval_expr(a, env)?;
+                        if let Some(p) = f.params.get(i) {
+                            callee_env.define(&p.name.name, v);
                         }
-                        self.enter()?;
-                        let result = self.exec_block_value(&f.body, &callee_env);
-                        self.leave();
-                        return self.finish_call(result);
                     }
+                    self.enter()?;
+                    let result = self.exec_block_value(&f.body, &callee_env);
+                    self.leave();
+                    return self.finish_call(result);
                 }
             }
         }
@@ -1190,9 +1210,21 @@ impl Interp {
         if let Expr::Var { path, .. } = callee {
             if path.segs.len() == 1 {
                 let name = &path.segs[0].name;
-                // A locally-bound closure value takes precedence (e.g. `f` inside `apply`).
-                if let Some(Value::Closure(clo)) = env.get(name) {
-                    return self.call_closure(&clo, argvals);
+                // A local binding of the name takes precedence over everything below (e.g. `f` inside `apply`), whatever
+                // it holds, as the checker resolves the name. LOCAL-CALLEE-1: only a closure was asked for, so a plugin's
+                // export kept in a local named like one of the module's functions called that function — the checker
+                // had typed a pure export there, and the function wrote.
+                match env.get(name) {
+                    Some(Value::Closure(clo)) => return self.call_closure(&clo, argvals),
+                    Some(Value::PluginFn(f)) => return self.call_plugin_export(&f, argvals, span),
+                    Some(other) => {
+                        return Err(Escape::Fault(Fault::at(
+                            "DL0907",
+                            format!("value `{}` is not callable", other.display()),
+                            span,
+                        )))
+                    }
+                    None => {}
                 }
                 // P2 — `load(host, path, grant)` is handled HERE rather than in `prim`, for the
                 // reason `root.foreign` is: it mints a custody node and reads a container through the
@@ -1208,6 +1240,12 @@ impl Interp {
                         self.note_alloc(v); // 10d
                     }
                     return res.map_err(Escape::Fault);
+                }
+                // A constructor of the module's own types, before a function of the same name, as the checker resolves
+                // it (CTOR-SHADOW-1: the function ran — a `Shape` the checker built was the function's `Int`, and an
+                // effectful function named like a pure constructor wrote from a program `authority` called pure).
+                if self.home().ctors.contains(name.as_str()) {
+                    return Ok(Value::variant(name, argvals));
                 }
                 // A user function.
                 if self.home().funcs.contains_key(name) {
@@ -2250,7 +2288,8 @@ impl Interp {
         for arm in arms {
             // A14: an arm whose pattern names nothing binds nothing, so it needs no scope of its own (as a block
             // without `let` needs none).
-            let arm_env = if binds(&arm.pattern) { Scope::child(env) } else { env.clone() };
+            let names = binds(&arm.pattern);
+            let arm_env = if names > 0 { Scope::child_sized(env, names) } else { env.clone() };
             if self.match_pattern(&arm.pattern, &value, &arm_env) {
                 return self.eval_expr(&arm.body, &arm_env);
             }
@@ -2429,12 +2468,13 @@ impl Interp {
     }
 }
 
-/// Whether matching `pat` can bind a name ([`Interp::match_pattern`] defines one only at a `Bind`).
-fn binds(pat: &Pattern) -> bool {
+/// How many names matching `pat` binds ([`Interp::match_pattern`] defines one at each `Bind`) — none, and the arm needs
+/// no scope of its own; some, and its scope is made with room for them (RW 3.24).
+fn binds(pat: &Pattern) -> usize {
     match pat {
-        Pattern::Bind(_) => true,
-        Pattern::Variant { fields, .. } => fields.iter().any(binds),
-        Pattern::Wildcard(_) | Pattern::Lit(..) => false,
+        Pattern::Bind(_) => 1,
+        Pattern::Variant { fields, .. } => fields.iter().map(binds).sum(),
+        Pattern::Wildcard(_) | Pattern::Lit(..) => 0,
     }
 }
 

@@ -272,7 +272,9 @@ another OS, and then takes about seven minutes itself (run 5).
   returns each test job's verdict and properties as JSON, no log at all (a job's id is its check run's); and
   `curl -s ".../actions/runs?per_page=15"` (add `&event=schedule` for the nightly) and `.../actions/runs/ID/jobs` list
   runs and jobs piped through `python3 -c` to one line each — without the whole commit messages an MCP listing
-  carries. Ask for a run by id (`get_workflow_run`) once it is
+  carries. **On-demand run 16:** `scripts/ci-annotations.py RUN_ID…` prints a run's totals and, for each test job, its
+  `actors_pingpong` verdict and its disk before → after, one line a job (the verdict is the annotation's TITLE; a match on
+  its message finds nothing, and run 16's first hand-written loop printed nothing for seven runs). Ask for a run by id (`get_workflow_run`) once it is
   known: a run listing carries every commit message in full.
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
   it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a
@@ -437,6 +439,11 @@ target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' -mmin +10 -delet
 **The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
 install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
 `formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.
+**The interpreter is profiled in the VM** (on-demand run 16, RW 3.24): valgrind is installed, and `scripts/interp-profile.sh
+[--base REF] [--profile NAME]` builds a release harness of this checkout's interpreter outside the tree and prints, for
+RW 3.24's five benchmarks, instructions under callgrind, the minimum time and the output's hash; with `--base` it builds
+REF's too and times the two interleaved. Judge a cut by its instruction count beside that timing, never by one time: the
+VM's wall time moved ±10% between identical runs, and two cuts that looked right lost on the count.
 **A sentinel a witness looks for in a program's output is joined at run time** (on-demand run 6): DL1001 quotes the
 dependency's source, so a literal `println("the dependency wrote")` was found in the refusal itself, and the fixed run
 read as one that ran. **The agent campaign's ledger is a file on `origin/autosave/dogfood`** (on-demand run 6): `git show

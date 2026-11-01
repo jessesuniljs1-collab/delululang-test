@@ -1409,3 +1409,66 @@ fn under_a_lease_a_run_that_ends_leaves_the_lease_live() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Build the `relay` plugin, a pure `fn(Cap[Console], Str) -> Str` that holds a capability and never uses it, and return
+/// the `.dpx` path.
+fn build_relay(dir: &Path) -> PathBuf {
+    let pkg = dir.join("relay");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"relay\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+         [plugin]\napi = 1\nclass = \"verified\"\n\n\
+         [plugin.authority]\neffects  = []\nrequires = []\n\n\
+         [plugin.exports]\nrelay = \"fn(Cap[Console], Str) -> Str\"\n",
+    )
+    .unwrap();
+    std::fs::write(pkg.join("src").join("lib.delulu"), "module relay\n\npub fn relay(c: Cap[Console], s: Str) -> Str { s }\n")
+        .unwrap();
+    let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
+    pkg.join("relay.dpx")
+}
+
+/// **LOCAL-CALLEE-1** (found 2026-11-01 in the weekly verification sweep, beside LATE-LET-1): a call by a name that a
+/// local binds goes to what the local holds, as the checker resolves it. The interpreter asked only whether the local held
+/// a CLOSURE; a plugin's export is not one, so a call through a local named like one of the module's functions ran that
+/// function instead. With `shout` it printed `hello?`, the module's, for the export's `hello!`. With an export typed pure
+/// and a module function that prints, `delulu why Write` said the program cannot write, and the run printed.
+#[test]
+fn a_local_holding_an_export_is_called_never_a_module_function_of_its_name() {
+    let dir = tmp("local-callee");
+    std::fs::copy(build_shout(&dir), dir.join("shout.dpx")).unwrap();
+    std::fs::copy(build_relay(&dir), dir.join("relay.dpx")).unwrap();
+    let grant =
+        "    let g = Grant {\n        effects: [], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n        \
+                 limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n        require_signed: false,\n    }\n";
+
+    // The effect: the checker saw a call to a pure export, and the program performs no `Write`.
+    let effect = format!(
+        "module host\n\nfn relay(c: Cap[Console], s: Str) -> Str ! {{Write}} {{\n    c.println(\"LEAK: the module's relay\")\n    s\n}}\n\n\
+         fn relayed(h: Cap[PluginHost], c: Cap[Console]) -> Result[Str, PluginErr] ! {{Load, Read}} {{\n{grant}    \
+         let p = load(h, \"relay.dpx\", g)?\n    let relay: fn(Cap[Console], Str) -> Str ! {{}} = p.get(\"relay\")?\n    \
+         Ok(relay(c, \"hello\"))\n}}\n\n\
+         fn main(root: Root) ! {{Load, Read}} {{\n    let r = relayed(root.plugin_host(), root.console())\n}}\n"
+    );
+    std::fs::write(dir.join("effect.delulu"), effect).unwrap();
+    let why = delulu_in(&dir, &["why", "Write", "effect.delulu"]);
+    assert!(out(&why).contains("program cannot perform `Write`"), "the checker's claim: {}", out(&why));
+    let o = delulu_in(&dir, &["run", "effect.delulu", "--grant", "console", "--grant", "plugin=."]);
+    assert!(o.status.success(), "{}", out(&o));
+    assert!(!out(&o).contains("LEAK"), "a program that cannot perform `Write` wrote: {}", out(&o));
+
+    // The value: the export's answer, not the module function's.
+    let value = format!(
+        "module host\n\nfn shout(s: Str) -> Str {{ s + \"?\" }}\n\n\
+         fn shouted(h: Cap[PluginHost]) -> Result[Str, PluginErr] ! {{Load, Read}} {{\n{grant}    \
+         let p = load(h, \"shout.dpx\", g)?\n    let shout: fn(Str) -> Str ! {{}} = p.get(\"shout\")?\n    Ok(shout(\"hello\"))\n}}\n\n\
+         fn main(root: Root) ! {{Write, Load, Read}} {{\n    let out = root.console()\n    match shouted(root.plugin_host()) {{\n        \
+         Ok(s) => out.println(s)\n        Err(e) => out.println(\"refused\")\n    }}\n}}\n"
+    );
+    std::fs::write(dir.join("value.delulu"), value).unwrap();
+    let o = delulu_in(&dir, &["run", "value.delulu", "--grant", "console", "--grant", "plugin=."]);
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "hello!\n", "the export answers, not the module's `shout`: {}", out(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}

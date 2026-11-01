@@ -36,13 +36,68 @@ header or an `import` with a keyword in its name is refused as DL0201 at the key
 or refused the next line's item (RW 6.42); a source file that is not UTF-8 is DL0101 at its first bad byte, exit 1, where
 1.x made it a usage error, exit 2 (RW 6.43); under `--broker daemon`, a call the program's own capability refuses is
 DL0904 before its custody is asked, where 1.x let a Guard rule (DL1410–DL1413) or a revoked or expired lease (DL0801,
-DL1402, DL1403) answer it first (RW 4.79, D-V2-195).
+DL1402, DL1403) answer it first (RW 4.79, D-V2-195); `run --engine` takes `interp` or `wasm` and refuses any other
+value, exit 2, where 1.x ran the interpreter (RW 6.48); a flag value that cannot be read is refused, exit 2, with
+nothing run, where 1.x ran on the default. That covers `run --seed abc`, `--clock bogus`, an unreadable `--epoch-ms`,
+`--actors-threads` or `--foreign-max-ret`, `test --seed abc`, `test --seed` with no value, and `atlas --budget abc`. The
+same goes for an option `atlas`'s query verbs do not know or are given with no value (RW 6.49).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### the interpreter's measured costs cut, 2026-11-01
+
+- **Changed: the interpreter runs loops and calls faster, with the same output** (RW 3.24, D-V2-202). Measured on a Linux
+  VM of four vCPUs, each the minimum of three rounds interleaved with the previous build: Study C's
+  `nested_calls_macro` 144 → 117 ms, `fib_recursive_24` 42 → 38 ms and `loop_sum_1m` 157 → 148 ms, and a merge sort and a
+  quicksort of 100,000 `Int`s 3.9 → 3.5 s. A lookup passes a scope that cannot hold the name without reading it, a call's
+  scope is made with room for its parameters, and the module's maps from names no longer hash with SipHash. The
+  interpreter is still a tree-walker, about 100× slower than `--engine wasm` on computation: `docs/for-agents.md` says
+  which engine to choose.
+
+### a flag's value that cannot be read is refused, 2026-11-01
+
+- **Fixed: a value a flag cannot read is a usage error (exit 2), and nothing runs** (RW 6.49). Each was read as no value,
+  the default: `run --seed abc` ran unseeded, `--clock bogus` on the real clock, and `--epoch-ms`, `--actors-threads`,
+  `--foreign-max-ret` and `--sim-step` on their defaults. So did `test --seed abc`, and `test --seed` with no value at
+  all. `atlas --budget abc` built under the default budget. Now each says `was given a value it cannot read: --seed
+  `abc``. A readable value runs as before.
+- **Fixed: `atlas`'s query verbs (`node`, `callers`, `calls`, `why`, `path`) refuse an option they do not know, an
+  option with no value, and a value they cannot read** (RW 6.49). They refused none, though they share the graph
+  command's parser, which did.
+
+### `run --engine` refuses a value it does not know, 2026-11-01
+
+- **Fixed: `delulu run --engine` takes `interp` or `wasm`, and refuses any other value** (RW 6.48). Any other value ran
+  the program on the interpreter and exited 0, so `--engine wsam`, a typo of `wasm`, ran on the other engine and said
+  nothing. Now it is a usage error (exit 2), `unknown --engine `wsam` (interp | wasm)`, and nothing runs, as
+  `--isolation` and `--broker` already refused theirs.
+
+### a name a constructor and a function share is the constructor, 2026-11-01
+
+- **Fixed: where a function shares its name with a constructor of the module's own sum type, the interpreter builds the
+  constructor, as the checker always said** (CTOR-SHADOW-1, RW 2.25, D-V2-201). The interpreter called the function, so
+  a value the checker typed `Shape` was the function's `Int`. An effectful function named like a pure constructor wrote
+  from a program `delulu authority` called "provably pure", with no special grant. A capitalized function passed as a
+  value faulted *"not callable"* (DL0907), and now runs. The WASM engine built the constructor where the call had an
+  expected type, and called the function where it had none (`let h = Wrap(c)` printed there too); it now builds the
+  constructor in both, and binds `let d = Dot` as the constructor, which it refused (DL1201). A constructor whose name
+  is lowercase, which the checker admits, now runs on the interpreter as a value and as a call (it was *"unbound
+  name"*).
+- **Fixed: on the WASM engine, a local function value named like a prelude builtin is called** (WASM-BUILTIN-SHADOW-1,
+  RW 2.27, D-V2-201). `let str = fn(x: Int) -> Str { "local" }` then `str(5)` ran the builtin there, so a checked
+  program printed other values than on the interpreter. The prelude's free functions are pure, so no effect moved.
+
+### a call through a local reaches what the local holds, 2026-11-01
+
+- **Fixed: a call by a name that a local binds goes to what the local holds** (LOCAL-CALLEE-1, RW 2.24, D-V2-200). The
+  interpreter asked only whether the local held a closure. A plugin's export kept in a local named like one of the
+  module's functions therefore called that function instead. With an export typed pure and a module function that
+  prints, `delulu why Write` said the program cannot write, and the run printed. It needed `--grant plugin=`, and the
+  console capability still bounded the effect. The WASM engine runs no plugins and was not affected.
 
 ### a closure reads each name as it was where the closure was written, 2026-11-01
 

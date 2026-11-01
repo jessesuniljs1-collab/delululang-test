@@ -538,6 +538,10 @@ impl EnumEnv {
     }
     /// The named sum type a constructor builds, when exactly one declares it — the checker's rule (`variant_ctor`): a
     /// name two sums share (`IoErr`'s and `NetErr`'s `Other`) names neither.
+    /// Is `name` a constructor of any of the module's sum types, however many (CTOR-SHADOW-1)?
+    fn is_ctor(&self, name: &str) -> bool {
+        (0..self.descs.len() as u32).any(|i| self.desc(i).ctors.iter().any(|c| c.name == name))
+    }
     fn enum_of_ctor(&self, ctor: &str) -> Option<u32> {
         let mut owners = (0..self.descs.len() as u32).filter(|&i| self.desc(i).ctors.iter().any(|c| c.name == ctor));
         let first = owners.next()?;
@@ -2712,9 +2716,10 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
-            // So does binding a name that is one — `let h = double`, `let g = h` (RW 3.4).
+            // So does binding a name that is one — `let h = double`, `let g = h` (RW 3.4) — but never a constructor of the
+            // module's own types, which the checker resolves before a function of the same name (CTOR-SHADOW-1).
             if let Expr::Var { path, .. } = value {
-                if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() {
+                if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() && !cx.env.is_ctor(&path.segs[0].name) {
                     if let Ok(c) = resolve_callable(value, cx) {
                         cx.bind_after();
                         cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
@@ -4416,6 +4421,12 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Expr::Var { path, .. } if path.segs.len() == 1 => path.segs[0].name.clone(),
                 _ => return Err(CompileError::Unsupported("an indirect or builtin call".into())),
             };
+            // Phase 3r: a call to a function VALUE (a bound lambda, or a generic's function parameter) → inline it. Asked
+            // first, as the checker resolves a name to its innermost binding: a local `str` or `int` is called, never the
+            // builtin of its name (WASM-BUILTIN-SHADOW-1 — the builtin ran, and a checked program printed other values).
+            if let Some(c) = cx.lookup_callable(&name) {
+                return inline_call(&c.params, &c.body, args, cx, Lexical::Value(&c));
+            }
             // Phase 3j: `str(x)` — Int formats via `__int_to_str`; a Str is already a string (identity).
             // RW 3.4: `parse_int(s)`, parsed host-side by the interpreter's own rule into `Some(n)` or `None`.
             if name == "parse_int" && args.len() == 1 {
@@ -4503,15 +4514,12 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     )),
                 };
             }
-            // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
-            if let Some(c) = cx.lookup_callable(&name) {
-                return inline_call(&c.params, &c.body, args, cx, Lexical::Value(&c));
-            }
-            if let Some(g) = cx.generics.get(&name).cloned() {
-                return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
-            }
             // A constructor with no expected type: `Some(x)` takes its payload's type; another, its sum's or the checker's.
-            if !cx.index.contains_key(&name) {
+            // CTOR-SHADOW-1: a constructor of the module's own types is built even where a function or a generic shares its
+            // name, as the checker resolves it, and never falls through to that function — `let h = Wrap(c)` ran an
+            // effectful `fn Wrap` from a program `authority` called pure.
+            let ctor = cx.env.is_ctor(&name);
+            if ctor || !cx.index.contains_key(&name) {
                 if let ("Some", [arg]) = (name.as_str(), &args[..]) {
                     return compile_some(arg, cx);
                 }
@@ -4519,6 +4527,14 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     compile_ctor(&name, args, cx, t)?;
                     return Ok(t);
                 }
+                if ctor {
+                    return Err(CompileError::Unsupported(format!(
+                        "the constructor `{name}`, whose type two of the module's types share"
+                    )));
+                }
+            }
+            if let Some(g) = cx.generics.get(&name).cloned() {
+                return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
             }
             let (fidx, ptys, ret) = {
                 let e = cx

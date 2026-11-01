@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 196447 |
+| Rust lines | 197072 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 278 |
-| Markdown lines | 91808 |
+| Markdown lines | 92537 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1580 / 18018 |
+| Nodes / edges in this map | 1582 / 18112 |
 | Open discrepancies | 53 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 47863 lines
+- **Modules:** 44 files, 47934 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -106,7 +106,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/budget.rs` | 397 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 126 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 189 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 11792 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 11854 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 387 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
@@ -132,7 +132,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/pipe_channel.rs` | 582 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
 | `src/policy.rs` | 526 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 161 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
-| `src/run_cmd.rs` | 2227 | `delulu run` — the command that actually executes a program. |
+| `src/run_cmd.rs` | 2236 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 689 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
 | `src/schema.rs` | 1057 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 896 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 25 files, 24433 lines
+- **Modules:** 25 files, 24700 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -320,7 +320,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/egress.rs` | 1409 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 1376 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 456 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2947 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/interp.rs` | 2987 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 459 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2222 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
@@ -331,7 +331,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/sim.rs` | 399 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 104 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 576 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
-| `src/value.rs` | 1433 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/value.rs` | 1660 | Runtime values, environments, and capability values (spec §7.1). |
 | `src/verified_adapter.rs` | 633 | P8-02: a device driver whose **logic is a Verified-class plugin** (`V2_P8_DESIGN.md`). |
 
 ### `delulu-survey`
@@ -384,13 +384,13 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 13815 lines
+- **Modules:** 9 files, 13831 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 265 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 344 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 6388 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 6404 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
 | `src/host.rs` | 3332 | The embedded Wasmtime host (Phase 3a/3b). |

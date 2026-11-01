@@ -11099,3 +11099,227 @@ interpreter; `5` read through a closure on both engines).
   value in another function, and M976 prints `LEAK: through a var`.
 - `SOUNDNESS_AUDIT.md` §D records the second negation, with the lesson: a gate that compares two implementations finds
   where they differ; only one held to the checker's meaning finds what they share.
+
+## 2026-11-01 — the laptop: #104 landed; the weekly `everything` run and `launch/2.0.0` `3bf4f2f` dispatched
+
+#104 (LATE-LET-1, D-V2-199) landed by fast-forward on its read run `41245211274` (14 success, 2 skipped), and `master`
+is `cccb001`. The weekly verification sweep's `everything` run is `41246969522` at `cccb001`, dispatched on Saturday
+2026-10-31 at 22:10 UTC. The sweep itself began at 21:12 UTC; its adversarial pass and documents scan are in the entry
+above.
+
+`launch/2.0.0` was merged with `cccb001` at `3bf4f2f`, and the *Breaking* paragraph was judged unchanged:
+- Every program checks as before, with the same codes. The runtime now gives the meaning the typing and effect rules
+  already gave, and those are the surface STABILITY.md §1 holds.
+- v1.0.0 had the same defect: its interpreter's `let` called `env.define` into the scope a closure held as
+  `env.clone()`.
+- A program the WASM engine now compiles, where it refused DL1201 before, is the backend's subset widening.
+
+Criterion 2 is 358/358, written by `scripts/launch-criterion-2.py`, and the launch gates were `LAUNCH-GATES=ok`. The
+`everything` run `41247420596` and the release dry run `41247423239` were dispatched at 22:16 UTC.
+
+## 2026-11-01 — the laptop: RW 4.29 closed, its condition met since 2026-10-13 (the weekly sweep's documents scan, second pass)
+
+The sweep's first documents scan searched the live documents for this week's closures and found nothing stale. A second
+pass read the status cell of every open row in `REMAINING_WORK.md` §2–§7. Row 4.29 (*"No program can be checked against
+a boundary, and nothing asks the operator for authority"*) still said *"P9-04 and P9-05 next"*, but its own closing
+condition was met when P9-03 completed on 2026-10-13 (D-V2-126). That condition is `authority --within` (P9-01), `grants
+diff` (P9-02), and `grants propose`, `proposals`, `approve`, `reject` and `auto-approve` (P9-03), the OpenShell study's
+§4.8–§4.10. P9-04 and P9-05 came after, from §4.11–§4.12, and are not this row's.
+
+Checked against the binary of `cccb001`: every one of those commands is in `delulu help grants` or `authority --help`,
+and `within_cli` (24 tests) and `broker_cli` hold them. The row is closed as of today, and says when its condition was met.
+
+The lesson is HANDOFF §11.8's, applied in full this time: a scan for this week's closures cannot find a row that went
+stale weeks ago. The sweep reads the status of every open row, not only the rows that just moved.
+
+## 2026-11-01 — the laptop: a call through a local reaches what the local holds (LOCAL-CALLEE-1, RW 2.24, D-V2-200)
+
+**What was found.** After LATE-LET-1 the laptop read the interpreter's other name lookups against the checker's. A local
+named like a builtin, like a module function, or like a constructor is resolved local-first by both, so each of those
+probes was refused as DL0501. A record's field holding a function is called `(b.len)(…)`, never as a method (DL0405).
+An actor's behaviour's effect reaches its sender's row (DL0501). One lookup disagreed: `eval_call` asked only whether a
+local held a closure, and a plugin's export is a `Value::PluginFn`. Witnessed on the release binary of `cccb001` with a
+plugin built by `delulu plugin build`:
+- a local `shout` holding the export, in a module with its own `fn shout`, printed the module's `hello?`;
+- with an export typed pure in the local's annotation and a module function `relay` that prints, `delulu why Write`
+  said the program cannot write, and the run printed.
+
+**The change** (D-V2-200). A local binding of the name decides the call, whatever it holds: a closure, a plugin's export,
+or DL0907 for anything else. The A14 fast path is taken only when no local binds the name.
+
+**Gates.** `plugin_load_cli` `a_local_holding_an_export_is_called_never_a_module_function_of_its_name`. Its effect half
+comes first, so a mutant shows the escape itself. Mutants M981 and M982 were each red, and the control green. The suites
+the call reaches passed. `SOUNDNESS_AUDIT.md` §D's box of the same day names it (entrenched;
+`ENTRENCHED_CHANGE_RECORD.md`).
+
+## 2026-11-01 — the laptop: a name a constructor and a function share is the constructor (CTOR-SHADOW-1, RW 2.25, D-V2-201)
+
+**What was found.** Reading the interpreter's name lookups against the checker's order, after LOCAL-CALLEE-1: a function
+may share its name with a constructor of the module's own sum type. The checker resolves the name to the constructor,
+and the interpreter called the function, or for a value took any capitalized name for a constructor before asking the
+functions. Witnessed on the release binary of `cccb001`:
+- a pure function calling `Wrap(c)` ran an effectful `fn Wrap`, printing from a program `authority` called provably pure,
+  with no special grant;
+- `Circle(3)` was an `Int` where the checker typed a `Shape`;
+- `apply(Double, 5)` faulted *"not callable"*;
+- the WASM engine was right for calls, but refused `let d = Dot`.
+v1.0.0 had the same order.
+
+**The change** (D-V2-201). `Home::ctors` holds the module's constructors. They are asked before the functions in
+`eval_var` and in both call paths, and the prelude's capitalized fallback comes after the functions. The WASM `let`
+never binds a constructor as a function value (`EnumEnv::is_ctor`). Refusing a function named like a constructor was
+not taken: it would refuse programs that check today.
+
+**Gates.** `late_let_cli` (the escape) and `loop_parity` (`3 -1 10` on both engines), each red before; mutants M983–M987,
+all red. The bash heredoc that wrote the CLI test turned the `\n` in an assertion's message into a real line break,
+the trap HANDOFF §11.5 names; the result compiled, and was corrected with the editor before the commit.
+
+**Later the same day, before #107 landed: lowercase constructors.** The checker admits a constructor whose name is
+lowercase (`type Slot = cell(Int) | empty`). The interpreter's capitalized fallback never covered one, so `let e = empty`
+and `cell(8)` faulted *"unbound name"* in a program that checked clean. D-V2-201's `Home::ctors` resolves them, as the
+WASM engine did. `loop_parity`'s CTOR-SHADOW-1 test now holds them too, at `3 -1 10 80` on both engines, and M985 (a
+value asks the functions first) is still red with them in.
+
+In a pattern, a lowercase name is a binding by the parser's convention, so `match t { foo => 1, bar => 2 }` answers 1
+for every `t`, on both engines and to the checker alike. That is the language's meaning, not a runtime defect, and it is
+recorded as RW 2.26, open, with its three ways out: a warning, which is additive, or refusing such names, or reading
+them as constructors, both breaking.
+
+**Later still, the WASM call (CTOR-SHADOW-1's WASM half, and WASM-BUILTIN-SHADOW-1).** The order of the WASM engine's
+call was read the same way. It compiled the prelude's builtins first, then a local function value, then the generics,
+then a constructor, but the constructor only where no module function had the name. So:
+- `let h = Wrap(c)`, a call with no expected type, ran the effectful `fn Wrap` on WASM as well, and printed. Its first
+  witness had `Wrap(c)` as the function's result, whose expected type took the constructor's path.
+- `let str = fn …; str(5)` ran the builtin `str` on WASM (`5 builtin`, where the interpreter printed
+  `local seventy-seven`).
+
+D-V2-201 now orders the WASM call as the checker does: a local, the builtins, a constructor of the module, the generics
+and the functions. The CLI test takes the unannotated form and runs both engines, and `loop_parity` gains
+`a_local_named_like_a_builtin_is_called_on_both_engines`. M988 and M989 are red. RW 2.27 closes the builtin half.
+
+## 2026-11-01 — the laptop: `run --engine` refuses a value it does not know (RW 6.48)
+
+Writing LATE-LET-1's two-engine CLI test, the laptop passed `--engine interp` and found that any value but `wasm` ran
+the interpreter. `--engine wsam` ran on the interpreter and exited 0. A typo of the engine was a silent run on the
+other one, the shape `refuse_unknown_flags` exists to prevent, one step further in. A sandboxed run refuses `--engine`
+and a `.dwx` refuses anything but `wasm`, so only a source or package run was open. `cmd_run_inner` now refuses an
+unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | wasm)`.
+
+`cli_contract`'s `a_flag_value_nobody_understood_is_refused` was red before (`--engine wsam` ran). It also holds
+`--isolation` and `--broker`, which refused already, and that `interp` and `wasm` still run.
+
+## 2026-11-01 — the laptop: #106–#108 landed; `launch/2.0.0` `05eb884` (one *Breaking* clause) dispatched
+
+- **Landed by fast-forward.** #106 on its run `41249223011`. #107 and #108 together at `4dfe67e`, on #108's run
+  `41251294523`, which holds #107's commits.
+- **#107's own run `41251053019` was cancelled.** Its `microvm-reproducible` job spent its whole 60-minute timeout in
+  `sudo apt-get update && apt-get install`, the first step, before any of our code ran. On #106's run that job took 15
+  minutes. A runner's package mirror can stall like that; the job was re-run, and its result was not needed.
+- **`launch/2.0.0` merged with `4dfe67e` at `05eb884`.** One *Breaking* clause was added for RW 6.48: `run --engine`
+  with a value other than `interp` or `wasm` is refused, exit 2, where v1.0.0 ran the interpreter. LOCAL-CALLEE-1,
+  CTOR-SHADOW-1 and WASM-BUILTIN-SHADOW-1 were judged not breaking. `LAUNCH-GATES=ok`. Its `everything` run
+  `41255633510` and release dry run `41255635829` were dispatched.
+
+## 2026-11-01 — the laptop: a flag's value that cannot be read is refused (RW 6.49)
+
+After RW 6.48 the laptop asked every value-taking flag of the shared parser the same question. `--limits mem=lots`
+refused already, but these did not:
+- `--seed abc`, `--epoch-ms abc`, `--actors-threads x`, `--foreign-max-ret x` and `--sim-step x`, each read with
+  `.parse().ok()`;
+- `--clock bogus` and `--clock fixed:soon`, read with `strip_prefix("fixed:")`.
+Each ran on the default, exit 0. A typo in a seed, which exists to make a run reproducible, gave an unreproducible run
+that said nothing. `test` read its own `--seed` the same way, and took a missing one as none. `atlas` read `--budget`
+and `--gods` the same way, and its query verbs (`node`, `callers`, `calls`, `why`, `path`) refused nothing at all:
+`atlas node main FILE --bogus` exited 0. They share the parser whose graph command refused unknown and missing options.
+
+The fix:
+- `read_value` keeps a flag and a value it cannot read in `bad_values`.
+- `refuse_unknown_flags` refuses them, exit 2, beside a missing value.
+- `test` refuses a missing or unreadable `--seed` in its own parser.
+- `refuse_atlas_flags` holds the graph command's rule for every atlas verb.
+
+`cli_contract`'s test gains 13 command lines, and was red before. M990–M993 each turned it red. `cli` (54),
+`json_contract`, `atlas_cli`, `atlas_e2e`, `atlas_chain`, `test_runner_cli`, `completions_cli`, `actors_cli`,
+`sim_device_cli` and `dead_man_cli` passed.
+
+## 2026-11-01 — on-demand routine run 16: the interpreter's measured costs cut, profile first (RW 3.24, D-V2-202)
+
+**Housekeeping.** The laptop's #110 (RW 6.49, `laptop/flag-values`) landed by fast-forward, `a4da001`, on its green run
+`41257609952` (14 success, 2 skipped), after its witnesses were re-run in the VM (`cli_contract` 20 passed,
+`sandbox_modes_cli` 12) and its refusals probed on the binary: `run --seed abc` and `--clock bogus` exit 2 with nothing
+run, `--seed=abc` and `--clock=bogus` exit 2 as unknown options, `--seed 7` and `--clock fixed:5` run. Its first run
+`41256288090` was red on `sandbox_modes_cli` alone (its `--clock 5`), which the branch's second commit fixed. Both newest
+autosave snapshots are in later commits: `60dccc5` (`laptop/flag-values`, 00:15 UTC) in `e67e9bf`, `d020bec`
+(`launch/2.0.0`, 2026-10-31 22:15 UTC) in `3bf4f2f`, each `git diff` over the paths it changed empty.
+
+**CI read, each to its end** (every job; `scripts/ci-annotations.py` for the verdicts):
+- the weekly sweep's `everything` `41246969522` at `cccb001`: 18 of 18 success, the broker's Miri 2 h 46 min;
+- `launch/2.0.0` `3bf4f2f`: `everything` `41247420596` 18 of 18 success (the broker's Miri 3 h 07 min), release dry run
+  `41247423239` success (four packages, `release` skipped);
+- `launch/2.0.0` `05eb884`: `everything` `41255633510` 18 of 18 success (the broker's Miri 3 h 05 min), release dry run
+  `41255635829` success (four packages, `release` skipped);
+- push runs `41256993252` (`d31c09a`) and `41271950047` (`a4da001`): 14 success, 2 skipped; #110's `41257609952` the same.
+In each, `actors_pingpong` MEASURED on arm64 (2.85x–2.96x where the machine gave 3.93x–3.95x, against 1.47x–1.48x,
+passed) and NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3 hardware threads; 1.50x–2.36x observed); the
+disk Ubuntu 82 → 67 GB free, Windows 144 → 129 or 217 → 202, macOS 91–93 → 88–89 GiB, arm64 104 → 91.
+
+**The launch branch.** `launch/2.0.0` merged `master`'s records `d31c09a` (documents only) and cites `3bf4f2f`'s and
+`05eb884`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8: `1548766`, `LAUNCH-GATES=ok` (Survey 1580 nodes, 18094 edges,
+0 errors, 15 warnings; doctor 26 checks; the nine document gates; conformance 100%; cargo deny). Its Rust is `05eb884`'s,
+which those runs ran. RW 6.49 and this entry's code are not folded yet (*Open / next*).
+
+**The milestone: RW 3.24, profile first.** The laptop handed RW 3.24 back on 2026-11-01 asking that the next attempt start
+from a profile. Callgrind on a release harness of the interpreter (`delulu-runtime` alone, line tables), on Study C's
+`loop_sum_1m`, `fib_recursive_24` and `nested_calls_macro`, the laptop's micro set (a call, a closure, an index, two
+nested blocks with a `let` each) and the dogfood merge sort and quicksort:
+- a step of `loop_sum_1m` is 2,069 instructions: `eval_expr`'s own body (its dispatch and its 56-byte result) about 390,
+  `binary` about 300, the block's statements about 300, the drop glue of the step's temporary `Value`s 168, a variable's
+  read about 150 (the walk, a `RefCell` borrow, a `memcmp` call for each binding passed, the clone) and an assignment
+  about 140;
+- a call of `nested_calls_macro` about 1,800: SipHash twice (`funcs`, `ctors`; about 120 together), a scan of the prelude's sixteen names, a
+  miss walk of every scope for a local of the callee's name, two allocations (the scope and its bindings' room);
+- the sorts spend a fifth of their instructions in `malloc`, `free` and `realloc`.
+
+Cut, each measured by its instruction count (deterministic) and by time, with the same output:
+1. Each scope keeps a filter of the names it binds, one bit each (`Scope::filter`, `Key::bit`). A walk passes a scope whose
+   filter lacks the name's bit without borrowing it. A set bit says only *perhaps*: the slots decide, so no binding is
+   hidden (`a_shared_filter_bit_hides_nothing` sets the bit with another name and reads, assigns and misses through it).
+2. A read (`Scope::get_near`) and an assignment ask the nearest scope by name before they build a key for the scopes above.
+3. A name is compared by its length and its first byte before any `memcmp`.
+4. The module's maps from names — functions, constructors, record fields — and a wide scope's index hash with
+   `NameHasher`, a keyless multiply-rotate hash (D-V2-202).
+5. A scope is made with room for the names it will bind — a call's parameters, a block's `let`s, an arm's bindings, a
+   loop's variable (`Scope::child_sized`) — so a fifth binding no longer reallocates.
+6. The call fast path asks its four conditions cheapest first; none has an effect, so only the cost changes.
+
+Tried and refuted by the count, each reverted: a scope's first four bindings held inline (+2–5% instructions on every
+benchmark — the laptop's timing on Windows confirmed on Linux) and an inlined clone of scalars at the read (+3%). Two
+forms of the lookup lost on `loop_sum_1m` before the one kept: a key built from the name's first eight bytes (2,115
+million instructions, against the base's 2,069) and a byte-by-byte comparison in place of `memcmp` (2,183 million).
+
+**Measured** with the old and new harnesses interleaved on a quiet VM, the minimum of three rounds: `loop_sum_1m` 157.0 →
+147.5 ms (−6%), `fib_recursive_24` 42.2 → 38.5 (−9%), `nested_calls_macro` 144.4 → 117.1 (−19%), the micro set 324.3 →
+275.4 (−15%), the merge sort and quicksort of 100,000 3,913 → 3,526 ms (−10%). Instructions: 2,069 → 1,814 million
+(−12.3%), 404 → 351 (−13.1%), 1,495 → 1,257 (−15.9%), 3,789 → 3,282 (−13.4%), and on the sort of 20,000 7,451 →
+6,529 million (−12.4%). The outputs are byte for byte the old build's. (`0a658f6`'s message says −8.6% for the sort of 20,000: that compared with a build between the two; against `a4da001` it is the figure here.)
+
+**Witnesses.** `step_allocations` `a_call_of_five_parameters_makes_its_room_once` and
+`a_block_of_five_lets_makes_its_room_once`, red on `a4da001`'s sources (3.00 allocations a step, where 2 are needed);
+`value::scope_tests` `a_shared_filter_bit_hides_nothing`, `the_nearest_scope_answers_first_at_every_size` and
+`a_cleared_scope_finds_nothing_and_binds_afresh`. Mutants M994–M1003, each red, the control green: M994 (a binding pushed
+without asking whether the scope holds it), M995 (the filter never set), M996 (the filter read backwards), M997 (a read
+that misses the nearest scope stops there), M998 (an assignment that misses it stops there), M999 (a two-byte name
+compared by its first byte), M1000 (the collector's clear keeps the filter — red on the filter's own assertion: a stale
+bit would cost one scan, nothing more), M1001 (no room made), M1002 (a block's room not made), M1003 (a call's room not
+made). The new tests were read on the runners before `master` moved: `witness.yml` `delulu-runtime` `step_allocations
+lib` on macOS `41274938848` (lib 311 passed, `step_allocations` 6), arm64 `41274940306` (the same) and Windows
+`41274937091` (lib 310 passed, `step_allocations` 6). The full suite: `scripts/suite.sh` `EXIT=0`, 2,640 passed, 0 failed,
+16 ignored, 191 binaries. The two-engine differential, by hand (the interpreter is one of its engines): 1 passed, 166 s.
+
+**What is left.** The tree-walker's own shape — the dispatch, the result, the drop glue, the walk. The next step is the one
+the row already names: variables resolved to slots before the run, or a compiled form. `scripts/interp-profile.sh` keeps
+this run's harness and benchmarks for it (loop engineering, in the sync log).
+
+**The push run** `41276447349` on `f1c693d` (it holds `0a658f6`): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64
+(2.95x where the machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu, Windows and macOS (1.56x observed);
+the disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.

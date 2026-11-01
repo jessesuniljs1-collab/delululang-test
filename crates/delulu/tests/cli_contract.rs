@@ -449,6 +449,55 @@ fn a_value_taking_flag_with_no_value_is_refused() {
     );
 }
 
+/// **A value nobody understood is refused, not read as the default** (found 2026-11-01). `run`'s `--engine` takes `interp`
+/// or `wasm`, and any other value ran the program on the interpreter, exit 0. So `--engine wsam`, a typo of `wasm`, ran on
+/// the other engine and reported success. `--isolation` and `--broker` already refused theirs.
+#[test]
+fn a_flag_value_nobody_understood_is_refused() {
+    let home = scratch("unknown-values");
+    let src = home.join("p.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"ran\")\n}\n",
+    )
+    .unwrap();
+    let p = src.to_str().unwrap();
+    for (flag, value) in [("--engine", "wsam"), ("--engine", "interpreter"), ("--isolation", "proces"), ("--broker", "deamon")] {
+        let o = delulu(&home, &["run", p, "--grant", "console", flag, value]);
+        assert_eq!(o.status.code(), Some(2), "`{flag} {value}` must be a usage error: {}", text(&o));
+        assert!(!text(&o).contains("ran"), "`{flag} {value}`: nothing runs: {}", text(&o));
+        assert!(text(&o).contains(value), "`{flag} {value}`: the refusal names the value: {}", text(&o));
+    }
+    for good in ["interp", "wasm"] {
+        let o = delulu(&home, &["run", p, "--grant", "console", "--engine", good]);
+        assert!(o.status.success() && text(&o).contains("ran"), "`--engine {good}` runs: {}", text(&o));
+    }
+    // RW 6.49: a value a flag cannot read was read as no value, the default. `--seed abc` ran unseeded and `--clock
+    // bogus` on the real clock, exit 0. And `atlas`'s query verbs refused nothing at all.
+    let unreadable: Vec<Vec<&str>> = vec![
+        vec!["run", p, "--grant", "console", "--seed", "abc"],
+        vec!["run", p, "--grant", "console", "--clock", "bogus"],
+        vec!["run", p, "--grant", "console", "--clock", "fixed:soon"],
+        vec!["run", p, "--grant", "console", "--epoch-ms", "abc"],
+        vec!["run", p, "--grant", "console", "--epoch-ms=abc"],
+        vec!["run", p, "--grant", "console", "--actors-threads", "many"],
+        vec!["run", p, "--grant", "console", "--foreign-max-ret=big"],
+        vec!["test", "--seed", "abc", p],
+        vec!["test", p, "--seed"],
+        vec!["atlas", p, "--budget", "abc"],
+        vec!["atlas", "node", "main", p, "--gods", "abc"],
+        vec!["atlas", "node", "main", p, "--gods"],
+        vec!["atlas", "callers", "main", p, "--bogus"],
+    ];
+    for argv in &unreadable {
+        let o = delulu(&home, argv);
+        assert_eq!(o.status.code(), Some(2), "`{}` must be a usage error: {}", argv.join(" "), text(&o));
+        assert!(!text(&o).contains("ran"), "`{}`: nothing runs: {}", argv.join(" "), text(&o));
+    }
+    let o = delulu(&home, &["run", p, "--grant", "console", "--seed", "7", "--clock", "fixed:5"]);
+    assert!(o.status.success() && text(&o).contains("ran"), "a readable seed and clock run: {}", text(&o));
+}
+
 /// Every error the CLI prints starts with `error:`.
 ///
 /// This is not cosmetics. The prefix is how a person scanning a terminal finds the line that

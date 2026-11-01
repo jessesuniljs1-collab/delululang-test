@@ -293,7 +293,8 @@ fn a_flag_the_sandboxed_run_does_not_apply_is_refused_not_dropped() {
         vec!["--engine", "wasm"],
         vec!["--grant-manifest"],
         vec!["--seed", "7"],
-        vec!["--clock", "5"],
+        // A readable value, so the sandbox's own refusal is what answers (RW 6.49 refuses `--clock 5` first).
+        vec!["--clock", "fixed:5"],
         // P8-01 (D-V2-95): a sandboxed run applies the device flags now. `--broker-profile`, `--sim-step`
         // and `--signoff` left this list; a hardware run's own flags stay on it, refused because this run
         // is not a hardware run — in the ordinary run too, which had always dropped them in silence.
