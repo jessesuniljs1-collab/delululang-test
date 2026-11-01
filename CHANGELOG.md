@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the editor renames a type or an effect everywhere it is written, 2026-11-02
+
+- **Fixed: renaming a type or an effect in the editor left most of its uses behind** (RENAME-TYPES-1, RW 2.31). The
+  language server looked for one in function signatures and constants alone, so renaming a type missed another type's
+  fields, an actor's fields and parameters, a `let x: T` annotation and a closure's signature, and renaming an effect
+  missed the rows of actors, closures and tests. The renamed program did not check. Find-references had the same gap.
+
 ## Unreleased — a warning for a binding never read (DL0414), 2026-11-02
 
 - **Added: DL0414, a warning for a `let` or `var` binding never read** (D-V2-206, RW 2.30). A binding nothing reads
