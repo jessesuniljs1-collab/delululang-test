@@ -274,6 +274,29 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "3 -1 10 80 4\n", "the values themselves");
 }
 
+/// **RW 2.26 (D-V2-203).** A lowercase constructor is matched by its call form, `bar()` or `cell(n)`, on both engines.
+/// The bare name binds, and a binding spelled like a constructor of the matched type is refused (DL0302), so the call
+/// form is the one way to name such a constructor in a pattern. It must pick the arm the reader sees.
+#[test]
+fn a_lowercase_constructor_is_matched_by_its_call_form_on_both_engines() {
+    let src = r#"module m
+
+type T = foo | bar
+
+type Slot = empty | cell(Int)
+
+fn pick(t: T) -> Int { match t { foo() => 1, bar() => 2 } }
+
+fn size(s: Slot) -> Int { match s { empty() => 0 - 1, cell(n) => n } }
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(str(pick(foo)) + " " + str(pick(bar)) + " " + str(size(empty)) + " " + str(size(cell(9))))
+}
+"#;
+    assert_eq!(assert_parity(src), "1 2 -1 9\n", "each arm the reader sees");
+}
+
 /// **WASM-BUILTIN-SHADOW-1** (found 2026-11-01 beside CTOR-SHADOW-1): a local function value named like a prelude
 /// builtin is called, as the checker resolves the name to its innermost binding. The WASM engine asked the builtins
 /// first, so `str(5)` and `int(1.5)` ran the builtins and printed `5 builtin`; the interpreter called the locals.

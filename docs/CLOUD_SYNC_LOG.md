@@ -7193,3 +7193,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   current: RW 6.49 as a *Breaking* clause beside RW 6.48, and RW 3.24. (3) RW 3.24, structural. (4) RW 2.26's decision.
   (5) The broker's Miri. (6) *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — RW 2.26 decided: a pattern binding spelled like a constructor of the matched type is refused (D-V2-203) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ctor-binding` (stacked on `laptop/ai-onboarding`, #111)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: A `tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu`,
+  `tests/conformance/accept/lowercase_constructor_call_form.delulu`. M `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/src/lib.rs` (tests), `crates/delulu-diag/src/codes.rs` (DL0302's explanation),
+  `crates/delulu-syntax/src/ast.rs` (a comment), `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/fix_cli.rs`, `tests/core-invariance/SNAPSHOT.txt` (blessed), `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 2.26), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-203),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/AI_ONBOARDING.md` (the counters), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- In flight: `launch/2.0.0` `005372f` (RW 6.49 and RW 3.24 folded, `LAUNCH-GATES=ok`). Its `everything` run is
+  `41281508881` and its release dry run `41281511250`, dispatched 06:43 UTC and not yet read.
+- **Open / next, in order:**
+  1. Read `41281508881` and `41281511250` to their ends. Then fold #111 and this branch into `launch/2.0.0`: RW 2.26 is
+     a *Breaking* clause. Cite the newest runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
+  2. RW 3.24, structural.
+  3. The broker's Miri.
+  4. *[laptop]* The launch, only on the owner's word.
+  Unreachable arms after an arm that binds everything get no warning either (`match t { x => 1, Foo => 2 }`). It is a
+  candidate row; not filed yet.
+- Survey and doctor (after the last edit): in the commit message.
