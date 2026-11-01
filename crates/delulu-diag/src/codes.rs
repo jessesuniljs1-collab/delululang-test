@@ -1002,8 +1002,10 @@ pub fn code_explain(code: &str) -> Option<String> {
              what its arms say; the arm is dead. Remove it, or move it above the arm that takes its \
              values. The checker reports an arm only when it has proved it unreachable.",
         "DL0414" => "A warning: this `let` or `var` binding is never read before its block ends. \
-             A write is not a read, so a `var` that is only ever assigned is named too. Remove \
-             it, or begin its name with `_` to say it is meant to go unread.",
+             A write is not a read, so a `var` that is only ever assigned is named too. A write \
+             through it to a field or an element is a read: the record or list it names may be \
+             shared. The program still checks and runs. Remove the binding, or begin its name \
+             with `_` to say it is meant to go unread.",
 
         // ===== DL05xx — effects ============================================
         "DL0501" => "This function performs an effect its row does not declare. This is the \

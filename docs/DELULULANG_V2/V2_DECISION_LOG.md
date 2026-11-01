@@ -5669,3 +5669,43 @@ the atlas, the plugin), `within_cli` `a_secret_bound_again_inside_an_index_in_a_
 and `lsp_cli` `hover_shows_the_type_of_a_name_in_an_index_target`; conformance reject programs
 `DL0501_effect_in_an_index_target` and `DL1602_consume_in_an_index_target`. Each was red on `9b3be30`.
 Mutants, each red on its own assertion: M1018 (the index's row dropped), M1019 (no DL0405 for a base that is no list), M1020 (the index never checked), M1021 (the reference-capability walk skips the index), M1022 (its loop pre-scan does), M1023 (`--within`'s send walk does), M1024 (its assigned-names walk does), M1025 (the requirements walk does), M1026 (the Python and compute walk does), M1027 (the plugin-load walk does), M1028 (the atlas's foreign reach does), M1029 (the LSP's walk does) and M1030 (`index_exprs` names nothing). The suites: `delulu-syntax`'s library (the formatter's corpus law over the two new programs), `delulu-check`, `delulu-atlas` and `delulu-wasm` whole; `delulu`'s `conformance`, `core_invariance` (the two new programs added, no existing answer changed), `index_target_cli`, `within_cli`, `lsp_cli`, `plugin_load_cli`, `atlas_cli`, `atlas_e2e`, `cli`, `examples_run` and `late_let_cli`.
+
+## D-V2-206 — a `let` or `var` binding never read is reported, DL0414, a new warning — TAKEN (head chef, 2026-11-02, under the owner's delegation)
+
+**Context.** A binding nothing reads is dead code, or a mistake: a value computed and dropped, a name shadowed before it
+was used, a `var` only ever written. The checker said nothing. `AI_ONBOARDING.md` §10 scoped the warning on 2026-11-01,
+and its first draft (`laptop/unread-lets`) found INDEX-TARGET-1 (D-V2-205): it named `i` in `xs[i] = 9` unread because
+the checker never looked inside the index. Among the programs the repository ships it finds:
+- `docs/book/samples/05_secrets.delulu` computed `ok` and printed *match* whatever `ok` was;
+- `examples/demo.delulu` bound a secret only to show its type;
+- `measurements/robotics-demo/bench-none.delulu` built a `Cmd` it never sent;
+- five measurement demos bound a call's result (`done`, `stopped`) and dropped it.
+
+**Decision.**
+1. **DL0414, a warning**: *"`x` is bound here and never read"*, at the binding, when a `let` or `var` binding has had no
+   read when its block closes. It is a warning: the program still checks and runs.
+2. **What reads.** Every name the checker resolves as a value reads its binding: in an expression, a call, a closure's
+   body, an index, a condition. **An assignment `x = v` does not read `x`**, so a `var` only ever written is named. **The
+   base of `p.f = v` or `xs[i] = v` is read**: the binding is how the write reaches a record or a list another name may
+   share (both are shared cells at run time).
+3. **What is reported.** `let` and `var` bindings only: not parameters, `for` variables or pattern bindings, whose names
+   a signature, a loop or a match fixes. A name that begins with `_` is exempt, which says the binding is meant to go
+   unread. A binding shadowed before any read is named; its shadow is judged on its own.
+4. **The code.** A new code is a minor, additive change (`STABILITY.md` §5), and a warning changes no program's verdict.
+   Its witnesses are the checker's own tests, as DL0413's are, because a reject file must be refused
+   (`witnesses.toml`, entrenched: `ENTRENCHED_CHANGE_RECORD.md`).
+5. **The shipped programs.** The Book's sample now branches on `ok`, and the demo's secret is `_key`, with a comment
+   saying why. The measurement programs, the recorded AI-usability attempts among them, are evidence and stay as they
+   were: they still check and run, with the warning. Three conformance reject programs gain the warning beside their
+   error (`core_invariance`).
+
+**Not taken:** a repair that renames a binding to `_x`, which would need a new repair id; reporting parameters, which
+would warn on every implementation of a signature that ignores an argument.
+
+**Evidence.** `a_binding_never_read_warns_dl0414` (seven shapes, each at its own line with its own name) and
+`a_binding_read_is_not_reported` (nine, among them a read only in an index, the base of a field or an element written,
+and a `_` name). Mutants: M1031 (a read marks nothing), M1032 (a field's base not read), M1033 (an assignment reads its
+target), M1034 (`_` exempts nothing), M1036 (an inner block's bindings never reported) and M1037 (an element's base not
+read) were red. M1035 (a second `let` keeps the first binding's place) survived, and is equivalent: `bind` clears the
+name's place before `bind_let` records the new one. `delulu-conform --coverage` passes at 100% (360 of 360, 157 codes),
+and the reference is in sync. `core_invariance` changed in three reject programs only, each by one added warning.
