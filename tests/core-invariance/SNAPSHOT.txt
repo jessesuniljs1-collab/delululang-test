@@ -3243,6 +3243,76 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/for_loop_iteration.delulu`
 
+===== tests/conformance/accept/lowercase_constructor_call_form.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/lowercase_constructor_call_form.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/lowercase_constructor_call_form.delulu checked clean
+
+===== tests/conformance/accept/lowercase_constructor_call_form.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "other",
+      "pick",
+      "size"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/lowercase_constructor_call_form.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     other, pick, size
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/lowercase_constructor_call_form.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/lowercase_constructor_call_form.delulu`
+
 ===== tests/conformance/reject/DL0104_float_overflow.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -4936,6 +5006,126 @@ error[DL0301]: unknown name `unknown_variable`
   explain: delulu explain E-DL0301
 
 1 error(s)
+
+===== tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0302",
+      "explanation_id": "E-DL0302",
+      "message": "`foo` is a constructor of `T`, but a lowercase name in a pattern is a new binding: this pattern matches every `T`, not `foo` — write `foo()` to match the constructor, or rename the binding",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "suggest",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu",
+              "insert": "()",
+              "range": {
+                "end_byte": 389,
+                "start_byte": 389
+              }
+            }
+          ],
+          "id": "match-the-constructor",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 389,
+            "col": 8,
+            "line": 11
+          },
+          "file": "tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu",
+          "label": "binds any `T`; it does not match the constructor `foo`",
+          "start": {
+            "byte": 386,
+            "col": 5,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0302",
+      "explanation_id": "E-DL0302",
+      "message": "`bar` is a constructor of `T`, but a lowercase name in a pattern is a new binding: this pattern matches every `T`, not `bar` — write `bar()` to match the constructor, or rename the binding",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "suggest",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu",
+              "insert": "()",
+              "range": {
+                "end_byte": 403,
+                "start_byte": 403
+              }
+            }
+          ],
+          "id": "match-the-constructor",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 403,
+            "col": 8,
+            "line": 12
+          },
+          "file": "tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu",
+          "label": "binds any `T`; it does not match the constructor `bar`",
+          "start": {
+            "byte": 400,
+            "col": 5,
+            "line": 12
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0302]: `foo` is a constructor of `T`, but a lowercase name in a pattern is a new binding: this pattern matches every `T`, not `foo` — write `foo()` to match the constructor, or rename the binding
+  --> tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu:11:5
+   |
+11 |     foo => 1,
+   |     ^^^ binds any `T`; it does not match the constructor `foo`
+  repair: match-the-constructor (suggest)
+  explain: delulu explain E-DL0302
+
+error[DL0302]: `bar` is a constructor of `T`, but a lowercase name in a pattern is a new binding: this pattern matches every `T`, not `bar` — write `bar()` to match the constructor, or rename the binding
+  --> tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu:12:5
+   |
+12 |     bar => 2,
+   |     ^^^ binds any `T`; it does not match the constructor `bar`
+  repair: match-the-constructor (suggest)
+  explain: delulu explain E-DL0302
+
+2 error(s)
 
 ===== tests/conformance/reject/DL0302_duplicate.delulu :: check --json =====
 exit 1

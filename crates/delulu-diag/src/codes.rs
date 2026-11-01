@@ -64,6 +64,7 @@ registry! {
     "DL0410" => "generic variable used as both type and effect row",
     "DL0411" => "`for` iterates something that is not a list",
     "DL0412" => "`break` or `continue` outside a loop",
+    "DL0413" => "unreachable match arm",
 
     // DL05xx — effects
     "DL0501" => "function performs an effect not declared in its row",
@@ -915,7 +916,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              declared `pub` there. An import brings a module's public names into scope UNQUALIFIED.",
         "DL0302" => "This name is already defined in this module. Two definitions with one name \
              would make every use of it ambiguous, so the second is refused rather than shadowing \
-             the first.",
+             the first. The same holds in a `match`: a lowercase name in a pattern is a new binding \
+             that matches any value, so one spelled like a constructor of the type being matched \
+             would shadow that constructor, take every value, and leave the later arms dead. It is \
+             refused. Write the constructor's call form to match it, `foo()` or `cell(_)`, or rename \
+             the binding.",
         "DL0303" => "The imported module does not exist in this package or in any declared \
              dependency. Check the module name, and check that the package providing it is in \
              `[dependencies]` — access is not authority (§5.7), but you still need access.",
@@ -989,6 +994,12 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0412" => "`break` and `continue` only mean something inside a `while` or `for` loop — \
              `break` ends the loop, `continue` skips to the next iteration. This one is not inside a \
              loop, so there is nothing for it to act on. Remove it, or move it into a loop body.",
+        "DL0413" => "A warning: no value can reach this `match` arm. Arms are tried in order and the \
+             first that matches wins, so an arm whose every value an earlier arm already matches \
+             never runs — a name or `_` above it, the same constructor or literal twice, `Some(_)` \
+             above `Some(Red)`, a `_` after every constructor. The program still checks and does \
+             what its arms say; the arm is dead. Remove it, or move it above the arm that takes its \
+             values. The checker reports an arm only when it has proved it unreachable.",
 
         // ===== DL05xx — effects ============================================
         "DL0501" => "This function performs an effect its row does not declare. This is the \

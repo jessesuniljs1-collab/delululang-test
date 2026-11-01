@@ -63,3 +63,8 @@ automatically, which is worth remembering as a cross-check on prose.
 
 See [[delulu-reproduce-the-shape]] for the methodology trap this pass hit, and
 [[delulu-survey-map]] — the Survey caught four bad numbers in the first draft.
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**Remaining-work inventory**](delulu-remaining-work-inventory.md) — **`docs/REMAINING_WORK.md` (2026-08-23, `2189554`+`cdcc1e5`) is the single gap list**, 60 items, each verified against the binary. The three structural gaps: **microVM layer is a probe that always fails**, **stdlib is 4 list methods**, **`CLI_STRINGS` is empty**. README/QUESTIONS/Book counted the unbuilt microVM as a source of strength — fixed; **CONSTITUTION §5.15 still does and is ENTRENCHED — ask Jesse, never quietly fix.** Check `query <id>` for ENTRENCHED before editing any `docs/design/` file.

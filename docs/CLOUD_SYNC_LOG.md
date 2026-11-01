@@ -7216,3 +7216,85 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   5. The broker's Miri: 3 h 05 min and 3 h 07 min on the newest `everything` runs, under the 240-minute cap. If a nightly or
      an `everything` run passes 3 h 45 min, shorten what that job runs.
   6. *[laptop]* the launch, only on the owner's word.
+
+### 2026-11-01 — one AI at a time: `docs/AI_ONBOARDING.md`, the memory refreshed both ways, the routine every four hours and paused (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ai-onboarding`   Pull request: opened with this commit. Base: `d8dcc3b` (routine run 16's close).
+- **What:** see V2_LOG's entry of the same date and name. The routine is now `25 */4 * * *` UTC (01:55, 05:55, 09:55,
+  13:55, 17:55, 21:55 IST) and **paused**; only the owner resumes it. Another AI may work here, never at the same time as
+  Claude. Every AI reads `docs/AI_ONBOARDING.md` first.
+- Files and folders: A `docs/AI_ONBOARDING.md`, and 21 files in `docs/assistant-memory/` (the laptop's topic files the
+  folder lacked). M `AGENTS.md` (*Read first*), `HANDOFF.md` (the routine paragraph; §11.1, one AI at a time),
+  `docs/CLOUD_ROUTINE.md` (the schedule), `docs/REPOSITORY_STRUCTURE.md` (§5.2, the tree),
+  `docs/assistant-memory/README.md`, `MEMORY.md` and 20 topic files refreshed, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- For the laptop's memory: done in this session. `one-ai-at-a-time-2026-11-01.md` is new. `cloud-routine-on-demand-2026-10-17.md`
+  and `release-program-progress.md` are updated. The 6 cloud lessons and DEADMAN-DEAF-1 were carried in.
+- **Open / next, in order:** run 16's list stands. (1) Read `master`'s push run on `d8dcc3b`. (2) Bring `launch/2.0.0`
+  current: RW 6.49 as a *Breaking* clause beside RW 6.48, and RW 3.24. (3) RW 3.24, structural. (4) RW 2.26's decision.
+  (5) The broker's Miri. (6) *[laptop]* The launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — RW 2.26 decided: a pattern binding spelled like a constructor of the matched type is refused (D-V2-203) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ctor-binding` (stacked on `laptop/ai-onboarding`, #111)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: A `tests/conformance/reject/DL0302_binding_spelled_like_a_constructor.delulu`,
+  `tests/conformance/accept/lowercase_constructor_call_form.delulu`. M `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/src/lib.rs` (tests), `crates/delulu-diag/src/codes.rs` (DL0302's explanation),
+  `crates/delulu-syntax/src/ast.rs` (a comment), `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/fix_cli.rs`, `tests/core-invariance/SNAPSHOT.txt` (blessed), `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 2.26), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-203),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/AI_ONBOARDING.md` (the counters), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- In flight: `launch/2.0.0` `005372f` (RW 6.49 and RW 3.24 folded, `LAUNCH-GATES=ok`). Its `everything` run is
+  `41281508881` and its release dry run `41281511250`, dispatched 06:43 UTC and not yet read.
+- **Open / next, in order:**
+  1. Read `41281508881` and `41281511250` to their ends. Then fold #111 and this branch into `launch/2.0.0`: RW 2.26 is
+     a *Breaking* clause. Cite the newest runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
+  2. RW 3.24, structural.
+  3. The broker's Miri.
+  4. *[laptop]* The launch, only on the owner's word.
+  Unreachable arms after an arm that binds everything get no warning either (`match t { x => 1, Foo => 2 }`). It is a
+  candidate row; not filed yet.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — a `match` arm no value reaches is reported, DL0413 (D-V2-204, RW 2.28) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/dead-arms` (stacked on `laptop/ctor-binding`, #112)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs` (tests),
+  `crates/delulu-diag/src/codes.rs` (DL0413), `tests/conformance/witnesses.toml` (two rows, entrenched),
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/reference/README.md`, `coverage.md`, `diagnostics.md` (regenerated),
+  `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`, `docs/lang/delulu-slang.md` and `docs/REMAINING_WORK.md` (the count of
+  codes, 156; row 2.28), `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-204), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/AI_ONBOARDING.md` (the counters), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Land #112, then this branch, each on its green run.
+  2. Read `launch/2.0.0` `005372f`'s `41281508881` and `41281511250`.
+  3. Fold `master` into `launch/2.0.0`. RW 2.26 is a *Breaking* clause. DL0413 is additive, a new section with no
+     clause. Run `launch-criterion-2.py` (359 anchors now), the gates, and the `everything` run and release dry run.
+  4. RW 3.24, structural.
+  5. The broker's Miri.
+  6. *[laptop]* The launch, only on the owner's word.
+
+### 2026-11-01 — FMT-CTOR-1: `delulu fmt` kept a lowercase constructor's call form (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ctor-binding` (#112), a second commit after #112's first run was read red (`41282442664`: Ubuntu and
+  macOS, `laws_hold_over_the_repository_corpus`).
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-syntax/src/fmt.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 2.26),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.5), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- **Open / next:** as the entry for RW 2.28 says. `laptop/dead-arms` (#113) merges this branch.
+
+### 2026-11-01 — the Survey holds the memory notes as records (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/survey-memory-records` (from `master` `bfdda95`)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name. The map's warnings go from 16 to 7. Mutant M1013 was red.
+- Files and folders: M `crates/delulu-survey/src/verify.rs` (the exemption and its first test), `docs/AI_ONBOARDING.md`
+  (the warnings line), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **Open / next:** as the entry for RW 2.28 says. This branch lands after #112 and #113, by a merge of `master` with the
+  map rebuilt. The onboarding doc's counters then read M1013.
+- Survey and doctor (after the last edit): in the commit message.

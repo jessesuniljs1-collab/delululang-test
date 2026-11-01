@@ -37,3 +37,8 @@ head chef wrongly called it undecided on 2026-10-17 and corrected it. What remai
 D-V2-nn) and the "owner-reserved" lists in AGENTS.md/HANDOFF §1 for these items. Each decision is still written as
 `TAKEN (head chef, <date>, under the owner's delegation of 2026-10-17)` with evidence. Related: [[delulu-v2-execution]],
 [[testing-repo-autopush]].
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**🔥 2026-10-17 FULL DELEGATION — take DeluluLang to a PUBLIC RELEASE**](owner-release-delegation-2026-10-17.md) — Jesse's prompt `docs/design/DeluluLang_Autonomous_Development_Prompt.md`: every owner-reserved decision is now the head chef's (public repo + fresh history, CODEOWNERS, SECURITY.md, CONSTITUTION, licence compliance, GPL image, release); order: audit → P9-05 → decisions → WSL/VS Code → scheduled task → release → final report; limits: never invent contacts/keys/results, preserve `delululang-test` + backup, no image until GPL-compliant; licence ALREADY Apache-2.0 (D27, 2026-07-24); commits now as the no-reply address

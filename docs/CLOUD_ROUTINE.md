@@ -10,10 +10,13 @@ time, I will be running it occasionally whenever I can't use my laptop. Let it b
 whenever I need … Enable Push and Email notifications for new routine. Let new routine run every 5hr and 5 mins."* The
 routine is **`trig_01HFG6usfzmDAPQigiDu9DLq`**, *DeluluLang head chef — on demand (start by hand)*: Opus 5.5, the
 `delululang-test` repository, the Default environment, the Claude-Docs connector, push and e-mail notifications,
-schedule **`5 */6 * * *`** since 2026-10-21 (UTC 00:05, 06:05, 12:05, 18:05 — **05:35, 11:35, 17:35, 23:35 IST**, every gap
-six hours). Cron has no 5 h 5 min interval, and the first schedule, `5 */5 * * *`, left one four-hour gap each night (20:05 →
-00:05 UTC); the owner, 2026-10-21, chose every six hours — never under 5 h 5 min apart. **Created paused**; the owner switches it on at
-[claude.ai/code/routines](https://claude.ai/code/routines) and off when he is back. Its mandate is his commission of
+schedule **`25 */4 * * *` since 2026-11-01** (UTC 00:25, 04:25, 08:25, 12:25, 16:25, 20:25 — **01:55, 05:55, 09:55, 13:55,
+17:55, 21:55 IST**, the owner's own times: *"Change routine schedule to every 4 hours"*), renamed *Head Chef — every 4
+hours*. Before that it was `5 */6 * * *` (from 2026-10-21) and `5 */5 * * *` (from 2026-10-17). **Paused since 2026-11-01**
+(the owner: *"Let routine be paused, I will resume it whenever I want"*): only he switches it on, at
+[claude.ai/code/routines](https://claude.ai/code/routines), and off again. **Another AI may work on this repository between
+runs, never during one** (the owner, 2026-11-01). A run reads that AI's sync-log entry and branches as it would a laptop
+session's, and treats its work as a stranger's ([`AI_ONBOARDING.md`](AI_ONBOARDING.md)). Its mandate is his commission of
 2026-10-17 (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`), and step 4 below gives its work order. The
 first routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`, the cloud period of 2026-09-28 → 2026-10-16) stays disabled. Everything
 below still holds except where a paragraph says *since 2026-10-17*. A run may start long after the last one, and the

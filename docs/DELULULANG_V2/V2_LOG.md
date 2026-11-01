@@ -11323,3 +11323,110 @@ this run's harness and benchmarks for it (loop engineering, in the sync log).
 **The push run** `41276447349` on `f1c693d` (it holds `0a658f6`): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64
 (2.95x where the machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu, Windows and macOS (1.56x observed);
 the disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+
+## 2026-11-01 — the laptop: one AI at a time, an onboarding brief for any AI, the memory refreshed, the routine every four hours and paused
+
+The owner, in the morning:
+- *"Change routine schedule to every 4 hours"* at 9:55 PM, 1:55 AM, 5:55 AM, 9:55 AM, 1:55 PM and 5:55 PM.
+- *"There maybe another AI also working on delululang, Update the ur memory and docs. Give me doc containing everything
+  another AI should know before that AI start working like imp things to know and things in ur memory. I don't want
+  everything to be mess. So I will be running either of u or another ai at time, Not both of u together"*.
+- Minutes later: *"Let routine be paused, I will resume it whenever I want"*.
+
+What was done:
+- **The routine** `trig_01HFG6usfzmDAPQigiDu9DLq` was set through the API to `25 */4 * * *` UTC, which is the owner's six
+  IST times, and renamed *Head Chef — every 4 hours*. It was read back with its next run at 08:25 UTC, then set to
+  `enabled: false` with the cron kept. It had been disabled since 2026-10-29 and fired by hand, run 16 included. Its
+  prompt is unchanged: the owner edits it himself.
+- **`docs/AI_ONBOARDING.md`** is the brief for any AI, Claude or not:
+  - the one-AI rule, and the hand-over through git;
+  - the checklists for the start and end of a session;
+  - the hard rules, and the change loop with its counters (D-V2-202, M1003);
+  - the commands, the traps, and the memory digested;
+  - where the work stands.
+  `AGENTS.md` sends every new AI there first, and `HANDOFF.md` §11.1 holds the instruction.
+- **`docs/assistant-memory/`** had diverged both ways since its snapshot of 2026-09-28:
+  - The laptop held 21 topic files the folder lacked, and newer text in 20 more.
+  - The cloud runs had written 6 lessons and DEADMAN-DEAF-1's paragraph that the laptop lacked.
+  The cloud's notes were carried to the laptop first. Then the folder was refreshed from the laptop, 80 files, sanitized
+  by a script that refuses if the banned word survives. The new files were scanned for credentials and personal
+  addresses: none.
+
+## 2026-11-01 — the laptop: a pattern binding spelled like a constructor of the matched type is refused (RW 2.26, D-V2-203)
+
+RW 2.26 waited for a decision. In a `match`, a lowercase name binds, so over `type T = foo | bar` the arms
+`foo => 1, bar => 2` answered 1 for `bar` on both engines, and the checker said nothing. Probed first on the binary: the
+call form `foo() => 1, bar() => 2` already answered 2 on both engines. So the language had a spelling for the
+constructor, and the trap was the bare name.
+
+**Decided (D-V2-203):** such a binding is refused with DL0302, at any depth of a pattern. The repair
+`match-the-constructor` writes `foo()` or `cell(_)`. DL0302 is an existing code (a second definition refused rather than
+shadowing), so no new code, no entrenched file and no conformance entry was needed. DL0302's explanation now says it.
+Also fixed: the comment on `Pattern::Bind` in `ast.rs`, which said the checker resolved such a name Rust-style. It never
+had.
+
+**Evidence:**
+- `delulu-check` has two new tests: four refused shapes, each clean before, and four that still check.
+- The conformance pair carries `ref.diag.DL0302`.
+- `loop_parity`'s call-form test passes on both engines (`1 2 -1 9`).
+- `fix_cli`'s repair corpus gains `match-the-constructor`.
+- Mutants M1004–M1007 were each red.
+- `delulu-conform --coverage`: 358 of 358. `--check-reference` is in sync.
+- These targets passed: `core_invariance` (blessed, +190 lines: the two programs), `conformance`, `corpus_cli`,
+  `fix_cli` (13), `late_let_cli` and `delulu-check` (260).
+
+**Breaking** under STABILITY.md section 1: a program that checked under 1.x is refused. It is noted in the CHANGELOG
+section, for the *Breaking* paragraph at the next fold into `launch/2.0.0`.
+
+## 2026-11-01 — the laptop: a `match` arm no value reaches is reported, DL0413 (D-V2-204, RW 2.28)
+
+After RW 2.26 the laptop asked the wider question: does the checker say anything about an arm no value can reach? It
+did not. Five dead arms (`x` above `Red`, `Red` twice, `Some(_)` above `Some(Red)`, `0` twice, a `_` after `true` and
+`false`) checked clean, exit 0, and the run took the earlier arms.
+
+**Built:** `check_reachable_arms` asks each arm Maranget's usefulness question against the arms above it (`useful`, the
+general form of the question `uncovered` asks for exhaustiveness). It shares a new `specialize` with `uncovered`. It
+warns **DL0413** at the arm's pattern, and only when it has proved the arm unreachable, within its own copy of the
+search's limit. DL0413 is a new code (D-V2-204), a warning. The entrenched witness file gains two rows
+(`ENTRENCHED_CHANGE_RECORD.md`), the reference was regenerated (359 of 359, 156 codes), and the documents quoting the
+count say 156.
+
+**Evidence:**
+- Ten dead shapes are each warned at their own line. Six live matches are not reported.
+- Mutants: M1008–M1011 were each red. One more was equivalent and is recorded in D-V2-204.
+- Cost: 6,000 literal arms check in 0.27 s against 0.06 s, on a debug build. No program the repository ships has a dead
+  arm.
+- These passed: `delulu-check` (262), `delulu-diag`, `conformance`, `core_invariance`, `corpus_cli`, `book`,
+  `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.
+
+## 2026-11-01 — the laptop: FMT-CTOR-1, `delulu fmt` printed `foo()` as `foo`
+
+#112's first run (`41282442664`) was red on Ubuntu and macOS, in `delulu-syntax`'s
+`laws_hold_over_the_repository_corpus`. The formatter's identity law holds over every `.delulu` file in the repository,
+and RW 2.26's new accepting program was one of them. `pattern_text` printed a nullary constructor pattern bare whatever
+its name, so `foo() => 1` became `foo => 1`. The parser reads a lone lowercase name as a binding, so `delulu fmt` had
+changed what the program meant: the arm matched every value. Before D-V2-203 the result checked clean and took the
+first arm; after it, the result is refused. The defect is as old as lowercase constructors (1.x).
+
+**Fixed:** a lone lowercase name keeps its call form (`foo()`). A capitalized or qualified name prints bare, as both
+parse to a constructor. `a_lowercase_nullary_constructor_pattern_keeps_its_call_form` holds it; mutant M1012 (the call
+form dropped) turns it and the corpus law red; `delulu-syntax`'s lib tests pass (131).
+
+The laptop had not run `delulu-syntax`'s tests for #112: a new `.delulu` file in `tests/conformance/` is also the
+formatter's corpus, so a change that adds one runs them. (HANDOFF §11.5.)
+
+## 2026-11-01 — the laptop: the Survey holds the memory notes as records, not claims about now
+
+Refreshing `docs/assistant-memory/` (the same day: 79 notes and their index) made ten of the map's sixteen warnings `stale-count`
+findings in memory notes. An example is "12 shipped language crates" in a note of 2026-08: a record of that day, as true
+as the archive's. Ten old warnings bury a new one.
+
+**Changed:** `describes_the_present` (`crates/delulu-survey/src/verify.rs`) exempts `docs/assistant-memory/`, as it
+exempts `docs/archive/`. Its README says the notes are dated as written and never edited on the way in. `HANDOFF.md` §11
+and the V2 documents state the present, and are still checked. The rule had no test. Now
+`only_documents_that_describe_the_present_are_held_to_the_tree` names the documents on each side, and mutant M1013 (the
+exemption removed) turns it red.
+
+**Result:** findings went from 0 errors and 16 warnings to 0 errors and 7. Four are memory notes naming a path not in
+the tree, kept as warnings because a path that dangles may be a real one moved. Two are in a design prompt, and one is an
+old V2_LOG count.

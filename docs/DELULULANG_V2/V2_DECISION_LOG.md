@@ -5534,3 +5534,103 @@ Indices resolved before the run: the larger change RW 3.24 still names, which wo
 **Evidence.** With run 16's other cuts (`V2_LOG.md`, RW 3.24), `nested_calls_macro` −15.9% in instructions and −19% in time;
 the full suite green. The hasher's own share was measured with the scope sizing and the call order together: those three
 took `nested_calls_macro` from 1,449 to 1,371 million instructions.
+
+## D-V2-203 — RW 2.26: a pattern binding spelled like a constructor of the matched type is refused (DL0302) — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** The checker admits lowercase constructors (`type T = foo | bar`), and since D-V2-201 both engines build
+them as values. In a pattern the parser reads a lowercase name as a fresh binding and a capitalized one as a constructor
+(`parse_pattern_inner`). So `match t { foo => 1, bar => 2 }` checked clean and answered 1 for `bar`, on both engines:
+the first arm bound every `T` and the second never ran. That is the language's defined meaning, not an engine defect,
+but every reader takes those arms for the constructors. The call form `foo()` already matched the constructor on both
+engines (probed on the binary, 2026-11-01).
+
+**Decision.** In a `match`, a binding spelled like a constructor of the type matched at that position is refused,
+**DL0302**, at every depth: at the top, inside `Some(…)`, and inside another constructor's fields. The message names the
+constructor and the type. The repair `match-the-constructor` (a suggestion, with edits) writes the call form, `foo()`,
+or `cell(_)` with one `_` per field. A binding spelled like another type's constructor, and every other binding, check
+as before.
+
+**Why DL0302, not a new code.** DL0302's rule is that a second definition of one name is refused rather than shadowing
+the first. A binding spelled like the matched type's own constructor would shadow it in the arm, and would take every
+value. Its explanation now says so. The precedent is D-V2-179, which reused DL0211. No conformance entry or entrenched
+file changes. A rejecting and an accepting program carry `ref.diag.DL0302` in their headers, and coverage stays 358 of
+358.
+
+**Why a refusal, not a warning.** Every program holding such a binding computes something other than what it reads as,
+silently: its later arms never run. A warning can be scrolled past, and the fix is mechanical. Rust refuses the same
+shape by default (E0170, `bindings_with_variant_name`). The refusal is also the other half of an existing one: a
+capitalized name that is no constructor of the type is refused, DL0405.
+
+**The alternatives.**
+- (b) Refuse lowercase constructors at their declaration: it refuses every such type, its correct uses included, and
+  the conformance witness of D-V2-201 holds lowercase constructors as values.
+- (c) Read such a name in a pattern as the constructor, as Rust resolves it: it changes what programs that check today
+  mean, without a word.
+- A warning, option (a) as first written: above.
+
+**Breaking.** A program that checked under 1.x is refused under 2.0.0 when it holds such a binding. Its 2.0.0 entry
+goes into the *Breaking* paragraph when `launch/2.0.0` next takes `master`.
+
+**Evidence.**
+- Tests: `delulu-check`'s `a_binding_spelled_like_a_constructor_of_the_matched_type_is_refused`. Its four shapes each
+  checked clean before: a nullary constructor, one with a field, one inside `Some`, and a generic sum type.
+  `a_binding_that_names_no_constructor_of_the_matched_type_checks` covers what stays. Also the conformance pair,
+  `loop_parity`'s call-form parity (`1 2 -1 9` on both engines), and `fix_cli`'s repair corpus.
+- Mutants, each red:
+  - M1004: the binding is never asked about. Unit tests and conformance went red.
+  - M1005: only a nullary constructor counts.
+  - M1006: the repair writes `()` whatever the fields.
+  - M1007: a generic sum type is not asked.
+- The core-invariance snapshot is blessed; it gained only the two new programs.
+
+## D-V2-204 — a `match` arm no value reaches is reported, DL0413, a new warning — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** Arms are tried in order and the first that matches wins, on both engines. So an arm whose every value an
+earlier arm already matches never runs. Five such arms checked clean on the binary (`check` exit 0), and the run took
+the earlier arms. Examples are `x => …` above `Red => …`, `Red` or `0` twice, `Some(_)` above `Some(Red)`, and a `_`
+after `true` and `false`. RW 2.26 (D-V2-203) closed the commonest way to write one by accident, a binding spelled like a
+constructor. The rest are an arm in the wrong order, or one left behind by an edit.
+
+**Decision.**
+- The checker asks each arm whether some value reaches it past the arms above. This is Maranget's usefulness, the
+  question the exhaustiveness search (MATCH-EXHAUST-1) already asks of a row that holds any value, generalized to any
+  row.
+- An arm no value reaches is reported with **DL0413**, *unreachable match arm*, a **warning**, at the arm's pattern.
+- It is asked only when every pattern of the `match` passed, with its own copy of the exhaustiveness search's limit
+  (`EXHAUSTIVE_BUDGET`). It reports an arm only when it has proved it unreachable. A search that spends its limit
+  stops asking, and says nothing more about that `match`.
+
+**Why a warning.** The program does what its arms say; nothing escapes or faults. rustc, OCaml and GHC each warn on
+the same shape. A refusal would make a dead arm in generated code, or one kept while editing, a build failure, for no
+safety gain.
+
+**Why a new code.** No existing code says it. DL0407 is the opposite claim (an arm missing). DL0502, the one typing
+warning, is about effects. The owner's delegation of 2026-10-17 covers a new `DL` code where one is needed. Under
+`STABILITY.md` §5 a new diagnostic code is a minor, additive change.
+
+**What it touches.**
+- `codes.rs`: the title and the explanation.
+- `witnesses.toml`, entrenched (`ENTRENCHED_CHANGE_RECORD.md`), gains two rows:
+  - the producing one is `an_arm_no_value_reaches_warns_dl0413`. A warning cannot be a `.delulu` reject file, which
+    must be refused.
+  - the accepting one is `an_arm_some_value_reaches_is_not_reported`.
+- The generated reference: 359 of 359 anchors, 156 codes.
+- The documents that quote the count of codes (156 now).
+
+**Cost.** Each arm is asked against the arms above it, so a `match` of n arms reads about n²/2 cells, within the limit.
+On a debug build, 6,000 literal arms check in 0.27 s against 0.06 s before (the limit is reached near arm 4,500), and
+1,000 in 0.04 s. No program the repository ships has a dead arm: `core_invariance` is unchanged by the check.
+
+**Evidence.**
+- The two tests above, each red before.
+- Mutants, each red:
+  - M1008: the arms are never asked, the defect itself.
+  - M1009: any literal covers any literal.
+  - M1010: a constructor every arm covers is read as a value left.
+  - M1011: a row's fields are read as any value.
+- One mutant was equivalent: reading the constructors some arms name as all of them. For a finite set of constructors,
+  trying each in turn, the missing ones included, gives the same answer as the default rows, at more cost. The
+  `all(...)` that selects the default rows is a matter of cost, not correctness.
+- Coverage is 100% (359/359), and the reference is in sync.
+- These targets passed: `delulu-check` (262), `delulu-diag` (57), `conformance`, `core_invariance`, `corpus_cli`,
+  `book`, `examples_run`, `json_contract`, `locale_cli`, `locale_plugin_cli` and `cli`.

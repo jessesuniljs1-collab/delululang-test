@@ -37,7 +37,7 @@ richly localizable precisely *because* the machine side is frozen. (See `AI_NATI
   to build with a missing `en-US` key. Every other locale falls back to it.
 - **`delulu-slang`** — Gen-Z spoken English, the project's default voice option. **It is a starter
   catalog, and this line overstated it until 2026-08-23.** What actually ships is version `0.8.0`
-  with **8 of 155 diagnostic codes** and **the 3 named CLI strings**; long-form `explain` is en-US
+  with **8 of 156 diagnostic codes** and **the 3 named CLI strings**; long-form `explain` is en-US
   throughout. The catalog `[meta].coverage` string is the honest one and the picker shows it.
 
   **The CLI half could not be authored until 2026-10-17**: `delulu_diag::catalog::CLI_STRINGS` — the

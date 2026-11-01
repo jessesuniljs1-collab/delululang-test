@@ -294,3 +294,8 @@ security outcome, what else spells the same thing?*
 Related: [[delulu-production-readiness-2026-08-09]], [[delulu-root-issuance-bypass]],
 [[delulu-core-regression-rule]], [[delulu-survey-map]], [[discovery-over-checklist]].
 Full log: `docs/design/PRODUCTION_READINESS_2026-08-10.md`.
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**P22 campaign 2026-08-10 (Opus 5) — verdict PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS**](delulu-p22-containment-campaign.md) — **START HERE with the 2026-08-09 file.** Win+Linux, Tier-2 deployment only; **macOS NOT covered and never run**. **13 defects fixed, 1 residual documented**, every fix falsified against pre-fix code. Headline: **SYMLINK-DANGLE-1** (a *dangling* symlink escaped filesystem containment — workspace-deliverable via git) and **GUARD-SPELL-1** (a guard seal written the natural relative way gated NOTHING while the CLI said `ok`). Also ROOTPOLICY-1, DEPPIN-LEX-1, INTERP-DROP-1, CERT-SCOPE-REL-1, DL1421-RENDER-1, DOCTOR-STATEDIR-1, SURVEY-HEADING-1, BOOKFMT-1, SERVERPATH-REL-1, CORE-SNAPSHOT-1. **The search key that found four of them: a security decision made on an UNNORMALIZED representation, walked past by a different spelling — ask it of every string compared to decide a security outcome.** Final `35a1f02`: Win 1645 / Linux 1654, clippy 0, LSP verified LIVE by protocol on both.

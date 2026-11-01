@@ -1,0 +1,14 @@
+// anchors: ref.diag.DL0302
+// Tier 1: a lowercase name in a pattern is a new binding, so `foo` here would match every `T`,
+// and the `bar` arm would never run. A binding spelled like a constructor of the type it matches
+// would shadow that constructor, so it is refused (RW 2.26, D-V2-203). `foo()` matches it.
+module conf
+
+type T = foo | bar
+
+fn pick(t: T) -> Int {
+  match t {
+    foo => 1,
+    bar => 2,
+  }
+}
