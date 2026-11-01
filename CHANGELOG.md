@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a flag's value that cannot be read is refused, 2026-11-01
+
+- **Fixed: a value a flag cannot read is a usage error (exit 2), and nothing runs** (RW 6.49). Each was read as no value,
+  the default: `run --seed abc` ran unseeded, `--clock bogus` on the real clock, and `--epoch-ms`, `--actors-threads`,
+  `--foreign-max-ret` and `--sim-step` on their defaults. So did `test --seed abc`, and `test --seed` with no value at
+  all. `atlas --budget abc` built under the default budget. Now each says `was given a value it cannot read: --seed
+  `abc``. A readable value runs as before.
+- **Fixed: `atlas`'s query verbs (`node`, `callers`, `calls`, `why`, `path`) refuse an option they do not know, an
+  option with no value, and a value they cannot read** (RW 6.49). They refused none, though they share the graph
+  command's parser, which did.
+
 ## Unreleased — `run --engine` refuses a value it does not know, 2026-11-01
 
 - **Fixed: `delulu run --engine` takes `interp` or `wasm`, and refuses any other value** (RW 6.48). Any other value ran

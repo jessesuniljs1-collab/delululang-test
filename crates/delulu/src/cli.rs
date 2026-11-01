@@ -199,6 +199,10 @@ pub(crate) struct Opts {
     /// --isolation` executed with **no isolation at all** and exited 0 — a security-relevant
     /// setting, dropped in silence, reported as success.
     pub(crate) missing_values: Vec<String>,
+    /// **And one step further in (RW 6.49):** a value given that the flag cannot read. Each was read as no value at all,
+    /// so `--seed abc` ran unseeded, `--clock bogus` on the real clock and `--epoch-ms abc` on the default epoch, and
+    /// each said nothing and exited 0. Refused with `missing_values` ([`refuse_unknown_flags`]).
+    pub(crate) bad_values: Vec<String>,
     /// Flags the shared parser did not recognise, kept so a command can refuse them.
     ///
     /// The exact twin of `positionals` above, and it exists for the same reason one commit later:
@@ -399,6 +403,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         positionals: Vec::new(),
         unknown_flags: Vec::new(),
         missing_values: Vec::new(),
+        bad_values: Vec::new(),
         seen_flags: Vec::new(),
         json: false,
         grants: Vec::new(),
@@ -590,7 +595,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--report-out=") => opts.report_out = Some(s["--report-out=".len()..].to_string()),
             "--seed" => {
                 if i + 1 < rest.len() {
-                    opts.seed = rest[i + 1].parse().ok();
+                    opts.seed = read_value("--seed", &rest[i + 1], &mut opts.bad_values);
                     i += 1;
                 } else {
                     opts.missing_values.push("--seed".to_string());
@@ -665,7 +670,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             }
             "--sim-step" => {
                 if i + 1 < rest.len() {
-                    opts.sim_step = rest[i + 1].parse().ok();
+                    opts.sim_step = read_value("--sim-step", &rest[i + 1], &mut opts.bad_values);
                     i += 1;
                 } else {
                     opts.missing_values.push("--sim-step".to_string());
@@ -701,6 +706,9 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--clock" => {
                 if i + 1 < rest.len() {
                     opts.clock_ms = rest[i + 1].strip_prefix("fixed:").and_then(|s| s.parse().ok());
+                    if opts.clock_ms.is_none() {
+                        opts.bad_values.push(format!("--clock `{}` (it takes `fixed:MS`)", rest[i + 1]));
+                    }
                     i += 1;
                 } else {
                     opts.missing_values.push("--clock".to_string());
@@ -718,14 +726,14 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             // Stage 7 (spec §6.1): actor scheduler controls.
             "--actors-threads" => {
                 if i + 1 < rest.len() {
-                    opts.actors_threads = rest[i + 1].parse().ok();
+                    opts.actors_threads = read_value("--actors-threads", &rest[i + 1], &mut opts.bad_values);
                     i += 1;
                 } else {
                     opts.missing_values.push("--actors-threads".to_string());
                 }
             }
             s if s.starts_with("--actors-threads=") => {
-                opts.actors_threads = s["--actors-threads=".len()..].parse().ok();
+                opts.actors_threads = read_value("--actors-threads", &s["--actors-threads=".len()..], &mut opts.bad_values);
             }
             "--on-quiesce" => {
                 if i + 1 < rest.len() {
@@ -772,14 +780,14 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--out=") => opts.out = Some(s["--out=".len()..].to_string()),
             "--foreign-max-ret" => {
                 if i + 1 < rest.len() {
-                    opts.foreign_max_ret = rest[i + 1].parse().ok();
+                    opts.foreign_max_ret = read_value("--foreign-max-ret", &rest[i + 1], &mut opts.bad_values);
                     i += 1;
                 } else {
                     opts.missing_values.push("--foreign-max-ret".to_string());
                 }
             }
             s if s.starts_with("--foreign-max-ret=") => {
-                opts.foreign_max_ret = s["--foreign-max-ret=".len()..].parse().ok();
+                opts.foreign_max_ret = read_value("--foreign-max-ret", &s["--foreign-max-ret=".len()..], &mut opts.bad_values);
             }
             "--broker" => {
                 if i + 1 < rest.len() {
@@ -792,13 +800,15 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--broker=") => opts.broker = Some(s["--broker=".len()..].to_string()),
             "--epoch-ms" => {
                 if i + 1 < rest.len() {
-                    opts.epoch_ms = rest[i + 1].parse().ok();
+                    opts.epoch_ms = read_value("--epoch-ms", &rest[i + 1], &mut opts.bad_values);
                     i += 1;
                 } else {
                     opts.missing_values.push("--epoch-ms".to_string());
                 }
             }
-            s if s.starts_with("--epoch-ms=") => opts.epoch_ms = s["--epoch-ms=".len()..].parse().ok(),
+            s if s.starts_with("--epoch-ms=") => {
+                opts.epoch_ms = read_value("--epoch-ms", &s["--epoch-ms=".len()..], &mut opts.bad_values)
+            }
             "--foreign-isolation" => {
                 if i + 1 < rest.len() {
                     opts.foreign_isolation = Some(rest[i + 1].clone());
@@ -1003,6 +1013,15 @@ pub(crate) fn documented_flags(cmd: &str) -> Vec<String> {
     flags
 }
 
+/// A flag's value as the flag reads it, or `None` with the flag and its value kept in `bad` to be refused (RW 6.49).
+fn read_value<T: std::str::FromStr>(flag: &str, value: &str, bad: &mut Vec<String>) -> Option<T> {
+    let read = value.parse().ok();
+    if read.is_none() {
+        bad.push(format!("{flag} `{value}`"));
+    }
+    read
+}
+
 pub(crate) fn refuse_unknown_flags(cmd: &str, opts: &Opts) -> Option<i32> {
     // A flag that needs a value and was given none is the same failure in a different position: the
     // setting the caller asked for is discarded and the command proceeds on its default.
@@ -1011,6 +1030,16 @@ pub(crate) fn refuse_unknown_flags(cmd: &str, opts: &Opts) -> Option<i32> {
             "error: `{cmd}` was given {} with no value: {}",
             if opts.missing_values.len() == 1 { "an option" } else { "options" },
             opts.missing_values.join(", ")
+        );
+        eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
+        return Some(2);
+    }
+    // RW 6.49: and a value the flag cannot read, which was read as no value, the default.
+    if !opts.bad_values.is_empty() {
+        eprintln!(
+            "error: `{cmd}` was given {} it cannot read: {}",
+            if opts.bad_values.len() == 1 { "a value" } else { "values" },
+            opts.bad_values.join(", ")
         );
         eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
         return Some(2);
@@ -2220,7 +2249,18 @@ fn cmd_test(rest: &[String]) -> i32 {
             s if s.starts_with("--test-authority=") => authority_rows.push(s["--test-authority=".len()..].to_string()),
             "--seed" => {
                 i += 1;
-                seed_flag = rest.get(i).and_then(|v| v.parse().ok());
+                // RW 6.49: a missing or unreadable seed ran the tests unseeded, as though none was asked for.
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: `test` was given an option with no value: --seed");
+                    eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
+                    return 2;
+                };
+                let Ok(n) = v.parse() else {
+                    eprintln!("error: `test` was given a value it cannot read: --seed `{v}`");
+                    eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
+                    return 2;
+                };
+                seed_flag = Some(n);
             }
             other if !other.starts_with("--") => {
                 let p = std::path::PathBuf::from(other);
@@ -10717,6 +10757,8 @@ struct AtlasFlags {
     /// Value-taking flags given no value. `atlas` parses its own argv, so it carries its own copy
     /// of the rule: `--format` with nothing after it must refuse, not fall back to the default.
     missing_values: Vec<String>,
+    /// Values a flag cannot read (RW 6.49): `--budget abc` built under the default budget, and `--gods abc` was ignored.
+    bad_values: Vec<String>,
     /// Flags this parser did not recognise. `atlas` parses its own options, so it needs its own
     /// copy of the rule the shared parser now holds: an option nobody understood is refused.
     unknown_flags: Vec<String>,
@@ -10733,6 +10775,7 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
         positionals: Vec::new(),
         unknown_flags: Vec::new(),
         missing_values: Vec::new(),
+        bad_values: Vec::new(),
         format: None,
         // (field added below on AtlasFlags itself — atlas parses its own flags)
         out: None,
@@ -10770,16 +10813,16 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
             s if s.starts_with("--out=") => f.out = Some(s["--out=".len()..].to_string()),
             "--budget" => {
                 if i + 1 < args.len() {
-                    f.budget = args[i + 1].parse().ok();
+                    f.budget = read_value("--budget", &args[i + 1], &mut f.bad_values);
                     i += 1;
                 } else {
                     f.missing_values.push("--budget".to_string());
                 }
             }
-            s if s.starts_with("--budget=") => f.budget = s["--budget=".len()..].parse().ok(),
+            s if s.starts_with("--budget=") => f.budget = read_value("--budget", &s["--budget=".len()..], &mut f.bad_values),
             "--gods" => {
                 if i + 1 < args.len() {
-                    if let Ok(n) = args[i + 1].parse() {
+                    if let Some(n) = read_value("--gods", &args[i + 1], &mut f.bad_values) {
                         f.gods = n;
                     }
                     i += 1;
@@ -10788,7 +10831,7 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
                 }
             }
             s if s.starts_with("--gods=") => {
-                if let Ok(n) = s["--gods=".len()..].parse() {
+                if let Some(n) = read_value("--gods", &s["--gods=".len()..], &mut f.bad_values) {
                     f.gods = n;
                 }
             }
@@ -10841,20 +10884,34 @@ fn atlas_custody_overlay() -> Result<Json, Diagnostic> {
     }
 }
 
+/// The rule `refuse_unknown_flags` holds for the shared parser, for `atlas`'s own: an option with no value, a value it
+/// cannot read (RW 6.49), and an option nobody understood are each refused, never run on the default.
+fn refuse_atlas_flags(cmd: &str, f: &AtlasFlags) -> Option<i32> {
+    if !f.missing_values.is_empty() {
+        eprintln!("error: `{cmd}` was given options with no value: {}", f.missing_values.join(", "));
+        eprintln!("  nothing was done — falling back to the default would ignore what you asked for");
+        return Some(2);
+    }
+    if !f.bad_values.is_empty() {
+        eprintln!("error: `{cmd}` was given values it cannot read: {}", f.bad_values.join(", "));
+        eprintln!("  nothing was done — falling back to the default would ignore what you asked for");
+        return Some(2);
+    }
+    if !f.unknown_flags.is_empty() {
+        eprintln!("error: `{cmd}` does not know these options: {}", f.unknown_flags.join(", "));
+        eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+        eprintln!("note: `delulu atlas --help` lists what this command accepts");
+        return Some(2);
+    }
+    None
+}
+
 /// `delulu atlas <file|dir> [--format tree|digest|json|dot|mermaid|html] [--out DIR] [--budget N]
 /// [--gods N] [--custody] [--json]`.
 fn atlas_graph_cmd(args: &[String]) -> i32 {
     let f = parse_atlas_flags(args);
-    if !f.missing_values.is_empty() {
-        eprintln!("error: `atlas` was given options with no value: {}", f.missing_values.join(", "));
-        eprintln!("  nothing was done — falling back to the default would ignore what you asked for");
-        return 2;
-    }
-    if !f.unknown_flags.is_empty() {
-        eprintln!("error: `atlas` does not know these options: {}", f.unknown_flags.join(", "));
-        eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
-        eprintln!("note: `delulu atlas --help` lists what this command accepts");
-        return 2;
+    if let Some(code) = refuse_atlas_flags("atlas", &f) {
+        return code;
     }
     let Some(target) = f.positionals.first().cloned() else {
         eprintln!("error: `atlas` needs a file or package directory (e.g. `delulu atlas examples/demo.delulu`)");
@@ -10937,6 +10994,11 @@ fn atlas_graph_cmd(args: &[String]) -> i32 {
 /// an optional trailing target (file/dir/atlas.json); default is the current directory.
 fn atlas_query_cmd(verb: &str, args: &[String]) -> i32 {
     let f = parse_atlas_flags(args);
+    // RW 6.49: the query verbs refused nothing — an unknown option, a value-taking one with no value, and a value
+    // nobody could read were all ignored, exit 0, though they share the graph command's parser and its rule.
+    if let Some(code) = refuse_atlas_flags(&format!("atlas {verb}"), &f) {
+        return code;
+    }
     let n_query = if verb == "path" { 2 } else { 1 };
     if f.positionals.len() < n_query {
         eprintln!("error: `atlas {verb}` needs {} argument(s){}", n_query, if verb == "path" { " (<A> <B>)" } else { "" });

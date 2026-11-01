@@ -7090,3 +7090,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. RW 2.26 (a lowercase nullary constructor cannot be matched by name) waits for a decision: the warning is additive.
   3. RW 3.24, profile first. *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — a flag's value that cannot be read is refused (RW 6.49) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/flag-values` (stacked on `laptop/records-0101b`, #109)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli_contract.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.49), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next:** as #109's entry says, with one more section to fold into `launch/2.0.0`. It is **Breaking** as RW
+  6.48 is: under 1.x each such command line ran on the default and exited 0, and now it is refused with exit 2. Add it
+  to 6.48's clause in the *Breaking* paragraph.
+- Survey and doctor (after the last edit): in the commit message.

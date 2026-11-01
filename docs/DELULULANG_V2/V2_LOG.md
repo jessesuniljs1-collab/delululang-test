@@ -11188,3 +11188,25 @@ unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | w
   with a value other than `interp` or `wasm` is refused, exit 2, where v1.0.0 ran the interpreter. LOCAL-CALLEE-1,
   CTOR-SHADOW-1 and WASM-BUILTIN-SHADOW-1 were judged not breaking. `LAUNCH-GATES=ok`. Its `everything` run
   `41255633510` and release dry run `41255635829` were dispatched.
+
+## 2026-11-01 — the laptop: a flag's value that cannot be read is refused (RW 6.49)
+
+After RW 6.48 the laptop asked every value-taking flag of the shared parser the same question. `--limits mem=lots`
+refused already, but these did not:
+- `--seed abc`, `--epoch-ms abc`, `--actors-threads x`, `--foreign-max-ret x` and `--sim-step x`, each read with
+  `.parse().ok()`;
+- `--clock bogus` and `--clock fixed:soon`, read with `strip_prefix("fixed:")`.
+Each ran on the default, exit 0. A typo in a seed, which exists to make a run reproducible, gave an unreproducible run
+that said nothing. `test` read its own `--seed` the same way, and took a missing one as none. `atlas` read `--budget`
+and `--gods` the same way, and its query verbs (`node`, `callers`, `calls`, `why`, `path`) refused nothing at all:
+`atlas node main FILE --bogus` exited 0. They share the parser whose graph command refused unknown and missing options.
+
+The fix:
+- `read_value` keeps a flag and a value it cannot read in `bad_values`.
+- `refuse_unknown_flags` refuses them, exit 2, beside a missing value.
+- `test` refuses a missing or unreadable `--seed` in its own parser.
+- `refuse_atlas_flags` holds the graph command's rule for every atlas verb.
+
+`cli_contract`'s test gains 13 command lines, and was red before. M990–M993 each turned it red. `cli` (54),
+`json_contract`, `atlas_cli`, `atlas_e2e`, `atlas_chain`, `test_runner_cli`, `completions_cli`, `actors_cli`,
+`sim_device_cli` and `dead_man_cli` passed.
