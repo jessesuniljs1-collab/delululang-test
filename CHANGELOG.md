@@ -40,13 +40,39 @@ DL1402, DL1403) answer it first (RW 4.79, D-V2-195); `run --engine` takes `inter
 value, exit 2, where 1.x ran the interpreter (RW 6.48); a flag value that cannot be read is refused, exit 2, with
 nothing run, where 1.x ran on the default. That covers `run --seed abc`, `--clock bogus`, an unreadable `--epoch-ms`,
 `--actors-threads` or `--foreign-max-ret`, `test --seed abc`, `test --seed` with no value, and `atlas --budget abc`. The
-same goes for an option `atlas`'s query verbs do not know or are given with no value (RW 6.49).
+same goes for an option `atlas`'s query verbs do not know or are given with no value (RW 6.49); in a `match`, a lowercase name
+spelled like a constructor of the matched type is refused, DL0302, where 1.x bound it to every value and left the
+later arms dead (RW 2.26, D-V2-203).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a warning for a `match` arm no value reaches (DL0413), 2026-11-01
+
+- **Added: DL0413, a warning for an arm no value can reach** (D-V2-204, RW 2.28). The first arm that matches wins, so an
+  arm whose every value an earlier arm already matches never runs. Examples: `x => …` above `Red => …`, `Red` or `0`
+  twice, `Some(_)` above `Some(Red)`, a `_` after `true` and `false`. Each of these checked clean, with no word. The
+  checker now names the arm. It reports an arm only when it has proved it unreachable, under the exhaustiveness search's
+  own limit. It is a warning: the program still checks and runs as its arms say. A new diagnostic code is a minor,
+  additive change (`STABILITY.md` §5), and no program the repository ships has such an arm.
+
+### a pattern binding spelled like a constructor of the matched type is refused, 2026-11-01
+
+- **Changed: in a `match`, a lowercase name spelled like a constructor of the type being matched is refused, DL0302**
+  (RW 2.26, D-V2-203). A lowercase name in a pattern is a new binding, so over `type T = foo | bar` the arms
+  `foo => 1, bar => 2` matched every `T` with the first arm and answered 1 for `bar`, on both engines and with no word
+  from the checker. Such a binding would shadow the constructor as a second definition would, so it is refused. The
+  message names the constructor, and a repair (`match-the-constructor`) writes its call form: `foo()`, or `cell(_)`
+  for a constructor with a field. That form already matched the constructor on both engines. A binding spelled like
+  another type's constructor is not affected. **Breaking** for a program holding such a binding: it checked under 1.x,
+  and its later arms never ran.
+- **Fixed: `delulu fmt` printed a lowercase nullary constructor's pattern `foo()` as `foo`** (FMT-CTOR-1). That is a
+  binding, so formatting changed what the program meant: the arm matched every value. It keeps the call form now. A
+  capitalized or qualified name prints bare, as before. Found by the formatter's identity law over the repository's
+  programs, on this change's own accepting program.
 
 ### the interpreter's measured costs cut, 2026-11-01
 

@@ -47,6 +47,12 @@ fn describes_the_present(rel: &str) -> bool {
         // to silence it would be to edit the record — which is the one thing an archive exists
         // to prevent. One prefix, so nothing has to be added here as the archive grows.
         || rel.starts_with("docs/archive/")
+        // The head chef's memory, copied from the laptop (`docs/assistant-memory/README.md`): working notes, one fact a
+        // file, "dated as they were written" and never edited on the way in. "12 shipped language crates" in a note of
+        // 2026-08 is a record of that day, like the archive's, and refreshing the folder (2026-11-01) made ten of the
+        // map's sixteen warnings such records, burying any new warning. `HANDOFF.md` §11 and the V2 documents state the
+        // present, and they are checked.
+        || rel.starts_with("docs/assistant-memory/")
     {
         return false; // records of what was true at a moment, and still are records of it
     }
@@ -607,4 +613,28 @@ pub fn counts_by_kind(nodes: &[crate::Node]) -> BTreeMap<&'static str, usize> {
 /// Whether a node kind is a file on disk.
 pub fn is_file_kind(k: NodeKind) -> bool {
     matches!(k, NodeKind::RustModule | NodeKind::TestSuite | NodeKind::Doc | NodeKind::Program | NodeKind::Other)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::describes_the_present;
+
+    /// Which documents' quoted counts are claims about now. A record of a moment (a build order, the changelog, the
+    /// dated audit, the archive, the head chef's memory notes) is exempt; the front door and `docs/` are checked.
+    #[test]
+    fn only_documents_that_describe_the_present_are_held_to_the_tree() {
+        for rel in ["README.md", "SECURITY.md", "docs/REMAINING_WORK.md", "docs/AI_ONBOARDING.md", "docs/lang/delulu-slang.md"] {
+            assert!(describes_the_present(rel), "{rel} states the present and must be checked");
+        }
+        for rel in [
+            "CHANGELOG.md",
+            "docs/survey/AUDIT.md",
+            "docs/design/STAGE10_BUILD_ORDER.md",
+            "docs/archive/v1/HANDOFF_HISTORY.md",
+            "docs/assistant-memory/delulu-survey-map.md",
+            "docs/assistant-memory/MEMORY.md",
+        ] {
+            assert!(!describes_the_present(rel), "{rel} is a record of a moment and must not be held to today's tree");
+        }
+    }
 }

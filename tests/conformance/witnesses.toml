@@ -156,6 +156,14 @@ file = "crates/delulu-check/src/lib.rs"
 test = "a_test_declaring_an_unperformed_effect_warns_dl0502"
 kind = "negative"
 
+# DL0413 (D-V2-204): a warning, so no `.delulu` reject file can carry it (a reject file must be refused). The
+# producing side is the checker's own test: ten shapes of an arm no value reaches, each warned at its own line.
+[[witness]]
+anchor = "ref.diag.DL0413"
+file = "crates/delulu-check/src/lib.rs"
+test = "an_arm_no_value_reaches_warns_dl0413"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.diag.DL0703"
 file = "crates/delulu/tests/cli.rs"
@@ -839,6 +847,12 @@ kind = "positive"
 anchor = "ref.diag.DL0412"
 file = "crates/delulu/tests/conformance.rs"
 test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0413"
+file = "crates/delulu-check/src/lib.rs"
+test = "an_arm_some_value_reaches_is_not_reported"
 kind = "positive"
 
 

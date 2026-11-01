@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: c99ba5c5-c39b-4a1f-b406-92fbf2c601b0
-  modified: 2026-10-29T22:00:00.000Z
+  modified: 2026-08-08T16:31:11.889Z
 ---
 
 **2026-08-08 (Opus 4.8 holding authority, 2× Haiku 4.5 attacking). Commit `0d06a4e` (fix) + `487c342`

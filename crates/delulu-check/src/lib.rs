@@ -2178,3 +2178,160 @@ mod alias_declaration_tests {
         assert!(codes("module m\nfn helper(n: Int) -> Int { n }\nfn main() {}\n").is_empty());
     }
 }
+
+// ----- a pattern binding spelled like a constructor of the matched type (RW 2.26, D-V2-203) ------
+
+#[cfg(test)]
+mod constructor_binding_tests {
+    use super::check_source;
+
+    const MAIN: &str = "\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n";
+
+    /// Each refusal: the code, the constructor named in the message, and the text the repair inserts.
+    fn refusals(src: &str) -> Vec<(String, String, String)> {
+        check_source(0, &format!("{src}{MAIN}"))
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error())
+            .map(|d| {
+                let insert = d.repairs.iter().flat_map(|r| r.edits.iter()).map(|e| e.insert.clone()).collect::<String>();
+                (d.code.to_string(), d.message.clone(), insert)
+            })
+            .collect()
+    }
+
+    /// **RW 2.26.** A lowercase name in a pattern binds, so over `type T = foo | bar` the arms `foo => 1, bar => 2`
+    /// matched every `T` with the first and answered 1 for `bar`, on both engines, with the checker silent. Before
+    /// D-V2-203 every one of these checked clean.
+    #[test]
+    fn a_binding_spelled_like_a_constructor_of_the_matched_type_is_refused() {
+        for (what, src, ctor, insert) in [
+            (
+                "a nullary constructor at the top",
+                "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { foo => 1, _ => 2 } }\n",
+                "foo",
+                "()",
+            ),
+            (
+                "a constructor with a field",
+                "module m\ntype T = empty | cell(Int)\nfn f(t: T) -> Int { match t { cell => 1 } }\n",
+                "cell",
+                "(_)",
+            ),
+            (
+                "inside `Some`",
+                "module m\ntype T = empty | cell(Int)\nfn f(o: Option[T]) -> Int { match o { Some(empty) => 1, _ => 0 } }\n",
+                "empty",
+                "()",
+            ),
+            (
+                "a generic sum type",
+                "module m\ntype Opt[A] = nothing | just(A, A)\nfn f(o: Opt[Int]) -> Int { match o { just => 1 } }\n",
+                "just",
+                "(_, _)",
+            ),
+        ] {
+            let got = refusals(src);
+            assert_eq!(got.len(), 1, "{what}: exactly one refusal, the binding's: {got:?}");
+            let (code, message, edit) = &got[0];
+            assert_eq!(code, "DL0302", "{what}: {message}");
+            assert!(message.contains(&format!("`{ctor}` is a constructor of")), "{what}: names the constructor: {message}");
+            assert_eq!(edit, insert, "{what}: the repair writes the constructor's call form");
+        }
+    }
+
+    /// What stays as it was: a binding spelled like a constructor of ANOTHER type, the call form `foo()`, an ordinary
+    /// binding, and capitalized constructors.
+    #[test]
+    fn a_binding_that_names_no_constructor_of_the_matched_type_checks() {
+        for (what, src) in [
+            (
+                "another type's constructor",
+                "module m\ntype T = foo | bar\ntype U = other | more\nfn f(u: U) -> Int { match u { foo => 1 } }\n",
+            ),
+            ("the call form", "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { foo() => 1, bar() => 2 } }\n"),
+            ("an ordinary binding", "module m\ntype T = foo | bar\nfn f(t: T) -> Int { match t { x => 1 } }\n"),
+            (
+                "capitalized constructors",
+                "module m\ntype C = Red | Green\nfn f(c: C) -> Int { match c { Red => 1, green => 2 } }\n",
+            ),
+        ] {
+            assert!(refusals(src).is_empty(), "{what} must check clean: {:?}", refusals(src));
+        }
+    }
+}
+
+// ----- an arm no value reaches (DL0413, D-V2-204) ------------------------------------------------
+
+#[cfg(test)]
+mod unreachable_arm_tests {
+    use super::check_source;
+
+    /// The line of each DL0413, and every error's code.
+    fn dead_arms(src: &str) -> (Vec<u32>, Vec<String>) {
+        let c = check_source(0, src);
+        let lines = c
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "DL0413")
+            .map(|d| {
+                assert!(!d.is_error(), "DL0413 is a warning: {}", d.message);
+                let at = d.primary_span().expect("DL0413 points at the arm").start as usize;
+                1 + src[..at].matches('\n').count() as u32
+            })
+            .collect();
+        let errors = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect();
+        (lines, errors)
+    }
+
+    const TYPES: &str = "module m\ntype C = Red | Green | Blue\ntype P[A] = none | one(A) | two(A, A)\n";
+
+    /// **D-V2-204.** Each match below checked clean, with no word, and its marked arm never ran: the first arm that
+    /// matches wins on both engines. The line each warning must name is the arm's own.
+    #[test]
+    fn an_arm_no_value_reaches_warns_dl0413() {
+        for (what, body, dead_line) in [
+            ("a name above a constructor", "fn f(c: C) -> Int { match c {\nx => 1,\nRed => 2,\n} }\n", 6),
+            ("a constructor twice", "fn f(c: C) -> Int { match c {\nRed => 1,\nRed => 2,\n_ => 3,\n} }\n", 6),
+            ("`Some(_)` above `Some(Red)`", "fn f(o: Option[C]) -> Int { match o {\nSome(_) => 1,\nNone => 2,\nSome(Red) => 3,\n} }\n", 7),
+            ("an integer twice", "fn f(n: Int) -> Int { match n {\n0 => 1,\n0 => 2,\n_ => 3,\n} }\n", 6),
+            ("a string twice", "fn f(s: Str) -> Int { match s {\n\"a\" => 1,\n\"a\" => 2,\n_ => 3,\n} }\n", 6),
+            ("`_` after `true` and `false`", "fn f(b: Bool) -> Int { match b {\ntrue => 1,\nfalse => 2,\n_ => 3,\n} }\n", 7),
+            ("`_` after every constructor", "fn f(c: C) -> Int { match c {\nRed => 1,\nGreen => 2,\nBlue => 3,\n_ => 4,\n} }\n", 8),
+            ("nested, two deep", "fn f(o: Option[Option[C]]) -> Int { match o {\nSome(Some(_)) => 1,\nSome(None) => 2,\nNone => 3,\nSome(Some(Blue)) => 4,\n} }\n", 8),
+            ("a field of a generic sum", "fn f(p: P[Int]) -> Int { match p {\ntwo(_, 0) => 1,\ntwo(x, y) => 2,\ntwo(1, 0) => 3,\n_ => 4,\n} }\n", 7),
+            ("`Ok(_)` above `Ok(1)`", "fn f(r: Result[Int, Str]) -> Int { match r {\nOk(_) => 1,\nOk(1) => 2,\nErr(_) => 3,\n} }\n", 6),
+        ] {
+            let (lines, errors) = dead_arms(&format!("{TYPES}{body}"));
+            assert!(errors.is_empty(), "{what}: the program still checks: {errors:?}");
+            assert_eq!(lines, vec![dead_line], "{what}: one DL0413, at the dead arm");
+        }
+    }
+
+    /// Every arm here is reached by some value, so none is reported: a constructor before `_`, literals before `_`, a
+    /// narrower pattern above a wider one, and a pair of fields that differ in either.
+    #[test]
+    fn an_arm_some_value_reaches_is_not_reported() {
+        for (what, body) in [
+            ("constructors then `_`", "fn f(c: C) -> Int { match c {\nRed => 1,\nGreen => 2,\n_ => 3,\n} }\n"),
+            (
+                "the narrow above the wide",
+                "fn f(o: Option[C]) -> Int { match o {\nSome(Red) => 1,\nSome(_) => 2,\nNone => 3,\n} }\n",
+            ),
+            ("literals then `_`", "fn f(n: Int) -> Int { match n {\n0 => 1,\n1 => 2,\n_ => 3,\n} }\n"),
+            ("`true` and `false`", "fn f(b: Bool) -> Int { match b {\ntrue => 1,\nfalse => 2,\n} }\n"),
+            (
+                "fields that differ",
+                "fn f(p: P[Int]) -> Int { match p {\ntwo(0, _) => 1,\ntwo(_, 0) => 2,\ntwo(_, _) => 3,\n_ => 4,\n} }\n",
+            ),
+            (
+                "a lowercase constructor's call form",
+                "fn f(p: P[Int]) -> Int { match p {\nnone() => 1,\none(_) => 2,\ntwo(_, _) => 3,\n} }\n",
+            ),
+        ] {
+            let (lines, errors) = dead_arms(&format!("{TYPES}{body}"));
+            assert!(errors.is_empty(), "{what}: {errors:?}");
+            assert!(lines.is_empty(), "{what}: no arm is dead, but DL0413 named lines {lines:?}");
+        }
+    }
+}
