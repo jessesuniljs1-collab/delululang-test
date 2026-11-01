@@ -11,15 +11,6 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## Unreleased — a warning for a binding never read (DL0414), 2026-11-02
-
-- **Added: DL0414, a warning for a `let` or `var` binding never read** (D-V2-206, RW 2.30). A binding nothing reads
-  before its block ends is named at its line: a value computed and dropped, a name shadowed before it was used, a `var`
-  only ever assigned. Writing through a binding to a field or an element reads it, since the record or list may be
-  shared. A name that begins with `_` is exempt. It is a warning: the program still checks and runs. A new diagnostic
-  code is a minor, additive change (`STABILITY.md` §5).
-- **Fixed: the Book's `05_secrets` sample printed *match* whatever the check answered.** It now branches on the answer.
-
 ## Unreleased — what an assignment's index holds is checked, asked for and judged, 2026-11-02
 
 - **Fixed: the index in `xs[e] = v` was never checked** (INDEX-TARGET-1, D-V2-205, RW 2.29). The interpreter evaluates

@@ -516,68 +516,25 @@ struct FnCtx {
     /// How many `while`/`for` bodies enclose the statement being checked. `break`/`continue` are
     /// legal only when this is > 0 (Tier 1); a bare `break` at function level is DL0412.
     loop_depth: u32,
-    /// DL0414 (D-V2-206): each scope's `let` and `var` bindings in the order bound, each with whether anything has read
-    /// it. Kept beside `locals`, one entry a scope (`sync_lets` keeps the lengths equal).
-    lets: Vec<Vec<LetUse>>,
-    /// Per scope, a name's newest binding when that binding is a `let` or `var`: its place in `lets`. A parameter or
-    /// pattern binding of the same name, bound later, takes the name back out.
-    let_index: Vec<HashMap<String, usize>>,
-}
-
-/// One `let` or `var` binding (DL0414): its name, where it is written, and whether a read has reached it.
-struct LetUse {
-    name: String,
-    span: Span,
-    read: std::cell::Cell<bool>,
 }
 
 impl FnCtx {
     fn push_scope(&mut self) {
         self.locals.push(HashMap::new());
-        self.sync_lets();
     }
-    /// Close the innermost scope, handing back its `let` and `var` bindings so the caller can name the unread ones.
-    fn pop_scope(&mut self) -> Vec<LetUse> {
-        self.sync_lets();
+    fn pop_scope(&mut self) {
         self.locals.pop();
-        self.let_index.pop();
-        self.lets.pop().unwrap_or_default()
-    }
-    fn sync_lets(&mut self) {
-        self.lets.resize_with(self.locals.len(), Vec::new);
-        self.let_index.resize_with(self.locals.len(), HashMap::new);
     }
     fn bind(&mut self, name: &str, ty: Type) {
         self.locals.last_mut().unwrap().insert(name.to_string(), ty);
-        self.sync_lets();
-        if let Some(index) = self.let_index.last_mut() {
-            index.remove(name);
-        }
     }
-    /// A `let` or `var` binding: bound as any other, and remembered so DL0414 can name it if nothing reads it.
-    fn bind_let(&mut self, name: &str, ty: Type, span: Span) {
-        self.bind(name, ty);
-        let (Some(lets), Some(index)) = (self.lets.last_mut(), self.let_index.last_mut()) else { return };
-        index.insert(name.to_string(), lets.len());
-        lets.push(LetUse { name: name.to_string(), span, read: std::cell::Cell::new(false) });
-    }
-    /// A read of `name`: its type, and the binding it reaches marked read (DL0414).
     fn lookup(&self, name: &str) -> Option<Type> {
-        for (i, scope) in self.locals.iter().enumerate().rev() {
+        for scope in self.locals.iter().rev() {
             if let Some(t) = scope.get(name) {
-                if let Some(&k) = self.let_index.get(i).and_then(|index| index.get(name)) {
-                    if let Some(l) = self.lets.get(i).and_then(|lets| lets.get(k)) {
-                        l.read.set(true);
-                    }
-                }
                 return Some(t.clone());
             }
         }
         None
-    }
-    /// The type of `name` for an assignment to it, which writes and does not read: the binding is not marked.
-    fn lookup_to_assign(&self, name: &str) -> Option<Type> {
-        self.locals.iter().rev().find_map(|scope| scope.get(name).cloned())
     }
 }
 
@@ -626,8 +583,6 @@ impl<'a> Checker<'a> {
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
             loop_depth: 0,
-            lets: Vec::new(),
-            let_index: Vec::new(),
         };
         // Bind parameters, noting capability kinds they carry.
         for (p, ty) in f.params.iter().zip(&param_types) {
@@ -754,8 +709,6 @@ impl<'a> Checker<'a> {
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
             loop_depth: 0,
-            lets: Vec::new(),
-            let_index: Vec::new(),
         };
         ctx.bind("self", self_ty.clone());
         for (p, ty) in params.iter().zip(&param_types) {
@@ -1185,8 +1138,6 @@ impl<'a> Checker<'a> {
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
             loop_depth: 0,
-            lets: Vec::new(),
-            let_index: Vec::new(),
         };
         let (ty, row) = self.check_expr(&c.value, &mut ctx);
         let ty = match &c.ty {
@@ -1236,8 +1187,6 @@ impl<'a> Checker<'a> {
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
             loop_depth: 0,
-            lets: Vec::new(),
-            let_index: Vec::new(),
         };
         // The runner (8g) scopes this Root by the test manifest; the TYPE is just Root.
         self.note_caps_in(&Type::Root, &mut ctx.facts);
@@ -1421,9 +1370,9 @@ impl<'a> Checker<'a> {
                     if let Some(ann) = ty {
                         let at = self.lower_type(ann, &ctx.genv, &mut ctx.facts);
                         self.expect_type(&at, &vt, value.span(), "let binding type mismatch");
-                        ctx.bind_let(&name.name, at, name.span);
+                        ctx.bind(&name.name, at);
                     } else {
-                        ctx.bind_let(&name.name, vt, name.span);
+                        ctx.bind(&name.name, vt);
                     }
                     value_ty = Type::Unit;
                 }
@@ -1513,23 +1462,11 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        let lets = ctx.pop_scope();
-        self.report_unread_lets(lets);
+        ctx.pop_scope();
         // Record the block node in the DIR side tables (§2.3): its value type and accumulated row.
         self.node_types_raw.insert(block.id, (value_ty.clone(), block.span));
         self.node_row_accs.insert(block.id, acc.clone());
         (value_ty, acc)
-    }
-
-    /// DL0414 (D-V2-206): a `let` or `var` binding nothing read before its block closed. A write is not a read, so a
-    /// `var` only ever assigned is named too. A name that begins with `_` says the binding is meant to go unread.
-    fn report_unread_lets(&mut self, lets: Vec<LetUse>) {
-        for l in lets.into_iter().filter(|l| !l.read.get() && !l.name.starts_with('_')) {
-            self.diags.push(
-                Diagnostic::warning("DL0414", format!("`{}` is bound here and never read", l.name))
-                    .with_span(l.span, format!("never read: remove it, or name it `_{}` to say so", l.name)),
-            );
-        }
     }
 
     /// An assignment's target: the type it stores, and the row of the index expressions it holds. INDEX-TARGET-1: the
@@ -1537,14 +1474,8 @@ impl<'a> Checker<'a> {
     /// when it ran), a name in it was never resolved, a `Str` index passed, and a non-list base got a fresh type. An index
     /// is checked here as `xs[i]` is read: an `Int`, its row the statement's, a base that is no list DL0405.
     fn check_lvalue(&mut self, lv: &LValue, ctx: &mut FnCtx) -> (Type, RowAcc) {
-        self.check_lvalue_at(lv, ctx, true)
-    }
-
-    /// `whole`: `lv` is the whole target, so a name there is written and not read (DL0414). The base of `p.f = v` or
-    /// `xs[i] = v` is read: the binding is how the write reaches a record or a list another name may share.
-    fn check_lvalue_at(&mut self, lv: &LValue, ctx: &mut FnCtx, whole: bool) -> (Type, RowAcc) {
         match lv {
-            LValue::Var(name) => match if whole { ctx.lookup_to_assign(&name.name) } else { ctx.lookup(&name.name) } {
+            LValue::Var(name) => match ctx.lookup(&name.name) {
                 Some(t) => (t, RowAcc::default()),
                 None => {
                     self.diags.push(
@@ -1555,11 +1486,11 @@ impl<'a> Checker<'a> {
                 }
             },
             LValue::Field(base, field) => {
-                let (bt, acc) = self.check_lvalue_at(base, ctx, false);
+                let (bt, acc) = self.check_lvalue(base, ctx);
                 (self.field_type(&bt, field, ctx), acc)
             }
             LValue::Index(base, idx) => {
-                let (bt, mut acc) = self.check_lvalue_at(base, ctx, false);
+                let (bt, mut acc) = self.check_lvalue(base, ctx);
                 let (it, ir) = self.check_expr(idx, ctx);
                 acc.add_row_acc(&ir);
                 self.expect_type(&Type::Int, &it, idx.span(), "index must be Int");

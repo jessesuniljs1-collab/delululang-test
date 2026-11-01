@@ -34,8 +34,7 @@ fn main(root: Root) ! {Read, Write} {
         Ok(text) => out.println(text)
         Err(_) => out.println("(no config found)")
     }
-    // Bound to show its type and never read, so its name begins with `_` (DL0414 otherwise).
-    let _key = root.secret("API_KEY")  // Secret[Str]
-    // out.println(_key)                        // DL0602: Secret[Str] is not Str
-    // out.println(str(_key))                   // DL0604: opaque type cannot be stringified
+    let key = root.secret("API_KEY")  // Secret[Str]
+    // out.println(key)                         // DL0602: Secret[Str] is not Str
+    // out.println(str(key))                    // DL0604: opaque type cannot be stringified
 }

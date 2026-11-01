@@ -6,7 +6,7 @@ voice, and the machine envelope is (as always) byte-identical to every other loc
 
 > **This pack is the authoring target, not the shipped state.** The block below is what a *complete*
 > delulu-slang catalog declares. What is actually built into the binary today
-> (`crates/delulu-diag/catalogs/delulu-slang.toml`) is **version `0.8.0`, 8 of 157 diagnostic codes,
+> (`crates/delulu-diag/catalogs/delulu-slang.toml`) is **version `0.8.0`, 8 of 156 diagnostic codes,
 > and the 3 named CLI strings there are** — its own `[meta].coverage` says so. The diagnostics gap is
 > tracked in [`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.2.
 >
@@ -109,7 +109,7 @@ Two different things get called "coverage" on this page and they must not be blu
 
 - **By design** — `explain` long-form docs are en-US outside the top codes. A delulu reads the vibe
   on the common path and the precise en-US doc when they go deep.
-- **Not by design** — the shipped catalog covers 8 of 157 diagnostics against the `diagnostics = 90` this
+- **Not by design** — the shipped catalog covers 8 of 156 diagnostics against the `diagnostics = 90` this
   page targets. Until 2026-08-23 this section read *"CLI + top diagnostics are 100%"*, which described the
   target as though it were the state. The diagnostics half is unwritten work; the CLI half, blocked until
   2026-10-17 on `CLI_STRINGS` being empty, covers all 3 registered strings

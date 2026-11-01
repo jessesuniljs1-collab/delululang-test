@@ -7850,29 +7850,6 @@ exit 1
   "delulu_version": "<version>",
   "diagnostics": [
     {
-      "code": "DL0414",
-      "explanation_id": "E-DL0414",
-      "message": "`n` is bound here and never read",
-      "repairs": [],
-      "severity": "warning",
-      "spans": [
-        {
-          "end": {
-            "byte": 591,
-            "col": 8,
-            "line": 22
-          },
-          "file": "tests/conformance/reject/DL1602_consume_in_an_index_target.delulu",
-          "label": "never read: remove it, or name it `_n` to say so",
-          "start": {
-            "byte": 590,
-            "col": 7,
-            "line": 22
-          }
-        }
-      ]
-    },
-    {
       "code": "DL1602",
       "explanation_id": "E-DL1602",
       "message": "use of `xs` after `consume` — the binding is dead",
@@ -7914,7 +7891,7 @@ exit 1
   "schema": 1,
   "summary": {
     "errors": 1,
-    "warnings": 1
+    "warnings": 0
   }
 }
 --- stderr ---
@@ -7923,13 +7900,6 @@ exit 1
 exit 1
 --- stdout ---
 --- stderr ---
-warning[DL0414]: `n` is bound here and never read
-  --> tests/conformance/reject/DL1602_consume_in_an_index_target.delulu:22:7
-   |
-22 |   let n = xs.len()
-   |       ^ never read: remove it, or name it `_n` to say so
-  explain: delulu explain E-DL0414
-
 error[DL1602]: use of `xs` after `consume` — the binding is dead
   --> tests/conformance/reject/DL1602_consume_in_an_index_target.delulu:22:11
    |
@@ -7950,29 +7920,6 @@ exit 1
   "command": "check",
   "delulu_version": "<version>",
   "diagnostics": [
-    {
-      "code": "DL0414",
-      "explanation_id": "E-DL0414",
-      "message": "`n` is bound here and never read",
-      "repairs": [],
-      "severity": "warning",
-      "spans": [
-        {
-          "end": {
-            "byte": 378,
-            "col": 8,
-            "line": 15
-          },
-          "file": "tests/conformance/reject/DL1602_use_after_consume.delulu",
-          "label": "never read: remove it, or name it `_n` to say so",
-          "start": {
-            "byte": 377,
-            "col": 7,
-            "line": 15
-          }
-        }
-      ]
-    },
     {
       "code": "DL1602",
       "explanation_id": "E-DL1602",
@@ -8015,7 +7962,7 @@ exit 1
   "schema": 1,
   "summary": {
     "errors": 1,
-    "warnings": 1
+    "warnings": 0
   }
 }
 --- stderr ---
@@ -8024,13 +7971,6 @@ exit 1
 exit 1
 --- stdout ---
 --- stderr ---
-warning[DL0414]: `n` is bound here and never read
-  --> tests/conformance/reject/DL1602_use_after_consume.delulu:15:7
-   |
-15 |   let n = xs.len()
-   |       ^ never read: remove it, or name it `_n` to say so
-  explain: delulu explain E-DL0414
-
 error[DL1602]: use of `xs` after `consume` — the binding is dead
   --> tests/conformance/reject/DL1602_use_after_consume.delulu:15:11
    |
@@ -8260,29 +8200,6 @@ exit 1
   "delulu_version": "<version>",
   "diagnostics": [
     {
-      "code": "DL0414",
-      "explanation_id": "E-DL0414",
-      "message": "`xs` is bound here and never read",
-      "repairs": [],
-      "severity": "warning",
-      "spans": [
-        {
-          "end": {
-            "byte": 155,
-            "col": 9,
-            "line": 6
-          },
-          "file": "tests/conformance/reject/DL1605_recover_captures_ref.delulu",
-          "label": "never read: remove it, or name it `_xs` to say so",
-          "start": {
-            "byte": 153,
-            "col": 7,
-            "line": 6
-          }
-        }
-      ]
-    },
-    {
       "code": "DL1605",
       "explanation_id": "E-DL1605",
       "message": "recover block references non-sendable outer binding `outer` (`ref`) — only `val`, `tag`, or a consumed `iso` may cross into recover",
@@ -8309,7 +8226,7 @@ exit 1
   "schema": 1,
   "summary": {
     "errors": 1,
-    "warnings": 1
+    "warnings": 0
   }
 }
 --- stderr ---
@@ -8318,13 +8235,6 @@ exit 1
 exit 1
 --- stdout ---
 --- stderr ---
-warning[DL0414]: `xs` is bound here and never read
-  --> tests/conformance/reject/DL1605_recover_captures_ref.delulu:6:7
-   |
- 6 |   let xs: iso List[Int] = recover { outer }
-   |       ^^ never read: remove it, or name it `_xs` to say so
-  explain: delulu explain E-DL0414
-
 error[DL1605]: recover block references non-sendable outer binding `outer` (`ref`) — only `val`, `tag`, or a consumed `iso` may cross into recover
   --> tests/conformance/reject/DL1605_recover_captures_ref.delulu:6:37
    |

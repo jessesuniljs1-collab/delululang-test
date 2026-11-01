@@ -273,15 +273,17 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   1. Land `laptop/index-target` on its green run. Then merge `master` into `launch/2.0.0` and judge INDEX-TARGET-1 for
      the *Breaking* paragraph: the programs it refuses broke rules the reference already states (DL0501's
      `ref.rule.effects.declared-row` among them), and v1.0.0 had the same defect.
-  2. Land `laptop/unread-lets`, DL0414 (D-V2-206), after #119, on its green run. Then fold it into
-     `launch/2.0.0`: a new warning is additive; criterion 2 becomes 360 anchors.
+  2. DL0414, a warning for a binding never read: `laptop/unread-lets` (`8be0bdc`), WIP, parked. Rebase it on
+     INDEX-TARGET-1; take D-V2-206. Its read marks must count a read in an index, and the base of `xs[i] = v` is read
+     (records and lists are shared). Then the entrenched witness rows, the reference, 157 codes, and judging every
+     shipped program and test for the new warning.
   3. RW 3.24: a compiled form. Slots alone buy about a tenth.
   4. Watch the broker's Miri time (3 h 07 min on the last run, against a 4-hour cap).
   5. The launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-206;
-  - the last mutant is M1037;
-  - there are 157 DL codes and 360 reference anchors;
+  - the last decision is D-V2-205;
+  - the last mutant is M1030;
+  - there are 156 DL codes and 359 reference anchors;
   - pull requests are numbered on GitHub, and #118 was the last opened.
 
 ## 11. Keep this file true

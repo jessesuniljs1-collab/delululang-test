@@ -1758,7 +1758,7 @@ fn decl_name_span(module: &delulu_syntax::ast::Module, word: &str) -> Option<del
 /// value references (bare or as a qualified path's final segment), type references, row
 /// effect references, and spawn targets. Local binders are deliberately NOT visited.
 fn name_occurrences(module: &delulu_syntax::ast::Module, word: &str) -> Vec<delulu_diag::Span> {
-    use delulu_syntax::ast::{Item, TypeExpr};
+    use delulu_syntax::ast::{Item, TypeDeclKind, TypeExpr};
     let mut out = Vec::new();
     if let Some(sp) = decl_name_span(module, word) {
         out.push(sp);
@@ -1802,39 +1802,63 @@ fn name_occurrences(module: &delulu_syntax::ast::Module, word: &str) -> Vec<delu
             TypeExpr::Rcap { inner, .. } => type_paths(inner, word, out),
         }
     }
+    // A signature's types and its row's effects, wherever a signature is written (RENAME-TYPES-1: only a function's
+    // and a constant's were, so a rename of a type left it in a field, an actor, a `let` and a closure, and the
+    // program it produced did not check).
+    let sig = |params: &[delulu_syntax::ast::Param],
+               ret: Option<&TypeExpr>,
+               row: Option<&delulu_syntax::ast::RowExpr>,
+               out: &mut Vec<delulu_diag::Span>| {
+        for p in params {
+            type_paths(&p.ty, word, out);
+        }
+        if let Some(r) = ret {
+            type_paths(r, word, out);
+        }
+        for e in row.map(|r| r.effects.as_slice()).unwrap_or_default() {
+            path_hit(e, out);
+        }
+    };
     for item in &module.items {
         match item {
-            Item::Fn(f) => {
-                for p in &f.params {
-                    type_paths(&p.ty, word, &mut out);
-                }
-                if let Some(r) = &f.ret {
-                    type_paths(r, word, &mut out);
-                }
-                if let Some(r) = &f.row {
-                    for e in &r.effects {
-                        path_hit(e, &mut out);
-                    }
-                }
-            }
+            Item::Fn(f) => sig(&f.params, f.ret.as_ref(), f.row.as_ref(), &mut out),
             Item::Const(c) => {
                 if let Some(t) = &c.ty {
                     type_paths(t, word, &mut out);
                 }
             }
-            _ => {}
+            Item::Type(t) => match &t.kind {
+                TypeDeclKind::Record(fields) => fields.iter().for_each(|fd| type_paths(&fd.ty, word, &mut out)),
+                TypeDeclKind::Sum(variants) => {
+                    variants.iter().flat_map(|v| &v.fields).for_each(|ty| type_paths(ty, word, &mut out))
+                }
+                TypeDeclKind::Alias(ty) => type_paths(ty, word, &mut out),
+            },
+            Item::Actor(a) => {
+                a.fields.iter().for_each(|fd| type_paths(&fd.ty, word, &mut out));
+                sig(&a.ctor.params, None, a.ctor.row.as_ref(), &mut out);
+                a.behaviors.iter().for_each(|b| sig(&b.params, None, b.row.as_ref(), &mut out));
+                a.fns.iter().for_each(|f| sig(&f.params, f.ret.as_ref(), f.row.as_ref(), &mut out));
+            }
+            Item::Foreign(fd) => fd.fns.iter().for_each(|f| sig(&f.params, f.ret.as_ref(), None, &mut out)),
+            Item::Test(t) => sig(&[], None, t.row.as_ref(), &mut out),
+            Item::Effect(_) => {}
         }
     }
-    walk_exprs(module, &mut |e| {
+    walk_module(module, &mut |v| {
         use delulu_syntax::ast::Expr;
-        match e {
-            Expr::Var { path, .. } | Expr::Record { path, .. } | Expr::Spawn { actor: path, .. } => path_hit(path, &mut out),
+        match v {
+            Visit::Expr(Expr::Var { path, .. } | Expr::Record { path, .. } | Expr::Spawn { actor: path, .. }) => {
+                path_hit(path, &mut out)
+            }
             // Dotted chains are Method/Field Go-selector style (`lib.greet(x)` is a
             // Method with recv `lib`), so a qualified reference to a module-level name
             // lands HERE — the deviation-3 walk's approximation includes same-named
             // record methods, recorded openly.
-            Expr::Method { name, .. } | Expr::Field { name, .. } if name.name == word => out.push(name.span),
-            _ => {}
+            Visit::Expr(Expr::Method { name, .. } | Expr::Field { name, .. }) if name.name == word => out.push(name.span),
+            Visit::Expr(Expr::Lambda { params, ret, row, .. }) => sig(params, ret.as_ref(), row.as_ref(), &mut out),
+            Visit::LetType(ty) => type_paths(ty, word, &mut out),
+            Visit::Expr(_) => {}
         }
     });
     out.sort_by_key(|s| s.start);
@@ -1842,13 +1866,33 @@ fn name_occurrences(module: &delulu_syntax::ast::Module, word: &str) -> Vec<delu
     out
 }
 
+/// What the module walk hands its visitor: an expression, or the type a `let` writes (RENAME-TYPES-1).
+enum Visit<'a> {
+    Expr(&'a delulu_syntax::ast::Expr),
+    LetType(&'a delulu_syntax::ast::TypeExpr),
+}
+
 /// Walk every expression in the module (fn/const/actor/test bodies), depth-first.
 fn walk_exprs(module: &delulu_syntax::ast::Module, f: &mut impl FnMut(&delulu_syntax::ast::Expr)) {
+    walk_module(module, &mut |v| {
+        if let Visit::Expr(e) = v {
+            f(e)
+        }
+    });
+}
+
+/// Walk every expression in the module, and every type a `let` writes, depth-first.
+fn walk_module<'m>(module: &'m delulu_syntax::ast::Module, f: &mut impl FnMut(Visit<'m>)) {
     use delulu_syntax::ast::{Item, Stmt};
-    fn block(b: &delulu_syntax::ast::Block, f: &mut impl FnMut(&delulu_syntax::ast::Expr)) {
+    fn block<'m>(b: &'m delulu_syntax::ast::Block, f: &mut impl FnMut(Visit<'m>)) {
         for s in &b.stmts {
             match s {
-                Stmt::Let { value, .. } => expr(value, f),
+                Stmt::Let { value, ty, .. } => {
+                    if let Some(t) = ty {
+                        f(Visit::LetType(t));
+                    }
+                    expr(value, f)
+                }
                 // INDEX-TARGET-1: the expressions in `xs[…]` are expressions of the module too.
                 Stmt::Assign { target, value, .. } => {
                     expr(value, f);
@@ -1869,9 +1913,9 @@ fn walk_exprs(module: &delulu_syntax::ast::Module, f: &mut impl FnMut(&delulu_sy
             }
         }
     }
-    fn expr(e: &delulu_syntax::ast::Expr, f: &mut impl FnMut(&delulu_syntax::ast::Expr)) {
+    fn expr<'m>(e: &'m delulu_syntax::ast::Expr, f: &mut impl FnMut(Visit<'m>)) {
         use delulu_syntax::ast::Expr::*;
-        f(e);
+        f(Visit::Expr(e));
         match e {
             List { items, .. } => items.iter().for_each(|x| expr(x, f)),
             Record { fields, .. } => fields.iter().for_each(|(_, v)| expr(v, f)),

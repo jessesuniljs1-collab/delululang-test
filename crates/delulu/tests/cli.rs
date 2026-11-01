@@ -1051,7 +1051,7 @@ fn one_over_deep_expression_yields_exactly_one_diagnostic() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let f = dir.join("deep.delulu");
-    let src = format!("module deep\n\nfn main(root: Root) {{\n    let _x = {}1{}\n}}\n", "(".repeat(200), ")".repeat(200));
+    let src = format!("module deep\n\nfn main(root: Root) {{\n    let x = {}1{}\n}}\n", "(".repeat(200), ")".repeat(200));
     std::fs::write(&f, src).unwrap();
 
     let o = delulu(&["check", f.to_str().unwrap(), "--json"]);
