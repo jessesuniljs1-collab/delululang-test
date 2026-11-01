@@ -11099,3 +11099,111 @@ interpreter; `5` read through a closure on both engines).
   value in another function, and M976 prints `LEAK: through a var`.
 - `SOUNDNESS_AUDIT.md` §D records the second negation, with the lesson: a gate that compares two implementations finds
   where they differ; only one held to the checker's meaning finds what they share.
+
+## 2026-11-01 — the laptop: #104 landed; the weekly `everything` run and `launch/2.0.0` `3bf4f2f` dispatched
+
+#104 (LATE-LET-1, D-V2-199) landed by fast-forward on its read run `41245211274` (14 success, 2 skipped), and `master`
+is `cccb001`. The weekly verification sweep's `everything` run is `41246969522` at `cccb001`, dispatched on Saturday
+2026-10-31 at 22:10 UTC. The sweep itself began at 21:12 UTC; its adversarial pass and documents scan are in the entry
+above.
+
+`launch/2.0.0` was merged with `cccb001` at `3bf4f2f`, and the *Breaking* paragraph was judged unchanged:
+- Every program checks as before, with the same codes. The runtime now gives the meaning the typing and effect rules
+  already gave, and those are the surface STABILITY.md §1 holds.
+- v1.0.0 had the same defect: its interpreter's `let` called `env.define` into the scope a closure held as
+  `env.clone()`.
+- A program the WASM engine now compiles, where it refused DL1201 before, is the backend's subset widening.
+
+Criterion 2 is 358/358, written by `scripts/launch-criterion-2.py`, and the launch gates were `LAUNCH-GATES=ok`. The
+`everything` run `41247420596` and the release dry run `41247423239` were dispatched at 22:16 UTC.
+
+## 2026-11-01 — the laptop: RW 4.29 closed, its condition met since 2026-10-13 (the weekly sweep's documents scan, second pass)
+
+The sweep's first documents scan searched the live documents for this week's closures and found nothing stale. A second
+pass read the status cell of every open row in `REMAINING_WORK.md` §2–§7. Row 4.29 (*"No program can be checked against
+a boundary, and nothing asks the operator for authority"*) still said *"P9-04 and P9-05 next"*, but its own closing
+condition was met when P9-03 completed on 2026-10-13 (D-V2-126). That condition is `authority --within` (P9-01), `grants
+diff` (P9-02), and `grants propose`, `proposals`, `approve`, `reject` and `auto-approve` (P9-03), the OpenShell study's
+§4.8–§4.10. P9-04 and P9-05 came after, from §4.11–§4.12, and are not this row's.
+
+Checked against the binary of `cccb001`: every one of those commands is in `delulu help grants` or `authority --help`,
+and `within_cli` (24 tests) and `broker_cli` hold them. The row is closed as of today, and says when its condition was met.
+
+The lesson is HANDOFF §11.8's, applied in full this time: a scan for this week's closures cannot find a row that went
+stale weeks ago. The sweep reads the status of every open row, not only the rows that just moved.
+
+## 2026-11-01 — the laptop: a call through a local reaches what the local holds (LOCAL-CALLEE-1, RW 2.24, D-V2-200)
+
+**What was found.** After LATE-LET-1 the laptop read the interpreter's other name lookups against the checker's. A local
+named like a builtin, like a module function, or like a constructor is resolved local-first by both, so each of those
+probes was refused as DL0501. A record's field holding a function is called `(b.len)(…)`, never as a method (DL0405).
+An actor's behaviour's effect reaches its sender's row (DL0501). One lookup disagreed: `eval_call` asked only whether a
+local held a closure, and a plugin's export is a `Value::PluginFn`. Witnessed on the release binary of `cccb001` with a
+plugin built by `delulu plugin build`:
+- a local `shout` holding the export, in a module with its own `fn shout`, printed the module's `hello?`;
+- with an export typed pure in the local's annotation and a module function `relay` that prints, `delulu why Write`
+  said the program cannot write, and the run printed.
+
+**The change** (D-V2-200). A local binding of the name decides the call, whatever it holds: a closure, a plugin's export,
+or DL0907 for anything else. The A14 fast path is taken only when no local binds the name.
+
+**Gates.** `plugin_load_cli` `a_local_holding_an_export_is_called_never_a_module_function_of_its_name`. Its effect half
+comes first, so a mutant shows the escape itself. Mutants M981 and M982 were each red, and the control green. The suites
+the call reaches passed. `SOUNDNESS_AUDIT.md` §D's box of the same day names it (entrenched;
+`ENTRENCHED_CHANGE_RECORD.md`).
+
+## 2026-11-01 — the laptop: a name a constructor and a function share is the constructor (CTOR-SHADOW-1, RW 2.25, D-V2-201)
+
+**What was found.** Reading the interpreter's name lookups against the checker's order, after LOCAL-CALLEE-1: a function
+may share its name with a constructor of the module's own sum type. The checker resolves the name to the constructor,
+and the interpreter called the function, or for a value took any capitalized name for a constructor before asking the
+functions. Witnessed on the release binary of `cccb001`:
+- a pure function calling `Wrap(c)` ran an effectful `fn Wrap`, printing from a program `authority` called provably pure,
+  with no special grant;
+- `Circle(3)` was an `Int` where the checker typed a `Shape`;
+- `apply(Double, 5)` faulted *"not callable"*;
+- the WASM engine was right for calls, but refused `let d = Dot`.
+v1.0.0 had the same order.
+
+**The change** (D-V2-201). `Home::ctors` holds the module's constructors. They are asked before the functions in
+`eval_var` and in both call paths, and the prelude's capitalized fallback comes after the functions. The WASM `let`
+never binds a constructor as a function value (`EnumEnv::is_ctor`). Refusing a function named like a constructor was
+not taken: it would refuse programs that check today.
+
+**Gates.** `late_let_cli` (the escape) and `loop_parity` (`3 -1 10` on both engines), each red before; mutants M983–M987,
+all red. The bash heredoc that wrote the CLI test turned the `\n` in an assertion's message into a real line break,
+the trap HANDOFF §11.5 names; the result compiled, and was corrected with the editor before the commit.
+
+**Later the same day, before #107 landed: lowercase constructors.** The checker admits a constructor whose name is
+lowercase (`type Slot = cell(Int) | empty`). The interpreter's capitalized fallback never covered one, so `let e = empty`
+and `cell(8)` faulted *"unbound name"* in a program that checked clean. D-V2-201's `Home::ctors` resolves them, as the
+WASM engine did. `loop_parity`'s CTOR-SHADOW-1 test now holds them too, at `3 -1 10 80` on both engines, and M985 (a
+value asks the functions first) is still red with them in.
+
+In a pattern, a lowercase name is a binding by the parser's convention, so `match t { foo => 1, bar => 2 }` answers 1
+for every `t`, on both engines and to the checker alike. That is the language's meaning, not a runtime defect, and it is
+recorded as RW 2.26, open, with its three ways out: a warning, which is additive, or refusing such names, or reading
+them as constructors, both breaking.
+
+**Later still, the WASM call (CTOR-SHADOW-1's WASM half, and WASM-BUILTIN-SHADOW-1).** The order of the WASM engine's
+call was read the same way. It compiled the prelude's builtins first, then a local function value, then the generics,
+then a constructor, but the constructor only where no module function had the name. So:
+- `let h = Wrap(c)`, a call with no expected type, ran the effectful `fn Wrap` on WASM as well, and printed. Its first
+  witness had `Wrap(c)` as the function's result, whose expected type took the constructor's path.
+- `let str = fn …; str(5)` ran the builtin `str` on WASM (`5 builtin`, where the interpreter printed
+  `local seventy-seven`).
+
+D-V2-201 now orders the WASM call as the checker does: a local, the builtins, a constructor of the module, the generics
+and the functions. The CLI test takes the unannotated form and runs both engines, and `loop_parity` gains
+`a_local_named_like_a_builtin_is_called_on_both_engines`. M988 and M989 are red. RW 2.27 closes the builtin half.
+
+## 2026-11-01 — the laptop: `run --engine` refuses a value it does not know (RW 6.48)
+
+Writing LATE-LET-1's two-engine CLI test, the laptop passed `--engine interp` and found that any value but `wasm` ran
+the interpreter. `--engine wsam` ran on the interpreter and exited 0. A typo of the engine was a silent run on the
+other one, the shape `refuse_unknown_flags` exists to prevent, one step further in. A sandboxed run refuses `--engine`
+and a `.dwx` refuses anything but `wasm`, so only a source or package run was open. `cmd_run_inner` now refuses an
+unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | wasm)`.
+
+`cli_contract`'s `a_flag_value_nobody_understood_is_refused` was red before (`--engine wsam` ran). It also holds
+`--isolation` and `--broker`, which refused already, and that `interp` and `wasm` still run.

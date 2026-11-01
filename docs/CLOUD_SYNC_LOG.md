@@ -6993,3 +6993,107 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   job; bring `launch/2.0.0` current (step 4.3: this section's CHANGELOG and the *Breaking* paragraph judged for it); RW
   3.24; *[laptop]* the launch only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — #104 landed; the weekly `everything` run and `launch/2.0.0` `3bf4f2f` dispatched (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-1101`   Pull request: opened with this commit
+- **#104 landed** by fast-forward: `master` `a999e71` → `cccb001` (LATE-LET-1, RW 2.23, D-V2-199). Its run
+  `41245211274` was read green (14 success, 2 skipped). `cccb001`'s push run `41246950036` was dispatched with it.
+- **The weekly verification sweep's `everything` run** at `master` `cccb001`: `41246969522`, dispatched on Saturday
+  2026-10-31 at 22:10 UTC (Sunday 03:40 IST). The sweep's adversarial pass and documents scan are in the previous entry
+  and in V2_LOG. **The sweep's run is dispatched: do not dispatch another; read this one.**
+- **`launch/2.0.0` brought current** (release procedure step 1), in the laptop's worktree `D:\nelan\dl-launch`: the
+  merge `3bf4f2f` of `master` `cccb001`.
+  - `scripts/launch-changelog.py` folded the one new section.
+  - The *Breaking* paragraph is unchanged, judged against STABILITY.md §1 and v1.0.0. Every program checks as before
+    with the same codes, and the runtime now gives the meaning those rules already gave. v1.0.0 had the same defect:
+    its `let` called `env.define` into the scope a closure held. A program the WASM engine now compiles is the subset
+    widening.
+  - Criterion 2 was written by `scripts/launch-criterion-2.py` (358/358).
+  - `LAUNCH-GATES=ok`: Survey 1580 nodes, 18018 edges, 0 errors, 15 warnings; doctor 29 checks; the nine document
+    gates; cargo deny ok.
+  - Its `everything` run `41247420596` and release dry run `41247423239` were dispatched at 22:16 UTC.
+- Files and folders (`master`): M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:**
+  1. Read `41246969522` (the sweep, at `cccb001`) and `41247420596` and `41247423239` (at `3bf4f2f`) to their ends,
+     every job. Then cite the launch runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8, by a merge of the records into
+     `launch/2.0.0`. Watch the broker's Miri: 3 h 14 min last time, and the cap is 4 h.
+  2. **[laptop, in progress] RW 3.24, the interpreter's speed.** It is the laptop's next milestone, on a `laptop/`
+     branch; a routine run picks another item.
+  3. *[laptop]* the launch, only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — RW 4.29 closed: its condition met since 2026-10-13 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/local-callee` (made on `laptop/rw-4-29`, which was folded into it)   Pull request: the one that carries LOCAL-CALLEE-1, below
+- **What:** see V2_LOG's entry of the same name. The weekly sweep's documents scan, second pass, read every open row's
+  status. Row 4.29 read *"P9-04 and P9-05 next"*, though P9-01 to P9-03, its whole closing condition, were complete on
+  2026-10-13 (D-V2-126). Checked against the binary of `cccb001`, and closed.
+- Files and folders: M `docs/REMAINING_WORK.md` (rows 4.29 and 3.24), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- **RW 3.24 handed back.** The laptop measured it and refuted two causes (row 3.24 has the numbers): the size of what an
+  evaluation returns, and the allocation of a scope's bindings. It cannot profile, because it has no tool and WSL's
+  build ran it out of memory. A routine VM can install valgrind or perf, so RW 3.24 goes back to the work order (step
+  4.7). Start from a profile of the row's benchmarks, and nothing in this entry or #105's reserves it any longer.
+- **Open / next:** read the sweep's run `41246969522` and the launch runs `41247420596` and `41247423239` (#105's entry),
+  then cite the launch runs. RW 3.24 is anyone's, profile first.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — LOCAL-CALLEE-1: a call through a local reaches what the local holds (RW 2.24, D-V2-200) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/local-callee` (on `master` `8b2784b`, #105; it also carries RW 4.29 and RW 3.24 above)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu/tests/plugin_load_cli.rs`,
+  `docs/design/SOUNDNESS_AUDIT.md` (entrenched: one paragraph in §D's box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (row 2.24), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-200),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- For the laptop's memory: HANDOFF §11.4 (LOCAL-CALLEE-1).
+- **Open / next, in order:** land this on a green run; read the sweep's run `41246969522` and the launch runs
+  `41247420596` and `41247423239`; bring `launch/2.0.0` current again (one section to fold, LOCAL-CALLEE-1: not
+  breaking, since v1.0.0 had no plugin export at run time, `PluginFn` and `load` being V2's P2, so no released surface
+  moves); cite the newest launch runs; *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — CTOR-SHADOW-1: a name a constructor and a function share is the constructor (RW 2.25, D-V2-201) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/ctor-shadow` (stacked on `laptop/local-callee`, #106)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/tests/loop_parity.rs`, `crates/delulu/tests/late_let_cli.rs`, `docs/design/SOUNDNESS_AUDIT.md`
+  (entrenched: one paragraph in §D's box), `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 2.25), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-201),
+  `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md` (§11.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- For the laptop's memory: HANDOFF §11.4 (CTOR-SHADOW-1).
+- **A second commit on the same branch:** `loop_parity`'s CTOR-SHADOW-1 test also holds lowercase constructors
+  (`cell(8)`, `empty`), which the interpreter refused as *"unbound name"* before D-V2-201. RW 2.26 is opened (in a
+  pattern a lowercase name binds, so a lowercase nullary constructor cannot be matched by name). M (this commit):
+  `crates/delulu-wasm/tests/loop_parity.rs`, `docs/REMAINING_WORK.md` (row 2.26), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **A third commit on the same branch:** the WASM call orders its lookups as the checker does. CTOR-SHADOW-1 reached
+  WASM where a call had no expected type, and WASM-BUILTIN-SHADOW-1 (RW 2.27): a local named like a builtin was never
+  called there. M: `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/late_let_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (rows 2.25, 2.27),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-201), `docs/DELULULANG_V2/V2_LOG.md`, `docs/design/SOUNDNESS_AUDIT.md`
+  (the CTOR paragraph, not yet landed), `HANDOFF.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Mutants M988, M989.
+- **Open / next, in order:** land #106, then this, on green runs; read the sweep's run `41246969522` and the launch runs
+  `41247420596` and `41247423239`; bring `launch/2.0.0` current. There are two sections to fold:
+  - LOCAL-CALLEE-1, not breaking, since v1.0.0 had no plugin export at run time;
+  - CTOR-SHADOW-1, not breaking, since v1.0.0 had the same order and the checked meaning is 1.x's.
+  Then cite the newest launch runs. *[laptop]* the launch only on the owner's word.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — `run --engine` refuses a value it does not know (RW 6.48) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W9JutwrGLAxpHiYw4t`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/engine-value` (stacked on `laptop/ctor-shadow`, #107)   Pull request: opened with this commit
+- **What:** see V2_LOG's entry of the same name.
+- Files and folders: M `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/cli_contract.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (row 6.48), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **Open / next:** as #107's entry says: land #107, then this. Read the sweep's run and the launch runs. Bring
+  `launch/2.0.0` current: the sections to fold are LOCAL-CALLEE-1, CTOR-SHADOW-1 with WASM-BUILTIN-SHADOW-1, and this
+  one. This one is a usage error where a run happened, so judge it against STABILITY.md §1's exit codes: `run` with an
+  unknown `--engine` exited 0 under 1.x.
+- Survey and doctor (after the last edit): in the commit message.

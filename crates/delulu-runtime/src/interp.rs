@@ -253,6 +253,9 @@ pub struct Home {
     /// prints them in it). A name maps to its place so that putting a literal in order and finding a field in a wide
     /// record cost no scan of the declaration (RW 2.10): a 1,600-field literal written out of order took 39 ms to build.
     records: HashMap<String, HashMap<String, usize>>,
+    /// The constructors of the module's own sum types. CTOR-SHADOW-1: a function may share a name with one, and the
+    /// checker resolves the name to the constructor, as a call and as a value; so does this interpreter.
+    ctors: std::collections::HashSet<String>,
 }
 
 /// A record at most this wide has its field found by a scan; a wider one asks its type's places first (RW 2.10). A
@@ -351,6 +354,7 @@ impl Interp {
         let mut actors = HashMap::new();
         let mut tests = HashMap::new();
         let mut records = HashMap::new();
+        let mut ctors = std::collections::HashSet::new();
         for item in &module.items {
             match item {
                 Item::Fn(f) => {
@@ -363,6 +367,9 @@ impl Interp {
                             at.entry(f.name.name.clone()).or_insert(i);
                         }
                         records.insert(td.name.name.clone(), at);
+                    }
+                    if let TypeDeclKind::Sum(variants) = &td.kind {
+                        ctors.extend(variants.iter().map(|v| v.name.name.clone()));
                     }
                 }
                 Item::Const(c) => consts.push((c.name.name.clone(), c.value.clone())),
@@ -393,7 +400,7 @@ impl Interp {
             }
         }
         Interp {
-            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root(), records })),
+            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root(), records, ctors })),
             tests,
             consts,
             depth: Cell::new(0),
@@ -1126,9 +1133,9 @@ impl Interp {
         if let Some(v) = env.get(name) {
             return Ok(v);
         }
-        // A nullary variant constructor as a value (`None`, a user enum's `Red`, prelude `NotFound`).
-        // The checker has already resolved it, so a capitalized unbound name is a nullary variant.
-        if name.chars().next().is_some_and(char::is_uppercase) {
+        // A nullary constructor of the module's own types as a value (a user enum's `Red`) — before a function of the same
+        // name, as the checker resolves it (CTOR-SHADOW-1).
+        if self.home().ctors.contains(name.as_str()) {
             return Ok(Value::variant(name, vec![]));
         }
         // A top-level function used AS A VALUE — `apply(double, 21)`, `xs.map(double)`.
@@ -1153,20 +1160,28 @@ impl Interp {
             self.note_alloc(&v);
             return Ok(v);
         }
+        // A prelude's nullary constructor as a value (`None`, `NotFound`): the checker has resolved the name, and a
+        // capitalized name no binding, constructor of the module or function claims is one. Asked after the functions:
+        // before them a capitalized function passed as a value became a constructor with no fields, "not callable"
+        // (CTOR-SHADOW-1).
+        if name.chars().next().is_some_and(char::is_uppercase) {
+            return Ok(Value::variant(name, vec![]));
+        }
         Err(Escape::Fault(Fault::at("DL0907", format!("unbound name `{name}`"), span)))
     }
 
     fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
-        // A14: a call by name to one of the module's functions — what the order below reaches when no local closure has
-        // the name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
-        // callee's scope. Whether a local closure has the name cannot change while the arguments run: an argument
-        // binds nothing in this scope, and a binding keeps its type.
+        // A14: a call by name to one of the module's functions — what the order below reaches when no local binds the
+        // name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
+        // callee's scope. Whether a local binds the name cannot change while the arguments run: an argument binds
+        // nothing in this scope.
         if let Expr::Var { path, .. } = callee {
             if let [seg] = path.segs.as_slice() {
                 let name = seg.name.as_str();
-                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && !matches!(env.get(name), Some(Value::Closure(_))) {
+                if !delulu_check::check::PRELUDE_BUILTINS.contains(&name) && env.get(name).is_none() {
                     let home = self.home();
-                    if let Some(f) = home.funcs.get(name) {
+                    // CTOR-SHADOW-1: never a function that shares its name with one of the module's constructors.
+                    if let Some(f) = home.funcs.get(name).filter(|_| !home.ctors.contains(name)) {
                         let callee_env = Scope::child(&home.globals);
                         for (i, a) in args.iter().enumerate() {
                             let v = self.eval_expr(a, env)?;
@@ -1190,9 +1205,21 @@ impl Interp {
         if let Expr::Var { path, .. } = callee {
             if path.segs.len() == 1 {
                 let name = &path.segs[0].name;
-                // A locally-bound closure value takes precedence (e.g. `f` inside `apply`).
-                if let Some(Value::Closure(clo)) = env.get(name) {
-                    return self.call_closure(&clo, argvals);
+                // A local binding of the name takes precedence over everything below (e.g. `f` inside `apply`), whatever
+                // it holds, as the checker resolves the name. LOCAL-CALLEE-1: only a closure was asked for, so a plugin's
+                // export kept in a local named like one of the module's functions called that function — the checker
+                // had typed a pure export there, and the function wrote.
+                match env.get(name) {
+                    Some(Value::Closure(clo)) => return self.call_closure(&clo, argvals),
+                    Some(Value::PluginFn(f)) => return self.call_plugin_export(&f, argvals, span),
+                    Some(other) => {
+                        return Err(Escape::Fault(Fault::at(
+                            "DL0907",
+                            format!("value `{}` is not callable", other.display()),
+                            span,
+                        )))
+                    }
+                    None => {}
                 }
                 // P2 — `load(host, path, grant)` is handled HERE rather than in `prim`, for the
                 // reason `root.foreign` is: it mints a custody node and reads a container through the
@@ -1208,6 +1235,12 @@ impl Interp {
                         self.note_alloc(v); // 10d
                     }
                     return res.map_err(Escape::Fault);
+                }
+                // A constructor of the module's own types, before a function of the same name, as the checker resolves
+                // it (CTOR-SHADOW-1: the function ran — a `Shape` the checker built was the function's `Int`, and an
+                // effectful function named like a pure constructor wrote from a program `authority` called pure).
+                if self.home().ctors.contains(name.as_str()) {
+                    return Ok(Value::variant(name, argvals));
                 }
                 // A user function.
                 if self.home().funcs.contains_key(name) {

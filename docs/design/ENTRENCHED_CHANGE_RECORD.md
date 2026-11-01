@@ -621,3 +621,71 @@ checker already gave. No rule is added, removed or reworded.
 ```
 git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
 ```
+
+## 2026-11-01 — `docs/design/SOUNDNESS_AUDIT.md`: LOCAL-CALLEE-1 added to §D's box of the same day
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/SOUNDNESS_AUDIT.md`: one paragraph appended to the LATE-LET-1 box at the end of §D. It records a second negation of §D's claim found the same day (LOCAL-CALLEE-1) and names its witness. No other sentence changes. |
+| Entrenched by | `.github/CODEOWNERS:27` → `@jessesuniljs1-collab` |
+| Campaign | the weekly verification sweep of 2026-11-01; `REMAINING_WORK.md` 2.24; decision D-V2-200 |
+| Approved by | **the head chef, 2026-11-01, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+§D's claim was negated again by the runtime's name resolution: a call the checker resolved to a local holding a pure
+plugin export ran an effectful module function of the same name. The box already recording LATE-LET-1 is where a reader
+of §D looks, and it must not stop at the first of the day's two.
+
+**Why this is not an RFC**
+
+No rule changes. The paragraph records a runtime defect, now fixed, against the meaning the checker already gave.
+
+**Verified before the change**
+
+1. On the binary before D-V2-200, the paragraph's program checked clean, `delulu why Write` said *"program cannot
+   perform `Write`"*, and `run --grant console --grant plugin=.` printed. After it, nothing is printed.
+2. The witness is red before D-V2-200 and green after it, and both mutants of the fix turn it red (the decision's
+   evidence).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
+```
+
+## 2026-11-01 — `docs/design/SOUNDNESS_AUDIT.md`: CTOR-SHADOW-1 added to §D's box of the same day
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/SOUNDNESS_AUDIT.md`: one paragraph appended to §D's box of 2026-11-01, after LOCAL-CALLEE-1's. It records the third negation of §D's claim found that day (CTOR-SHADOW-1), names its witness, and states the lesson the three share. No other sentence changes. |
+| Entrenched by | `.github/CODEOWNERS:27` → `@jessesuniljs1-collab` |
+| Campaign | the weekly verification sweep of 2026-11-01; `REMAINING_WORK.md` 2.25; decision D-V2-201 |
+| Approved by | **the head chef, 2026-11-01, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+§D's claim was negated a third time the same day, by the interpreter's name resolution. A call the checker resolved to
+a pure constructor ran an effectful function of the same name, with no special grant. The box is where a reader of §D
+looks.
+
+**Why this is not an RFC**
+
+No rule changes. The paragraph records a runtime defect, now fixed, against the meaning the checker already gave. The
+alternative that would change a rule, refusing a function named like a constructor, was not taken (D-V2-201).
+
+**Verified before the change**
+
+1. On the binary before D-V2-201, the paragraph's program checked clean, `authority` said *"(none — provably pure)"*,
+   and `run --grant console` printed. After it, nothing is printed.
+2. The witness is red before D-V2-201 and green after it, and its mutants turn it red (the decision's evidence).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/SOUNDNESS_AUDIT.md
+```

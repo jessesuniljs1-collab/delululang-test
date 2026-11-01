@@ -5426,3 +5426,84 @@ one frame) were all red, and the control green. M976 survived the first form of 
 a lambda made in the outer scope and held it directly; the witness now makes that value in another function. The
 suites: `delulu-runtime` and `delulu-wasm` whole; `examples_run`, `core_invariance`, `conformance`, `for_loop_cli`,
 `actors_cli`, `actors_cycles_cli`, `deep_values_cli`, `wasm_cli`, `book`, `stdlib_p3`; `delulu-check`'s `laundering`.
+
+## D-V2-200 — LOCAL-CALLEE-1 (RW 2.24): a call by a name a local binds goes to what the local holds — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** The checker resolves a call's name to the innermost binding: a local before a module function, and a module
+function before a prelude builtin, which DL0302 keeps apart. The interpreter's `eval_call` has two paths:
+- the A14 fast path, taken for a module function when *"no local closure has the name"*;
+- the general path, which calls a local only `if let Some(Value::Closure(..))`, and otherwise falls through to `load`,
+  the builtins and the module's functions.
+A plugin's export is a `Value::PluginFn`, not a closure. So a local holding an export, named like a module function,
+called that function on both paths. Found 2026-11-01 by the laptop beside LATE-LET-1, reading `eval_call`:
+- `let shout: fn(Str) -> Str ! {} = p.get("shout")?; shout("hello")` printed the module's `hello?` for the export's
+  `hello!`.
+- With an export `relay: fn(Cap[Console], Str) -> Str`, typed pure in the local's annotation, and a module function
+  `relay` that prints, `delulu why Write` said *"program cannot perform `Write`"*, `authority` listed `Load, Read`, and
+  the run printed. This is C88's shape, R-4.
+- It needed `--grant plugin=`, the console capability held, and the WASM engine runs no plugins.
+
+**Decision.** A local binding of the name decides the call, whatever it holds. The fast path is taken only when no local
+binds the name (`env.get(name).is_none()`). The general path calls a closure, calls a plugin's export
+(`call_plugin_export`, which re-checks its liveness as before), and refuses anything else as DL0907, *"value … is not
+callable"*, the same words its last arm used. The module's functions, `load` and the builtins are reached only when no
+local binds the name. No new code.
+
+**Not taken:** keeping the closure-only check and adding `PluginFn` beside it. That would leave the next callable kind
+to fall through the same way, which is the skip-branch shape (HANDOFF §11.4, C88).
+
+**Evidence.** `plugin_load_cli` `a_local_holding_an_export_is_called_never_a_module_function_of_its_name`: the effect half
+first (`why Write` says the program cannot write, and the run must print nothing), then the value half (`hello!`). Red
+before: `hello?`. Mutants M981 (the fast path asks for a closure only) and M982 (the general path does) each left
+`LEAK: the module's relay`, and the control was green. `delulu-runtime` (351), `plugin_load_cli` (25), `plugin_cli`,
+`late_let_cli`, `examples_run`, `core_invariance`, `conformance`, `actors_cli`, `stdlib_p3`, `wasm_cli`, `for_loop_cli`
+and `loop_parity` passed.
+
+## D-V2-201 — CTOR-SHADOW-1 (RW 2.25): a name a constructor of the module and a function share is the constructor, on both engines — TAKEN (head chef, 2026-11-01, under the owner's delegation)
+
+**Context.** A function may share its name with a constructor of the module's own sum type. DL0302 refuses only a
+function named like a prelude builtin. The checker resolves such a name to the constructor, as a call (`let s: Shape =
+Circle(3)` checks, and `let n: Int = Circle(3)` is DL0401) and as a value. The interpreter's order differed:
+- for a call, `eval_call`'s two paths asked the module's functions before its capitalized-name fallback;
+- for a value, `eval_var` asked the capitalized-name fallback before the functions.
+
+Found 2026-11-01 by the laptop, reading the interpreter's name lookups against the checker's after LATE-LET-1 and
+LOCAL-CALLEE-1. On the release binary of `cccb001`, with no special grant:
+- `type Holder = Wrap(Cap[Console]) | Empty` with `fn Wrap(c) -> Holder ! {Write}` that prints, called from a pure
+  `hold`: `authority` said *"(none — provably pure)"*, `why Write` said *"program cannot perform `Write`"*, and the run
+  printed. This is C88's shape, R-4.
+- `Circle(3)` was the function's `Int`, and a `match` on it as a `Shape` faulted.
+- `apply(Double, 5)`, with no constructor `Double`, faulted *"value `Double` is not callable"* (DL0907).
+- The WASM engine built the constructor for a call with an expected type (`Wrap(c)` as `hold`'s result), but called
+  the function for one without (`let h = Wrap(c)`), and printed. It refused `let d = Dot` (DL1201: its `let` bound the
+  bare name to the function value).
+- And the WASM engine compiled the prelude's builtins (`str`, `int`, `float`, `parse_int`, `parse_float`, `Map`) before
+  it asked for a local function value, so a local `str` was never called there (WASM-BUILTIN-SHADOW-1, RW 2.27).
+- v1.0.0's interpreter had the same order.
+
+**Decision.**
+1. **The interpreter keeps the module's constructors** (`Home::ctors`, from its sum types' variants). It builds a
+   constructor before it asks the functions: in `eval_var`, in the A14 fast call path (a function that shares a
+   constructor's name is never taken there), and in the general call path. The capitalized-name fallback, which
+   serves a prelude's constructors (`None`, `NotFound`), now comes after the functions in `eval_var`, as it already did
+   for a call. A prelude constructor cannot be a function (DL0302), so the fallback never meets one.
+2. **The WASM engine never binds a constructor as a function value** (`EnumEnv::is_ctor`, asked over every sum type,
+   since `enum_of_ctor` answers nothing for a name two types share). **Its call asks in the checker's order:** a local
+   function value first, then the builtins, then a constructor of the module (built even where a generic or a function
+   shares its name, and refused in words where two of the module's types share it, never falling through to the
+   function), then the generics and the functions.
+3. **Not taken:** refusing a function named like one of the module's constructors (DL0302 widened). That would refuse
+   programs that check today, which STABILITY.md §1 forbids within a major and asks a decision of its own for 2.0. The
+   runtime now gives the meaning the checker already gives, so no program changes verdict.
+
+**Evidence.** `late_let_cli`'s `a_call_the_checker_resolved_to_a_constructor_never_runs_a_function_of_its_name` (red
+before: the `LEAK` line). `loop_parity`'s
+`a_constructor_is_built_where_a_function_shares_its_name_and_a_function_is_passed_where_none_does` holds both engines to
+`3 -1 10`; red before: the WASM engine refused the program, and the interpreter faulted. Mutants M983 (the general path
+asks the functions first), M984 (the fast path takes a function that shares a constructor's name), M985 (a value asks
+the functions first), M986 (a capitalized value is a constructor before a function), M987 (the WASM `let` binds a
+constructor as a function value), M988 (the WASM call asks a local after the builtins) and M989 (the WASM call takes a
+function that shares a constructor's name) were all red, and the control green. The CLI test runs both engines, and
+`loop_parity`'s `a_local_named_like_a_builtin_is_called_on_both_engines` holds WASM-BUILTIN-SHADOW-1. `delulu-runtime` (351), `delulu-wasm` (217),
+`late_let_cli`, `plugin_load_cli`, `examples_run`, `core_invariance`, `conformance`, `actors_cli`, `stdlib_p3`,
+`wasm_cli`, `book`, `corpus_cli` and `deep_values_cli` passed.
