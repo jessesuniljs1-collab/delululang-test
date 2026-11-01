@@ -11320,3 +11320,19 @@ What was done:
   The cloud's notes were carried to the laptop first. Then the folder was refreshed from the laptop, 80 files, sanitized
   by a script that refuses if the banned word survives. The new files were scanned for credentials and personal
   addresses: none.
+
+## 2026-11-01 — the laptop: the Survey holds the memory notes as records, not claims about now
+
+Refreshing `docs/assistant-memory/` (the same day: 79 notes and their index) made ten of the map's sixteen warnings `stale-count`
+findings in memory notes. An example is "12 shipped language crates" in a note of 2026-08: a record of that day, as true
+as the archive's. Ten old warnings bury a new one.
+
+**Changed:** `describes_the_present` (`crates/delulu-survey/src/verify.rs`) exempts `docs/assistant-memory/`, as it
+exempts `docs/archive/`. Its README says the notes are dated as written and never edited on the way in. `HANDOFF.md` §11
+and the V2 documents state the present, and are still checked. The rule had no test. Now
+`only_documents_that_describe_the_present_are_held_to_the_tree` names the documents on each side, and mutant M1013 (the
+exemption removed) turns it red.
+
+**Result:** findings went from 0 errors and 16 warnings to 0 errors and 7. Four are memory notes naming a path not in
+the tree, kept as warnings because a path that dangles may be a real one moved. Two are in a design prompt, and one is an
+old V2_LOG count.

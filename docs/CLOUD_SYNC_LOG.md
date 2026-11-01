@@ -7193,3 +7193,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   current: RW 6.49 as a *Breaking* clause beside RW 6.48, and RW 3.24. (3) RW 3.24, structural. (4) RW 2.26's decision.
   (5) The broker's Miri. (6) *[laptop]* The launch, only on the owner's word.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-01 — the Survey holds the memory notes as records (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6W99xtUHfXNFr996kS5`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/survey-memory-records` (from `master` `bfdda95`)   Pull request: opened with this commit.
+- **What:** see V2_LOG's entry of the same name. The map's warnings go from 16 to 7. Mutant M1013 was red.
+- Files and folders: M `crates/delulu-survey/src/verify.rs` (the exemption and its first test), `docs/AI_ONBOARDING.md`
+  (the warnings line), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **Open / next:** as the entry for RW 2.28 says. This branch lands after #112 and #113, by a merge of `master` with the
+  map rebuilt. The onboarding doc's counters then read M1013.
+- Survey and doctor (after the last edit): in the commit message.

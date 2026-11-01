@@ -105,8 +105,9 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
      2026-10-19). Push the branch, dispatch `ci.yml` with `-f jobs=everything`, read the run to its end, and land only
      on green.
 5. **Regenerate the map LAST**: `cargo run -p delulu-survey -- build`, then `-- check` and `-- findings`, which must show
-   0 errors. A warning is for you to judge: on 2026-11-01 there were 16, nearly all of them dated memory notes quoting
-   what was true when they were written. Then `cargo run -p delulu -- doctor --check`.
+   0 errors. A warning is for you to judge: on 2026-11-01 there were 7, each a path some prose names that is not in the
+   tree, or an old log entry's count. Dated records (the archive, the memory notes) are not held to today's counts.
+   Then `cargo run -p delulu -- doctor --check`.
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;

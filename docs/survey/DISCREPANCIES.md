@@ -10,13 +10,12 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 | Severity | Class | Count |
 |---|---|---:|
 | warning | `prose-cites-missing-path` | 6 |
-| warning | `stale-count` | 10 |
+| warning | `stale-count` | 1 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
 | note | `dependency-never-used-in-source` | 3 |
 | note | `ruling-cited-without-its-stage` | 1 |
-| note | `test-count-quoted-but-unverifiable` | 1 |
 
 ## warning — `prose-cites-missing-path` (6)
 
@@ -29,20 +28,11 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
 
-## warning — `stale-count` (10)
+## warning — `stale-count` (1)
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
 - `docs/DELULULANG_V2/V2_LOG.md:1145` — says 154 registered diagnostic codes; the tree has 155
-- `docs/assistant-memory/delulu-hardening-campaign.md:183` — says 12 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-hardening-campaign.md:1201` — says 13 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-hardening-campaign.md:1203` — says 12 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-hardening-campaign.md:1252` — says 13 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-hardening-campaign.md:1254` — says 12 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-licensing-intent.md:15` — says 12 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-p18-uncertainty.md:81` — says 7 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-survey-map.md:53` — says 12 shipped language crates; the tree has 9
-- `docs/assistant-memory/delulu-survey-map.md:97` — says 12 shipped language crates; the tree has 9
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
@@ -105,10 +95,4 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 **What to do:** write the stage when you mean an earlier one — `S9-D21` — as the Stage-10 ledger already does
 
 - `docs/design` — 365 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
-
-## note — `test-count-quoted-but-unverifiable` (1)
-
-**What to do:** re-run the suite and update these by hand; the Survey deliberately does not guess
-
-- `README.md` — these lines quote a test count, which is produced by `cargo test` and cannot be read out of the tree — verify them against a suite run: docs/assistant-memory/delulu-p22-containment-campaign.md:178, docs/assistant-memory/delululang-project.md:3, docs/assistant-memory/delululang-project.md:64, docs/assistant-memory/delululang-project.md:112, docs/assistant-memory/delululang-project.md:125, docs/assistant-memory/delululang-project.md:160, docs/assistant-memory/delululang-project.md:170, docs/assistant-memory/delululang-project.md:184, docs/assistant-memory/delululang-project.md:192, docs/assistant-memory/delululang-project.md:200
 

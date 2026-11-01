@@ -24,16 +24,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 339 |
-| Rust lines | 197072 |
+| Rust lines | 197102 |
 | Rust files outside `src/` (test/bench targets) | 168 |
 | Markdown documents | 300 |
-| Markdown lines | 93369 |
+| Markdown lines | 93397 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 155 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1605 / 18199 |
-| Open discrepancies | 54 |
+| Nodes / edges in this map | 1605 / 18205 |
+| Open discrepancies | 44 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -340,7 +340,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 13 files, 4684 lines
+- **Modules:** 13 files, 4714 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -356,7 +356,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 | `src/render.rs` | 292 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 482 | Reading Rust source as text. |
 | `src/scan.rs` | 214 | Walking the tree and deciding what each file *is*. |
-| `src/verify.rs` | 610 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
+| `src/verify.rs` | 640 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`
 
