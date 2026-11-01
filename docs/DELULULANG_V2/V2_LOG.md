@@ -11399,3 +11399,32 @@ exemption removed) turns it red.
 **Result:** findings went from 0 errors and 16 warnings to 0 errors and 7. Four are memory notes naming a path not in
 the tree, kept as warnings because a path that dangles may be a real one moved. Two are in a design prompt, and one is an
 old V2_LOG count.
+
+## 2026-11-01 — the laptop: the two-engine generator writes sum types of its own
+
+`delulu-wasm`'s program generator (`gen.rs`) feeds `conformance_parity` (2,000 programs) and the differential gate
+(50,000). It never wrote a sum type of the program's own. So none of the shapes this weekend turned on was ever drawn
+at random:
+- CTOR-SHADOW-1's lowercase constructors (D-V2-201);
+- their call-form patterns (D-V2-203);
+- a test inside a constructor (MATCH-NEST-1).
+Every such check was hand-written.
+
+**Added:** `gen_sum`, from a stream of its own in `random_console_program`, in half the programs. It writes:
+- a type `K` of two to four constructors, lowercase and capitalized, each with no field or with one or two `Int`
+  fields;
+- a `pick` whose arms come in a shuffled order. A pattern names a lowercase nullary constructor by its call form, and a
+  capitalized one bare or called. A field is bound, ignored, or tested against a literal. A final `_` keeps the match
+  exhaustive, and a general arm above a narrower one sometimes takes its values, a DL0413 warning both engines must
+  honour alike;
+- a line printing `pick` of three to five of its values.
+`conformance_parity` counts what it drew and fails below its floors: more than 700 sum-type programs, more than 300
+matching a lowercase constructor by its call form, and more than 200 testing a field.
+
+**Evidence:**
+- All 2,000 programs check clean, compile, and print alike on both engines. The differential gate passes on 6,000
+  seeds, in 64 s on a debug build.
+- M1016 (the generator never writes a sum type) turns the floors red.
+- M1017 (the interpreter reads a literal inside a constructor as any value) turns the parity red: 488 programs differ.
+  Under the generator as it was before this change, M1017 stays **green**: no generated program tested inside a
+  constructor. That difference is the coverage this adds.
