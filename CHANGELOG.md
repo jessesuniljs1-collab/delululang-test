@@ -11,6 +11,27 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the interpreter's measured costs cut, 2026-11-01
+
+- **Changed: the interpreter runs loops and calls faster, with the same output** (RW 3.24, D-V2-202). Measured on a Linux
+  VM of four vCPUs, each the minimum of three rounds interleaved with the previous build: Study C's
+  `nested_calls_macro` 144 → 117 ms, `fib_recursive_24` 42 → 38 ms and `loop_sum_1m` 157 → 148 ms, and a merge sort and a
+  quicksort of 100,000 `Int`s 3.9 → 3.5 s. A lookup passes a scope that cannot hold the name without reading it, a call's
+  scope is made with room for its parameters, and the module's maps from names no longer hash with SipHash. The
+  interpreter is still a tree-walker, about 100× slower than `--engine wasm` on computation: `docs/for-agents.md` says
+  which engine to choose.
+
+## Unreleased — a flag's value that cannot be read is refused, 2026-11-01
+
+- **Fixed: a value a flag cannot read is a usage error (exit 2), and nothing runs** (RW 6.49). Each was read as no value,
+  the default: `run --seed abc` ran unseeded, `--clock bogus` on the real clock, and `--epoch-ms`, `--actors-threads`,
+  `--foreign-max-ret` and `--sim-step` on their defaults. So did `test --seed abc`, and `test --seed` with no value at
+  all. `atlas --budget abc` built under the default budget. Now each says `was given a value it cannot read: --seed
+  `abc``. A readable value runs as before.
+- **Fixed: `atlas`'s query verbs (`node`, `callers`, `calls`, `why`, `path`) refuse an option they do not know, an
+  option with no value, and a value they cannot read** (RW 6.49). They refused none, though they share the graph
+  command's parser, which did.
+
 ## Unreleased — `run --engine` refuses a value it does not know, 2026-11-01
 
 - **Fixed: `delulu run --engine` takes `interp` or `wasm`, and refuses any other value** (RW 6.48). Any other value ran

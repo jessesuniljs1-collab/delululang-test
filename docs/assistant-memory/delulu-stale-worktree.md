@@ -36,3 +36,6 @@ which is the first clue it is not scratch.
   repository operations. New ones go in `docs/survey/REMOVALS.md`.
 
 Related: [[delulu-survey-map]], [[subagent-cost-strategy]] (the agent runs that create these).
+
+**2026-10-21:** the two agent worktrees of 2026-09-17 (`agent-ab8e3c649dff8d3e7`, `agent-af964add0968902db`, tip `9584011` on master, 13 MB each) were REMOVED on Jesse's word ("Do that is right decision"), after both checks; their two notes kept at `D:
+elan\worktree-notes-2026-09-17\` (one also byte-identical in docs/archive). Record: `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md`. `.claude/worktrees/` is now empty.

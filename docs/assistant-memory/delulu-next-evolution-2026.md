@@ -80,3 +80,8 @@ without his approval; when he approves, follow the per-phase end-of-phase protoc
 ([[no-banned-word-mentions]] absolute); agents only under [[agent-usage-rule-2026-09-17]].
 Related: [[delululang-project]], [[delulu-remaining-work-inventory]], [[delulu-github-remote]],
 [[testing-repo-autopush]], [[delulu-p22-containment-campaign]] (the search key that found NE-19/20).
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [NEXT EVOLUTION 2026 planning record (approved; now archived under `docs/archive/v1/NEXT_EVOLUTION_2026/`)](delulu-next-evolution-2026.md) — plan + 5 SANDBOX docs in `docs/NEXT_EVOLUTION_2026/`; decision: sandbox = cross-cutting layer, early (PS-0 inside P1, L1 jail next), microVM re-sequenced to a Linux/KVM phase, **the guest performs no effects**; headline findings NE-01 (no run-time plugin load, `prim.rs:366`), NE-17 (`http.get` has no client), NE-19 (Windows device names pass containment); every run of the day READ (`3fd69f2` GREEN on all push jobs) and recorded in `0bf8b11` = HEAD (pushed, clean); **`0bf8b11`'s own run `35224262541` NOT yet read — next session reads + records it**; commission files back in `docs/design` (first redacted in place).

@@ -3225,6 +3225,9 @@ impl<'a> Checker<'a> {
         match pat {
             Pattern::Wildcard(_) => *has_wildcard = true,
             Pattern::Bind(name) => {
+                if let Some(arity) = self.own_constructor_arity(scrut, &name.name) {
+                    self.binding_spelled_like_a_constructor(name, scrut, arity);
+                }
                 *has_wildcard = true;
                 ctx.bind(&name.name, self.cx.apply_type(scrut));
             }
@@ -3250,6 +3253,52 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+    }
+
+    /// RW 2.26 (D-V2-203): the number of fields of the matched type's own constructor spelled `name`, if it has one.
+    /// Only a sum type declared in the program can have one: `Ok`, `Err`, `Some` and `None` are capitalized, and the
+    /// parser reads a capitalized name as a constructor already.
+    fn own_constructor_arity(&mut self, scrut: &Type, name: &str) -> Option<usize> {
+        let Type::Sum(id, _) = self.cx.apply_type(scrut) else { return None };
+        match &self.table.type_def(id).kind {
+            TypeDefKind::Sum(variants) => variants.iter().find(|(n, _)| n == name).map(|(_, tys)| tys.len()),
+            _ => None,
+        }
+    }
+
+    /// RW 2.26 (D-V2-203). A lowercase name in a pattern is a new binding, by the parser's convention
+    /// (`parse_pattern_inner`), so `match t { foo => 1, bar => 2 }` over `type T = foo | bar` matched every `T` with
+    /// its first arm and answered 1 for `bar`, on both engines and with no word from the checker. A binding spelled
+    /// like a constructor of the very type it matches is refused, DL0302: it would shadow that constructor, as a second
+    /// definition of one name would. It is the other half of DL0405, which refuses a capitalized name that is no
+    /// constructor of the type. `foo()` matches the constructor, and the repair writes it.
+    fn binding_spelled_like_a_constructor(&mut self, name: &Ident, scrut: &Type, arity: usize) {
+        let ty = self.ty(&self.cx.apply_type(scrut));
+        let n = &name.name;
+        let call = format!("({})", vec!["_"; arity].join(", "));
+        self.diags.push(
+            Diagnostic::error(
+                "DL0302",
+                format!(
+                    "`{n}` is a constructor of `{ty}`, but a lowercase name in a pattern is a new binding: this pattern \
+                     matches every `{ty}`, not `{n}` — write `{n}{call}` to match the constructor, or rename the binding"
+                ),
+            )
+            .with_span(name.span, format!("binds any `{ty}`; it does not match the constructor `{n}`"))
+            .with_repair(Repair {
+                id: "match-the-constructor",
+                confidence: Confidence::Suggest,
+                authority_widening: false,
+                requires_human: false,
+                edits: vec![Edit {
+                    file: name.span.file,
+                    start_byte: name.span.end,
+                    end_byte: name.span.end,
+                    insert: call.clone(),
+                }],
+                reason: None,
+            }),
+        );
     }
 
     fn variant_field_types(&mut self, scrut: &Type, vname: &str, span: Span) -> Vec<Type> {

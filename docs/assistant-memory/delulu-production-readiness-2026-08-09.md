@@ -197,3 +197,8 @@ worked. It survived Jesse's usage-limit gap (session paused ~3 h, resumed by re-
 runaway. Long background runs (release build, Miri, full suites) each got a deletable watchdog cron.
 WSL harness lessons from [[delulu-p21-crossaccount]] all held (PowerShell not Git-Bash; script files;
 cargo belongs to `user`).
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**Production-readiness sweep 2026-08-09**](delulu-production-readiness-2026-08-09.md) — 8 phases + multi-agent red team, `e5ae9ec`→`b203983`. **Six security defects, each witnessed against old code**: adapter reply-desync; **ROTATE-1** (rotate-key never persisted, restart resurrected killed tokens); **ADOPT-REPLAY-1** (revoked cert lived only in memory, restart let it re-adopt); **ADAPTER-LINE-1** (unbounded reply line → OOM); **PATTERN-DEPTH-1**/**BLOCK-DEPTH-1** (parser crashes). All four recursive-descent nesting classes now bounded (DL0210/0211/0212/0213). Recurring shape: *safe in the normal case, unbounded in the adversarial one*.

@@ -11188,3 +11188,135 @@ unknown value before anything runs: exit 2, `unknown --engine `wsam` (interp | w
   with a value other than `interp` or `wasm` is refused, exit 2, where v1.0.0 ran the interpreter. LOCAL-CALLEE-1,
   CTOR-SHADOW-1 and WASM-BUILTIN-SHADOW-1 were judged not breaking. `LAUNCH-GATES=ok`. Its `everything` run
   `41255633510` and release dry run `41255635829` were dispatched.
+
+## 2026-11-01 — the laptop: a flag's value that cannot be read is refused (RW 6.49)
+
+After RW 6.48 the laptop asked every value-taking flag of the shared parser the same question. `--limits mem=lots`
+refused already, but these did not:
+- `--seed abc`, `--epoch-ms abc`, `--actors-threads x`, `--foreign-max-ret x` and `--sim-step x`, each read with
+  `.parse().ok()`;
+- `--clock bogus` and `--clock fixed:soon`, read with `strip_prefix("fixed:")`.
+Each ran on the default, exit 0. A typo in a seed, which exists to make a run reproducible, gave an unreproducible run
+that said nothing. `test` read its own `--seed` the same way, and took a missing one as none. `atlas` read `--budget`
+and `--gods` the same way, and its query verbs (`node`, `callers`, `calls`, `why`, `path`) refused nothing at all:
+`atlas node main FILE --bogus` exited 0. They share the parser whose graph command refused unknown and missing options.
+
+The fix:
+- `read_value` keeps a flag and a value it cannot read in `bad_values`.
+- `refuse_unknown_flags` refuses them, exit 2, beside a missing value.
+- `test` refuses a missing or unreadable `--seed` in its own parser.
+- `refuse_atlas_flags` holds the graph command's rule for every atlas verb.
+
+`cli_contract`'s test gains 13 command lines, and was red before. M990–M993 each turned it red. `cli` (54),
+`json_contract`, `atlas_cli`, `atlas_e2e`, `atlas_chain`, `test_runner_cli`, `completions_cli`, `actors_cli`,
+`sim_device_cli` and `dead_man_cli` passed.
+
+## 2026-11-01 — on-demand routine run 16: the interpreter's measured costs cut, profile first (RW 3.24, D-V2-202)
+
+**Housekeeping.** The laptop's #110 (RW 6.49, `laptop/flag-values`) landed by fast-forward, `a4da001`, on its green run
+`41257609952` (14 success, 2 skipped), after its witnesses were re-run in the VM (`cli_contract` 20 passed,
+`sandbox_modes_cli` 12) and its refusals probed on the binary: `run --seed abc` and `--clock bogus` exit 2 with nothing
+run, `--seed=abc` and `--clock=bogus` exit 2 as unknown options, `--seed 7` and `--clock fixed:5` run. Its first run
+`41256288090` was red on `sandbox_modes_cli` alone (its `--clock 5`), which the branch's second commit fixed. Both newest
+autosave snapshots are in later commits: `60dccc5` (`laptop/flag-values`, 00:15 UTC) in `e67e9bf`, `d020bec`
+(`launch/2.0.0`, 2026-10-31 22:15 UTC) in `3bf4f2f`, each `git diff` over the paths it changed empty.
+
+**CI read, each to its end** (every job; `scripts/ci-annotations.py` for the verdicts):
+- the weekly sweep's `everything` `41246969522` at `cccb001`: 18 of 18 success, the broker's Miri 2 h 46 min;
+- `launch/2.0.0` `3bf4f2f`: `everything` `41247420596` 18 of 18 success (the broker's Miri 3 h 07 min), release dry run
+  `41247423239` success (four packages, `release` skipped);
+- `launch/2.0.0` `05eb884`: `everything` `41255633510` 18 of 18 success (the broker's Miri 3 h 05 min), release dry run
+  `41255635829` success (four packages, `release` skipped);
+- push runs `41256993252` (`d31c09a`) and `41271950047` (`a4da001`): 14 success, 2 skipped; #110's `41257609952` the same.
+In each, `actors_pingpong` MEASURED on arm64 (2.85x–2.96x where the machine gave 3.93x–3.95x, against 1.47x–1.48x,
+passed) and NOT MEASURED on Ubuntu and Windows (busy or SMT) and macOS (3 hardware threads; 1.50x–2.36x observed); the
+disk Ubuntu 82 → 67 GB free, Windows 144 → 129 or 217 → 202, macOS 91–93 → 88–89 GiB, arm64 104 → 91.
+
+**The launch branch.** `launch/2.0.0` merged `master`'s records `d31c09a` (documents only) and cites `3bf4f2f`'s and
+`05eb884`'s runs in CHECKLIST-2.0 criteria 1, 3, 4 and 8: `1548766`, `LAUNCH-GATES=ok` (Survey 1580 nodes, 18094 edges,
+0 errors, 15 warnings; doctor 26 checks; the nine document gates; conformance 100%; cargo deny). Its Rust is `05eb884`'s,
+which those runs ran. RW 6.49 and this entry's code are not folded yet (*Open / next*).
+
+**The milestone: RW 3.24, profile first.** The laptop handed RW 3.24 back on 2026-11-01 asking that the next attempt start
+from a profile. Callgrind on a release harness of the interpreter (`delulu-runtime` alone, line tables), on Study C's
+`loop_sum_1m`, `fib_recursive_24` and `nested_calls_macro`, the laptop's micro set (a call, a closure, an index, two
+nested blocks with a `let` each) and the dogfood merge sort and quicksort:
+- a step of `loop_sum_1m` is 2,069 instructions: `eval_expr`'s own body (its dispatch and its 56-byte result) about 390,
+  `binary` about 300, the block's statements about 300, the drop glue of the step's temporary `Value`s 168, a variable's
+  read about 150 (the walk, a `RefCell` borrow, a `memcmp` call for each binding passed, the clone) and an assignment
+  about 140;
+- a call of `nested_calls_macro` about 1,800: SipHash twice (`funcs`, `ctors`; about 120 together), a scan of the prelude's sixteen names, a
+  miss walk of every scope for a local of the callee's name, two allocations (the scope and its bindings' room);
+- the sorts spend a fifth of their instructions in `malloc`, `free` and `realloc`.
+
+Cut, each measured by its instruction count (deterministic) and by time, with the same output:
+1. Each scope keeps a filter of the names it binds, one bit each (`Scope::filter`, `Key::bit`). A walk passes a scope whose
+   filter lacks the name's bit without borrowing it. A set bit says only *perhaps*: the slots decide, so no binding is
+   hidden (`a_shared_filter_bit_hides_nothing` sets the bit with another name and reads, assigns and misses through it).
+2. A read (`Scope::get_near`) and an assignment ask the nearest scope by name before they build a key for the scopes above.
+3. A name is compared by its length and its first byte before any `memcmp`.
+4. The module's maps from names — functions, constructors, record fields — and a wide scope's index hash with
+   `NameHasher`, a keyless multiply-rotate hash (D-V2-202).
+5. A scope is made with room for the names it will bind — a call's parameters, a block's `let`s, an arm's bindings, a
+   loop's variable (`Scope::child_sized`) — so a fifth binding no longer reallocates.
+6. The call fast path asks its four conditions cheapest first; none has an effect, so only the cost changes.
+
+Tried and refuted by the count, each reverted: a scope's first four bindings held inline (+2–5% instructions on every
+benchmark — the laptop's timing on Windows confirmed on Linux) and an inlined clone of scalars at the read (+3%). Two
+forms of the lookup lost on `loop_sum_1m` before the one kept: a key built from the name's first eight bytes (2,115
+million instructions, against the base's 2,069) and a byte-by-byte comparison in place of `memcmp` (2,183 million).
+
+**Measured** with the old and new harnesses interleaved on a quiet VM, the minimum of three rounds: `loop_sum_1m` 157.0 →
+147.5 ms (−6%), `fib_recursive_24` 42.2 → 38.5 (−9%), `nested_calls_macro` 144.4 → 117.1 (−19%), the micro set 324.3 →
+275.4 (−15%), the merge sort and quicksort of 100,000 3,913 → 3,526 ms (−10%). Instructions: 2,069 → 1,814 million
+(−12.3%), 404 → 351 (−13.1%), 1,495 → 1,257 (−15.9%), 3,789 → 3,282 (−13.4%), and on the sort of 20,000 7,451 →
+6,529 million (−12.4%). The outputs are byte for byte the old build's. (`0a658f6`'s message says −8.6% for the sort of 20,000: that compared with a build between the two; against `a4da001` it is the figure here.)
+
+**Witnesses.** `step_allocations` `a_call_of_five_parameters_makes_its_room_once` and
+`a_block_of_five_lets_makes_its_room_once`, red on `a4da001`'s sources (3.00 allocations a step, where 2 are needed);
+`value::scope_tests` `a_shared_filter_bit_hides_nothing`, `the_nearest_scope_answers_first_at_every_size` and
+`a_cleared_scope_finds_nothing_and_binds_afresh`. Mutants M994–M1003, each red, the control green: M994 (a binding pushed
+without asking whether the scope holds it), M995 (the filter never set), M996 (the filter read backwards), M997 (a read
+that misses the nearest scope stops there), M998 (an assignment that misses it stops there), M999 (a two-byte name
+compared by its first byte), M1000 (the collector's clear keeps the filter — red on the filter's own assertion: a stale
+bit would cost one scan, nothing more), M1001 (no room made), M1002 (a block's room not made), M1003 (a call's room not
+made). The new tests were read on the runners before `master` moved: `witness.yml` `delulu-runtime` `step_allocations
+lib` on macOS `41274938848` (lib 311 passed, `step_allocations` 6), arm64 `41274940306` (the same) and Windows
+`41274937091` (lib 310 passed, `step_allocations` 6). The full suite: `scripts/suite.sh` `EXIT=0`, 2,640 passed, 0 failed,
+16 ignored, 191 binaries. The two-engine differential, by hand (the interpreter is one of its engines): 1 passed, 166 s.
+
+**What is left.** The tree-walker's own shape — the dispatch, the result, the drop glue, the walk. The next step is the one
+the row already names: variables resolved to slots before the run, or a compiled form. `scripts/interp-profile.sh` keeps
+this run's harness and benchmarks for it (loop engineering, in the sync log).
+
+**The push run** `41276447349` on `f1c693d` (it holds `0a658f6`): 14 success, 2 skipped; `actors_pingpong` MEASURED on arm64
+(2.95x where the machine gave 3.95x, against 1.48x, passed), NOT MEASURED on Ubuntu, Windows and macOS (1.56x observed);
+the disk Ubuntu 82 → 67 GB free, Windows 144 → 129, macOS 93 → 89 GiB, arm64 104 → 91.
+
+## 2026-11-01 — the laptop: one AI at a time, an onboarding brief for any AI, the memory refreshed, the routine every four hours and paused
+
+The owner, in the morning:
+- *"Change routine schedule to every 4 hours"* at 9:55 PM, 1:55 AM, 5:55 AM, 9:55 AM, 1:55 PM and 5:55 PM.
+- *"There maybe another AI also working on delululang, Update the ur memory and docs. Give me doc containing everything
+  another AI should know before that AI start working like imp things to know and things in ur memory. I don't want
+  everything to be mess. So I will be running either of u or another ai at time, Not both of u together"*.
+- Minutes later: *"Let routine be paused, I will resume it whenever I want"*.
+
+What was done:
+- **The routine** `trig_01HFG6usfzmDAPQigiDu9DLq` was set through the API to `25 */4 * * *` UTC, which is the owner's six
+  IST times, and renamed *Head Chef — every 4 hours*. It was read back with its next run at 08:25 UTC, then set to
+  `enabled: false` with the cron kept. It had been disabled since 2026-10-29 and fired by hand, run 16 included. Its
+  prompt is unchanged: the owner edits it himself.
+- **`docs/AI_ONBOARDING.md`** is the brief for any AI, Claude or not:
+  - the one-AI rule, and the hand-over through git;
+  - the checklists for the start and end of a session;
+  - the hard rules, and the change loop with its counters (D-V2-202, M1003);
+  - the commands, the traps, and the memory digested;
+  - where the work stands.
+  `AGENTS.md` sends every new AI there first, and `HANDOFF.md` §11.1 holds the instruction.
+- **`docs/assistant-memory/`** had diverged both ways since its snapshot of 2026-09-28:
+  - The laptop held 21 topic files the folder lacked, and newer text in 20 more.
+  - The cloud runs had written 6 lessons and DEADMAN-DEAF-1's paragraph that the laptop lacked.
+  The cloud's notes were carried to the laptop first. Then the folder was refreshed from the laptop, 80 files, sanitized
+  by a script that refuses if the banned word survives. The new files were scanned for credentials and personal
+  addresses: none.

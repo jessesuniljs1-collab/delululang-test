@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: bcacf460-7d6e-4c46-a621-53fcfa099e56
-  modified: 2026-07-24T17:19:51.211Z
+  modified: 2026-10-17T12:28:56.997Z
 ---
 
 **RESOLVED 2026-07-24 (owner-approved): Apache-2.0 + trademark policy, derivatives rename.** Jesse
@@ -15,7 +15,7 @@ Sunil), `NOTICE` (sticky attribution via §4(d)), `TRADEMARK.md` (different-name
 `GOVERNANCE.md` (Jesse = lead), `license`/`authors` on all 12 crates, SBOM component licence added.
 The record below is kept because the *reasoning* stays useful; the decision itself is now made.
 
-Standing rule still in force for ANY FUTURE licensing change: never auto-decide it — licensing,
+Standing rule for ANY FUTURE licensing change: never auto-decide it — licensing,
 philosophy, governance, public spec, and backward compatibility always need explicit owner approval.
 **2026-10-17: Jesse delegated licensing too** ([[owner-release-delegation-2026-10-17]]: "Choose and implement the most
 appropriate licence rather than asking me to pick one") — the intent below is the evidence any such choice must serve;

@@ -415,6 +415,11 @@ fn repair_corpus() -> Vec<(&'static str, &'static str)> {
             "val_over_ref.delulu",
             "module valoverref\n\nfn f() {\n    let a: ref List[Int] = [1, 2]\n    let rows: val List[List[Int]] = [a]\n}\n",
         ),
+        // DL0302 `match-the-constructor` (RW 2.26, D-V2-203) — a suggestion, with edits: `foo` -> `foo()`.
+        (
+            "binding_like_ctor.delulu",
+            "module bindinglikector\n\ntype T = foo | bar\n\nfn f(t: T) -> Int {\n    match t {\n        foo => 1,\n        _ => 2,\n    }\n}\n",
+        ),
     ]
 }
 

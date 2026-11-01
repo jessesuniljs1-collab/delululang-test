@@ -5,10 +5,13 @@ time, I will be running it occasionally whenever I can't use my laptop. Let it b
 whenever I need … Enable Push and Email notifications for new routine. Let new routine run every 5hr and 5 mins."* The
 routine is **`trig_01HFG6usfzmDAPQigiDu9DLq`**, *DeluluLang head chef — on demand (start by hand)*: Opus 5.5, the
 `delululang-test` repository, the Default environment, the Claude-Docs connector, push and e-mail notifications,
-schedule **`5 */6 * * *`** since 2026-10-21 (UTC 00:05, 06:05, 12:05, 18:05 — **05:35, 11:35, 17:35, 23:35 IST**, every gap
-six hours). Cron has no 5 h 5 min interval, and the first schedule, `5 */5 * * *`, left one four-hour gap each night (20:05 →
-00:05 UTC); the owner, 2026-10-21, chose every six hours — never under 5 h 5 min apart. **Created paused**; the owner switches it on at
-[claude.ai/code/routines](https://claude.ai/code/routines) and off when he is back. Its mandate is his commission of
+schedule **`25 */4 * * *` since 2026-11-01** (UTC 00:25, 04:25, 08:25, 12:25, 16:25, 20:25 — **01:55, 05:55, 09:55, 13:55,
+17:55, 21:55 IST**, the owner's own times: *"Change routine schedule to every 4 hours"*), renamed *Head Chef — every 4
+hours*. Before that it was `5 */6 * * *` (from 2026-10-21) and `5 */5 * * *` (from 2026-10-17). **Paused since 2026-11-01**
+(the owner: *"Let routine be paused, I will resume it whenever I want"*): only he switches it on, at
+[claude.ai/code/routines](https://claude.ai/code/routines), and off again. **Another AI may work on this repository between
+runs, never during one** (the owner, 2026-11-01). A run reads that AI's sync-log entry and branches as it would a laptop
+session's, and treats its work as a stranger's ([`AI_ONBOARDING.md`](AI_ONBOARDING.md)). Its mandate is his commission of
 2026-10-17 (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`), and step 4 below gives its work order. The
 first routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`, the cloud period of 2026-09-28 → 2026-10-16) stays disabled. Everything
 below still holds except where a paragraph says *since 2026-10-17*. A run may start long after the last one, and the
@@ -267,7 +270,9 @@ another OS, and then takes about seven minutes itself (run 5).
   returns each test job's verdict and properties as JSON, no log at all (a job's id is its check run's); and
   `curl -s ".../actions/runs?per_page=15"` (add `&event=schedule` for the nightly) and `.../actions/runs/ID/jobs` list
   runs and jobs piped through `python3 -c` to one line each — without the whole commit messages an MCP listing
-  carries. Ask for a run by id (`get_workflow_run`) once it is
+  carries. **On-demand run 16:** `scripts/ci-annotations.py RUN_ID…` prints a run's totals and, for each test job, its
+  `actors_pingpong` verdict and its disk before → after, one line a job (the verdict is the annotation's TITLE; a match on
+  its message finds nothing, and run 16's first hand-written loop printed nothing for seven runs). Ask for a run by id (`get_workflow_run`) once it is
   known: a run listing carries every commit message in full.
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
   it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a
@@ -432,6 +437,11 @@ target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' -mmin +10 -delet
 **The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
 install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
 `formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.
+**The interpreter is profiled in the VM** (on-demand run 16, RW 3.24): valgrind is installed, and `scripts/interp-profile.sh
+[--base REF] [--profile NAME]` builds a release harness of this checkout's interpreter outside the tree and prints, for
+RW 3.24's five benchmarks, instructions under callgrind, the minimum time and the output's hash; with `--base` it builds
+REF's too and times the two interleaved. Judge a cut by its instruction count beside that timing, never by one time: the
+VM's wall time moved ±10% between identical runs, and two cuts that looked right lost on the count.
 **A sentinel a witness looks for in a program's output is joined at run time** (on-demand run 6): DL1001 quotes the
 dependency's source, so a literal `println("the dependency wrote")` was found in the refusal itself, and the fixed run
 read as one that ran. **The agent campaign's ledger is a file on `origin/autosave/dogfood`** (on-demand run 6): `git show

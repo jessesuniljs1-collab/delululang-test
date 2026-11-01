@@ -7,6 +7,12 @@ you remember from elsewhere.
 
 ## Read first, in this order
 
+**One AI at a time (owner, 2026-11-01).** The owner may run another AI on DeluluLang (Codex, Gemini, Cursor, …) instead
+of Claude, but never two at once. **If you are new here, of any kind, read `docs/AI_ONBOARDING.md` first.** It holds
+the rules, the start and end checklists that keep a hand-over clean, the head chef's memory digested, and where the
+work stands. Hand over through git alone: everything pushed, and a `docs/CLOUD_SYNC_LOG.md` entry whose *Open / next*
+is the next AI's inbox. If a commit you did not make lands while you work, stop and tell the owner.
+
 **In force since 2026-10-17:** the owner's commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md` —
 take DeluluLang to a public release; every outstanding decision is the head chef's (below, *The owner's delegation*).
 

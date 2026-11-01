@@ -915,7 +915,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              declared `pub` there. An import brings a module's public names into scope UNQUALIFIED.",
         "DL0302" => "This name is already defined in this module. Two definitions with one name \
              would make every use of it ambiguous, so the second is refused rather than shadowing \
-             the first.",
+             the first. The same holds in a `match`: a lowercase name in a pattern is a new binding \
+             that matches any value, so one spelled like a constructor of the type being matched \
+             would shadow that constructor, take every value, and leave the later arms dead. It is \
+             refused. Write the constructor's call form to match it, `foo()` or `cell(_)`, or rename \
+             the binding.",
         "DL0303" => "The imported module does not exist in this package or in any declared \
              dependency. Check the module name, and check that the package providing it is in \
              `[dependencies]` — access is not authority (§5.7), but you still need access.",

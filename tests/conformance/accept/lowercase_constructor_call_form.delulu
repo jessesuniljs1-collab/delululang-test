@@ -1,0 +1,29 @@
+// anchors: ref.diag.DL0302
+// Tier 1: lowercase constructors are matched by their call form, `foo()` and `cell(n)`, and a
+// binding may share a name with another type's constructor. The accepting side of the DL0302
+// refusal of a binding spelled like the matched type's own constructor (RW 2.26, D-V2-203).
+module conf
+
+type T = foo | bar
+
+type Slot = empty | cell(Int)
+
+fn pick(t: T) -> Int {
+  match t {
+    foo() => 1,
+    bar() => 2,
+  }
+}
+
+fn size(s: Slot) -> Int {
+  match s {
+    cell(n) => n,
+    empty() => 0,
+  }
+}
+
+fn other(t: T) -> Int {
+  match t {
+    empty => pick(empty),
+  }
+}

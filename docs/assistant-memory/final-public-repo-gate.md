@@ -5,8 +5,10 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: c99ba5c5-c39b-4a1f-b406-92fbf2c601b0
-  modified: 2026-09-17T02:03:04.557Z
+  modified: 2026-10-17T12:28:53.812Z
 ---
+
+**REINSTATED for the repository itself, 2026-10-17 night** ([[test-repo-only-2026-10-17]]): Jesse — "Only push to and use test repo until I tell u to change. Do not change repo, unless told by me". No push to the public repo until he says so.
 
 **SUPERSEDED 2026-10-17 by [[owner-release-delegation-2026-10-17]]:** Jesse delegated all four decisions below, and
 the public release itself, to the head chef ("You do not need to wait for my review or approval"). The gate is now
@@ -62,3 +64,8 @@ decided. Pushes to the testing repo are unaffected: since 2026-09-17 every commi
 **Do NOT rewrite the testing repo's history.** That changes every hash from July onward, and the docs
 cite hashes throughout. The gate text lives in HANDOFF §1 (rules table), §1.1 ("Before the final
 public repository — a gate") and §11.1, plus REMAINING_WORK 7.5.
+
+
+## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
+
+- [**⛔ HARD GATE: the FINAL public repo (Jesse, 2026-09-17) — SUPERSEDED 2026-10-17 by the full delegation (checklist kept)**](final-public-repo-gate.md) — before creating, adding as a remote, or pushing to the final/real public repo, REMIND Jesse of the 4 decisions (banned word in history `0a58451` + two HANDOFF rule lines; author e-mail in all commits; CODEOWNERS placeholder; SECURITY.md PENDING-PUBLIC controls) with the suggestions, and WAIT for his decision on each. **No push there before.** No changes to those items until he says.

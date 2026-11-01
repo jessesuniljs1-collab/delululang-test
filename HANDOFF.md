@@ -46,8 +46,10 @@ and the VS Code end-to-end test → the scheduled task → the release → an ev
 `docs/CLOUD_SYNC_LOG.md`.
 
 **The on-demand routine (D-V2-146).** On 2026-10-17 the owner asked for a new cloud routine he runs *"occasionally
-whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, `5 */6 * * *` UTC since 2026-10-21 — 05:35, 11:35, 17:35, 23:35 IST — push
-and e-mail notifications, created disabled). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
+whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, **`25 */4 * * *` UTC since
+2026-11-01** — 01:55, 05:55, 09:55, 13:55, 17:55, 21:55 IST, the owner's times; `5 */6 * * *` from 2026-10-21 — push and
+e-mail notifications, created disabled; **paused since 2026-11-01**, the owner: *"Let routine be paused, I will resume it
+whenever I want"*). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
 does what a Linux VM can verify; the launch, the WSL microVM images and the Windows VS Code test stay the laptop's. **So
 every session — laptop or cloud — starts by fetching `origin`** and reading what came in (`AGENTS.md`, *Read first* 0).
 
@@ -601,6 +603,16 @@ wins, and you should update the memory to match.
   `laptop/*` branch whose tip is in `master`'s history is deleted from `origin` once it has landed, each checked with
   `git merge-base --is-ancestor` just before; one with a commit `master` lacks is landed, kept, or preserved under
   `archive/*` first (`docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`).
+- **One AI at a time; another AI may work on DeluluLang** (owner, 2026-11-01: *"There maybe another AI also working on
+  delululang … Give me doc containing everything another AI should know before that AI start working … I don't want
+  everything to be mess. So I will be running either of u or another ai at time, Not both of u together"*). Any AI's
+  first read is `docs/AI_ONBOARDING.md`: the rules, the start and end checklists, the memory digested, the state. AIs
+  hand over through git alone, with everything pushed and a sync-log entry whose *Open / next* is the next AI's inbox.
+  Work another AI left is read like a stranger's: its witnesses re-run and its CI read before it lands. A commit that
+  lands while you work and is not yours means stop, tell the owner, and re-sync. Branches are named by who made them:
+  `laptop/`, `claude/`, or the other AI's own name. The routine is an AI too: the owner set it to every four hours
+  (`25 */4 * * *` UTC) the same day and then paused it, and only he resumes it. `docs/assistant-memory/` was refreshed
+  from the laptop's memory that day, 80 files, sanitized.
 - **Start every session by syncing with GitHub** (owner, 2026-10-17: *"save this to memory, So that u will check GitHub
   repo whenever u start session"*): `git fetch origin`, read `HEAD..origin/master` and the `origin/claude/*` branches,
   fast-forward before any edit, and read the CI runs of what came in — the on-demand routine (D-V2-146) pushes while the
@@ -2023,6 +2035,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   so all of them stayed green on a program that escaped its effect row. Assert the VALUE the checker's meaning gives, not
   only that the engines match. And **a witness exercises the rule it names alone**: M976 survived because the witness's
   later value was a lambda made in the very scope the mutant stopped holding, which held it anyway.
+- **An interpreter's cut is judged by its instruction count, beside an interleaved timing** (on-demand routine run 16, RW
+  3.24). Callgrind's count is deterministic where the VM's wall time moved ±10% between identical runs, and a baseline timed
+  while another job ran reads every cut as a win. Two cuts that each looked right lost on the count: four bindings held
+  inline in a scope (+2–5% on every benchmark, as the laptop's timing had found) and an inlined clone of scalars (+3%) —
+  each made a hot function bigger than it saved. `scripts/interp-profile.sh --base REF` builds both and prints both.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

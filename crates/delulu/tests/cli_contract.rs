@@ -472,6 +472,30 @@ fn a_flag_value_nobody_understood_is_refused() {
         let o = delulu(&home, &["run", p, "--grant", "console", "--engine", good]);
         assert!(o.status.success() && text(&o).contains("ran"), "`--engine {good}` runs: {}", text(&o));
     }
+    // RW 6.49: a value a flag cannot read was read as no value, the default. `--seed abc` ran unseeded and `--clock
+    // bogus` on the real clock, exit 0. And `atlas`'s query verbs refused nothing at all.
+    let unreadable: Vec<Vec<&str>> = vec![
+        vec!["run", p, "--grant", "console", "--seed", "abc"],
+        vec!["run", p, "--grant", "console", "--clock", "bogus"],
+        vec!["run", p, "--grant", "console", "--clock", "fixed:soon"],
+        vec!["run", p, "--grant", "console", "--epoch-ms", "abc"],
+        vec!["run", p, "--grant", "console", "--epoch-ms=abc"],
+        vec!["run", p, "--grant", "console", "--actors-threads", "many"],
+        vec!["run", p, "--grant", "console", "--foreign-max-ret=big"],
+        vec!["test", "--seed", "abc", p],
+        vec!["test", p, "--seed"],
+        vec!["atlas", p, "--budget", "abc"],
+        vec!["atlas", "node", "main", p, "--gods", "abc"],
+        vec!["atlas", "node", "main", p, "--gods"],
+        vec!["atlas", "callers", "main", p, "--bogus"],
+    ];
+    for argv in &unreadable {
+        let o = delulu(&home, argv);
+        assert_eq!(o.status.code(), Some(2), "`{}` must be a usage error: {}", argv.join(" "), text(&o));
+        assert!(!text(&o).contains("ran"), "`{}`: nothing runs: {}", argv.join(" "), text(&o));
+    }
+    let o = delulu(&home, &["run", p, "--grant", "console", "--seed", "7", "--clock", "fixed:5"]);
+    assert!(o.status.success() && text(&o).contains("ran"), "a readable seed and clock run: {}", text(&o));
 }
 
 /// Every error the CLI prints starts with `error:`.

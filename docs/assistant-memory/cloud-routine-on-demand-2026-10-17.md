@@ -1,11 +1,11 @@
 ---
 name: cloud-routine-on-demand-2026-10-17
-description: "The on-demand cloud routine trig_01HFG6usfzmDAPQigiDu9DLq (D-V2-146): created PAUSED 2026-10-17, Jesse switches it on when he can't use the laptop; settings, schedule, and what a routine run must not do"
+description: "The cloud routine trig_01HFG6usfzmDAPQigiDu9DLq (D-V2-146): since 2026-11-01 cron 25 */4 UTC (01:55/05:55/09:55/13:55/17:55/21:55 IST), PAUSED — Jesse resumes it himself; settings, schedule, and what a routine run must not do"
 metadata:
   node_type: memory
   type: project
   originSessionId: eb34182b-835b-44af-b5ec-07064fcae52c
-  modified: 2026-10-17T16:41:51.148Z
+  modified: 2026-11-01T06:27:16.891Z
 ---
 
 Created 2026-10-17 at Jesse's request: **`trig_01HFG6usfzmDAPQigiDu9DLq`**, "Head Chef — on demand (start by hand)" (renamed at Jesse's request 2026-10-17; first named "DeluluLang head chef — …") — https://claude.ai/code/routines/trig_01HFG6usfzmDAPQigiDu9DLq. **Created `enabled: false`**; Jesse starts it.
@@ -37,3 +37,5 @@ Effort: the routine API stores no environment variables (CLAUDE_CODE_EFFORT_LEVE
 
 
 **2026-10-26 (Jesse): ONE MILESTONE PER RUN, then a clean stop.** Run 6 (2026-10-25) closed ~11 items in 2 h 27 min and was killed by the WEEKLY limit mid-slice (A10 committed only on `claude/peaceful-carson-crfvfa`, unrecorded). Jesse: stop at a meaningful milestone (built, tested, committed, pushed, documented, handoff), not continuously until the limit — and not merely because time passed or one small task is done. "Continue cooking … till the limit hits" = his terminal + interactive cloud sessions only, NOT routine runs. Written into `docs/CLOUD_ROUTINE.md` (new section + step 9 + Branches), CLAUDE.md, AGENTS.md, HANDOFF §11.1, and the routine prompt (updated by API 2026-10-26; a Run now with text `CHECK ONLY` = report model + effort and stop). **Effort:** `CLAUDE_EFFORT` is set BY Claude Code in every Bash subprocess to the effort IN EFFECT (env-vars reference) — run 6 had `CLAUDE_EFFORT=xhigh`, i.e. it ran at xhigh; transcripts record `"effort":"…"` per reply (`grep -oh '"effort":"[a-z]*"' ~/.claude/projects/*/*.jsonl`). The trigger config has NO effort field (session_request.config lists all fields), so a "medium" on a page is not the run's level. **Jesse, 2026-10-26: "Leave it for now. Only anthropic can do something about it I guess" — CLAUDE_CODE_EFFORT_LEVEL=xhigh is already in the cloud environment; do NOT spend more effort/usage researching the effort again; step 0 just records CLAUDE_EFFORT.** Branch cleanup same day: `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`.
+
+**2026-11-01 (Jesse): every 4 hours, then paused.** *"Change routine schedule to every 4 hours. Timing of routine 9:55 PM 1:55 AM 5:55 AM 9:55 AM 1:55 PM 5:55 PM"* → set by API to `25 */4 * * *` UTC (= those IST times), `enabled: true`, renamed **"Head Chef — every 4 hours"**; read back next run 08:25 UTC. Minutes later: *"Let routine be paused, I will resume it whenever I want"* → `enabled: false`, cron kept. Never switch it on myself. Between those, runs had been fired by hand (Run now) while it was disabled; run 16 = 04:03–06:04 UTC 2026-11-01. The prompt's "runs this routine only when he cannot use his laptop" line is unchanged (Jesse edits the prompt himself). With another AI possibly working ([[one-ai-at-a-time-2026-11-01]]), the routine must not run while another AI does — Jesse controls that by the switch.
