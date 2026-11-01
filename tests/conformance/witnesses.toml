@@ -164,6 +164,14 @@ file = "crates/delulu-check/src/lib.rs"
 test = "an_arm_no_value_reaches_warns_dl0413"
 kind = "negative"
 
+# DL0414 (D-V2-206): a warning, so no `.delulu` reject file can carry it. The producing side is the checker's own test:
+# seven shapes of a `let` or `var` never read, each warned at its own line with its own name.
+[[witness]]
+anchor = "ref.diag.DL0414"
+file = "crates/delulu-check/src/lib.rs"
+test = "a_binding_never_read_warns_dl0414"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.diag.DL0703"
 file = "crates/delulu/tests/cli.rs"
@@ -853,6 +861,12 @@ kind = "positive"
 anchor = "ref.diag.DL0413"
 file = "crates/delulu-check/src/lib.rs"
 test = "an_arm_some_value_reaches_is_not_reported"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0414"
+file = "crates/delulu-check/src/lib.rs"
+test = "a_binding_read_is_not_reported"
 kind = "positive"
 
 

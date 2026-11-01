@@ -11477,3 +11477,28 @@ Also recorded here: `launch/2.0.0` `9a33f6c` merged `master` `9b3be30` (#115–#
 4 and 8 now cite `005372f`'s `everything` `41281508881` (attempt 2) and dry run `41281511250`, and `415eb2e`'s
 `41299813712` (18 of 18; the broker's Miri 3 h 07 min) and `41299815972`, all read green. `LAUNCH-GATES=ok`. No run was
 dispatched for `9a33f6c`, a records merge.
+
+## 2026-11-02 — the laptop: DL0414, a binding never read
+
+`laptop/unread-lets` was a draft stopped at the owner's 97% on 2026-11-01 (`8be0bdc`, marked not to land). It is finished
+here, after INDEX-TARGET-1, which it found, was merged into it.
+
+**Added** (D-V2-206, RW 2.30): DL0414, a warning naming a `let` or `var` binding with no read when its block closes.
+Each scope keeps its `let` and `var` bindings with a read mark (`FnCtx::lets`). `lookup` marks the binding a read
+reaches. An assignment's whole target uses `lookup_to_assign`, which does not mark it, but the base of a field or element
+written is read (`check_lvalue_at`). A name beginning with `_` is exempt.
+
+**What it found among the programs the repository ships:** the Book's `05_secrets` printed *match* whatever its check
+answered (now it branches), the demo bound a secret only to show its type (now `_key`), and six measurement programs
+bind a value they never use (left as recorded evidence). The eighteen recorded AI-usability attempts it names are left too.
+
+**Tests changed, none weakened:**
+- `type_size`'s collector leaves DL0414 out. Its programs build `Pair` chains to time the type-size bound and never read
+  the last link. Every other diagnostic still counts.
+- `cli`'s deep-nesting witness binds `_x`, so its one-defect, one-diagnostic assertion stays exact.
+
+**Evidence:**
+- Two checker tests, named in `witnesses.toml` (entrenched).
+- Mutants M1031–M1034, M1036 and M1037 red. M1035 survived and is equivalent.
+- `delulu-conform --coverage` passes at 100% (360 of 360, 157 codes).
+- `core_invariance` changed three reject programs by one added warning each.
