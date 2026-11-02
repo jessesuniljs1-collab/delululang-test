@@ -1142,7 +1142,7 @@ binary itself uses: the 35 commands with the invocations and options their `--he
 same `usage_lines`/`documented_flags` the option parser refuses by), the ten core effects, the 16
 `--grant` forms each with an example that parses, the 82-entry primitive table (v5), the run budget and
 the three sandbox profiles' limits, the five isolation levels, the two modes, the channel version,
-all 154 diagnostic codes and the seven explanation topics. Three facts lived only in code and were
+all 154 diagnostic codes (the count on 2026-09-26) and the seven explanation topics. Three facts lived only in code and were
 lifted into tables so they could be read rather than restated: `broker::GRANT_FORMS` (a test reads
 `Grants::add`'s own match arms and fails on a key parsed but not listed, or listed but not parsed — its
 first run caught an actuator example missing the mandatory dead-man), `codes::TOPICS` (bound to
@@ -11717,3 +11717,54 @@ re-measured by `scripts/launch-criterion-2.py`: 366/366. `scripts/launch-gates.s
 at it: `everything` `41416143488` and the release dry run `41416147296`.
 
 **The close.** `everything` `41416143488` READ: **18 of 18 success** — `miri-slow (delulu-broker)` **2 h 01 min 16 s** (3 h 10 min 54 s on `41383380395`), its tests 7,190 s (11,386 s), the laws test **4,191 s** (8,119 s) and the corpus containment test 283 s (513 s), on a runner as slow as the last (`delulu-check`'s Miri 1 h 43 min against 1 h 39 min; the untouched `netscope::tests::equivalent_net_sets_canonicalize_identically` 769 s against 748 s); `delulu-syntax` 22 min; arm64 `actors_pingpong` 2.96x against 1.48x, passed; disk Windows 144 → 129 GB. Release dry run `41416147296` READ: the four packages success, the release job skipped (no tag). The records commit's push run `41417695534` on `329d8b1`: 14 success, 2 skipped; arm64 2.95x against 1.47x, passed. So the cut is real on a runner: about 4,200 s off the job, which now has nearly two hours to spare. `scripts/ci-log-summary.py` gained `--slowest N` (each test timed from the log's stamps), which printed the hand count of `41383380395`'s broker log exactly and timed this one.
+
+## 2026-11-02 — the laptop: synced with on-demand runs 17–19; an everyday-program probe; a tour of every surface
+
+**Synced.** The owner fired on-demand runs 17, 18 and 19 by hand (the trigger stays disabled; every run was idle by
+11:20 UTC). They landed #122's records, D-V2-207, D-V2-208 and the broker's Miri fix. The laptop fast-forwarded:
+- `master` to `9c51b4e`;
+- `launch/2.0.0`, in `D:/nelan/dl-launch`, to `728a582`.
+
+Five branches whose tips are in `master`'s history were deleted from `origin`, each checked with
+`git merge-base --is-ancestor` immediately before (run 19's *Redo on the laptop*):
+- `claude/peaceful-carson-em21b1` `1ee12c7`, `claude/peaceful-carson-yl72j8` `eeb9c01` and
+  `claude/peaceful-carson-emptlo` `9c51b4e`;
+- `laptop/records-0102` `d75b65b` and `laptop/unread-repair` `3543faa`.
+
+Kept, under BRANCH-CLEANUP-2026-10-26's rule: `master`, `launch/2.0.0`, `rc/1.0.0-drill`,
+`archive/superseded-2026-10-26` and `autosave/*`. The autosave task was renewed to 2026-11-09 18:17 IST. The Survey
+matched the tree (1613 nodes, 18608 edges), and `doctor --check` passed 29 checks.
+
+**The everyday-program probe.** Told that 2.0 was ready to ship, the owner answered: *"Fundamental things that are
+needed in a programming language are not in delululang. Still cannot write complete program like in java or python,
+Most keywords and their equivalent are missing."* He was right, and the claim had been judged on the wrong axis.
+CHECKLIST-2.0 and `REMAINING_WORK.md` measure quality, security and proof; neither asks whether an ordinary program can
+be written.
+
+The probe ran 39 small programs, each one construct a Java or Python programmer reaches for, with
+`delulu run --grant console` on a debug build of `9c51b4e`. 14 ran and 25 were refused; one of the 14 printed
+`hello {name}` with its braces.
+- Deliberate and kept: no exceptions, no module-level `var`, no implicit conversion in `+`, `let` for a constant, and
+  faults that stop a program.
+- Not built: RW 2.33–2.40, through RW 1.15's correction of this list's opening note, its row 2.1 and the README's
+  status row.
+
+**The tour.** Every surface the owner asked about was run on the same build:
+- `authority`, `atlas`, and `guard` with `broker start` (without the broker it refuses, DL1401, as designed);
+- `sandbox probe`, and a `--sandbox` run (L1 on Windows: a Job Object, a restricted token, an AppContainer);
+- `--isolation microvm` (DL1408 on Windows, as documented);
+- `build --target wasm` and a run of its `.dwx`;
+- the REPL, `plugin build` and `plugin verify`, `new`, `test` and `run` of a fresh package, and `morph list`;
+- the foreign C and Python samples, each refused without its grant (DL1303), as designed.
+
+The launch branch's `everything` run `41416143488` holds the rest: 18 of 18, `microvm` and `editor` among them.
+
+Found:
+- RW 6.50: `sandbox probe` says L3 and L4 are unbuilt.
+- RW 6.51: `test` reads a missing path as a filter.
+- RW 6.52: one file of a package gives DL0301.
+- RW 6.53: the laptop's own `delulu` on `PATH` and its VS Code extension dated from 2026-08-07, three months behind, and
+  nothing noticed.
+
+**Open, the owner's to answer:** hold the 2.0 launch until the language basics land (recommended), or launch and add
+them in 2.x. No code changed. The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

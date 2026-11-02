@@ -49,9 +49,15 @@ and the VS Code end-to-end test → the scheduled task → the release → an ev
 whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, **`25 */4 * * *` UTC since
 2026-11-01** — 01:55, 05:55, 09:55, 13:55, 17:55, 21:55 IST, the owner's times; `5 */6 * * *` from 2026-10-21 — push and
 e-mail notifications, created disabled; **paused since 2026-11-01**, the owner: *"Let routine be paused, I will resume it
-whenever I want"*). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
+whenever I want"*; he can still start one run by hand while it stays paused, as he did for runs 17 to 19 on 2026-11-02). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
 does what a Linux VM can verify; the launch, the WSL microVM images and the Windows VS Code test stay the laptop's. **So
 every session — laptop or cloud — starts by fetching `origin`** and reading what came in (`AGENTS.md`, *Read first* 0).
+
+**Readiness, 2026-11-02.** Told that 2.0 was ready to ship, the owner answered: *"Fundamental things that are needed in a
+programming language are not in delululang. Still cannot write complete program like in java or python."* A probe
+bore him out: 25 of 39 everyday constructs were refused (RW 1.15, 2.33–2.40). The release checklist had measured
+quality, security and proof, never an ordinary program. So "objective readiness" now includes writing the programs
+users will write (§11.2). Whether the launch waits for the language basics is his choice, asked that day.
 
 **Commit identity.** From 2026-10-17 this repository commits as
 `227307678+jessesuniljs1-collab@users.noreply.github.com` (a repository-local `git config user.email`; account id
@@ -202,7 +208,8 @@ every session — laptop or cloud — starts by fetching `origin`** and reading 
 > **Status: PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS** — Windows and Linux, in the
 > Tier-2 deployment of `docs/DEPLOYMENT.md` (the 2026-08-10 campaign's verdict). macOS is verified by CI
 > but not covered by the verdict: the Tier-2 cross-account boundary was tested with a real second UID on
-> Linux only.
+> Linux only. The verdict is about containment and deployment. It says nothing about the everyday language,
+> which on 2026-11-02 still lacked basics a Java or Python programmer reaches for (RW 1.15, 2.33–2.40).
 
 Read §1 and §2 before touching anything. The rest is reference.
 
@@ -774,6 +781,15 @@ wins, and you should update the memory to match.
   a test, not by memory.
 - **Model-attribution honesty**: check which model is actually running before writing a
   `Co-Authored-By` line. Stage 9 was mis-signed and the correction is recorded rather than rewritten.
+- **"Ready" is judged against an ordinary program too, not only against gates** *(the owner, 2026-11-02)*. Told that
+  2.0 was ready to ship, he answered that a complete program like Java's or Python's still could not be written — and a
+  probe found 25 of 39 everyday constructs refused (RW 1.15, 2.33–2.40). CHECKLIST-2.0 and `REMAINING_WORK.md` measured
+  quality, security and proof; neither asked what a newcomer meets first. Before calling anything ready, write the
+  ordinary programs its users will write, and separate *deliberate by design* from *simply not built* when explaining
+  a gap.
+- **What the owner runs is not what CI runs.** On 2026-11-02 the laptop's `delulu` on `PATH` and its VS Code extension
+  were three months old while every test used a fresh build (RW 6.53). At a laptop session's start, compare
+  `which delulu` and its date with the tree's; reinstall only on the owner's word.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

@@ -7651,3 +7651,35 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      other long job (1 h 28 min to 1 h 40 min).
   4. *[laptop]* delete the six branches named under *Redo on the laptop*.
   5. *[laptop]* the launch, only on the owner's word.
+
+### 2026-11-02 — the laptop: synced with runs 17–19; merged branches deleted; the everyday-program probe (RW 1.15, 2.33–2.40) and a tour of every surface (RW 6.50–6.53)
+- Session: `https://claude.ai/code/session_01Deh6WC2VFsycMvHSuMgFXM`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/records-language-gaps`   Pull request: #123 (records only).
+- Base: `9c51b4e`. Synced with runs 17–19, which the owner fired by hand. On `origin`, five branches in `master`'s
+  history were deleted, as run 19's *Redo on the laptop* asked: `claude/peaceful-carson-em21b1`, `-yl72j8` and
+  `-emptlo`, `laptop/records-0102` and `laptop/unread-repair`. Its `laptop/sandbox-fault-place` was already gone. The
+  autosave task was renewed to 2026-11-09 18:17 IST.
+- **What changed:** records only (the V2_LOG entry of this date says why):
+  - the owner's challenge to 2.0's readiness, and the probe that showed he was right: 14 of 39 everyday constructs ran;
+  - RW 1.15, rows 2.33–2.40 and §8 item 7;
+  - the README's *Specified, not built* row;
+  - RW 6.50–6.53, from running every surface;
+  - two lessons in `HANDOFF.md` §11.2.
+- Files and folders (`git diff --name-status 9c51b4e..HEAD`):
+  - M `README.md`, `HANDOFF.md` (§11.2), `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md`
+    (row 17), `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/*`,
+    `docs/survey/*`.
+  - A `docs/assistant-memory/readiness-includes-everyday-language.md` and `installed-toolchain-stale-2026-11-02.md`.
+  - Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- For the laptop's memory: `HANDOFF.md` §11.2's two new lessons (already in the laptop's memory).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. **The owner's answer** (asked 2026-11-02, unanswered at this entry): hold the 2.0 launch until the language basics
+     land (RW 2.33–2.40; the head chef's recommendation), or launch and add them in 2.x.
+  2. Cite `launch/2.0.0` `728a582`'s `everything` `41416143488` and release dry run `41416147296` in CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 at the next merge of `master` (run 19's item 1, unchanged).
+  3. RW 6.50–6.52: three small CLI fixes, each witnessed red first.
+  4. The language basics, in RW §8 item 7's order, then RW 3.24, a compiled form.
+  5. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension from the tree (RW 6.53).
+  6. The launch, only on the owner's word.
