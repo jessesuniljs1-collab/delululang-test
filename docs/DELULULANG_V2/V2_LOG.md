@@ -11590,5 +11590,12 @@ is refused DL0401), each confirmed on the binary by hand; both mutants were then
 `DL1605_recover_captures_ref`) each gain the repair, its one edit at the binding's first byte, in the JSON and the human
 surface; 3 lines removed (`"repairs": []`), 60 added, nothing else. Judged and blessed.
 
-**Evidence.** The full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the tree unmoved); `scripts/clippy.sh` clean. The new tests on the other runners, `witness.yml` at `0c3fad1` on the session's branch with `fix_cli lsp_cli`: macOS `41381373785` (14 and 41 passed, both new tests named) and Windows `41381376441` (success; `lsp_cli` 41 passed with the new test named, `fix_cli` above the tail read and covered by the job's success). The push run of `master` is read in this run's `docs/CLOUD_SYNC_LOG.md` entry.
+**Evidence.** The full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the tree unmoved); `scripts/clippy.sh` clean. The new tests on the other runners, `witness.yml` at `0c3fad1` on the session's branch with `fix_cli lsp_cli`: macOS `41381373785` (14 and 41 passed, both new tests named) and Windows `41381376441` (success; `lsp_cli` 41 passed with the new test named, `fix_cli` above the tail read and covered by the job's success). The push run of `master`, `41382701663` on `0d17bca`, is read green (14 success, 2 skipped).
+
+**`launch/2.0.0` brought current.** `1487163` merges `master` `0d17bca`. The one CHANGELOG section was folded by
+`scripts/launch-changelog.py` and judged against `STABILITY.md` §1 and v1.0.0: additive, because a repair id is add-only,
+DL0414 is not in 1.x, and no 1.x repair was both `requires_human` and carried edits (v1.0.0's sources searched), so no
+code action a 1.x program receives changes. CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `e361f0b`'s runs; criterion 2 is
+360/360; `LAUNCH-GATES=ok`, the merged tree's Rust `master`'s. Release dry run `41383382785`: the four packages success.
+`everything` `41383380395`: dispatched, running at the run's close.
 

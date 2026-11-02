@@ -272,13 +272,13 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     renamed `x` to `_x` where `_x` already meant something in the scope and changed what the program printed
     (RENAME-CAPTURE-1); now it is offered only where no `_x` is met in the binding's scope, and the editor offers its
     edits (never preferred).
-- `launch/2.0.0` is at `e361f0b`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `bbcaade`.
-  Its `everything` run `41347076820` (18 of 18; the broker's Miri 1 h 44 min) and release dry run `41347080030` are read
-  green, and not yet cited in CHECKLIST-2.0. The launch itself (a fresh history in the public repository, the tag, the
-  release) waits for the owner's word.
-- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: bring `launch/2.0.0` current
-  with `master` (D-V2-207 is additive), citing `e361f0b`'s runs in criteria 1, 3, 4 and 8; then RW 3.24, a compiled
-  form; watch the broker's Miri time; the launch, only on the owner's word.
+- `launch/2.0.0` is at `1487163`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `0d17bca`
+  (D-V2-207 is additive). CHECKLIST-2.0 cites `e361f0b`'s runs, read green. `1487163`'s release dry run `41383382785` is
+  read green; its `everything` run `41383380395` was running when on-demand routine run 17 closed. The launch itself (a
+  fresh history in the public repository, the tag, the release) waits for the owner's word.
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: read `41383380395` to its end
+  and cite it and `41383382785` in CHECKLIST-2.0 criteria 1, 3, 4 and 8; then RW 3.24, a compiled form; watch the
+  broker's Miri time; the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-207;
   - the last mutant is M1055;

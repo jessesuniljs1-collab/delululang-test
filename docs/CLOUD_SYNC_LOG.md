@@ -7462,7 +7462,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   installed (not used). No other branch was ahead of `master` with unrecorded work: `autosave/*`, `launch/2.0.0`,
   `archive/*` and `rc/*` as before.
 - Commits on `master`: `d75b65b` (#122, the laptop's), `3543faa` (the laptop's draft), `5037cc7` (the merge), `0c3fad1` (the
-  code), then the records commit with this entry.
+  code), `0d17bca` (the records), then this entry's closing commit. On `launch/2.0.0`: `1487163`, the merge of `master`
+  `0d17bca` — this run's CHANGELOG section folded by `scripts/launch-changelog.py` and judged additive against
+  `STABILITY.md` §1 and v1.0.0 (no 1.x repair was both `requires_human` and carried edits, so no 1.x code action changes;
+  the *Breaking* paragraph unchanged); `e361f0b`'s `41347076820` and `41347080030` cited in CHECKLIST-2.0 criteria 1, 3, 4
+  and 8; criterion 2 re-measured by `scripts/launch-criterion-2.py` (360/360); `scripts/launch-gates.sh`
+  `LAUNCH-GATES=ok`, the merged tree's Rust `master`'s. Its release dry run `41383382785` is read green (the four packages
+  success, the release job skipped: no tag); its `everything` `41383380395` was dispatched with it and is running at this
+  entry's close.
 - Files and folders (`git diff --name-status d75b65b..HEAD`):
   M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-diag/src/codes.rs`,
     `crates/delulu/src/fix.rs`, `crates/delulu/src/lsp.rs`, `crates/delulu/tests/fix_cli.rs`,
@@ -7475,8 +7482,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - Verified: the full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the
   tree unmoved); `scripts/clippy.sh` clean; mutants M1044–M1055 red, the control green; `witness.yml` at `0c3fad1` with
-  `fix_cli lsp_cli`: macOS `41381373785` and Windows `41381376441`, each green, the new tests named. **The push run** of
-  this commit: pending at this commit; it is read and recorded in this entry's closing commit.
+  `fix_cli lsp_cli`: macOS `41381373785` and Windows `41381376441`, each green, the new tests named. **The milestone's
+  push run** `41382701663` on `0d17bca` (the records commit, which holds `0c3fad1`): 14 success, 2 skipped (`miri-slow`
+  and `heavy-gates`, a push run's usual); `actors_pingpong` MEASURED on arm64 (2.93x where the machine gave 3.93x, against
+  1.47x, passed), NOT MEASURED on Ubuntu and Windows (no perfectly parallel work) and macOS (3 hardware threads); disk
+  Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 88 GiB, arm64 104 → 91.
 - **Loop engineering:** CLOUD_ROUTINE step 5: a guard several paths feed is witnessed once per path, in a shape where that
   path alone carries the fact (M1049, M1050); a patch script's heredoc is quoted (this run's first records script ran
   every backtick as a command, and its anchor check stopped it before any write).
@@ -7487,12 +7497,10 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.4 (RENAME-CAPTURE-1: a renaming repair is offered only where the new name
   means nothing in the scope; witness a rename by running the program).
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. **Bring `launch/2.0.0` current with `master`** (step 4.3; this run goes on to it, and if it ends first, it is the next
-     session's first item): fold this run's CHANGELOG section with `scripts/launch-changelog.py` and judge it against
-     `STABILITY.md` §1 and v1.0.0 — a new repair id is add-only, and a code action that now carries an edit changes no
-     refusal, exit code or field, so it is additive; cite `e361f0b`'s `41347076820` and `41347080030` in criteria 1, 3, 4
-     and 8; criterion 2 (`scripts/launch-criterion-2.py`, 360 anchors); `scripts/launch-gates.sh`; dispatch `everything`
-     and the release dry run, and read them.
+  1. Read `launch/2.0.0` `1487163`'s `everything` run `41383380395` to its end (about 2–3 h; the broker's Miri is the
+     long job), then cite it and the dry run `41383382785` (read green) in CHECKLIST-2.0 criteria 1, 3, 4 and 8, in a
+     records commit on `launch/2.0.0`. Read `master`'s push run on this entry's closing commit (records only) if this
+     run's own reading of it is not recorded below.
   2. RW 3.24: a compiled form. Slots alone buy about a tenth (on-demand run 16's profile).
   3. The broker's Miri: 1 h 44 min on `41347076820` (3 h 07 min on the run before), under the 240-minute cap.
   4. *[laptop]* delete the four branches named under *Redo on the laptop*.
