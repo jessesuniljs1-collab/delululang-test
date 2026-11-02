@@ -280,10 +280,10 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     inputs and laws.
 - `launch/2.0.0` is at `728a582`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `04db8fb`
   (D-V2-208 is additive). CHECKLIST-2.0 cites `1487163`'s runs, read green. `728a582`'s `everything` `41416143488` and
-  release dry run `41416147296` were dispatched by on-demand routine run 19; its sync-log entry says what was read. The
+  release dry run `41416147296` were read green by on-demand routine run 19 (18 of 18; the broker's Miri 2 h 01 min). The
   launch itself (a fresh history in the public repository, the tag, the release) waits for the owner's word.
-- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: read `41416143488` and
-  `41416147296` to their ends and cite them in CHECKLIST-2.0 at the next merge; RW 3.24, a compiled form, designed
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: cite `41416143488` and
+  `41416147296` in CHECKLIST-2.0 at the next merge; RW 3.24, a compiled form, designed
   first; watch the broker's Miri time; the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-208;

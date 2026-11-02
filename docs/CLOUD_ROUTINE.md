@@ -444,7 +444,8 @@ install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_al
 **Miri runs in the VM** (on-demand routine run 19): `rustup toolchain install nightly --profile minimal --component
 miri,rust-src`, then `MIRIFLAGS=-Zmiri-disable-isolation cargo +nightly miri test --lib -p CRATE -- --exact TEST`; a test of
 hours is measured on a copy in a scratch crate at a tenth of its size, old form against new. A `miri-slow` job's tests are
-timed from its own log (each `test … ok` line's timestamp against the one before).
+timed from its own log: `scripts/ci-log-summary.py SAVED_LOG --slowest 10` (each `test … ok` line's stamp against the one
+before; Miri runs a binary's tests one at a time).
 **The interpreter is profiled in the VM** (on-demand run 16, RW 3.24): valgrind is installed, and `scripts/interp-profile.sh
 [--base REF] [--profile NAME]` builds a release harness of this checkout's interpreter outside the tree and prints, for
 RW 3.24's five benchmarks, instructions under callgrind, the minimum time and the output's hash; with `--base` it builds

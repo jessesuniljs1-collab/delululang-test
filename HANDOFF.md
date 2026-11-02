@@ -1438,11 +1438,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
   (on-demand routine run 19, 2026-11-02): `path::tests::canonicalization_laws_hold_on_generated_paths` ran 0.4 s natively
   and 8,119 s under Miri, 71% of `miri-slow (delulu-broker)`'s 3 h 11 min — 46 minutes from the cap, on code unchanged
   since 2026-10-17 (1 h 44 min the run before: the runner moved). A linear search over 400 classes was 42% of its loop
-  under Miri; resolving each path four times was most of the rest. Time a job's tests from its own log (each `test … ok`
-  line against the one before — Miri runs them one at a time), then measure the slow one IN THE VM before choosing a fix:
+  under Miri; resolving each path four times was most of the rest. Time a job's tests from its own log
+  (`scripts/ci-log-summary.py SAVED_LOG --slowest 10`: each `test … ok` line against the one before — Miri runs them one at
+  a time), then measure the slow one IN THE VM before choosing a fix:
   `rustup toolchain install nightly --profile minimal --component miri,rust-src` (about a minute), a copy of the test in a
   scratch crate at a tenth of its size, the old form against the new. Do its work once before shrinking it under
-  `cfg!(miri)`: here the same 20,000 paths and laws, the loop 2.5x and the pairs 1.9x faster.
+  `cfg!(miri)`: here the same 20,000 paths and laws, the loop 2.5x and the pairs 1.9x faster in the VM, and on the next
+  runner as slow the test 8,119 → 4,191 s and the job 3 h 11 min → 2 h 01 min (`41416143488`).
 - **Measure an OS limit before claiming it** — Windows' job time limit fires late; macOS does not enforce
   `RLIMIT_DATA`, so no memory ceiling is claimed there. A report states only what was measured.
 - **A sandboxed run writes its audit records only where the chain already exists**

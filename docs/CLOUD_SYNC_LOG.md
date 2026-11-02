@@ -7604,13 +7604,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (`521f2ac`, `242ce03`), each landed. No branch held a commit `master` lacks but `launch/2.0.0`, `autosave/*`,
   `archive/*` and `rc/*`. The Survey matched the tree (1613 nodes, 18600 edges) and `doctor --check` passed (26 checks).
   `gh` is installed (not used).
-- Commits on `master`: `04db8fb` (the fix), the records commit after it, then this entry's closing commit. On
+- Commits on `master`: `04db8fb` (the fix), `329d8b1` (the records), then this entry's closing commit (`--slowest`, the
+  runs read). On
   `launch/2.0.0`: `728a582`, the merge of `master` `04db8fb` (CHANGELOG folded and judged additive — v1.0.0's primitive
   table version was 1, so 8 → 9 changes nothing a 1.x artefact meets; CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite
   `1487163`'s runs; criterion 2 366/366; `scripts/launch-gates.sh` `LAUNCH-GATES=ok`, the merged tree's Rust `master`'s).
 - Files and folders (`git diff --name-status eeb9c01..HEAD`):
   M `crates/delulu-broker/src/path.rs` (three tests; `Seg` derives an order), `.github/workflows/ci.yml` (`miri-slow`'s
-    comment)
+    comment), `scripts/ci-log-summary.py` (`--slowest N`)
   M `HANDOFF.md` (§11.5), `docs/CLOUD_ROUTINE.md` (step 5), `docs/REMAINING_WORK.md` (row 5.6),
     `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md` (row 17), `docs/AI_ONBOARDING.md` (section 10),
     `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/release-program-progress.md`, `docs/survey/*`
@@ -7624,10 +7625,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   success, 2 skipped (`miri-slow`, `heavy-gates`, a push run's usual); `actors_pingpong` MEASURED on arm64 (2.88x where
   the machine gave 3.94x, against 1.48x, passed), NOT MEASURED on Ubuntu and Windows (no perfectly parallel work) and
   macOS (3 hardware threads); disk Ubuntu 82 → 67 GB free, Windows 217 → 202, macOS 93 → 89 GiB, arm64 104 → 91.
-  `launch/2.0.0` `728a582`: `everything` `41416143488` and release dry run `41416147296` — dispatched; running at the records commit (their state at the close is below).
+  `launch/2.0.0` `728a582`: `everything` `41416143488` READ: **18 of 18 success** — `miri-slow (delulu-broker)` **2 h 01 min 16 s** (3 h 10 min 54 s on `41383380395`), its tests 7,190 s (11,386 s), the laws test **4,191 s** (8,119 s) and the corpus containment test 283 s (513 s), on a runner as slow as the last (`delulu-check`'s Miri 1 h 43 min against 1 h 39 min; the untouched `netscope::tests::equivalent_net_sets_canonicalize_identically` 769 s against 748 s); `delulu-syntax` 22 min; arm64 `actors_pingpong` 2.96x against 1.48x, passed; disk Windows 144 → 129 GB. Release dry run `41416147296` READ: the four packages success, the release job skipped (no tag). The records commit's push run `41417695534` on `329d8b1`: 14 success, 2 skipped; arm64 2.95x against 1.47x, passed.
 - **Loop engineering:** CLOUD_ROUTINE step 5 — Miri runs in the VM (a nightly with `miri` installs in about a minute; a
   test of hours is measured on a copy at a tenth of its size, old form against new) and a `miri-slow` job's tests are
-  timed from its own log. `HANDOFF.md` §11.5: a test's cost under Miri is not its native cost's shape, and a job near its
+  timed from its own log: `scripts/ci-log-summary.py SAVED_LOG --slowest N` (new this run; on `41383380395`'s broker log
+  it printed the hand count exactly — 223 tests, 11,386 s, the laws test 8,119 s). `HANDOFF.md` §11.5: a test's cost under Miri is not its native cost's shape, and a job near its
   cap is a finding before it is red.
 - **Redo on the laptop:** delete `laptop/records-0102` (`d75b65b`), `laptop/sandbox-fault-place` (`9a82bf9`),
   `laptop/unread-repair` (`3543faa`), `claude/peaceful-carson-em21b1` (`1ee12c7`), `claude/peaceful-carson-yl72j8`
@@ -7636,14 +7638,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.5 (Miri's cost shape; measure a slow Miri test in the VM before choosing a
   fix).
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `launch/2.0.0` `728a582`'s `everything` `41416143488` and release dry run `41416147296` to their ends if this
-     entry does not record them read, then cite both in CHECKLIST-2.0 criteria 1, 3, 4 and 8 at the next merge of
-     `master` into `launch/2.0.0`, with the broker's Miri time — the first runner measurement of `04db8fb`'s fix.
+  1. Cite `launch/2.0.0` `728a582`'s `everything` `41416143488` and release dry run `41416147296` (both read green by
+     this run) in CHECKLIST-2.0 criteria 1, 3, 4 and 8 at the next merge of `master` into `launch/2.0.0`, with the
+     broker's Miri time — 2 h 01 min, the first runner measurement of `04db8fb`'s fix — and bring the launch tree current
+     with this run's closing commit (records and a script; no CHANGELOG section).
   2. RW 3.24: a compiled form. Design it first (`V2_LOG.md`, on-demand routine run 18: slots alone buy about a tenth; a
      compiled form pays only if it is total over `interp.rs`, closures and the plugin budget's per-node fuel included).
   3. The broker's Miri: watch its time on each `everything` and nightly. If it is still over about two hours on a slow
-     runner, the next to do their work once are `netscope::tests::equivalent_net_sets_canonicalize_identically` (748 s
-     on `41383380395`) and the two `the_order_and_the_meet_…` tests (358 s and 227 s); `delulu-check`'s Miri is the
+     runner, the laws test is still the largest (4,191 s on `41416143488`, its 20,000 resolves and 8,100 containment pairs
+     the work itself), then `netscope::tests::equivalent_net_sets_canonicalize_identically` (769 s) and the two
+     `the_order_and_the_meet_…` tests (381 s and 236 s); `delulu-check`'s Miri is the
      other long job (1 h 28 min to 1 h 40 min).
   4. *[laptop]* delete the six branches named under *Redo on the laptop*.
   5. *[laptop]* the launch, only on the owner's word.
