@@ -85,7 +85,7 @@ Transport: stdio, LSP 3.17. One server binary flag (`delulu lsp`), one instance 
 | Capability | Behavior |
 |---|---|
 | diagnostics (push) | exactly the compiler's diagnostics — same codes, same spans, same repairs; produced by the incremental pipeline (§3.1) |
-| codeAction | every typed repair becomes a code action; `authority_widening: true` repairs are tagged (`isPreferred: false`) and titled with a ⚠ prefix; `requires_human` repairs appear as documentation-only actions |
+| codeAction | every typed repair becomes a code action; `authority_widening: true` repairs are tagged (`isPreferred: false`) and titled with a ⚠ prefix; `requires_human` repairs are never preferred, and appear as documentation-only actions when they carry no edit (one that carries edits offers them for a person to choose — DL0414's `prefix-underscore`, D-V2-207, 2026-11-02) |
 | hover | type + **effect row** + rcap + opacity + (for caps) resource kind and grant provenance; for a `fn`: its full signature and, one line below, `authority: {…}` computed transitively |
 | inlayHint | **authority lens**: inferred rows on unannotated lambdas; `⚑ Net` markers on calls whose row adds effects the enclosing fn declares — the review surface (Constitution §8.4) |
 | definition / references / rename | DefId-based, cross-package (read-only into `dep:` files) |

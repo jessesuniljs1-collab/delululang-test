@@ -256,7 +256,11 @@ saying what happened to it, so a skipped one is visible rather than looking like
 > fixed the program — it has removed the objection. Surface it to a human instead.
 
 `requires_human: true` means the same thing for a different reason: the repair needs a judgement
-the tool cannot make.
+the tool cannot make. Most such repairs carry no edit and a `reason`; one that carries edits
+(DL0414's `prefix-underscore`, which renames a binding never read to `_x`, `confidence: "safe"`)
+changes nothing the program does — it is withheld wherever `_x` already means something in the
+binding's scope — and it is still a person's call: the binding may be a mistake the rename would
+hide. `delulu fix` applies neither.
 
 **Honest coverage number:** as measured in Study B, **8.3%** of real defects currently offer a
 machine-applicable repair, and a loop with no model reaches a clean program on **none** of them —

@@ -7853,7 +7853,25 @@ exit 1
       "code": "DL0414",
       "explanation_id": "E-DL0414",
       "message": "`n` is bound here and never read",
-      "repairs": [],
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL1602_consume_in_an_index_target.delulu",
+              "insert": "_",
+              "range": {
+                "end_byte": 590,
+                "start_byte": 590
+              }
+            }
+          ],
+          "id": "prefix-underscore",
+          "reason": null,
+          "requires_human": true
+        }
+      ],
       "severity": "warning",
       "spans": [
         {
@@ -7928,6 +7946,7 @@ warning[DL0414]: `n` is bound here and never read
    |
 22 |   let n = xs.len()
    |       ^ never read: remove it, or name it `_n` to say so
+  repair: prefix-underscore (safe)  [requires human decision]
   explain: delulu explain E-DL0414
 
 error[DL1602]: use of `xs` after `consume` — the binding is dead
@@ -7954,7 +7973,25 @@ exit 1
       "code": "DL0414",
       "explanation_id": "E-DL0414",
       "message": "`n` is bound here and never read",
-      "repairs": [],
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL1602_use_after_consume.delulu",
+              "insert": "_",
+              "range": {
+                "end_byte": 377,
+                "start_byte": 377
+              }
+            }
+          ],
+          "id": "prefix-underscore",
+          "reason": null,
+          "requires_human": true
+        }
+      ],
       "severity": "warning",
       "spans": [
         {
@@ -8029,6 +8066,7 @@ warning[DL0414]: `n` is bound here and never read
    |
 15 |   let n = xs.len()
    |       ^ never read: remove it, or name it `_n` to say so
+  repair: prefix-underscore (safe)  [requires human decision]
   explain: delulu explain E-DL0414
 
 error[DL1602]: use of `xs` after `consume` — the binding is dead
@@ -8263,7 +8301,25 @@ exit 1
       "code": "DL0414",
       "explanation_id": "E-DL0414",
       "message": "`xs` is bound here and never read",
-      "repairs": [],
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL1605_recover_captures_ref.delulu",
+              "insert": "_",
+              "range": {
+                "end_byte": 153,
+                "start_byte": 153
+              }
+            }
+          ],
+          "id": "prefix-underscore",
+          "reason": null,
+          "requires_human": true
+        }
+      ],
       "severity": "warning",
       "spans": [
         {
@@ -8323,6 +8379,7 @@ warning[DL0414]: `xs` is bound here and never read
    |
  6 |   let xs: iso List[Int] = recover { outer }
    |       ^^ never read: remove it, or name it `_xs` to say so
+  repair: prefix-underscore (safe)  [requires human decision]
   explain: delulu explain E-DL0414
 
 error[DL1605]: recover block references non-sendable outer binding `outer` (`ref`) — only `val`, `tag`, or a consumed `iso` may cross into recover

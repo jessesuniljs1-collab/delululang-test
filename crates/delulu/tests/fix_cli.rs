@@ -429,6 +429,89 @@ fn repair_corpus() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
+/// **D-V2-207.** DL0414's `prefix-underscore` says it changes nothing the program does, so that is witnessed by running
+/// the program: each one is checked, the repair's edits are applied back to front as an agent would, and the repaired
+/// program must print exactly what the original printed and check with no DL0414. Where `_x` already means something
+/// inside the binding's scope — an outer `_x` read, a later `_x` an assignment would reach, a function `_x` called —
+/// the laptop's draft offered the repair anyway and the repaired program printed something else (`value: 1` for
+/// `value: 5`); there the warning stands and no repair is offered. `delulu fix` never applies it: a human decides.
+#[test]
+fn prefix_underscore_changes_nothing_a_program_prints() {
+    let dir = scratch("prefix-underscore");
+    let head = "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n";
+    let repaired: &[&str] = &[
+        "    let x = 1\n    out.println(\"value: 5\")\n}\n",
+        "    var n = 0\n    n = 5\n    n = 6\n    out.println(\"value: 7\")\n}\n",
+        "    var n = 0\n    let g = fn() -> Int {\n        n = 1\n        0\n    }\n    out.println(\"value: \" + str(g()))\n}\n",
+        "    let _x = 5\n    let y = _x\n    let x = _x + 1\n    out.println(\"value: \" + str(y))\n}\n",
+        "    let _x = 5\n    let r = if true {\n        let x = 1\n        2\n    } else {\n        3\n    }\n    out.println(\"value: \" + str(r + _x))\n}\n",
+    ];
+    let withheld: &[&str] = &[
+        "    let _x = 5\n    let x = 1\n    out.println(\"value: \" + str(_x))\n}\n",
+        "    var x = 0\n    var _x = 7\n    x = 2\n    out.println(\"value: \" + str(_x))\n}\n",
+        "    let x = 1\n    out.println(\"value: \" + str(_x()))\n}\n\nfn _x() -> Int {\n    5\n}\n",
+        "    var x = 0\n    if true {\n        var _x = 1\n        x = 2\n        out.println(\"value: \" + str(_x))\n    }\n}\n",
+        "    var _x = 7\n    if true {\n        var x = 0\n        _x = 3\n    }\n    out.println(\"value: \" + str(_x))\n}\n",
+    ];
+    let prefix_repairs = |path: &str| -> (usize, Vec<(usize, String)>) {
+        let v: serde_json::Value = serde_json::from_slice(&delulu(&["check", path, "--json"]).stdout).unwrap();
+        let mut warned = 0;
+        let mut edits = Vec::new();
+        for d in v["diagnostics"].as_array().unwrap() {
+            assert_ne!(d["severity"], "error", "{path}: the program checks: {d}");
+            if d["code"] != "DL0414" {
+                continue;
+            }
+            warned += 1;
+            for r in d["repairs"].as_array().unwrap().iter().filter(|r| r["id"] == "prefix-underscore") {
+                assert_eq!(r["requires_human"], true, "{path}: a human decides: {r}");
+                assert_eq!(r["authority_widening"], false, "{path}: nothing widens: {r}");
+                for e in r["edits"].as_array().unwrap() {
+                    let (start, end) = (e["range"]["start_byte"].as_u64().unwrap(), e["range"]["end_byte"].as_u64().unwrap());
+                    assert_eq!(start, end, "{path}: an insertion: {e}");
+                    edits.push((start as usize, e["insert"].as_str().unwrap().to_string()));
+                }
+            }
+        }
+        (warned, edits)
+    };
+    let printed = |path: &str| -> String {
+        let o = delulu(&["run", "--grant", "console", path]);
+        assert!(o.status.success(), "{path} runs: {}", stderr(&o));
+        stdout(&o)
+    };
+    for (i, body) in repaired.iter().chain(withheld).enumerate() {
+        let src = format!("{head}{body}");
+        let f = dir.join(format!("p{i}.delulu"));
+        write(&f, &src);
+        let path = f.to_str().unwrap();
+        let (warned, mut edits) = prefix_repairs(path);
+        assert_eq!(warned, 1, "program {i}: one binding never read:\n{src}");
+        if i >= repaired.len() {
+            assert!(edits.is_empty(), "program {i}: `_x` is spoken for in the scope, so no repair is offered:\n{src}");
+            continue;
+        }
+        assert!(!edits.is_empty(), "program {i}: the repair is offered:\n{src}");
+        let fix = delulu(&["fix", path]);
+        assert_eq!(read(&f), src, "program {i}: `delulu fix` leaves a repair a human decides alone: {}", stderr(&fix));
+        edits.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+        let mut fixed = src.clone();
+        for (at, text) in edits {
+            fixed.insert_str(at, &text);
+        }
+        let g = dir.join(format!("p{i}_fixed.delulu"));
+        write(&g, &fixed);
+        let gpath = g.to_str().unwrap();
+        assert_eq!(prefix_repairs(gpath).0, 0, "program {i}: repaired, nothing is left unread:\n{fixed}");
+        assert_eq!(
+            printed(gpath),
+            printed(path),
+            "program {i}: the repair changed what the program prints:\n{src}\n---\n{fixed}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// NE-07. DL0502 offered `remove_effect_from_row` with `confidence: "safe"`,
 /// `authority_widening: false`, `requires_human: false` and **`edits: []`** — every flag reading
 /// *apply me* — while `delulu fix --dry-run --json` refused the same repair with

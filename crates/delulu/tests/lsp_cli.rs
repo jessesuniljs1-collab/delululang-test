@@ -1642,6 +1642,57 @@ fn a_code_action_with_no_edit_is_never_preferred() {
     c.shutdown();
 }
 
+/// D-V2-207, the editor half. DL0414's `prefix-underscore` is the first repair a human must decide that carries
+/// edits, and the server stripped the edits of every `requires_human` repair: the action read "no automatic edit" and
+/// did nothing, though the edit is the whole of it. A person choosing it is the human decision, so it carries its edits,
+/// is never preferred (a client's auto-fix never takes it), and says `requires_human` in `data` for a harness. Applied,
+/// the program has no DL0414; where `_x` already means something in the binding's scope, no such action is offered.
+#[test]
+fn a_repair_a_human_decides_offers_its_edits_and_is_never_preferred() {
+    const UNREAD: &str = "module m\nfn f() -> Int {\n    var n = 0\n    n = 5\n    0\n}\n";
+    const TAKEN: &str = "module m\nfn f() -> Int {\n    let _n = 5\n    let n = 1\n    _n\n}\n";
+    let mut c = Client::start();
+    let action_for = |c: &mut Client, uri: &str, text: &str| -> Option<Value> {
+        c.open(uri, text);
+        let diags = c.wait_diagnostics(uri);
+        let d = diags.as_array().unwrap().iter().find(|d| d["code"] == "DL0414").expect("DL0414 is published").clone();
+        let actions = c.request(
+            "textDocument/codeAction",
+            json!({ "textDocument": { "uri": uri }, "range": d["range"], "context": { "diagnostics": [d] } }),
+        );
+        actions.as_array().unwrap().iter().find(|a| a["data"]["repair_id"] == "prefix-underscore").cloned()
+    };
+    let a = action_for(&mut c, "file:///unread.delulu", UNREAD).expect("DL0414 offers prefix-underscore");
+    assert_eq!(a["isPreferred"], false, "a repair a human decides is never preferred: {a}");
+    assert_eq!(a["data"]["requires_human"], true, "and its data says so: {a}");
+    assert_eq!(a["data"]["authority_widening"], false, "nothing widens: {a}");
+    assert!(a["title"].as_str().unwrap().contains("a human decides"), "the title says who decides: {a}");
+    let edits = a["edit"]["changes"]["file:///unread.delulu"].as_array().expect("the action carries its edits").clone();
+    assert_eq!(edits.len(), 2, "the binding and its one assignment: {a}");
+    let mut at: Vec<(u64, String)> = edits
+        .iter()
+        .map(|e| {
+            let start = &e["range"]["start"];
+            assert_eq!(e["range"]["start"], e["range"]["end"], "an insertion: {e}");
+            (
+                pos_to_byte(UNREAD, start["line"].as_u64().unwrap(), start["character"].as_u64().unwrap()),
+                e["newText"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    at.sort_by_key(|(b, _)| std::cmp::Reverse(*b));
+    let mut fixed = UNREAD.to_string();
+    for (b, text) in at {
+        fixed.insert_str(b as usize, &text);
+    }
+    assert!(fixed.contains("var _n = 0\n    _n = 5\n"), "the binding and the assignment renamed: {fixed}");
+    c.open("file:///fixed.delulu", &fixed);
+    let after = c.wait_diagnostics("file:///fixed.delulu");
+    assert!(after.as_array().unwrap().is_empty(), "applied, nothing is left to say: {after}");
+    assert!(action_for(&mut c, "file:///taken.delulu", TAKEN).is_none(), "`_n` is taken in the scope: no repair offered");
+    c.shutdown();
+}
+
 /// RW 4.39's rest (routine run 7): the server allocated whatever a message's `Content-Length` said BEFORE
 /// reading a byte of it — `18446744073709551615` panicked it (the red-team pass on FRAME-DRIP-1), and any
 /// large number made it allocate that much for a client that sends nothing. A message is bounded now, and

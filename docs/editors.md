@@ -20,8 +20,9 @@ transport: stdio
 - **Diagnostics that ARE the compiler's** — same codes, spans, messages, and typed
   repairs as `delulu check --json`. Nothing is re-derived, nothing drifts.
 - **Code actions from typed repairs** — an authority-widening repair is ⚠-titled and
-  never preferred; `authority_widening`/`requires_human` ride in the action's `data`
-  so agent harnesses can refuse them by policy.
+  never preferred; a repair a human must decide is never preferred either, and offers
+  its edit when it has one (DL0414's rename to `_x`); `authority_widening`/`requires_human`
+  ride in the action's `data` so agent harnesses can refuse them by policy.
 - **Hover** — type, effect row, and (on a function name) the full signature plus its
   transitively computed authority.
 - **The authority lens** — inlay hints show the inferred row on unannotated lambdas.

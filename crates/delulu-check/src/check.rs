@@ -522,6 +522,36 @@ struct FnCtx {
     /// Per scope, a name's newest binding when that binding is a `let` or `var`: its place in `lets`. A parameter or
     /// pattern binding of the same name, bound later, takes the name back out.
     let_index: Vec<HashMap<String, usize>>,
+    /// When each name was last met in this body, read, written or bound (D-V2-207): DL0414's repair renames `x` to
+    /// `_x` only where no `_x` is met inside the binding's scope.
+    names: NameClock,
+}
+
+/// A clock over the names a body meets (D-V2-207). Every local read, every assignment and every binding goes through
+/// [`FnCtx`]'s `lookup`, `lookup_to_assign` and `bind`, and a name that is not local (a function, a constant, a builtin,
+/// a constructor) is asked of `lookup` first, so meeting a name there is meeting every use the body makes of it.
+#[derive(Default)]
+struct NameClock {
+    now: std::cell::Cell<u64>,
+    last: std::cell::RefCell<HashMap<String, u64>>,
+}
+
+impl NameClock {
+    fn meet(&self, name: &str) {
+        let t = self.now.get() + 1;
+        self.now.set(t);
+        let mut last = self.last.borrow_mut();
+        match last.get_mut(name) {
+            Some(at) => *at = t,
+            None => {
+                last.insert(name.to_string(), t);
+            }
+        }
+    }
+    /// Whether `name` was met after `since`.
+    fn met_since(&self, name: &str, since: u64) -> bool {
+        self.last.borrow().get(name).is_some_and(|&t| t > since)
+    }
 }
 
 /// One `let` or `var` binding (DL0414): its name, where it is written, whether a read has reached it, and each
@@ -531,6 +561,8 @@ struct LetUse {
     span: Span,
     read: std::cell::Cell<bool>,
     writes: std::cell::RefCell<Vec<Span>>,
+    /// The name clock when it was bound: a name met after this, before its block closes, is met inside its scope.
+    bound_at: u64,
 }
 
 impl FnCtx {
@@ -550,6 +582,7 @@ impl FnCtx {
         self.let_index.resize_with(self.locals.len(), HashMap::new);
     }
     fn bind(&mut self, name: &str, ty: Type) {
+        self.names.meet(name);
         self.locals.last_mut().unwrap().insert(name.to_string(), ty);
         self.sync_lets();
         if let Some(index) = self.let_index.last_mut() {
@@ -566,6 +599,7 @@ impl FnCtx {
             span,
             read: std::cell::Cell::new(false),
             writes: std::cell::RefCell::new(Vec::new()),
+            bound_at: self.names.now.get(),
         });
     }
     /// An assignment `name = v` at `at`: the binding it reaches keeps the place, so a repair that renames the binding
@@ -584,6 +618,7 @@ impl FnCtx {
     }
     /// A read of `name`: its type, and the binding it reaches marked read (DL0414).
     fn lookup(&self, name: &str) -> Option<Type> {
+        self.names.meet(name);
         for (i, scope) in self.locals.iter().enumerate().rev() {
             if let Some(t) = scope.get(name) {
                 if let Some(&k) = self.let_index.get(i).and_then(|index| index.get(name)) {
@@ -598,6 +633,7 @@ impl FnCtx {
     }
     /// The type of `name` for an assignment to it, which writes and does not read: the binding is not marked.
     fn lookup_to_assign(&self, name: &str) -> Option<Type> {
+        self.names.meet(name);
         self.locals.iter().rev().find_map(|scope| scope.get(name).cloned())
     }
 }
@@ -649,6 +685,7 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            names: NameClock::default(),
         };
         // Bind parameters, noting capability kinds they carry.
         for (p, ty) in f.params.iter().zip(&param_types) {
@@ -777,6 +814,7 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            names: NameClock::default(),
         };
         ctx.bind("self", self_ty.clone());
         for (p, ty) in params.iter().zip(&param_types) {
@@ -1208,6 +1246,7 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            names: NameClock::default(),
         };
         let (ty, row) = self.check_expr(&c.value, &mut ctx);
         let ty = match &c.ty {
@@ -1259,6 +1298,7 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            names: NameClock::default(),
         };
         // The runner (8g) scopes this Root by the test manifest; the TYPE is just Root.
         self.note_caps_in(&Type::Root, &mut ctx.facts);
@@ -1535,7 +1575,7 @@ impl<'a> Checker<'a> {
             }
         }
         let lets = ctx.pop_scope();
-        self.report_unread_lets(lets);
+        self.report_unread_lets(lets, &ctx.names);
         // Record the block node in the DIR side tables (§2.3): its value type and accumulated row.
         self.node_types_raw.insert(block.id, (value_ty.clone(), block.span));
         self.node_row_accs.insert(block.id, acc.clone());
@@ -1544,26 +1584,33 @@ impl<'a> Checker<'a> {
 
     /// DL0414 (D-V2-206): a `let` or `var` binding nothing read before its block closed. A write is not a read, so a
     /// `var` only ever assigned is named too. A name that begins with `_` says the binding is meant to go unread.
-    fn report_unread_lets(&mut self, lets: Vec<LetUse>) {
+    ///
+    /// The block has just closed, so `names` has met everything inside each binding's scope: a `_x` met after the
+    /// binding was met there.
+    fn report_unread_lets(&mut self, lets: Vec<LetUse>, names: &NameClock) {
         for l in lets.into_iter().filter(|l| !l.read.get() && !l.name.starts_with('_')) {
-            // The repair names the binding and every assignment to it `_x`, which changes nothing the program does. A
-            // human decides: an unread binding may be a mistake that renaming would hide (the Book's `ok`, D-V2-206).
-            let edits = std::iter::once(l.span)
-                .chain(l.writes.take())
-                .map(|at| Edit { file: at.file, start_byte: at.start, end_byte: at.start, insert: "_".to_string() })
-                .collect();
-            self.diags.push(
-                Diagnostic::warning("DL0414", format!("`{}` is bound here and never read", l.name))
-                    .with_span(l.span, format!("never read: remove it, or name it `_{}` to say so", l.name))
-                    .with_repair(Repair {
-                        id: "prefix-underscore",
-                        confidence: Confidence::Safe,
-                        authority_widening: false,
-                        requires_human: true,
-                        edits,
-                        reason: None,
-                    }),
-            );
+            let mut warning = Diagnostic::warning("DL0414", format!("`{}` is bound here and never read", l.name))
+                .with_span(l.span, format!("never read: remove it, or name it `_{}` to say so", l.name));
+            // The repair names the binding and every assignment to it `_x` (D-V2-207). That changes nothing the program
+            // does only if `_x` means nothing else inside the binding's scope: there, a read of an outer `_x`, a write
+            // that a later `_x` would take, or a call of a function `_x` would reach the renamed binding instead. So it
+            // is offered only when no `_x` is met between the binding and the end of its block. A human decides: an
+            // unread binding may be a mistake that renaming would hide (the Book's `ok`, D-V2-206).
+            if !names.met_since(&format!("_{}", l.name), l.bound_at) {
+                let edits = std::iter::once(l.span)
+                    .chain(l.writes.take())
+                    .map(|at| Edit { file: at.file, start_byte: at.start, end_byte: at.start, insert: "_".to_string() })
+                    .collect();
+                warning = warning.with_repair(Repair {
+                    id: "prefix-underscore",
+                    confidence: Confidence::Safe,
+                    authority_widening: false,
+                    requires_human: true,
+                    edits,
+                    reason: None,
+                });
+            }
+            self.diags.push(warning);
         }
     }
 
