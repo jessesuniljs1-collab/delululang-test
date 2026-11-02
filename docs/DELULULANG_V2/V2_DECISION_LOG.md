@@ -5777,3 +5777,60 @@ edits, the program has nothing left to say; where `_n` is taken, no action). Eac
 (the draft's, re-run) and M1047–M1055 red, the control green; M1049 (an assignment's target never met) and M1050 (a
 binding never met) first survived, which named two witness shapes the test lacked, now added. `core_invariance`: the
 three reject programs' DL0414 each gain the repair, its edit at the binding's first byte; nothing else moved.
+
+## D-V2-208 — P9-05 (d), third slice: `Cap[Http].put`, `patch` and `delete`, each with a `_with_secret` form, judged by its method everywhere a POST is; a redirect changes a method by the Fetch standard's rule, and a method other than GET never leaves the program's origin — TAKEN (head chef, 2026-11-02, under the owner's delegation)
+
+**Context.** RW 2.12's last open part. D-V2-182 gave a `net` entry its methods (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+`DELETE`; none named = GET alone), and D-V2-183 built the first request that is not a GET, `post`. A program could still
+not update or delete anything over a REST API it was granted, and an agent that must could not be granted exactly that
+and no more. The grammar already parsed `HOST:PUT,PATCH,DELETE`, and the broker already judged any of its methods, but
+`check` refused `h.put(…)` with DL0405 (witnessed on `1ee12c73`: *"type `Cap[Http]` has no method `put`"*, and the same
+for `patch` and `delete`).
+
+**Decision.**
+1. **The primitives.** `put(url, headers, body)` and `patch(url, headers, body)` take `post`'s arguments; `delete(url,
+   headers)` takes `get_with`'s and carries no body. Each has a `_with_secret` form with `get_with_secret`'s arguments and
+   then the body (`put_with_secret`, `patch_with_secret`: arity 5; `delete_with_secret`: arity 4). All answer
+   `Result[Str, NetErr] ! {Net}`, with the URL as argument one, so every check that reads a request's URL reads it where
+   it reads `get`'s. `PRIM_TABLE_VERSION` goes from 8 to 9 (additive; a `.dpx` holding a v8 DIR is refused DL1503 and
+   rebuilt, as at every bump). Six conformance anchors, four witnesses each (`ENTRENCHED_CHANGE_RECORD.md`); the reference
+   is at 366 of 366.
+2. **Judged by its method wherever a POST is**, from one list (`prim::HTTP_REQUESTS`, `http_method_of`, `http_body_index`,
+   `http_carries_secret`) that the first check, the custody gate, the trace, the broker-held secret's send, `--within`,
+   `authority --json` (`requests[].method`, and the schema's enum) and both engines read, where five hand-written lists
+   named the five requests before: the first check (DL0904: *"a `DELETE` to … is outside the methods the grant names for
+   it"*), every egress hop by its own method, the broker's use check and the chain's `use` record (`method` beside
+   `url_path`; OCSF `http_request.http_method`), and `--within`, which decides the request at its call by its method.
+3. **Redirects, by the Fetch standard's rule** (HTTP-redirect fetch): a 301 or 302 turns a POST into a GET with no body,
+   and a 303 turns every method but GET and HEAD into one. Every other redirect keeps the method and the body — a PUT, a
+   PATCH or a DELETE on a 301 or 302, anything on a 307 or 308. RFC 9110 (§15.4.2, §15.4.3) lets a client change only a
+   POST on a 301 or 302; D-V2-183's rule changed every method on them, which was right for the one method it could see,
+   and would have turned a moved DELETE into a GET whose answer read as the DELETE's. A POST is unchanged.
+4. **A method other than GET never leaves the origin the program named.** A kept body was refused elsewhere already
+   (`body-elsewhere`). A DELETE has no body, and is no less the program's to aim, so a redirect that would send it to
+   another origin is refused: `Reason::MethodElsewhere`, reason `method-elsewhere`, the program told `Refused`. A 303's GET
+   may leave, judged as a GET.
+5. **One implementation for L0, every guest and the WASM engine.** A sandboxed guest's request is performed by the host in
+   the same `prim` arm. The WASM engine gains six imports (`delulu:cap.http_put`, `http_patch`, `http_delete` and their
+   `_with_secret` forms), emitted from one table (`MORE_REQUESTS`) and performed by the host's `send_plain` and
+   `send_with_secret` — `send_plain` now also performs `get_with` and `post`, which had two copies of the same body.
+6. **Not built: a `head` primitive.** A grant may name HEAD (D-V2-182), but a program is answered a body
+   (`Result[Str, NetErr]`) and never a response's headers, so a HEAD would answer nothing it could read. It waits for a
+   response type that carries headers.
+
+**Evidence.** The egress client: `a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin`
+(each method sent by itself, the body kept or none; refused under GET alone and under POST alone before anything is
+resolved; kept on 301, 302, 307 and 308 to the same origin; refused `body-elsewhere` or `method-elsewhere` to another;
+a 303 a GET with no body; a POST's 301 and 302 unchanged), `a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience`,
+and over real TLS `a_put_a_patch_and_a_delete_arrive_over_tls_by_their_own_methods` (the request line, the body whole, a
+DELETE's none). End to end: `egress_cli` `a_put_a_patch_and_a_delete_leave_under_a_grant_that_names_their_method_and_no_other`
+(L0 and a guest: TLS out under `:METHOD`, the report's hop naming it; DL0904 in words about the method under a host-only
+grant and under `:POST`, nothing connects) and `a_programs_put_and_patch_carry_its_body_to_the_client` (a 2 MiB body
+refused `request-too-large` before anything connects); `within_cli`
+`a_put_a_patch_and_a_delete_are_decided_by_their_methods_against_the_boundary` (*exceeds* naming the method; `authority
+--json`'s `requests` and `secret_destinations`; the report valid against its schema); `broker_cli`
+`a_put_a_patch_and_a_delete_are_judged_by_their_methods_under_the_daemon_as_embedded` (embedded and daemon custody, a
+guest, the WASM engine; the chain naming each method, a POST refused) and
+`a_broker_held_secret_rides_a_put_a_patch_and_a_delete_by_their_methods` (both engines, the broker's `send`, a capability
+without DELETE refused before a byte is asked); `audit_ocsf_cli` (a DELETE's `http_method`); `trace` `effect_for`. Mutants
+M1056–M1071 (`V2_LOG.md`).

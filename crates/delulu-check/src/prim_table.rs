@@ -92,6 +92,15 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     // and a POST carrying one secret in one header, sent only to its grant's audience (as `get_with_secret`) —
     // `post_with_secret(url, headers, header: Str, secret: Secret[Str], body: Str)`.
     PrimEntry { receiver: "http", method: "post_with_secret", arity: 5 },
+    // P9-05 (d), D-V2-208: the other requests a grant's methods can name — `put(url, headers, body)` and
+    // `patch(url, headers, body)` as `post` is, `delete(url, headers)` with no body — each judged by its own method, and each
+    // with a `_with_secret` form carrying one secret in one header (`get_with_secret`'s arguments, then the body).
+    PrimEntry { receiver: "http", method: "put", arity: 3 },
+    PrimEntry { receiver: "http", method: "put_with_secret", arity: 5 },
+    PrimEntry { receiver: "http", method: "patch", arity: 3 },
+    PrimEntry { receiver: "http", method: "patch_with_secret", arity: 5 },
+    PrimEntry { receiver: "http", method: "delete", arity: 2 },
+    PrimEntry { receiver: "http", method: "delete_with_secret", arity: 4 },
     // Cap[Clock].
     PrimEntry { receiver: "clock", method: "now_ms", arity: 0 },
     // Root device mints + Cap[Actuator]/Cap[Sensor] (Stage 10 phase 10e, Track D).
@@ -202,7 +211,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            86,
+            92,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

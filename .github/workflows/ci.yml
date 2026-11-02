@@ -348,6 +348,12 @@ jobs:
   # On 2026-10-24 delulu-broker was cancelled at the cap: a new test judged the same requests afresh
   # for every pair of entries and alone took 2 h 45 min. A test that grows is answered by doing its
   # work once (that one now judges each entry once), never by raising this budget.
+  # On 2026-11-02 delulu-broker took 3 h 11 min (`everything` 41383380395; 1 h 44 min the run before,
+  # on the same code: the runner moved), 8,119 s of it in path canonicalization's laws. Its
+  # completeness law searched 400 classes one by one for each of 20,000 paths, and its containment
+  # law canonicalized both sides of 8,100 pairs. Both now do their work once, over the same inputs
+  # and laws: measured under Miri in the VM on a copy, the loop at 2,000 paths 668 s -> 270 s and the
+  # pairs 1,497 s -> 806 s (on-demand routine run 19).
   miri-slow:
     if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'heavy-gates')
     runs-on: ubuntu-24.04

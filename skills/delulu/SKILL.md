@@ -76,7 +76,9 @@ A `val` closure can still be `!{Write}` — the two axes are independent and bot
 --grant net=HOST/v1/*/items/**       # that host under those paths only: `*` one segment, `**` the rest (last)
 --grant net=HOST:GET,POST/v1/**      # and by those methods only (in the order GET,HEAD,POST,PUT,PATCH,DELETE);
                                      # no methods named = GET alone; `h.post(url, headers, body)` and
-                                     # `h.post_with_secret(url, headers, header, secret, body)` need `:POST`
+                                     # `h.post_with_secret(url, headers, header, secret, body)` need `:POST`;
+                                     # `h.put`/`h.patch` (post's arguments), `h.delete(url, headers)` and their
+                                     # `_with_secret` forms need `:PUT`, `:PATCH`, `:DELETE`
 --grant "secret:NAME=env:VAR"        --grant declassify
 --grant foreign.c=LOGICAL:PATH       --grant foreign.python=numpy
 --grant plugin=PATH                  # where a program may LOAD a plugin artifact from

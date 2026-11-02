@@ -1363,6 +1363,13 @@ spells the same thing?**
   write or a binding, a function, a constant or a builtin included (`NameClock`). Witness a rename by RUNNING the program
   before and after, not by checking it. Search key: a `Repair` whose edits insert into a name.
 
+- **A redirect changes a method by the Fetch standard's rule, and a method other than GET never leaves the program's
+  origin** (on-demand routine run 18, 2026-11-02, D-V2-208). D-V2-183 made every non-GET a GET on a 301, 302 or 303 —
+  right for the one method it could see, POST, and wrong for the next: a moved DELETE would have been re-sent as a GET
+  whose answer read as the DELETE's. Only a POST becomes a GET on a 301 or 302 (RFC 9110 §15.4.2–3), a 303 makes every
+  method a GET, and a kept PUT, PATCH or DELETE goes to its own origin only (`body-elsewhere`, `method-elsewhere`). Never
+  widen either back. Search key: `to_get` and `MethodElsewhere` in `egress.rs`.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -2055,6 +2062,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   while another job ran reads every cut as a win. Two cuts that each looked right lost on the count: four bindings held
   inline in a scope (+2–5% on every benchmark, as the laptop's timing had found) and an inlined clone of scalars (+3%) —
   each made a hot function bigger than it saved. `scripts/interp-profile.sh --base REF` builds both and prints both.
+- **What a program hands its client is witnessed by a refusal the client makes on it** (on-demand routine run 18, D-V2-208).
+  A program's request cannot reach a test server that sees its body: the platform trust store refuses the test's own
+  certificate, and the end-to-end tests read only the TLS hello. So a mutant that dropped a PUT's body inside `prim`
+  survived every test but one written for it: a body past the client's 1 MiB limit, refused `request-too-large` before
+  anything connects — which happens only if the body arrived. Where a server cannot see a value, find the check the
+  client makes on that value and make it fire. And **one set, one list**: the five requests were five hand-written
+  `matches!` lists (the first check, the custody gate, the trace, `--within`, the schema), each a place a sixth request
+  could be missed; `prim::HTTP_REQUESTS` is now the one every place reads.
 
 - **A new `.delulu` file is also the formatter's corpus** (FMT-CTOR-1, 2026-11-01). `delulu-syntax`'s `laws_hold_over_the_repository_corpus` formats every `.delulu` file in the repository and requires the same program back. A change that adds a conformance program runs `cargo test -p delulu-syntax --lib`, not only the checker's and the CLI's tests. #112 skipped it, and its first run was red on Ubuntu and macOS. The law had found a real defect: `fmt` printed `foo()` as `foo`, a binding.
 

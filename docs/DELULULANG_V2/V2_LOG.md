@@ -11621,5 +11621,72 @@ is refused DL0401), each confirmed on the binary by hand; both mutants were then
 `DL1605_recover_captures_ref`) each gain the repair, its one edit at the binding's first byte, in the JSON and the human
 surface; 3 lines removed (`"repairs": []`), 60 added, nothing else. Judged and blessed.
 
-**Evidence.** The full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the tree unmoved); `scripts/clippy.sh` clean. The new tests on the other runners, `witness.yml` at `0c3fad1` on the session's branch with `fix_cli lsp_cli`: macOS `41381373785` (14 and 41 passed, both new tests named) and Windows `41381376441` (success; `lsp_cli` 41 passed with the new test named, `fix_cli` above the tail read and covered by the job's success). The push run of `master` is read in this run's `docs/CLOUD_SYNC_LOG.md` entry.
+**Evidence.** The full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the tree unmoved); `scripts/clippy.sh` clean. The new tests on the other runners, `witness.yml` at `0c3fad1` on the session's branch with `fix_cli lsp_cli`: macOS `41381373785` (14 and 41 passed, both new tests named) and Windows `41381376441` (success; `lsp_cli` 41 passed with the new test named, `fix_cli` above the tail read and covered by the job's success). The push run of `master`, `41382701663` on `0d17bca`, is read green (14 success, 2 skipped).
 
+**`launch/2.0.0` brought current.** `1487163` merges `master` `0d17bca`. The one CHANGELOG section was folded by
+`scripts/launch-changelog.py` and judged against `STABILITY.md` §1 and v1.0.0: additive, because a repair id is add-only,
+DL0414 is not in 1.x, and no 1.x repair was both `requires_human` and carried edits (v1.0.0's sources searched), so no
+code action a 1.x program receives changes. CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `e361f0b`'s runs; criterion 2 is
+360/360; `LAUNCH-GATES=ok`, the merged tree's Rust `master`'s. Release dry run `41383382785`: the four packages success.
+`everything` `41383380395`: dispatched, running at the run's close.
+
+## 2026-11-02 — on-demand routine run 18: `put`, `patch` and `delete` (D-V2-208) — RW 2.12 closed, P9-05 complete
+
+**Housekeeping.** `master` was at `1ee12c7` (on-demand routine run 17's close) and every run since the last record was
+green: `1ee12c7`'s push run `41384594047`; `launch/2.0.0` `1487163`'s release dry run `41383382785` (read by run 17). The
+newest autosave snapshot (`521f2ac`, 20:35 UTC on 2026-11-01) differs from `3543faa`, which landed, only in the
+generated map; `autosave/laptop-dl-launch`'s newest (`242ce03`, 2026-11-01 10:55 UTC, base `005372f`) is in `launch/2.0.0`
+whole: its 75 paths are identical in `415eb2e`, the next merge. No branch held a commit `master` lacks but `launch/2.0.0`, `autosave/*`, `archive/*` and `rc/*`, as before.
+The Survey matched the tree (1613 nodes, 18564 edges) and `doctor --check` passed (26 checks). The permission classifier
+refused `git push --delete` again (*"Git Destructive"*), so the four merged branches stay for the laptop.
+
+**Why this milestone, not RW 3.24.** The inbox's second item was RW 3.24, a compiled form for the interpreter. Read
+against `interp.rs`: slots alone buy about a tenth (run 16's profile), and a compiled form pays only if it is total —
+methods on capabilities, closures over scopes (LATE-LET-1), the plugin budget's per-node fuel, CLOSURE-SCOPE-1's home —
+which is a redesign of the interpreter over several runs, to be designed before it is built. RW 2.12's last part was
+designed (D-V2-55, D-V2-182, D-V2-183), a gap for the agents the language serves (no program could update or delete over
+a REST API), and a Linux VM could build and verify it whole. RW 3.24 stays the first *Open / next* item, with this read.
+
+**The milestone.** Witnessed first on `1ee12c7`: `check` refused `h.put(…)`, `h.patch(…)` and `h.delete(…)` with DL0405
+*"type `Cap[Http]` has no method"*, though the grant grammar parsed `HOST:PUT,PATCH,DELETE`. Built (D-V2-208):
+- the six primitives in the table and the checker (`PRIM_TABLE_VERSION` 9), and one list of requests in `prim` that the
+  first check, the custody gate, the trace, the broker-held secret's send, `--within`, `authority --json` and its schema
+  read, where five hand-written lists named the five requests before;
+- the egress client's redirect rule by the Fetch standard (a 301/302 changes a POST alone, a 303 every method but GET and
+  HEAD), and `Reason::MethodElsewhere`: a request that keeps a method other than GET is never sent to another origin;
+- the WASM engine's six imports from one table (`MORE_REQUESTS`), performed by the host's `send_plain` (which now also
+  performs `get_with` and `post`, two copies of one body before) and `send_with_secret`;
+- six conformance anchors (366 of 366), the reference regenerated; `witnesses.toml` recorded in
+  `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Evidence.** Tests (each named in D-V2-208): the egress client's
+`a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin`,
+`a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience` and, over real TLS,
+`a_put_a_patch_and_a_delete_arrive_over_tls_by_their_own_methods`; `egress_cli`
+`a_put_a_patch_and_a_delete_leave_under_a_grant_that_names_their_method_and_no_other` (L0 and a guest) and
+`a_programs_put_and_patch_carry_its_body_to_the_client`; `within_cli`
+`a_put_a_patch_and_a_delete_are_decided_by_their_methods_against_the_boundary`; `broker_cli`
+`a_put_a_patch_and_a_delete_are_judged_by_their_methods_under_the_daemon_as_embedded` and
+`a_broker_held_secret_rides_a_put_a_patch_and_a_delete_by_their_methods`; `audit_ocsf_cli` (a DELETE's `http_method`);
+`trace` `effect_for_maps_every_effectful_primitive`. Mutants, each red, the controls green:
+- M1056 a 301/302 changes every method again (D-V2-183's rule), M1057 a 303 changes a POST alone, M1058 no
+  `method-elsewhere` — the egress tests;
+- M1059 `delete` made a GET, M1060 `put` made a POST, M1063 a secret form found by the old two names — the end-to-end
+  tests; M1061 a program's body dropped in `prim` (first a build error, `None` untyped; re-run as `None::<String>`) and
+  M1062 `put` given no body — only `a_programs_put_and_patch_carry_its_body_to_the_client`, written because no other test
+  could see a program's body;
+- M1064 `--within` finds the old five requests, M1065 a secret form's arity read as 4, M1070 the schema's old enum —
+  the `--within` test (the last by its schema validation, added for it); M1071 the checker types `put` no more;
+- M1066 the WASM table gives `put` no body, M1067 the host's PUT and PATCH imports swapped, M1068 the host's custody
+  asked with no method — the daemon test's WASM route; M1069 the trace's old five — `effect_for`.
+**The suite** (`scripts/suite.sh`, alone, `-j 4`): 192 binaries, 2,670 passed, 1 failed, 16 ignored, the tree unmoved. The one
+red was `delulu-check`'s `prim_table::tests::count_is_pinned`, the table's length written by hand (86, now 92) — a
+tripwire doing its job, which the slice's own tests had not run. Updated, its target re-run green (266 passed);
+`scripts/clippy.sh` clean after it. CLOUD_ROUTINE step 7a now lists a new primitive's four places.
+**Runner reads, before `master` moved** (`witness.yml` at `cd55b59` on `claude/peaceful-carson-yl72j8`): macOS
+`41392735108` and Windows `41392737821` (`egress_cli`, `within_cli`, `broker_cli`, filter `_put`: the five new tests
+named, each `ok`), macOS `41392740882` and Windows `41392744038` (`delulu-runtime` `lib`: the three new egress tests named,
+each `ok`, the TLS test among them).
+**The push run** `41394552057` on `4e63eb7` (the records commit, holding `cd55b59`): 14 success, 2 skipped (`miri-slow`,
+`heavy-gates`); `openshell` `41394552103` and `ocsf` `41394552121` success; `actors_pingpong` measured on arm64 (2.92x
+against 1.28x, passed), not measured on the other three.

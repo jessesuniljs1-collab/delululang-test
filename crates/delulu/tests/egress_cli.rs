@@ -347,6 +347,110 @@ fn a_post_leaves_under_a_grant_that_names_post_and_no_other() {
     }
 }
 
+/// A program that makes one request by `method` (`put`, `patch` or `delete`) to `url` (D-V2-208).
+fn sender(dir: &Path, method: &str, hosts: &str, url: &str) {
+    let body = if method == "delete" { "" } else { ", \"{}\"" };
+    std::fs::write(
+        dir.join("send.delulu"),
+        format!(
+            "module send\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+             let out = root.console()\n    \
+             let h = root.http([\"{hosts}\"])\n    \
+             let hs = Map()\n    \
+             hs.insert(\"Content-Type\", \"application/json\")\n    \
+             match h.{method}(\"{url}\", hs{body}) {{\n        \
+             Ok(body) => out.println(\"delivered\")\n        \
+             Err(e) => out.println(\"not delivered\")\n    \
+             }}\n}}\n"
+        ),
+    )
+    .unwrap();
+}
+
+/// D-V2-208: `http.put`, `http.patch` and `http.delete`, end to end on loopback, at L0 and from a guest — the host performs
+/// them. Under an entry naming the method each leaves as TLS, and the run report names the hop's method; under one naming
+/// no methods (GET alone) or another method alone, each is refused DL0904 at the call, in words about its method, and
+/// nothing connects.
+#[test]
+fn a_put_a_patch_and_a_delete_leave_under_a_grant_that_names_their_method_and_no_other() {
+    for (method, verb) in [("put", "PUT"), ("patch", "PATCH"), ("delete", "DELETE")] {
+        for sandbox in [false, true] {
+            let run = |dir: &Path, grant: &str| {
+                let grant = format!("net.special={grant}");
+                let mut args =
+                    vec!["run", "send.delulu", "--grant", "console", "--grant", grant.as_str(), "--report-out", "rep.json"];
+                if sandbox {
+                    args.push("--sandbox");
+                }
+                delulu(dir, &args)
+            };
+            let what = format!("{method} sandbox={sandbox}");
+            let dir = tmp(&format!("{method}-in-{}", if sandbox { "guest" } else { "l0" }));
+            let (port, seen) = listen(Duration::from_secs(20));
+            let own = format!("127.0.0.1:{verb}");
+            sender(&dir, method, &own, &format!("https://127.0.0.1:{port}/items/1"));
+            let o = run(&dir, &own);
+            let first = seen.join().unwrap().unwrap_or_else(|| panic!("{what}: nothing connected:\n{}", out(&o)));
+            assert!(first.len() >= 3 && first[0] == 0x16, "{what}: TLS, got {first:02x?}:\n{}", out(&o));
+            assert_eq!(o.status.code(), Some(0), "{what}:\n{}", out(&o));
+            let rep: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
+            assert_eq!(rep["egress"]["records"][0]["hops"][0]["method"], verb, "{what}: {rep}");
+
+            for other in ["127.0.0.1", "127.0.0.1:POST"] {
+                let dir = tmp(&format!("{method}-out-{}", if sandbox { "guest" } else { "l0" }));
+                let (port, seen) = listen(Duration::from_secs(3));
+                sender(&dir, method, other, &format!("https://127.0.0.1:{port}/items/1"));
+                let o = run(&dir, other);
+                assert!(
+                    out(&o).contains("DL0904") && out(&o).contains(&format!("a `{verb}` to")),
+                    "{what} under {other}: refused at the call by its method:\n{}",
+                    out(&o)
+                );
+                assert!(seen.join().unwrap().is_none(), "{what} under {other}: nothing connected");
+            }
+        }
+    }
+}
+
+/// D-V2-208: a program's PUT and PATCH carry its body to the egress client — seen from outside by the body's own limit: a
+/// body past `MAX_REQUEST_BODY` (1 MiB) is refused before anything is resolved, `request-too-large` in the report, and
+/// nothing connects. Were the body dropped on its way from the program, the request would leave.
+#[test]
+fn a_programs_put_and_patch_carry_its_body_to_the_client() {
+    for method in ["put", "patch", "post"] {
+        let verb = method.to_ascii_uppercase();
+        let dir = tmp(&format!("{method}-body"));
+        let (port, seen) = listen(Duration::from_secs(3));
+        std::fs::write(
+            dir.join("big.delulu"),
+            format!(
+                "module big\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+                 let out = root.console()\n    \
+                 let h = root.http([\"127.0.0.1:{verb}\"])\n    \
+                 var s = \"x\"\n    \
+                 var i = 0\n    \
+                 while i < 21 {{\n        s = s + s\n        i = i + 1\n    }}\n    \
+                 match h.{method}(\"https://127.0.0.1:{port}/items/1\", Map(), s) {{\n        \
+                 Ok(body) => out.println(\"delivered\")\n        \
+                 Err(e) => out.println(\"not delivered\")\n    \
+                 }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        let grant = format!("net.special=127.0.0.1:{verb}");
+        let o = delulu(&dir, &["run", "big.delulu", "--grant", "console", "--grant", &grant, "--report-out", "rep.json"]);
+        assert_eq!(
+            (o.status.code(), String::from_utf8_lossy(&o.stdout).trim()),
+            (Some(0), "not delivered"),
+            "{method}:\n{}",
+            out(&o)
+        );
+        assert!(seen.join().unwrap().is_none(), "{method}: nothing connected");
+        let rep: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
+        assert_eq!(rep["egress"]["records"][0]["reason"], "request-too-large", "{method}: {rep}");
+    }
+}
+
 /// A program that fetches `url` with `headers` through `get_with` (P9-04 (a), D-V2-128).
 fn fetcher_with(dir: &Path, hosts: &str, url: &str, headers: &[(&str, &str)]) {
     let inserts: String = headers.iter().map(|(n, v)| format!("    hs.insert(\"{n}\", \"{v}\")\n")).collect();

@@ -752,7 +752,7 @@ overstate it downstream:
   (`declassify:NAME`) covers every send of it, and a seal on it refuses them all (D-V2-137). Not yet in a
   `--sandbox` guest (DL1401: no secret crosses the channel). Under `--engine wasm` it runs as on the interpreter
   (D-V2-174; `post_with_secret` since 2026-10-23).
-  `http.post(url, headers, body)` (P9-05 (d), D-V2-183) is the one request that is not a GET: the program mints
+  `http.post(url, headers, body)` (P9-05 (d), D-V2-183) was the first request that is not a GET: the program mints
   `root.http(["api.example.com:POST/v1/**"])` and the operator grants the same (`--grant net=api.example.com:POST/v1/**`;
   `--grants` prints it). Under an entry naming no methods it is refused at the call, DL0904, *"a `POST` to … is outside
   the methods the grant names"*. Its headers follow `get_with`'s rules, and its body is at most 1 MiB (reason
@@ -763,6 +763,15 @@ overstate it downstream:
   `--engine wasm` (since 2026-10-23) the WASM host does, its custody asked by the method; `post_with_secret` too. `http.post_with_secret(url, headers, header, secret, body)` is the authenticated POST: the
   secret as `get_with_secret` sends it (its audience only; under `--broker daemon`/`--lease` the broker's `send`), the
   body as `post`'s; a capability minted without POST refuses it before the broker is asked for a byte.
+  `http.put(url, headers, body)`, `http.patch(url, headers, body)` and `http.delete(url, headers)` (D-V2-208) are the
+  other requests: each minted and granted by its method (`root.http(["api.example.com:PUT,PATCH,DELETE/v1/**"])`), each
+  refused at the call under an entry that does not name it, judged on every hop, recorded and decided by `--within` as a
+  POST is. A DELETE carries no body. Each has a `_with_secret` form: `put_with_secret` and `patch_with_secret` take
+  `post_with_secret`'s arguments, `delete_with_secret` takes `get_with_secret`'s. Redirects follow the Fetch standard:
+  a 301 or 302 keeps a PUT, a PATCH or a DELETE (only a POST becomes a GET there), a 303 makes each a GET with no body,
+  and a request that keeps a method other than GET goes only to the URL's own origin (elsewhere: reason
+  `body-elsewhere`, or `method-elsewhere` for a DELETE). There is no `head`: a program is answered a body, never a
+  response's headers. They run from a `--sandbox` guest and on `--engine wasm`.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

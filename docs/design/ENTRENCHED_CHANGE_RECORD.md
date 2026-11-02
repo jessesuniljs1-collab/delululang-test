@@ -801,3 +801,44 @@ No rule changes meaning, and no rule lists the code: DL0414 enforces nothing, it
 git checkout <this-commit>^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-206's check and the registry entry, or the coverage gate fails on an unwitnessed DL0414.
+
+## 2026-11-02 — `tests/conformance/witnesses.toml`: `put`, `patch`, `delete` and their `_with_secret` forms
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: twenty-four `[[witness]]` rows, four for each of the six new anchors `ref.prim.http.put`, `.patch`, `.delete`, `.put_with_secret`, `.patch_with_secret` and `.delete_with_secret`, after `post_with_secret`'s, with a comment naming the decision. No other row changes. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | on-demand routine run 18 (2026-11-02); `REMAINING_WORK.md` 2.12; decision D-V2-208 |
+| Approved by | **the head chef, 2026-11-02, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+D-V2-208 adds six primitives to the primitive table. The coverage law (invariant 42) demands an accepting and a
+rejecting witness for every anchor, and each primitive's rows follow `post`'s and `post_with_secret`'s:
+- the table's own two, `every_listed_primitive_resolves` (positive) and `every_listed_primitive_rejects_a_five_argument_call`
+  (negative), which sweep every entry;
+- for `put`, `patch` and `delete`: the egress client's `a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin`
+  (positive) and the judge's `an_entry_judges_its_host_then_its_path_then_its_method` (negative: a method the entry does
+  not name is refused);
+- for the `_with_secret` forms: `a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience` (positive) and
+  `a_secret_outside_its_audience_is_refused_before_anything_is_resolved` (negative).
+
+**Why this is not an RFC**
+
+The primitives are additive (`STABILITY.md` §1): no program that checked changes its answer, and an entry naming no
+methods allows GET alone, so no grant written before widens. `PRIM_TABLE_VERSION` moves from 8 to 9 by its own rule.
+
+**Verified before the change**
+
+1. The four new egress and end-to-end tests are green; mutants M1056–M1071 turn their witnesses red (`V2_LOG.md`).
+2. `delulu-conform --coverage`: *PASS: 100% anchor coverage*, 366 of 366, 157 codes. `--reference` regenerated the
+   reference (the primitive chapter's six rows, 92 of 92).
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- tests/conformance/witnesses.toml
+```
+— together with the six primitive-table entries, or the coverage gate fails on six unwitnessed anchors.

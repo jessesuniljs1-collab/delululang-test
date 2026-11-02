@@ -305,3 +305,9 @@ skip branch, §11.2).
   performed by the interpreter's own `post`; the host's gate asks the custody by its method (`custody_allows_by`).
   And `post_with_secret` (`delulu:cap.http_post_with_secret`, through one host helper with `get_with_secret`). Next: PUT,
   PATCH and DELETE, each a primitive of its own when a program needs one.
+  **Step (d)'s third slice built 2026-11-02 (on-demand routine run 18, D-V2-208): `put`, `patch` and `delete`**, each with a
+  `_with_secret` form — judged by its method wherever a POST is, from one list (`prim::HTTP_REQUESTS`) that every check
+  and both engines read; six WASM imports emitted from one table and performed by two host helpers; a redirect changing
+  a method by the Fetch standard's rule (a 301 or 302 a POST alone, a 303 every method but GET and HEAD), and a method
+  other than GET never sent to another origin (`method-elsewhere`). `PRIM_TABLE_VERSION` 9. **P9-05 is complete**: no
+  `head` primitive, since a program is answered a body and never a response's headers (D-V2-208 item 6).

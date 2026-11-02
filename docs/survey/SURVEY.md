@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 198587 |
+| Rust lines | 199342 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 303 |
-| Markdown lines | 94722 |
+| Markdown lines | 95040 |
 | DeluluLang programs | 258 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1614 / 18615 |
+| Nodes / edges in this map | 1614 / 18651 |
 | Open discrepancies | 43 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 48009 lines
+- **Modules:** 44 files, 48011 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -137,7 +137,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/schema.rs` | 1057 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 896 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 | `src/toolchain.rs` | 167 | P4-02: `delulu toolchain --json` — what this toolchain IS, as data. |
-| `src/within.rs` | 1633 | P9-01 — `delulu authority FILE --within BOUNDARY` (`V2_OPENSHELL_STUDY.md` §4.8, `V2_P9_DESIGN.md`). |
+| `src/within.rs` | 1635 | P9-01 — `delulu authority FILE --within BOUNDARY` (`V2_OPENSHELL_STUDY.md` §4.8, `V2_P9_DESIGN.md`). |
 
 ### `delulu-atlas`
 
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 14536 lines
+- **Modules:** 19 files, 14548 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -179,7 +179,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/lib.rs` | 85 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
 | `src/netscope.rs` | 753 | P9-05 (a), D-V2-138 — a `net` scope entry is `HOST` or `HOST/PATTERN`, and this is the one reading of it: the … |
 | `src/ocsf.rs` | 358 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
-| `src/path.rs` | 615 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
+| `src/path.rs` | 627 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/proposal.rs` | 408 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |
 | `src/secrets.rs` | 908 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 53 | The pluggable TTL clock (ruling 3: determinism injection). |
@@ -192,22 +192,22 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 17170 lines
+- **Modules:** 18 files, 17196 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 4742 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 4757 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1539 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
-| `src/dir.rs` | 863 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
+| `src/dir.rs` | 865 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
 | `src/lib.rs` | 2504 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 573 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
 | `src/manifest.rs` | 380 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 236 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |
 | `src/plugin.rs` | 580 | `kind = "plugin"` packages: the plugin manifest tables and the manifest-vs-code fence |
-| `src/prim_table.rs` | 436 | The declarative primitive-table index (Stage 9, invariant 42 — the coverage law). |
+| `src/prim_table.rs` | 445 | The declarative primitive-table index (Stage 9, invariant 42 — the coverage law). |
 | `src/program.rs` | 593 | Whole-program (multi-module) checking (Stage 2, §5). Stage 1's `check_source` handles one |
 | `src/rcap_check.rs` | 1873 | The reference-capability checking PASS (Stage 7, phases 7c–7f) — the second checking axis. |
 | `src/rcaps.rs` | 737 | Reference-capability core (Stage 7, spec §3) — Pony's production-proven system, adopted |
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 25 files, 24700 lines
+- **Modules:** 25 files, 24891 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -317,15 +317,15 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/custody.rs` | 402 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 288 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
 | `src/device.rs` | 1436 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
-| `src/egress.rs` | 1409 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
-| `src/egress/tests.rs` | 1376 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
+| `src/egress.rs` | 1435 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
+| `src/egress/tests.rs` | 1515 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 456 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2987 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/interp.rs` | 2979 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 459 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2222 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 484 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
-| `src/prim.rs` | 2156 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
+| `src/prim.rs` | 2190 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 328 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
 | `src/scrub.rs` | 108 | RW 4.67: a secret's bytes leave no copy behind in this process once a send is done. |
 | `src/sim.rs` | 399 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
@@ -384,16 +384,16 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 13921 lines
+- **Modules:** 9 files, 14100 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 265 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 344 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 6412 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 6510 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 439 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 3332 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/host.rs` | 3413 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 1196 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 | `src/reify.rs` | 449 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |

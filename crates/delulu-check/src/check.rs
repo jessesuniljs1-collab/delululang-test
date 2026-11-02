@@ -2536,8 +2536,9 @@ impl<'a> Checker<'a> {
                     Some((Type::result(Type::Str, net), Some(Effect::Net), None))
                 }
                 // P9-05 (d), D-V2-183: a POST with headers and a body. The URL stays argument ONE (as `get_with`'s), and
-                // the request is judged by its method against the grant's methods at every check the URL is.
-                "post" => {
+                // the request is judged by its method against the grant's methods at every check the URL is. A PUT and a
+                // PATCH take the same arguments (D-V2-208).
+                "post" | "put" | "patch" => {
                     self.expect_arg(args, 0, &Type::Str, span);
                     self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
                     self.expect_arg(args, 2, &Type::Str, span);
@@ -2545,12 +2546,26 @@ impl<'a> Checker<'a> {
                 }
                 // And a POST carrying one `Secret[Str]` in one header, as `get_with_secret` carries it: never declassified,
                 // sent only to the audience its grant names. The body stays the last argument, a plain `Str`.
-                "post_with_secret" => {
+                "post_with_secret" | "put_with_secret" | "patch_with_secret" => {
                     self.expect_arg(args, 0, &Type::Str, span);
                     self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
                     self.expect_arg(args, 2, &Type::Str, span);
                     self.expect_arg(args, 3, &Type::Secret(Box::new(Type::Str)), span);
                     self.expect_arg(args, 4, &Type::Str, span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
+                // P9-05 (d), D-V2-208: a DELETE carries no body — `get_with`'s arguments, judged by its method; and its
+                // `_with_secret` form, `get_with_secret`'s.
+                "delete" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
+                "delete_with_secret" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
+                    self.expect_arg(args, 2, &Type::Str, span);
+                    self.expect_arg(args, 3, &Type::Secret(Box::new(Type::Str)), span);
                     Some((Type::result(Type::Str, net), Some(Effect::Net), None))
                 }
                 _ => None,

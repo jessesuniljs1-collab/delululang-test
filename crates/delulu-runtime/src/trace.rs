@@ -252,11 +252,7 @@ pub fn effect_for(cap_kind: &str, method: &str) -> Option<&'static str> {
         ("Console", "readline") => Some("Read"),
         ("FsRead", "read_text") | ("FsRead", "list_dir") => Some("Read"),
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => Some("Write"),
-        ("Http", "get")
-        | ("Http", "get_with")
-        | ("Http", "get_with_secret")
-        | ("Http", "post")
-        | ("Http", "post_with_secret") => Some("Net"),
+        ("Http", m) if crate::prim::is_http_request(m) => Some("Net"),
         ("Clock", "now_ms") => Some("Clock"),
         ("Rand", "int") | ("Rand", "float") => Some("Rand"),
         ("Secret", "expose") => Some("Declassify"),
@@ -375,6 +371,10 @@ mod tests {
         assert_eq!(effect_for("Http", "post"), Some("Net"));
         assert_eq!(effect_for("Http", "post_with_secret"), Some("Net"));
         assert_eq!(effect_for("Http", "get_with_secret"), Some("Net"));
+        for m in ["put", "put_with_secret", "patch", "patch_with_secret", "delete", "delete_with_secret"] {
+            assert_eq!(effect_for("Http", m), Some("Net"), "{m}");
+        }
+        assert_eq!(effect_for("Http", "head"), None, "no `head` request exists");
         assert_eq!(effect_for("Clock", "now_ms"), Some("Clock"));
         assert_eq!(effect_for("Rand", "int"), Some("Rand"));
         assert_eq!(effect_for("Rand", "float"), Some("Rand"));
