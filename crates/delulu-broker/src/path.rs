@@ -17,7 +17,9 @@
 
 /// One resolved path segment. A canonicalized relative path is a run of zero-or-more [`Seg::Up`]
 /// followed by zero-or-more [`Seg::Name`]; `Up` never follows a `Name` (the `..` already popped it).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The order is only a map key's (the generated-paths test keeps one class per resolved path); no
+/// decision reads it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Seg {
     /// The POSIX filesystem root, from a leading `/`.
     Root,
@@ -418,22 +420,25 @@ mod tests {
     /// nobody imagined has to satisfy them too.
     #[test]
     fn canonicalization_laws_hold_on_generated_paths() {
+        // Every value below is computed ONCE (on-demand routine run 19). Under Miri this test was
+        // 8,119 s of `delulu-broker`'s 11,386 s on `launch/2.0.0` `1487163`'s `everything` run
+        // (41383380395), 46 minutes short of the job's 240-minute cap: law 4 searched its first
+        // 400 classes one by one for each of the 20,000 paths, law 5 canonicalized both sides of
+        // every one of its 8,100 pairs, and each path was resolved four times. The same paths, the
+        // same laws, the same assertions — a map lookup, and each canonical form made once.
         let mut rng = Rng(0x0D31_11A1_5EED_1234);
-        let mut seen: Vec<(Vec<Seg>, String)> = Vec::new();
+        let mut seen: std::collections::BTreeMap<Vec<Seg>, String> = std::collections::BTreeMap::new();
         for i in 0..20_000u32 {
             let p = random_path(&mut rng);
+            let segs = resolve(&p);
             let c = canonicalize(&p);
 
             // 1. Authority-preserving: canonicalizing cannot change the resolved path.
-            assert_eq!(
-                resolve(&c),
-                resolve(&p),
-                "iteration {i}: canonicalize({p:?}) = {c:?} resolves differently — authority CHANGED"
-            );
+            assert_eq!(resolve(&c), segs, "iteration {i}: canonicalize({p:?}) = {c:?} resolves differently — authority CHANGED");
             // 2. Idempotent, or "store the canonical form" is not a well-defined instruction.
             assert_eq!(canonicalize(&c), c, "iteration {i}: not idempotent at {p:?}");
             // 3. An anchor may only ever appear first — `join_tail`'s totality rests on this.
-            for (j, s) in resolve(&p).iter().enumerate() {
+            for (j, s) in segs.iter().enumerate() {
                 assert!(
                     !(matches!(s, Seg::Root | Seg::Drive(_)) && j != 0),
                     "iteration {i}: {p:?} resolved an anchor at index {j}"
@@ -442,22 +447,27 @@ mod tests {
             // 4. Completeness: equal resolved segments ⟹ identical canonical spelling. Checked
             //    against everything generated so far, which is what makes it a real quotient claim
             //    rather than a per-input one.
-            let segs = resolve(&p);
-            if let Some((_, prev)) = seen.iter().find(|(s, _)| *s == segs) {
+            if let Some(prev) = seen.get(&segs) {
                 assert_eq!(*prev, c, "iteration {i}: {p:?} resolves like an earlier path but canonicalizes apart");
             } else if seen.len() < 400 {
-                seen.push((segs, c.clone()));
+                seen.insert(segs, c);
             }
         }
 
         // 5. Containment decisions are identical before and after, over every pair of a sample.
         let mut rng = Rng(0x00C0_FFEE_1234_5678);
-        let sample: Vec<String> = (0..90).map(|_| random_path(&mut rng)).collect();
-        for a in &sample {
-            for b in &sample {
+        let sample: Vec<(String, String)> = (0..90)
+            .map(|_| {
+                let p = random_path(&mut rng);
+                let c = canonicalize(&p);
+                (p, c)
+            })
+            .collect();
+        for (a, ca) in &sample {
+            for (b, cb) in &sample {
                 assert_eq!(
                     is_descendant_or_equal(a, b),
-                    is_descendant_or_equal(&canonicalize(a), &canonicalize(b)),
+                    is_descendant_or_equal(ca, cb),
                     "containment of {a:?} in {b:?} flipped under canonicalization"
                 );
             }
@@ -528,10 +538,13 @@ mod tests {
     /// authorities hash identically in the audit chain (P17-F3).
     #[test]
     fn equivalent_spellings_get_one_representative() {
-        for a in CORPUS {
-            for b in CORPUS {
-                if resolve(a) == resolve(b) {
-                    assert_eq!(canonicalize(a), canonicalize(b), "{a:?} and {b:?} resolve alike but canonicalize apart");
+        // Each spelling resolved and canonicalized once, then every pair compared (on-demand routine
+        // run 19: this resolved both sides of all 5,929 pairs afresh, 143 s under Miri).
+        let each: Vec<(&str, Vec<Seg>, String)> = CORPUS.iter().map(|p| (*p, resolve(p), canonicalize(p))).collect();
+        for (a, ra, ca) in &each {
+            for (b, rb, cb) in &each {
+                if ra == rb {
+                    assert_eq!(ca, cb, "{a:?} and {b:?} resolve alike but canonicalize apart");
                 }
             }
         }
@@ -579,14 +592,13 @@ mod tests {
     /// consequence of authority-preservation, checked over every ordered pair in the corpus.
     #[test]
     fn canonicalizing_never_changes_a_containment_decision() {
-        for c in CORPUS {
-            for p in CORPUS {
+        // Each spelling canonicalized once, then every ordered pair judged both ways (on-demand
+        // routine run 19: both sides of all 5,929 pairs were canonicalized afresh, 513 s under Miri).
+        let each: Vec<(&str, String)> = CORPUS.iter().map(|p| (*p, canonicalize(p))).collect();
+        for (c, cc) in &each {
+            for (p, cp) in &each {
                 let raw = is_descendant_or_equal(c, p);
-                assert_eq!(
-                    is_descendant_or_equal(&canonicalize(c), &canonicalize(p)),
-                    raw,
-                    "containment of {c:?} in {p:?} flipped under canonicalization"
-                );
+                assert_eq!(is_descendant_or_equal(cc, cp), raw, "containment of {c:?} in {p:?} flipped under canonicalization");
             }
         }
     }

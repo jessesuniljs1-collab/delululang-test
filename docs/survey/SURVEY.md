@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 199330 |
+| Rust lines | 199342 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 302 |
 | Markdown lines | 94821 |
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 14536 lines
+- **Modules:** 19 files, 14548 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -179,7 +179,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/lib.rs` | 85 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
 | `src/netscope.rs` | 753 | P9-05 (a), D-V2-138 — a `net` scope entry is `HOST` or `HOST/PATTERN`, and this is the one reading of it: the … |
 | `src/ocsf.rs` | 358 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
-| `src/path.rs` | 615 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
+| `src/path.rs` | 627 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/proposal.rs` | 408 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |
 | `src/secrets.rs` | 908 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 53 | The pluggable TTL clock (ruling 3: determinism injection). |
