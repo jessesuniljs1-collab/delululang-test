@@ -7420,3 +7420,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Added, deleted, renamed: nothing.
 - **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says; the last mutant is now M1043.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-02 — #121 landed; `launch/2.0.0` `add7f18` and `e361f0b`; `everything` dispatched (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WAoHjZ5jxkZ1RtCCft`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0102`   Pull request: opened with this commit.
+- **Landed on `master`**: #121 at `bbcaade` by fast-forward, on its green run `41345208398`. Its branch was deleted from
+  `origin`.
+- `launch/2.0.0`: `add7f18` (master `f6f1306`; INDEX-TARGET-1 *Breaking*, DL0414 additive) and `e361f0b` (master
+  `bbcaade`; RENAME-TYPES-1), each with `LAUNCH-GATES=ok` and criterion 2 at 360/360. On `e361f0b`, `everything`
+  `41347076820` and the release dry run `41347080030` were dispatched; neither is read yet.
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md`, `docs/AI_ONBOARDING.md` (section 10),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 now says. First, read `41347076820` and
+  `41347080030` to their end, then cite them in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
+- Survey and doctor (after the last edit): in the commit message.
