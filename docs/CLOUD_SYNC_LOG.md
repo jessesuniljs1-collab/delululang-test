@@ -7549,7 +7549,12 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   its target re-run green, 266 passed); `scripts/clippy.sh` clean; mutants M1056–M1071 red, the controls green;
   `witness.yml` at `cd55b59`: macOS `41392735108` and Windows `41392737821` (the five new end-to-end tests named, `ok`),
   macOS `41392740882` and Windows `41392744038` (the three new egress tests named, `ok`, the TLS test among them).
-  `master`'s push run on the records commit: PUSH_RUN.
+  **The milestone's push run** `41394552057` on `4e63eb7` (the records commit, which holds `cd55b59`): 14 success, 2 skipped
+  (`miri-slow` and `heavy-gates`, a push run's usual); `openshell` `41394552103` and `ocsf` `41394552121` success.
+  `actors_pingpong` MEASURED on arm64 (2.92x where the machine gave 3.43x, against 1.28x, passed), NOT MEASURED on Ubuntu
+  and Windows (no perfectly parallel work) and macOS (3 hardware threads); disk Ubuntu 82 → 67 GB free, Windows 144 → 129,
+  macOS 92 → 89 GiB, arm64 104 → 91. `launch/2.0.0`'s `41383380395` was still running at the close (17 of 18; the
+  broker's Miri at 2 h 25 min).
 - **Loop engineering:** CLOUD_ROUTINE step 5: a mutant that swaps an expression for `None` names its type (M1061 read
   `BUILD-ERROR` first); a value a program hands its client, which no test server can see, is witnessed by a refusal the
   client makes on it before connecting (the PUT body by the 1 MiB limit — the mutant that dropped it survived every
@@ -7560,10 +7565,10 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.4 (a redirect changes a method by the Fetch standard's rule; a method other
   than GET never leaves the program's origin) and §11.5.
 - **Open / next, in order** (the inbox for the next session, routine or laptop):
-  1. Read `launch/2.0.0` `1487163`'s `everything` run `41383380395` to its end (at this entry's writing 17 of 18 jobs
-     success, the broker's Miri running past two hours), then cite it and the dry run `41383382785` (read green) in
-     CHECKLIST-2.0 criteria 1, 3, 4 and 8, in a records commit on `launch/2.0.0` — unless this run's closing commit says
-     it did.
+  1. Read `launch/2.0.0` `1487163`'s `everything` run `41383380395` to its end (at this entry's close 17 of 18 jobs
+     success, the broker's Miri at 2 h 25 min), then cite it and the dry run `41383382785` (read green) in CHECKLIST-2.0
+     criteria 1, 3, 4 and 8, in a records commit on `launch/2.0.0` (or fold it into item 2's merge). Read `master`'s push
+     run on this entry's closing commit (records only).
   2. Bring `launch/2.0.0` current with `master` (release procedure step 1): D-V2-208's CHANGELOG section folded and judged
      additive against `STABILITY.md` §1 and v1.0.0 (v1.0.0 had `get` alone; the primitive table's version moves 8 → 9, as
      D-V2-183's 7 → 8 did, which the fold recorded as a *Changed* entry and not in the *Breaking* paragraph — judge it

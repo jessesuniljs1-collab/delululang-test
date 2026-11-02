@@ -11656,4 +11656,6 @@ tripwire doing its job, which the slice's own tests had not run. Updated, its ta
 `41392735108` and Windows `41392737821` (`egress_cli`, `within_cli`, `broker_cli`, filter `_put`: the five new tests
 named, each `ok`), macOS `41392740882` and Windows `41392744038` (`delulu-runtime` `lib`: the three new egress tests named,
 each `ok`, the TLS test among them).
-**The push run** of the records commit on `master`: in this run's sync-log entry, or read by the next session.
+**The push run** `41394552057` on `4e63eb7` (the records commit, holding `cd55b59`): 14 success, 2 skipped (`miri-slow`,
+`heavy-gates`); `openshell` `41394552103` and `ocsf` `41394552121` success; `actors_pingpong` measured on arm64 (2.92x
+against 1.28x, passed), not measured on the other three.
