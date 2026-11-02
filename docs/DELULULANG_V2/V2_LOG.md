@@ -11562,3 +11562,64 @@ program it produced did not check.
 **Evidence:** `lsp_cli` `rename_finds_a_type_and_an_effect_wherever_one_is_written` renames a type and an effect, applies
 the edits the server returns, and checks the program. It was red before. Mutants M1038–M1043 drop one arm each, and
 each is red. The `lsp_cli` suite passes, 40 tests.
+
+## 2026-11-02 — the laptop: #119–#121 landed and folded into `launch/2.0.0`; the actor probe in full
+
+**Landed on `master`** by fast-forward, each on its green run:
+- #119, INDEX-TARGET-1: `11df603`, run `41341255443`.
+- #120, DL0414: `f6f1306`, run `41343108643`.
+- #121, RENAME-TYPES-1: `bbcaade`, run `41345208398`.
+
+**`launch/2.0.0`, merged twice**:
+- `add7f18` (master `f6f1306`) folded INDEX-TARGET-1 and DL0414. INDEX-TARGET-1 joins the *Breaking* paragraph,
+  judged against v1.0.0's own code: its `check_lvalue` ignored the index, so a program 1.x checked is refused under
+  2.0.0. Each such program broke a rule 1.x's reference already stated, but a refused program is a surface
+  `STABILITY.md` §1 holds stable. DL0414 is additive.
+- `e361f0b` (master `bbcaade`) folded RENAME-TYPES-1, which is not *Breaking*.
+- Criterion 2 was re-measured on each: 360/360, diag 157. `scripts/launch-gates.sh`: `LAUNCH-GATES=ok` on each.
+- `e361f0b`'s `everything` run `41347076820` and its release dry run `41347080030` were dispatched, and are unread at
+  this entry.
+
+**The actor probe, in full.** RENAME-TYPES-1's entry said a capability cannot reach an actor, probed with `val` on the
+constructor's parameter (DL1601). The value was then annotated, as DL1601 asks. Each spelling was refused:
+- `let p: val Cap[Python] = py`: DL1603;
+- `let p: iso Cap[Python] = recover { py }` sent with `consume p`: DL1605 and DL1603;
+- `let p: tag Cap[Python] = py`: DL1603.
+So the foreign-report and plugin-list walks, which visit functions and constants alone, miss nothing an actor can reach.
+
+## 2026-11-02 — on-demand routine run 17: DL0414's repair finished (D-V2-207); RENAME-CAPTURE-1 found in the draft
+
+**Housekeeping.** `master` was at `bbcaade` and every run since the last record was green: #122's `41347267939`,
+`bbcaade`'s push run `41346896446`, and `launch/2.0.0` `e361f0b`'s `everything` `41347076820` (18 of 18 success; the
+broker's Miri 1 h 44 min, against 3 h 07 min on the run before) and release dry run `41347080030` (the four packages
+success, the release job skipped: no tag). #122 (records) landed by fast-forward (`d75b65b`). The Survey matched the tree
+(1613 nodes) and `doctor --check` passed (26 checks).
+
+**The milestone.** The laptop's last session stopped `laptop/unread-repair` (`3543faa`) when the machine ran short of
+memory, before any suite ran: DL0414 (D-V2-206) gained a repair, `prefix-underscore`, which inserts `_` at the binding
+and at each assignment to it, marked `requires_human`. The newest autosave snapshot (`521f2ac`) holds the same code. This
+run merged `master` into it (`5037cc7`), read it as a stranger's, and finished it (`0c3fad1`):
+- **RENAME-CAPTURE-1, witnessed on the draft's binary.** The draft said the rename changes nothing the program does.
+  With `let _x = 5`, `let x = 1`, then `_x` printed, the repaired program printed `value: 1` (the original `value: 5`)
+  and checked clean; with `var x = 0`, `var _x = 7`, `x = 2`, it printed 2 for 7. Fixed: `FnCtx` keeps a `NameClock`,
+  when each name was last met (every `lookup`, `lookup_to_assign` and `bind`; a global is asked of `lookup` first), each
+  `let` records the clock when bound, and the repair is offered only if no `_x` was met before its block closed.
+- **The editor showed it as nothing.** `lsp.rs` dropped the edits of every `requires_human` repair. It now offers the
+  edits of one that has them, never preferred, titled *"a human decides — review before applying"*. The documents that
+  said such a repair never carries an edit were corrected (`fix.rs`, STAGE8 §3, `editors.md`, `for-agents.md`), and
+  DL0414's explanation names the repair.
+
+**Mutants.** The draft's M1044 (an assignment never noted), M1045 (the binding not renamed) and M1046 (no human asked),
+re-run, and M1047 (the guard removed), M1048 (`lookup` meets nothing), M1051 (the clock read as 0 at the binding), M1052
+(the server drops the edits again), M1053 (preferred), M1054 (the title) and M1055 (a name met twice keeps its first
+time) were red. **M1049 (`lookup_to_assign` meets nothing) and M1050 (`bind` meets nothing) survived**: every `_x` in the
+witnesses was also read. Two shapes were added, an outer `_x` only assigned inside the binding's block (renamed, the
+outer `_x` read after it stays 7 for 3) and an inner `_x` only bound before a write to `x` (renamed, the repaired program
+is refused DL0401), each confirmed on the binary by hand; both mutants were then red, and the control green.
+
+**`core_invariance`.** Three reject programs' DL0414 (`DL1602_consume_in_an_index_target`, `DL1602_use_after_consume`,
+`DL1605_recover_captures_ref`) each gain the repair, its one edit at the binding's first byte, in the JSON and the human
+surface; 3 lines removed (`"repairs": []`), 60 added, nothing else. Judged and blessed.
+
+**Evidence.** The full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the tree unmoved); `scripts/clippy.sh` clean. The new tests on the other runners, `witness.yml` at `0c3fad1` on the session's branch with `fix_cli lsp_cli`: macOS `41381373785` (14 and 41 passed, both new tests named) and Windows `41381376441` (success; `lsp_cli` 41 passed with the new test named, `fix_cli` above the tail read and covered by the job's success). The push run of `master` is read in this run's `docs/CLOUD_SYNC_LOG.md` entry.
+

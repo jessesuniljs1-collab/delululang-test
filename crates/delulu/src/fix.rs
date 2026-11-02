@@ -15,8 +15,10 @@
 //!   person. You may accept one, but you must name it — `--accept-widening <repair-id>` — because
 //!   a blanket flag on a batch command means "widen authority everywhere, unattended", and that
 //!   flag ends up in a CI script.
-//! - **`requires_human` repairs carry no edits at all.** They are documentation of a decision
-//!   someone has to make; there is nothing to apply and nothing is pretended.
+//! - **`requires_human` repairs are never applied.** Most carry no edits at all: they are
+//!   documentation of a decision someone has to make, and nothing is pretended. One that carries
+//!   edits (DL0414's `prefix-underscore`, D-V2-207) changes nothing the program does and may still
+//!   hide a mistake, so it is a person's to choose — in an editor, or by reading `check --json`.
 //! - **Only `Exact` repairs are applied.** `Safe` and `Suggest` are good guesses, and this command
 //!   does not guess into your source. They are reported so you can see them.
 
@@ -44,7 +46,8 @@ enum Verdict {
     AppliedWidening,
     /// It would widen what the program may do. Nameable with `--accept-widening`, never automatic.
     Widening,
-    /// Documentation of a decision, not an edit — there is nothing to apply.
+    /// A human decides: a repair that documents a decision and carries no edit, or one whose edits change nothing the
+    /// program does but may hide a mistake (DL0414's `prefix-underscore`). This command applies neither.
     NeedsHuman,
     /// Not `Exact`: a good guess is still a guess, and this command does not guess into source.
     NotExact,
@@ -77,7 +80,7 @@ impl Verdict {
                  `--accept-widening`"
             }
             Verdict::Widening => "would widen what this program may do — a tool must not decide that for you",
-            Verdict::NeedsHuman => "needs a human decision; it carries no edit to apply",
+            Verdict::NeedsHuman => "needs a human decision; this command applies none, and `delulu check` shows any edit",
             Verdict::NotExact => "is a suggestion, not a mechanical certainty",
             Verdict::Overlaps => "touches bytes another repair in this run already changed",
             Verdict::Unusable => "names bytes outside this file — please report this as a bug",

@@ -53,6 +53,19 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### DL0414 offers to rename a binding never read, where that changes nothing, 2026-11-02
+
+- **Added: DL0414 carries a repair, `prefix-underscore`** (D-V2-207, RW 2.32). It names the binding and every assignment
+  to it `_x`, which says the binding is meant to go unread and changes nothing the program does. A person decides: an
+  unread binding may be a mistake the rename would hide, so the repair is `requires_human` and `delulu fix` never
+  applies it. **It is not offered where `_x` already means something inside the binding's scope** (an outer `_x` read
+  or assigned there, a later `_x` an assignment would reach, a function or constant `_x` called or read), because there
+  the rename would change what the program does. A new repair id is additive (`STABILITY.md` §1).
+- **Changed: the editor offers the edits of a repair a human decides.** The language server dropped the edits of every
+  `requires_human` repair, so such an action did nothing. One that carries edits now offers them, is never preferred
+  (a client's automatic fix never takes it) and says *"a human decides — review before applying"*; one with no edit is
+  documentation, as before. `requires_human` stays in the action's `data` for a harness to refuse by policy.
+
 ### the editor renames a type or an effect everywhere it is written, 2026-11-02
 
 - **Fixed: renaming a type or an effect in the editor left most of its uses behind** (RENAME-TYPES-1, RW 2.31). The

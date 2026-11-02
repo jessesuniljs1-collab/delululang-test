@@ -2385,6 +2385,101 @@ mod unread_binding_tests {
         }
     }
 
+    /// **D-V2-207.** The repair `prefix-underscore` names the binding and every assignment to it `_x`. Applied to each
+    /// shape above, the program checks with no DL0414 and no error, and a `var` only written has each write renamed.
+    #[test]
+    fn the_repair_names_the_binding_and_each_assignment_to_it_unread() {
+        let apply = |src: &str| -> String {
+            let c = check_source(0, src);
+            let mut edits: Vec<(u32, String)> = c
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == "DL0414")
+                .flat_map(|d| {
+                    let r = d.repairs.iter().find(|r| r.id == "prefix-underscore").expect("DL0414 offers prefix-underscore");
+                    assert!(r.requires_human && !r.authority_widening, "a human decides; nothing widens");
+                    r.edits.iter().map(|e| {
+                        assert_eq!(e.start_byte, e.end_byte, "an insertion");
+                        (e.start_byte, e.insert.clone())
+                    })
+                })
+                .collect();
+            edits.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+            let mut out = src.to_string();
+            for (at, insert) in edits {
+                out.insert_str(at as usize, &insert);
+            }
+            out
+        };
+        for body in [
+            "fn f() -> Int {\nlet x = 1\n0\n}\n",
+            "fn f() -> Int {\nvar n = 0\nn = 5\nn = 6\n0\n}\n",
+            "fn f() -> Int {\nlet x = 1\nlet x = 2\nx\n}\n",
+            "fn f(b: Bool) -> Int {\nif b {\nlet y = 3\n0\n} else {\n1\n}\n}\n",
+            "fn f() -> Int {\nvar n = 0\nlet g = fn() -> Int {\nn = 1\n0\n}\ng()\n}\n",
+            "fn f() -> Int {\nfor i in [1, 2] {\nlet w = i\n}\n0\n}\n",
+        ] {
+            let fixed = apply(&format!("{HEAD}{body}"));
+            let (found, errors) = unread(&fixed);
+            assert!(errors.is_empty() && found.is_empty(), "the repaired program checks clean: {errors:?} {found:?}\n{fixed}");
+        }
+        assert!(
+            apply(&format!("{HEAD}fn f() -> Int {{\nvar n = 0\nn = 5\nn = 6\n0\n}}\n")).contains("var _n = 0\n_n = 5\n_n = 6\n"),
+            "each assignment is renamed with the binding"
+        );
+    }
+
+    /// **D-V2-207, the capture.** Renaming `x` to `_x` changes what the program does when `_x` already means something
+    /// inside the binding's scope: `let _x = 5`, `let x = 1`, then `_x` read — the renamed binding shadows the first,
+    /// and the program printed 1 where it printed 5, and checked clean (the laptop's draft, 2026-11-02). So the repair
+    /// is withheld whenever the name `_x` is read, written or bound between the binding and the end of its block, and
+    /// offered when `_x` is met only before the binding (its own value among those) or after its block has closed.
+    #[test]
+    fn the_repair_is_withheld_where_the_new_name_is_already_spoken_for() {
+        let offered = |src: &str| -> Vec<(String, bool)> {
+            let c = check_source(0, src);
+            assert!(!c.diagnostics.iter().any(|d| d.is_error()), "the program checks: {src}");
+            c.diagnostics
+                .iter()
+                .filter(|d| d.code == "DL0414")
+                .map(|d| {
+                    let name = d.message.split('`').nth(1).unwrap_or_default().to_string();
+                    (name, d.repairs.iter().any(|r| r.id == "prefix-underscore"))
+                })
+                .collect()
+        };
+        for (what, src) in [
+            ("an earlier `_x` read after", "fn f() -> Int {\nlet _x = 5\nlet x = 1\n_x\n}\n"),
+            ("a later `_x` that a write would reach", "fn f() -> Int {\nvar x = 0\nvar _x = 7\nx = 2\n_x\n}\n"),
+            ("a parameter `_x` read after", "fn f(_x: Int) -> Int {\nlet x = 1\n_x\n}\n"),
+            ("a function `_x` called after", "fn _x() -> Int {\n3\n}\nfn f() -> Int {\nlet x = 1\n_x()\n}\n"),
+            ("a constant `_x` read after", "let _x: Int = 3\nfn f() -> Int {\nlet x = 1\n_x\n}\n"),
+            ("`_x` read in a closure after", "fn f() -> Int {\nlet _x = 5\nlet x = 1\nlet g = fn() -> Int {\n_x\n}\ng()\n}\n"),
+            (
+                "an inner `_x` before a write",
+                "fn f(b: Bool) -> Int {\nvar x = 0\nif b {\nvar _x = 1\nx = 2\n_x\n} else {\n0\n}\n}\n",
+            ),
+            // Met only as an assignment's target: renamed, `_x = 3` would write the inner binding, and the outer `_x`
+            // read after the block would stay 7 (M1049).
+            ("an outer `_x` only assigned", "fn f(b: Bool) -> Int {\nvar _x = 7\nif b {\nvar x = 0\n_x = 3\n}\n_x\n}\n"),
+            // Met only as a binding: renamed, `x = \"b\"` would assign a `Str` to the inner `_x`, an `Int`, and the
+            // repaired program would not check (M1050).
+            ("an inner `_x` only bound", "fn f(b: Bool) -> Int {\nvar x = \"a\"\nif b {\nvar _x = 1\nx = \"b\"\n}\n0\n}\n"),
+        ] {
+            assert_eq!(offered(&format!("{HEAD}{src}")), vec![("x".to_string(), false)], "{what}: warned, and no repair");
+        }
+        for (what, src) in [
+            ("`_x` met only before the binding", "fn f() -> Int {\nlet _x = 5\nlet y = _x\nlet x = 1\ny\n}\n"),
+            ("`_x` in the binding's own value", "fn f() -> Int {\nlet _x = 5\nlet x = _x + 1\n0\n}\n"),
+            (
+                "`_x` read after the binding's block closed",
+                "fn f(b: Bool) -> Int {\nlet _x = 5\nlet r = if b {\nlet x = 1\n0\n} else {\n1\n}\nr + _x\n}\n",
+            ),
+        ] {
+            assert_eq!(offered(&format!("{HEAD}{src}")), vec![("x".to_string(), true)], "{what}: warned, and repaired");
+        }
+    }
+
     /// Every binding here is read, so none is reported: in an expression, only in an assignment's index (INDEX-TARGET-1),
     /// as the base a field or an element is written through, only in a closure, in a loop's condition, by a later
     /// statement after it was written, from either branch after a shadow in one, and one whose name begins with `_`.

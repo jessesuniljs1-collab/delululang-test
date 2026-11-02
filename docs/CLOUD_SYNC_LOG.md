@@ -7461,3 +7461,80 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Added, deleted, renamed: nothing.
 - **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 says; the last mutant is now M1043.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-02 — #121 landed; `launch/2.0.0` `add7f18` and `e361f0b`; `everything` dispatched (made on the laptop)
+- Session: `https://claude.ai/code/session_01Deh6WAoHjZ5jxkZ1RtCCft`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef).
+- Branch: `laptop/records-0102`   Pull request: opened with this commit.
+- **Landed on `master`**: #121 at `bbcaade` by fast-forward, on its green run `41345208398`. Its branch was deleted from
+  `origin`.
+- `launch/2.0.0`: `add7f18` (master `f6f1306`; INDEX-TARGET-1 *Breaking*, DL0414 additive) and `e361f0b` (master
+  `bbcaade`; RENAME-TYPES-1), each with `LAUNCH-GATES=ok` and criterion 2 at 360/360. On `e361f0b`, `everything`
+  `41347076820` and the release dry run `41347080030` were dispatched; neither is read yet.
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md`, `docs/AI_ONBOARDING.md` (section 10),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next, in order:** as `docs/AI_ONBOARDING.md` section 10 now says. First, read `41347076820` and
+  `41347080030` to their end, then cite them in CHECKLIST-2.0 criteria 1, 3, 4 and 8.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-11-02 — on-demand routine run 17: DL0414's repair `prefix-underscore` finished from the laptop's draft (D-V2-207, RW 2.32); RENAME-CAPTURE-1 found in it; #122 landed
+- Session: `https://claude.ai/code/session_01Deh6W8BVPCBBrYHB6SG18G`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command (`rustup` reported it unchanged).
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); the code first went to the session's
+  branch `claude/peaceful-carson-em21b1` for its runner witnesses. Pull request: none (#122, the laptop's, landed by
+  fast-forward).
+- Base: `bbcaade` (`master` at the start; its push run `41346896446` green).
+- **The milestone, named before building:** DL0414's `prefix-underscore` repair — the laptop's WIP `laptop/unread-repair`
+  (`3543faa`), stopped when the laptop ran short of memory before any suite ran — finished end to end: read adversarially,
+  defects witnessed and fixed, mutants, `core_invariance` judged, the full suite green, D-V2-207 and the records, landed on
+  `master` on a read green push run. **Delivered:** `0c3fad1` on `5037cc7` (the merge of `master` into the draft) on
+  `3543faa`. **RENAME-CAPTURE-1**, witnessed on the draft's binary: the rename to `_x` printed `value: 1` for
+  `value: 5` (and 2 for 7) where `_x` already meant something in the scope, and checked clean; now the repair is offered
+  only when no `_x` is met between the binding and the end of its block (`NameClock`). The editor dropped the edits of
+  every `requires_human` repair, so the action did nothing; now it offers them, never preferred. Four documents that said
+  such a repair never carries an edit are corrected. Mutants M1044–M1055 red (M1049 and M1050 first survived: two witness
+  shapes added). `core_invariance`: three reject programs' DL0414 each gain the repair, nothing else.
+- **Housekeeping:** every run since the last record read green: #122's `41347267939`, `bbcaade`'s push run
+  `41346896446`, `launch/2.0.0` `e361f0b`'s `everything` `41347076820` (18 of 18; the broker's Miri 1 h 44 min) and release
+  dry run `41347080030` (four packages success, release skipped). #122 landed: `bbcaade` → `d75b65b` by fast-forward. The
+  newest autosave snapshot `521f2ac` (20:35 UTC, base `bbcaade`) holds exactly `3543faa`'s four code files — it is in this
+  run's commits. The Survey matched the tree (1613 nodes, 18488 edges) and `doctor --check` passed (26 checks). `gh` is
+  installed (not used). No other branch was ahead of `master` with unrecorded work: `autosave/*`, `launch/2.0.0`,
+  `archive/*` and `rc/*` as before.
+- Commits on `master`: `d75b65b` (#122, the laptop's), `3543faa` (the laptop's draft), `5037cc7` (the merge), `0c3fad1` (the
+  code), then the records commit with this entry.
+- Files and folders (`git diff --name-status d75b65b..HEAD`):
+  M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-diag/src/codes.rs`,
+    `crates/delulu/src/fix.rs`, `crates/delulu/src/lsp.rs`, `crates/delulu/tests/fix_cli.rs`,
+    `crates/delulu/tests/lsp_cli.rs`, `tests/core-invariance/SNAPSHOT.txt`
+  M `docs/design/STAGE8_SPECIFICATION.md` (§3's code-action row; not entrenched), `docs/editors.md`, `docs/for-agents.md`
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md` (row 2.32), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+    (D-V2-207), `V2_LOG.md`, `V2_PHASE_STATUS.md` (row 17), `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_ROUTINE.md`
+    (steps 5), `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/`, `docs/survey/*`
+  Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the
+  tree unmoved); `scripts/clippy.sh` clean; mutants M1044–M1055 red, the control green; `witness.yml` at `0c3fad1` with
+  `fix_cli lsp_cli`: macOS `41381373785` and Windows `41381376441`, each green, the new tests named. **The push run** of
+  this commit: pending at this commit; it is read and recorded in this entry's closing commit.
+- **Loop engineering:** CLOUD_ROUTINE step 5: a guard several paths feed is witnessed once per path, in a shape where that
+  path alone carries the fact (M1049, M1050); a patch script's heredoc is quoted (this run's first records script ran
+  every backtick as a command, and its anchor check stopped it before any write).
+- **Redo on the laptop:** delete `laptop/records-0102` (`d75b65b`), `laptop/sandbox-fault-place` (`9a82bf9`),
+  `laptop/unread-repair` (`3543faa`) and this run's `claude/peaceful-carson-em21b1` from `origin` — each in `master`'s
+  history (`git merge-base --is-ancestor`, this run); the session's permission classifier refused `git push --delete`
+  (*"Git Destructive"*), as in runs 15 and 16.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RENAME-CAPTURE-1: a renaming repair is offered only where the new name
+  means nothing in the scope; witness a rename by running the program).
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. **Bring `launch/2.0.0` current with `master`** (step 4.3; this run goes on to it, and if it ends first, it is the next
+     session's first item): fold this run's CHANGELOG section with `scripts/launch-changelog.py` and judge it against
+     `STABILITY.md` §1 and v1.0.0 — a new repair id is add-only, and a code action that now carries an edit changes no
+     refusal, exit code or field, so it is additive; cite `e361f0b`'s `41347076820` and `41347080030` in criteria 1, 3, 4
+     and 8; criterion 2 (`scripts/launch-criterion-2.py`, 360 anchors); `scripts/launch-gates.sh`; dispatch `everything`
+     and the release dry run, and read them.
+  2. RW 3.24: a compiled form. Slots alone buy about a tenth (on-demand run 16's profile).
+  3. The broker's Miri: 1 h 44 min on `41347076820` (3 h 07 min on the run before), under the 240-minute cap.
+  4. *[laptop]* delete the four branches named under *Redo on the laptop*.
+  5. *[laptop]* the launch, only on the owner's word.

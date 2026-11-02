@@ -1072,8 +1072,10 @@ impl Server {
     }
 
     /// Every typed repair becomes a code action. Authority-widening repairs are ⚠-titled
-    /// and `isPreferred: false` with the flag surfaced in `data` (criterion 2);
-    /// `requires_human` repairs are documentation-only (no edit to apply).
+    /// and `isPreferred: false` with the flag surfaced in `data` (criterion 2). A
+    /// `requires_human` repair is never preferred: one with no edit is documentation of a
+    /// decision, and one with edits (DL0414's `prefix-underscore`, D-V2-207) offers them for a
+    /// person to choose, as a widening repair does, with the flag in `data` for a harness.
     fn code_actions(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
         let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else {
@@ -1093,8 +1095,10 @@ impl Server {
                 let widening = r.authority_widening;
                 let title = if widening {
                     format!("⚠ {} (widens authority — review)", r.id)
-                } else if r.requires_human {
+                } else if r.requires_human && r.edits.is_empty() {
                     format!("{} (requires a human decision — no automatic edit)", r.id)
+                } else if r.requires_human {
+                    format!("{} (a human decides — review before applying)", r.id)
                 } else {
                     r.id.to_string()
                 };
@@ -1114,7 +1118,7 @@ impl Server {
                         "requires_human": r.requires_human,
                     },
                 });
-                if !r.requires_human && !r.edits.is_empty() {
+                if !r.edits.is_empty() {
                     let edits: Vec<Value> = r
                         .edits
                         .iter()

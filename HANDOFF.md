@@ -1355,6 +1355,13 @@ spells the same thing?**
   `LValue::index_exprs` names the indices in the order they run. A new walk of a statement names every part the
   runtime evaluates; never write `Assign { value, .. }`. Search key: `Assign { value, .. }` and a
   `Stmt::Let { value, .. } | Stmt::Assign { value, .. }` arm.
+- **RENAME-CAPTURE-1 — a repair that renames is offered only where the new name means nothing in the scope** (on-demand
+  routine run 17, 2026-11-02, D-V2-207). The laptop's draft of DL0414's repair renamed an unread `x` to `_x` and called
+  it a change to nothing. With `let _x = 5` before it and `_x` read after, the renamed binding shadowed the first, and
+  the repaired program printed 1 where it printed 5, and checked clean; a later `var _x` took a write meant for `x`. A
+  rename is safe only when the new name is met nowhere between the binding and the end of its block, as a read, a
+  write or a binding, a function, a constant or a builtin included (`NameClock`). Witness a rename by RUNNING the program
+  before and after, not by checking it. Search key: a `Repair` whose edits insert into a name.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

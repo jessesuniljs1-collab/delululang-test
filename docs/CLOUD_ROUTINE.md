@@ -454,7 +454,9 @@ origin/autosave/dogfood:2026-10-24/_head-chef/VERIFIED.md` names each finding (A
 each agent's `REPORT.txt` beside it has the steps; it is the agents' data, verified on the binary before a word is used.
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
-Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step
+Collect the edits, assert each anchor exactly once against the files as they are, then write. Quote a patch script's heredoc (`<<'EOF'`, its paths
+passed through the environment): an unquoted one runs every backtick in the records as a command (on-demand run 17; the
+anchor check stopped it before any write). **Join a script's input step
 to it with `&&`, and never leave a dry run's dummy input where the real run reads it** (on-demand run 2: a heredoc that
 wrote the evidence file failed its own anchor check, the records script ran anyway on the dry run's `R`/`L`/`S`/`X`, and the
 placeholders were caught only by reading the result). **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
@@ -485,7 +487,10 @@ witness can fail at all. A wall no double mutant can reach is dead code (run 18,
 **A witness of a normalizing comparison spells the colliding pair both ways round** (run 23, M351: `Accept` then `accept`
 let a mutant that compared the WRITTEN name live; the non-canonical spelling must be the one the comparison reads).
 **A measurement that comes back clean is re-asked in the shape that failed** (on-demand run 14): RW 4.53's contention numbers were clean on the current binary, and the red team's F4 — the chain HELD, requests queued — still answered DL1401 at 15 s. Re-run every shape a row's history names before closing it; and a witness of an ORDER places every member it is about (M970, the quarantine left out of the lane, survived a witness that placed only the e-stop). `scripts/estop-measure.py BIN DIR contention N` and `… held Q` time the e-stop in both of RW 4.53's shapes. **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
-the binary's answers never changed); read what the mutated code returns before recording a survivor.
+the binary's answers never changed); read what the mutated code returns before recording a survivor. **A guard that several paths feed is witnessed once per path,
+in a shape where that path alone carries the fact** (on-demand run 17: M1049 and M1050 — an assignment and a binding never
+noted — survived because every `_x` in the witnesses was also READ, which a third path noted; two shapes, each meeting
+`_x` one way only, turned both red).
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
 `git revert` it in a commit of its own — a dispatch records its SHA when it is created, so the next commit may follow at once
 (M108 and the next witness ran side by side). `git revert` takes no `-q`; read `git log -1` after a revert before any amend.
