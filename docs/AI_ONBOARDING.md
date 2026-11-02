@@ -275,17 +275,19 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - `http.put`, `http.patch` and `http.delete` and their `_with_secret` forms (D-V2-208, RW 2.12 closed, P9-05 complete,
     on-demand routine run 18): each judged by its method wherever a POST is, on both engines and in a guest; redirects by
     the Fetch standard's rule, and a method other than GET never sent to another origin.
-- `launch/2.0.0` is at `1487163`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `0d17bca`
-  (D-V2-207 is additive). CHECKLIST-2.0 cites `e361f0b`'s runs, read green. `1487163`'s release dry run `41383382785` is
-  read green; its `everything` run `41383380395` was still running (17 of 18 jobs success) when on-demand routine run 18
-  closed. D-V2-208 is not yet in `launch/2.0.0`. The launch itself (a
-  fresh history in the public repository, the tag, the release) waits for the owner's word.
-- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: read `41383380395` to its end
-  and cite it and `41383382785` in CHECKLIST-2.0 criteria 1, 3, 4 and 8; bring `launch/2.0.0` current with D-V2-208; then
-  RW 3.24, a compiled form, designed first; watch the broker's Miri time; the launch, only on the owner's word.
+  - the broker's Miri back under its cap (on-demand routine run 19): `miri-slow (delulu-broker)` ran 3 h 11 min of its
+    240 on `41383380395`, 8,119 s of it in one test; path canonicalization's tests now do their work once, over the same
+    inputs and laws.
+- `launch/2.0.0` is at `728a582`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `04db8fb`
+  (D-V2-208 is additive). CHECKLIST-2.0 cites `1487163`'s runs, read green. `728a582`'s `everything` `41416143488` and
+  release dry run `41416147296` were dispatched by on-demand routine run 19; its sync-log entry says what was read. The
+  launch itself (a fresh history in the public repository, the tag, the release) waits for the owner's word.
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: read `41416143488` and
+  `41416147296` to their ends and cite them in CHECKLIST-2.0 at the next merge; RW 3.24, a compiled form, designed
+  first; watch the broker's Miri time; the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-208;
-  - the last mutant is M1071;
+  - the last mutant is M1075;
   - there are 157 DL codes and 366 reference anchors;
   - pull requests are numbered on GitHub, and #122 was the last opened.
 

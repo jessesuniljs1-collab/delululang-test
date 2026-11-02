@@ -11659,3 +11659,59 @@ each `ok`, the TLS test among them).
 **The push run** `41394552057` on `4e63eb7` (the records commit, holding `cd55b59`): 14 success, 2 skipped (`miri-slow`,
 `heavy-gates`); `openshell` `41394552103` and `ocsf` `41394552121` success; `actors_pingpong` measured on arm64 (2.92x
 against 1.28x, passed), not measured on the other three.
+
+## 2026-11-02 — on-demand routine run 19: the broker's Miri back under its cap; `launch/2.0.0` brought current with D-V2-208
+
+**Housekeeping.** `master` was at `eeb9c01` (on-demand routine run 18's close), and every run since the last record was
+read green: `eeb9c01`'s push run `41396824431` (14 success, 2 skipped — `miri-slow` and `heavy-gates`, a push run's usual;
+`actors_pingpong` measured on arm64, 2.83x where the machine gave 3.94x, against 1.48x, passed; not measured on the
+other three), and `launch/2.0.0` `1487163`'s `everything` `41383380395` — **18 of 18 success**, read to its end this run
+(the broker's Miri 3 h 10 min 54 s, `delulu-check`'s 1 h 39 min, `delulu-syntax`'s 22 min; arm64 2.89x against 1.48x,
+passed). Its release dry run `41383382785` was read green by run 17. The autosave snapshots are those runs 17 and 18 read
+(`521f2ac`, `242ce03`), each landed. No branch held a commit `master` lacks but `launch/2.0.0`, `autosave/*`, `archive/*`
+and `rc/*`. The Survey matched the tree (1613 nodes, 18600 edges) and `doctor --check` passed (26 checks).
+
+**The finding: the broker's Miri at 80% of its cap.** `41383380395`'s `miri-slow (delulu-broker)` ran 3 h 10 min 54 s of its
+240 minutes; the run before it (`41347076820`, on `e361f0b`) ran the same job in 1 h 43 min 40 s, and `path.rs` has not
+changed since 2026-10-17 — the runner moved, not the code, and the next slow runner could cancel the job and turn a
+launch criterion red. Timed from the job's own log (each test's line against the one before; Miri runs the tests one at a
+time): `path::tests::canonicalization_laws_hold_on_generated_paths` alone 8,119 s of the crate's 11,386 s, natively 0.4 s;
+`netscope::tests::equivalent_net_sets_canonicalize_identically` 748 s (already strided under Miri);
+`path::tests::canonicalizing_never_changes_a_containment_decision` 513 s; `equivalent_spellings_get_one_representative`
+143 s. Read against the code: the laws test's completeness law searched its first 400 classes one by one for each of
+20,000 generated paths, its containment law canonicalized both sides of each of 8,100 pairs, and each path was resolved
+four times; the two corpus tests canonicalized (or resolved) both sides of every one of 5,929 pairs afresh.
+
+**The fix** (`04db8fb`): each value computed once, over the same inputs and the same laws. Law 4 (completeness) looks
+its class up in a `BTreeMap` keyed by the resolved segments — `Seg` derives an order for it, which no decision reads —
+where it scanned a list; law 5 (containment) pairs each of its 90 samples with its canonical form, made once; laws 1 and
+3 read the path's segments resolved once. `equivalent_spellings_get_one_representative` and
+`canonicalizing_never_changes_a_containment_decision` resolve or canonicalize each of the 77 corpus spellings once.
+**Nothing shrinks under `cfg!(miri)`:** Miri still interprets all 20,000 paths and every pair — the CI comment's rule
+for a test that grows (*"doing its work once … never by raising this budget"*), and the strongest form of it here.
+
+**Evidence.** Measured under Miri in the VM (nightly with `miri`, a copy of the test's functions and forms in a scratch
+crate outside the repository, each form alone): the loop at 2,000 paths — the old form 668 s, the old form without law
+4's scan 386 s, the new form 270 s (2.5x); the 8,100 pairs — old 1,497 s, new 806 s (1.9x; the new form measured partly
+beside a workspace clippy, so if anything slow). The old form's projection, 6,680 + 1,497 s, matches the runner's
+8,119 s. Natively the eighteen `path` tests take 0.34 s. Mutants (`scripts/mutants.py`),
+each red at the law it is about, the control green (18 passed): **M1072** `canonicalize` returns the spelling as written —
+the laws test red at law 4, *"resolves like an earlier path but canonicalizes apart"*, iteration 14 (laws 1, 2, 3 and 5
+all hold for it, so law 4's map is what sees it); **M1073** the same against `equivalent_spellings_get_one_representative`
+(*"resolve alike but canonicalize apart"*); **M1074** a relative path rendered without its `./` —
+`canonicalizing_never_changes_a_containment_decision`, *"flipped under canonicalization"*; **M1075** the same with laws 1
+and 2 removed from the laws test — law 5 alone, *"flipped"*. **The suite** (`scripts/suite.sh`, alone, `-j 4`): 192
+binaries, 2,671 passed, 0 failed, 16 ignored, the tree unmoved — run 18's tests among them. `scripts/clippy.sh` clean.
+**The push run** `41414258769` on `04db8fb`: 14 success, 2 skipped (`miri-slow`, `heavy-gates`); `actors_pingpong`
+measured on arm64 (2.88x where the machine gave 3.94x, against 1.48x, passed), not measured on the other three.
+
+**`launch/2.0.0` brought current** (`728a582`, the merge of `master` `04db8fb`): `master`'s one new CHANGELOG section
+(D-V2-208) folded by `scripts/launch-changelog.py`, judged additive against `STABILITY.md` §1 and v1.0.0 — v1.0.0 had no
+`put`, `patch` or `delete`; a grant entry naming no methods still allows GET alone; a GET's and a POST's redirects are
+unchanged; and the primitive table's version moves 8 → 9 inside 2.0.0's own development, from v1.0.0's 1, so a 1.x
+`.dpx` is refused by 2.0.0 already and nothing a 1.x artefact meets changes (as D-V2-183's 7 → 8 was judged). The
+*Breaking* paragraph is unchanged. CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `1487163`'s runs (`41383380395`, 18 of 18;
+`41383382785`, the four packages), and criterion 3 names the broker's 3 h 11 min with what was done about it. Criterion 2
+re-measured by `scripts/launch-criterion-2.py`: 366/366. `scripts/launch-gates.sh`: `LAUNCH-GATES=ok` (survey 1614 nodes,
+18651 edges; findings 0 errors, 6 warnings; doctor 26 checks; cargo deny), the merged tree's Rust `master`'s. Dispatched
+at it: `everything` `41416143488` and the release dry run `41416147296`.

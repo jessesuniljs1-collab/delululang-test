@@ -441,6 +441,10 @@ target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' -mmin +10 -delet
 **The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
 install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
 `formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.
+**Miri runs in the VM** (on-demand routine run 19): `rustup toolchain install nightly --profile minimal --component
+miri,rust-src`, then `MIRIFLAGS=-Zmiri-disable-isolation cargo +nightly miri test --lib -p CRATE -- --exact TEST`; a test of
+hours is measured on a copy in a scratch crate at a tenth of its size, old form against new. A `miri-slow` job's tests are
+timed from its own log (each `test … ok` line's timestamp against the one before).
 **The interpreter is profiled in the VM** (on-demand run 16, RW 3.24): valgrind is installed, and `scripts/interp-profile.sh
 [--base REF] [--profile NAME]` builds a release harness of this checkout's interpreter outside the tree and prints, for
 RW 3.24's five benchmarks, instructions under callgrind, the minimum time and the output's hash; with `--base` it builds
