@@ -445,8 +445,7 @@ pub fn capability_refusal(capv: &CapVal, method: &str, args: &[Value], span: Spa
         (capv.kind, method),
         (ResourceKind::FsRead, "read_text" | "list_dir") | (ResourceKind::FsWrite, "write_text" | "append_text")
     );
-    let net_use =
-        capv.kind == ResourceKind::Http && matches!(method, "get" | "get_with" | "get_with_secret" | "post" | "post_with_secret");
+    let net_use = capv.kind == ResourceKind::Http && is_http_request(method);
     match (&capv.scope, args.first()) {
         (CapScope::Fs { root, anchor, .. }, Some(Value::Str(rel))) if file_effect => fs_scope_refusal(root, anchor, rel, span),
         (CapScope::Net { allow, .. }, Some(Value::Str(url))) if net_use && url.starts_with("https://") => {
@@ -480,14 +479,53 @@ pub fn net_scope_refusal(url: &str, verb: &str, allow: &[String], span: Span) ->
     Some(CapabilityRefusal { fault: Fault::at("DL0904", message, span), reason })
 }
 
-/// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183): `post` and `post_with_secret` a POST,
-/// every other one a GET.
+/// Every `Cap[Http]` method that makes a request (P9-04; P9-05 (d), D-V2-183 and D-V2-208), in one list for every place that
+/// asks "is this a network use?" — the first check, the custody gate, the trace, `--within` and `authority --json`. Each is
+/// judged by [`http_method_of`].
+pub const HTTP_REQUESTS: [&str; 11] = [
+    "get",
+    "get_with",
+    "get_with_secret",
+    "post",
+    "post_with_secret",
+    "put",
+    "put_with_secret",
+    "patch",
+    "patch_with_secret",
+    "delete",
+    "delete_with_secret",
+];
+
+/// Is `method` one of [`HTTP_REQUESTS`]?
+pub fn is_http_request(method: &str) -> bool {
+    HTTP_REQUESTS.contains(&method)
+}
+
+/// The HTTP method a `Cap[Http]` method makes its request by (P9-05 (d), D-V2-183, D-V2-208): `post` a POST, `put` a PUT,
+/// `patch` a PATCH, `delete` a DELETE, each with its `_with_secret` form; every other one a GET.
 pub fn http_method_of(method: &str) -> &'static str {
-    if method == "post" || method == "post_with_secret" {
-        "POST"
-    } else {
-        "GET"
+    match method.strip_suffix("_with_secret").unwrap_or(method) {
+        "post" => "POST",
+        "put" => "PUT",
+        "patch" => "PATCH",
+        "delete" => "DELETE",
+        _ => "GET",
     }
+}
+
+/// Where a request's body is among its arguments (D-V2-208): last — after the URL and the headers, and after a secret's
+/// header and value — for a POST, a PUT and a PATCH; nowhere for a GET and a DELETE, which carry none.
+pub fn http_body_index(method: &str) -> Option<usize> {
+    match method {
+        "post" | "put" | "patch" => Some(2),
+        "post_with_secret" | "put_with_secret" | "patch_with_secret" => Some(4),
+        _ => None,
+    }
+}
+
+/// Does the request carry one `Secret[Str]` in one header — its arguments 2 (the header) and 3 (the secret)?
+pub fn http_carries_secret(method: &str) -> bool {
+    is_http_request(method) && method.ends_with("_with_secret")
 }
 
 /// Does `host` fall under the allowlist pattern `pat` — exact, or `*.suffix` on a dot boundary?
@@ -863,26 +901,22 @@ pub fn call_cap_method_pinned(
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
-        (ResourceKind::Http, "get")
-        | (ResourceKind::Http, "get_with")
-        | (ResourceKind::Http, "get_with_secret")
-        | (ResourceKind::Http, "post")
-        | (ResourceKind::Http, "post_with_secret") => {
+        (ResourceKind::Http, m) if is_http_request(m) => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
             let headers = headers_arg(args, method, span)?;
-            // P9-05 (d), D-V2-183: `post(url, headers, body)` — the one request with a body, by POST.
+            // P9-05 (d), D-V2-183 and D-V2-208: a POST, a PUT and a PATCH carry the program's body, last; a GET and a
+            // DELETE none. Each is made and judged by its own method.
             let verb = http_method_of(method);
-            let body = match method {
-                "post" => Some(str_arg(args, 2, span)?),
-                "post_with_secret" => Some(str_arg(args, 4, span)?),
-                _ => None,
+            let body = match http_body_index(method) {
+                Some(i) => Some(str_arg(args, i, span)?),
+                None => None,
             };
             // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in.
-            let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" || method == "post_with_secret" {
+            let secret: Option<(String, Rc<SecretVal>)> = if http_carries_secret(method) {
                 let header = str_arg(args, 2, span)?;
                 let Some(Value::Secret(s)) = args.get(3) else {
-                    return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
+                    return Err(Fault::at("DL0907", format!("http.{method} expects a Secret[Str] (checker bug)"), span));
                 };
                 Some((header, s.clone()))
             } else {

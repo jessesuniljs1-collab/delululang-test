@@ -62,7 +62,7 @@ fn seeded(tag: &str) -> PathBuf {
                     Scopes {
                         fs_write: names(&["./out"]),
                         secrets: names(&["API_KEY"]),
-                        net: names(&["example.com", "hooks.example.org:POST"]),
+                        net: names(&["example.com", "hooks.example.org:POST,DELETE"]),
                         secret_to: names(&["API_KEY@example.com:443"]),
                         ..Default::default()
                     },
@@ -86,6 +86,8 @@ fn seeded(tag: &str) -> PathBuf {
         assert!(b.check_use_at(&root, Op::Net, Some("example.com"), Some("/v1/items")).decision.is_allow());
         // P9-05 (d), D-V2-183: a POST, recorded as one.
         assert!(b.check_use_by(&root, Op::Net, Some("hooks.example.org"), Some("/in"), Some("POST")).decision.is_allow());
+        // D-V2-208: and a DELETE, recorded as one.
+        assert!(b.check_use_by(&root, Op::Net, Some("hooks.example.org"), Some("/in/7"), Some("DELETE")).decision.is_allow());
         let store = SecretStore::in_memory();
         store.set("API_KEY", CANARY).unwrap();
         assert_eq!(b.expose(&root, "API_KEY", &store, Some("app.delulu:3:9".into())).unwrap(), CANARY);
@@ -255,6 +257,10 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
         .expect("the POST's use");
     assert_eq!(posted["http_request"]["http_method"], "POST", "{posted}");
     assert_eq!(posted["http_request"]["url"]["path"], "/in", "{posted}");
+    // D-V2-208: a DELETE, by its own method.
+    let deleted =
+        events.iter().find(|e| e["class_uid"] == 4002 && e["http_request"]["url"]["path"] == "/in/7").expect("the DELETE's use");
+    assert_eq!(deleted["http_request"]["http_method"], "DELETE", "{deleted}");
     let refused = events.iter().find(|e| e["class_uid"] == 2004 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
     assert_eq!(
         refused["finding_info"]["types"],

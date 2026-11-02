@@ -1645,6 +1645,67 @@ fn a_post_is_decided_by_its_method_against_the_boundary() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// D-V2-208: `put`, `patch` and `delete` are requests by their own methods, decided by them as a POST is — the request at
+/// its call against a boundary that takes its path by other methods only *exceeds*, naming the method; `authority --json`
+/// lists each request under its own name; and a `_with_secret` form's send is asked for with its audience.
+#[test]
+fn a_put_a_patch_and_a_delete_are_decided_by_their_methods_against_the_boundary() {
+    let dir = std::env::temp_dir().join(format!("delulu-within-methods-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (method, verb, body) in [("put", "PUT", ", \"{}\""), ("patch", "PATCH", ", \"{}\""), ("delete", "DELETE", "")] {
+        let f = dir.join(format!("{method}.delulu"));
+        std::fs::write(
+            &f,
+            format!(
+                "module {method}\n\nfn main(root: Root) ! {{Net}} {{\n    let h = root.http([\"example.com:{verb}/api/**\"])\n    \
+                 let r = h.{method}(\"https://example.com/admin\", Map(){body})\n}}\n"
+            ),
+        )
+        .unwrap();
+        let f = f.to_string_lossy().to_string();
+        assert_eq!(required(&f), [format!("net=example.com:{verb}/api/**")], "{method}");
+        // The request to `/admin`, where the boundary takes that path by GET (and POST) alone.
+        let boundary = vec![format!("net=example.com:{verb}/api/**"), "net=example.com:GET,POST/admin".to_string()];
+        let (code, v) = within(&f, &boundary);
+        assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{method}: {v:#}");
+        let why = v["counterexample"]["reason"].as_str().unwrap();
+        assert!(why.contains(&format!("is a `{verb}`")), "{method}: decided by its method: {v:#}");
+        let taken = vec![format!("net=example.com:{verb}/api/**"), format!("net=example.com:{verb}/admin")];
+        assert_eq!(within(&f, &taken).1["result"], "within", "{method}");
+        // `authority --json` lists the request under its own name.
+        let a = json_of(&delulu(&["authority", f.as_str(), "--json"]));
+        assert_eq!(a["authority"]["requests"][0]["method"], method, "{a:#}");
+        assert_eq!(a["authority"]["requests"][0]["path"], "/admin", "{a:#}");
+        // And the report holds to its schema, whose `requests[].method` names every request.
+        let report = dir.join(format!("{method}.json"));
+        std::fs::write(&report, serde_json::to_string_pretty(&a["authority"]).unwrap()).unwrap();
+        let r = json_of(&delulu(&["schema", "validate", "authority", report.to_str().unwrap(), "--json"]));
+        assert_eq!(r["validate"]["valid"], true, "{method}: {}", r["validate"]["errors"]);
+
+        // The `_with_secret` form: its send is asked for with its audience.
+        let s = dir.join(format!("{method}_secret.delulu"));
+        std::fs::write(
+            &s,
+            format!(
+                "module {method}_secret\n\nfn main(root: Root) ! {{Net}} {{\n    let h = root.http([\"api.example.com:{verb}\"])\n    \
+                 let tok = root.secret(\"A\")\n    \
+                 let r = h.{method}_with_secret(\"https://api.example.com/v1\", Map(), \"Authorization\", tok{body})\n}}\n"
+            ),
+        )
+        .unwrap();
+        let s = s.to_string_lossy().to_string();
+        assert_eq!(required(&s), [format!("net=api.example.com:{verb}"), "secret:A@api.example.com:443=VALUE".to_string()]);
+        let ok = vec![format!("net=api.example.com:{verb}"), "secret:A@api.example.com:443=v".to_string()];
+        assert_eq!(within(&s, &ok).1["result"], "within", "{method}_with_secret");
+        let get_only = vec!["net=api.example.com".to_string(), "secret:A@api.example.com:443=v".to_string()];
+        assert_eq!(within(&s, &get_only).1["result"], "exceeds", "{method}_with_secret");
+        let a = json_of(&delulu(&["authority", s.as_str(), "--json"]));
+        assert_eq!(a["authority"]["secret_destinations"][0]["to"], "api.example.com:443", "{method}_with_secret: {a:#}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// D-V2-181: a request is judged at its call by its path where its capability's entry names a pattern (P9-05 (a)), and
 /// `--within` decided only the mint: a program minting `example.com/api/**` and requesting `https://example.com/admin`
 /// was *within* a boundary of `net=example.com/api/**`, though the run refuses the request whatever it minted. Each request

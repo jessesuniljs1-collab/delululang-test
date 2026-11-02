@@ -416,6 +416,10 @@ lints only the targets named — about two minutes for one, against seven for al
 first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that
 does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
 kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
+**A mutant that swaps an expression for `None` names its type** (`None::<String>`; on-demand run 18's M1061 read
+`BUILD-ERROR`, not a falsification). **A value a program hands its client, which no test server can see** (the trust store
+refuses a test's certificate at the program level), **is witnessed by a refusal the client makes on that value before it
+connects** — run 18's PUT body by the 1 MiB limit: the mutant that dropped it survived every test but that one.
 **A mutant's witnesses in several targets take one command** (on-demand run 10): libtest takes several name filters —
 `cargo test -p delulu --test broker_cli --test guard_e2e -- NAME_A NAME_B` — fifteen mutants so took about 45 minutes.
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what

@@ -157,6 +157,9 @@ pub enum Reason {
     RedirectWithoutLocation,
     /// A 307 or 308 that would carry the program's body to another origin than the one it named (P9-05 (d), D-V2-183).
     BodyElsewhere,
+    /// A redirect that would send a request whose method is not a GET or a HEAD — a DELETE, which carries no body — to
+    /// another origin than the one the program named (D-V2-208).
+    MethodElsewhere,
     /// The request's body is larger than [`MAX_REQUEST_BODY`].
     RequestTooLarge,
     /// The response was larger than the policy allows.
@@ -209,6 +212,7 @@ impl Reason {
             Reason::TooManyRedirects => "too-many-redirects",
             Reason::RedirectWithoutLocation => "redirect-without-location",
             Reason::BodyElsewhere => "body-elsewhere",
+            Reason::MethodElsewhere => "method-elsewhere",
             Reason::RequestTooLarge => "request-too-large",
             Reason::BodyTooLarge => "body-too-large",
             Reason::NotUtf8 => "not-utf8",
@@ -244,6 +248,9 @@ impl Reason {
             Reason::BodyElsewhere => {
                 "a redirect would carry the request's body to another origin than the one the program named".into()
             }
+            Reason::MethodElsewhere => {
+                "a redirect would send a request that is not a GET to another origin than the one the program named".into()
+            }
             Reason::RequestTooLarge => format!("the request's body is larger than {MAX_REQUEST_BODY} bytes"),
             Reason::BodyTooLarge => "the response is larger than the size limit".into(),
             Reason::NotUtf8 => "the response body is not UTF-8".into(),
@@ -275,6 +282,7 @@ impl Reason {
             | Reason::Header(_)
             | Reason::Audience(_)
             | Reason::BodyElsewhere
+            | Reason::MethodElsewhere
             | Reason::RequestTooLarge => Answer::Refused,
             Reason::Timeout => Answer::Timeout,
             Reason::RedirectWithoutLocation => Answer::Other("redirect without a location".into()),
@@ -512,10 +520,11 @@ pub struct PinnedRequest<'a> {
     /// The program's headers for THIS hop — checked by [`check_headers`], lower-case names, and empty on
     /// a hop to another origin than the program named.
     pub headers: &'a [(String, String)],
-    /// The hop's method (P9-05 (d), D-V2-183): `GET`, or the program's `POST` — which a 301, 302 or 303 turns
-    /// into a `GET` for the hop after it.
+    /// The hop's method (P9-05 (d), D-V2-183, D-V2-208): `GET`, or the program's `POST`, `PUT`, `PATCH` or `DELETE` — which
+    /// a redirect may turn into a `GET` for the hop after it ([`request`]).
     pub method: &'a str,
-    /// The body the hop sends: the program's, on a `POST` and on the 307/308 hops after it; none otherwise.
+    /// The body the hop sends: the program's, on a `POST`, a `PUT` or a `PATCH` and on the hops that keep its method; none
+    /// otherwise.
     pub body: Option<&'a str>,
 }
 
@@ -979,10 +988,12 @@ pub fn request_with_secret(
     request(policy, "GET", url, headers, None, secret, resolver, transport)
 }
 
-/// [`request_with_secret`] by `method`, with the program's `body` (P9-05 (d), D-V2-183). Every hop is judged by its
-/// own method. A 301, 302 or 303 after a request that is not a GET is followed as a GET with no body (as every
-/// browser does); a 307 or 308 keeps the method and the body, and only to the origin the program named — the body
-/// is the program's, as its headers are, and a redirect elsewhere that would carry it is refused.
+/// [`request_with_secret`] by `method`, with the program's `body` (P9-05 (d), D-V2-183, D-V2-208). Every hop is judged by
+/// its own method. A redirect changes the method by the Fetch standard's rule: a 301 or 302 turns a POST into a GET with
+/// no body (as every browser does), and a 303 turns every method but GET and HEAD into one; every other redirect keeps the
+/// method and the body — a PUT, a PATCH or a DELETE on a 301 or 302, anything on a 307 or 308 — and sends them only to the
+/// origin the program named. The body is the program's, as its headers are, and a method that is not a GET is its intent:
+/// a redirect elsewhere that would carry either is refused.
 #[allow(clippy::too_many_arguments)]
 pub fn request(
     policy: &EgressPolicy,
@@ -1046,6 +1057,12 @@ pub fn request(
             rec.outcome = Err(Reason::BodyElsewhere);
             return (rec, None);
         }
+        // D-V2-208: a DELETE carries no body, and is no less the program's to aim. A URL that does not parse has no origin,
+        // and its first hop refuses it in its own words.
+        if !send && method != "GET" && method != "HEAD" && origin.is_some() {
+            rec.outcome = Err(Reason::MethodElsewhere);
+            return (rec, None);
+        }
         let carry_secret = send
             && secret
                 .is_some_and(|s| here.as_ref().is_some_and(|(h, p)| s.audience.iter().any(|a| a.host == *h && a.port == *p)));
@@ -1067,7 +1084,16 @@ pub fn request(
                     rec.outcome = Err(Reason::TooManyRedirects);
                     return (rec, None);
                 }
-                if matches!(status, 301..=303) && method != "GET" && method != "HEAD" {
+                // The Fetch standard's rule (HTTP-redirect fetch): a 301 or 302 changes a POST alone, a 303 every method but
+                // GET and HEAD. RFC 9110 lets a client change only a POST on a 301 or 302 (§15.4.2, §15.4.3); a DELETE moved
+                // elsewhere is re-sent there as a DELETE — to its own origin only (above) — never quietly made a GET whose
+                // answer would read as the DELETE's.
+                let to_get = match status {
+                    301 | 302 => method == "POST",
+                    303 => method != "GET" && method != "HEAD",
+                    _ => false,
+                };
+                if to_get {
                     (method, body) = ("GET", None);
                 }
                 current = next;

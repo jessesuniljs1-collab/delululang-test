@@ -1227,7 +1227,7 @@ impl SendWalk<'_> {
                     self.expr(a);
                 }
                 let is_http = |t: &delulu_check::Type| matches!(t, delulu_check::Type::Cap(delulu_check::ResourceKind::Http));
-                let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret" | "post" | "post_with_secret")
+                let request = delulu_runtime::prim::is_http_request(&name.name)
                     && self.types.and_then(|t| t.get(&recv.id())).is_some_and(is_http);
                 if request {
                     let url = args.first().and_then(|u| self.str_of(u));
@@ -1253,8 +1253,10 @@ impl SendWalk<'_> {
                         self.files.push(FileUseSite { kind, call, path, cap: self.fs_of(recv), at: *span });
                     }
                 }
-                // The secret is argument four of both (P9-05 (d), D-V2-183: `post_with_secret` adds the body after it).
-                if (name.name == "get_with_secret" && args.len() == 4) || (name.name == "post_with_secret" && args.len() == 5) {
+                // The secret is argument four of every `_with_secret` request (P9-05 (d), D-V2-183 and D-V2-208: a POST, a PUT and a
+                // PATCH add the body after it).
+                let secret_arity = 4 + usize::from(delulu_runtime::prim::http_body_index(&name.name).is_some());
+                if delulu_runtime::prim::http_carries_secret(&name.name) && args.len() == secret_arity {
                     let to = self
                         .str_of(&args[0])
                         .and_then(|u| delulu_runtime::egress::parse_target(&u).ok().map(|t| format!("{}:{}", t.host, t.port)));
