@@ -263,24 +263,25 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 
 ## 10. Where the project stands (2026-11-02) — the newest sync-log entry supersedes this
 
-- `master` is at `bbcaade`. It holds #119 to #121, each landed on a green run:
+- `master` holds #119 to #122 and on-demand routine run 17's milestone, each landed on a green run:
   - INDEX-TARGET-1 (D-V2-205, RW 2.29): every walk of an assignment skipped its index, so a function the checker called
     pure printed through `xs[noisy(c)] = 9`;
   - DL0414 (D-V2-206, RW 2.30): a new warning for a `let` or `var` binding never read;
-  - RENAME-TYPES-1 (RW 2.31): the editor's rename of a type or an effect left most of its uses behind.
+  - RENAME-TYPES-1 (RW 2.31): the editor's rename of a type or an effect left most of its uses behind;
+  - DL0414's repair `prefix-underscore` (D-V2-207, RW 2.32): the laptop's draft `laptop/unread-repair`, finished. It
+    renamed `x` to `_x` where `_x` already meant something in the scope and changed what the program printed
+    (RENAME-CAPTURE-1); now it is offered only where no `_x` is met in the binding's scope, and the editor offers its
+    edits (never preferred).
 - `launch/2.0.0` is at `e361f0b`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `bbcaade`.
-  INDEX-TARGET-1 is in its *Breaking* paragraph. Its `everything` run `41347076820` and release dry run `41347080030` were
-  dispatched and are unread. The launch itself (a fresh history in the public repository, the tag, the release) waits
-  for the owner's word.
-- **Open / next, in order:**
-  1. Read `41347076820` and `41347080030` to their end. Then cite them in CHECKLIST-2.0 criteria 1, 3, 4 and 8, in a
-     records commit on `launch/2.0.0`.
-  2. RW 3.24: a compiled form. Slots alone buy about a tenth.
-  3. Watch the broker's Miri time (3 h 07 min on the last run, against a 4-hour cap).
-  4. The launch, only on the owner's word.
+  Its `everything` run `41347076820` (18 of 18; the broker's Miri 1 h 44 min) and release dry run `41347080030` are read
+  green, and not yet cited in CHECKLIST-2.0. The launch itself (a fresh history in the public repository, the tag, the
+  release) waits for the owner's word.
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: bring `launch/2.0.0` current
+  with `master` (D-V2-207 is additive), citing `e361f0b`'s runs in criteria 1, 3, 4 and 8; then RW 3.24, a compiled
+  form; watch the broker's Miri time; the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-206;
-  - the last mutant is M1043;
+  - the last decision is D-V2-207;
+  - the last mutant is M1055;
   - there are 157 DL codes and 360 reference anchors;
   - pull requests are numbered on GitHub, and #122 was the last opened.
 

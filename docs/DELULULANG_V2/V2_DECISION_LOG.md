@@ -5709,3 +5709,54 @@ target), M1034 (`_` exempts nothing), M1036 (an inner block's bindings never rep
 read) were red. M1035 (a second `let` keeps the first binding's place) survived, and is equivalent: `bind` clears the
 name's place before `bind_let` records the new one. `delulu-conform --coverage` passes at 100% (360 of 360, 157 codes),
 and the reference is in sync. `core_invariance` changed in three reject programs only, each by one added warning.
+
+## D-V2-207 — DL0414 offers a repair, `prefix-underscore`, for a person to choose, withheld wherever `_x` already means something in the binding's scope — TAKEN (head chef, 2026-11-02, under the owner's delegation)
+
+**Context.** D-V2-206 left a repair out (*"Not taken: a repair that renames a binding to `_x`, which would need a new
+repair id"*). The laptop drafted one the same night (`laptop/unread-repair`, `3543faa`, session
+`session_01Deh6WAoHjZ5jxkZ1RtCCft`), and the laptop ran out of memory before its suites ran; the commit said *do not land*.
+On-demand routine run 17 read the draft as a stranger's and found two things it got wrong:
+- **RENAME-CAPTURE-1.** The draft said the rename *"changes nothing the program does"*. That is false wherever `_x`
+  already means something inside the binding's scope. With `let _x = 5`, `let x = 1`, then `_x` printed, the repaired
+  program printed `value: 1` where the original printed `value: 5`, and it checked clean. A `var _x = 7` bound after
+  `var x` took the write `x = 2` (7 became 2). An outer `_x = 3` inside the binding's block would have written the renamed
+  binding (3 became 7), and an inner `var _x = 1` would have taken `x = "b"`, and the repaired program would not check
+  (DL0401). Witnessed on the draft's binary before the fix.
+- **The editor showed it as nothing.** The language server stripped the edits of every `requires_human` repair (*"no
+  automatic edit"*), because until this repair none carried any. So in an editor the action did nothing, and the edit
+  existed only in `check --json`. `fix.rs`'s header, STAGE8 §3 and the server's own comment all said such a repair never
+  carries an edit.
+
+**Decision.**
+1. **The repair.** DL0414 carries `prefix-underscore`: an insertion of `_` at the binding and at every assignment
+   `x = v` to it (`LetUse::writes`, noted by `FnCtx::note_write`). `confidence: "safe"`, `authority_widening: false`,
+   **`requires_human: true`**: the rename changes nothing the program does, and it can still hide a mistake (the Book's
+   `ok`, D-V2-206), so a person chooses it. `delulu fix` never applies it. A new repair id is additive (`STABILITY.md` §1:
+   codes and repair ids are add-only).
+2. **Withheld where it would capture.** The repair is offered only when no `_x` is met between the binding and the end
+   of its block. The checker keeps a clock over the names a body meets (`NameClock`): every `lookup`,
+   `lookup_to_assign` and `bind` meets its name, and a name that is not local (a function, a constant, a builtin, a
+   constructor) is asked of `lookup` first, so meeting it there is meeting every use. A `let` records the clock when
+   bound; when its block closes, a `_x` met since is a `_x` inside its scope. `_x` met only before the binding (its own
+   value among those) or after its block has closed does not withhold it. The warning itself is unchanged: DL0414 still
+   names the binding, with or without the repair.
+3. **The editor offers its edits.** A `requires_human` repair that carries edits becomes a code action with those edits,
+   **never preferred** (so a client's automatic fix never takes it), titled *"… (a human decides — review before
+   applying)"*, `requires_human: true` in its `data` for a harness to refuse by policy, as an authority-widening repair
+   already is. An editless one stays documentation (*"no automatic edit"*). The documents that said otherwise are
+   corrected (`fix.rs`, `lsp.rs`, STAGE8 §3, `editors.md`, `for-agents.md`), and DL0414's explanation names the repair and
+   when it is withheld.
+
+**Not taken:** offering the repair as `exact` (applied by `delulu fix`): an unread binding is as often a mistake as an
+intention, and only a person can tell; renaming to a fresh name such as `_x2` when `_x` is taken, which would make the
+repair's text depend on the rest of the scope and still need the same capture check.
+
+**Evidence.** `delulu-check` `the_repair_is_withheld_where_the_new_name_is_already_spoken_for` (nine shapes withheld,
+three offered) and the draft's `the_repair_names_the_binding_and_each_assignment_to_it_unread`; `fix_cli`
+`prefix_underscore_changes_nothing_a_program_prints` (applies the edits from `check --json`, runs both programs and
+compares their output; five programs where `_x` is taken offer nothing; `delulu fix` leaves the file as it was) and the
+draft's corpus case; `lsp_cli` `a_repair_a_human_decides_offers_its_edits_and_is_never_preferred` (applies the action's
+edits, the program has nothing left to say; where `_n` is taken, no action). Each was red before its fix. Mutants M1044–M1046
+(the draft's, re-run) and M1047–M1055 red, the control green; M1049 (an assignment's target never met) and M1050 (a
+binding never met) first survived, which named two witness shapes the test lacked, now added. `core_invariance`: the
+three reject programs' DL0414 each gain the repair, its edit at the binding's first byte; nothing else moved.
