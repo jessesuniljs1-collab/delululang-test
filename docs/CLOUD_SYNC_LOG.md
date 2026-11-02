@@ -7505,3 +7505,73 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. The broker's Miri: 1 h 44 min on `41347076820` (3 h 07 min on the run before), under the 240-minute cap.
   4. *[laptop]* delete the four branches named under *Redo on the laptop*.
   5. *[laptop]* the launch, only on the owner's word.
+
+### 2026-11-02 — on-demand routine run 18: `http.put`, `http.patch` and `http.delete`, each judged by its method (D-V2-208) — RW 2.12 closed, P9-05 complete
+- Session: `https://claude.ai/code/session_01Deh6W8ECbyiSQ9gCahv13j`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with step
+  0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup script had run: the 1.96.1 toolchain was
+  installed before the first command (`rustup` reported it unchanged).
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); the slice first went to the session's
+  branch `claude/peaceful-carson-yl72j8` for its runner witnesses. Pull request: none.
+- Base: `1ee12c7` (`master` at the start; its push run `41384594047` green).
+- **The milestone, named before building:** RW 2.12's last part — `Cap[Http].put(url, headers, body)`, `patch(url,
+  headers, body)`, `delete(url, headers)` and their `_with_secret` forms, on the interpreter, every guest and the WASM
+  engine, each judged by its method wherever a POST is, with redirects by the Fetch standard's rule and a method other
+  than GET never sent to another origin; witnessed, tested, mutants, the full suite, D-V2-208 and the records, landed on
+  `master` on a read push run. **Why not RW 3.24 (the inbox's item 2):** `V2_LOG.md` (this run) — a compiled form pays
+  only if it is total over `interp.rs`, a redesign to be designed first; it stays first in *Open / next*.
+  **Delivered:** `cd55b59` (the code, tests, decision, reference, entrenched record) and the records commit after it.
+  Witnessed before on `1ee12c7`: `check` refused each with DL0405. Mutants M1056–M1071 red, the controls green.
+- **Housekeeping:** every run since the last record read green (`1ee12c7`'s push run `41384594047`). The newest autosave
+  snapshot `521f2ac` differs from `3543faa` (landed) only in the generated map; `autosave/laptop-dl-launch`'s `242ce03`
+  is whole in `launch/2.0.0` `415eb2e` (its 75 paths identical). No other branch ahead of `master` with unrecorded work.
+  The Survey matched the tree (1613 nodes, 18564 edges) and `doctor --check` passed (26 checks). `gh` is installed (not
+  used). `git push --delete` refused again by the permission classifier (*"Git Destructive"*).
+- Commits on `master`: `cd55b59` (the slice), the records commit after it (the pinned count, the records), then this
+  entry's closing commit if the push run is read in the run.
+- Files and folders (`git diff --name-status 1ee12c7..HEAD`):
+  M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/dir.rs`, `crates/delulu-check/src/prim_table.rs`,
+    `crates/delulu-runtime/src/egress.rs`, `crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu-runtime/src/interp.rs`,
+    `crates/delulu-runtime/src/prim.rs`, `crates/delulu-runtime/src/trace.rs`, `crates/delulu-wasm/src/codegen.rs`,
+    `crates/delulu-wasm/src/host.rs`, `crates/delulu/src/schema.rs`, `crates/delulu/src/within.rs`
+  M `crates/delulu/tests/audit_ocsf_cli.rs`, `broker_cli.rs`, `egress_cli.rs`, `within_cli.rs`
+  M `tests/conformance/witnesses.toml` (entrenched), `docs/design/ENTRENCHED_CHANGE_RECORD.md`
+  M `docs/reference/README.md`, `coverage.md`, `primitives.md` (regenerated: 366 anchors)
+  M `docs/for-agents.md`, `docs/GETTING_STARTED.md`, `skills/delulu/SKILL.md`
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4, §11.5), `docs/REMAINING_WORK.md` (row 2.12 closed),
+    `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-208), `V2_LOG.md`, `V2_PHASE_STATUS.md` (rows 16 and 17),
+    `V2_P9_DESIGN.md`, `docs/AI_ONBOARDING.md` (section 10), `docs/CLOUD_ROUTINE.md` (steps 5 and 7a),
+    `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/release-program-progress.md`, `docs/survey/*`
+  Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the records commit's message.
+- Verified: the full suite in the VM (`scripts/suite.sh`: 192 binaries, 2,670 passed, 1 failed, 16 ignored, the tree
+  unmoved — the one red `prim_table::tests::count_is_pinned`, the table's hand-written length 86 against 92, updated and
+  its target re-run green, 266 passed); `scripts/clippy.sh` clean; mutants M1056–M1071 red, the controls green;
+  `witness.yml` at `cd55b59`: macOS `41392735108` and Windows `41392737821` (the five new end-to-end tests named, `ok`),
+  macOS `41392740882` and Windows `41392744038` (the three new egress tests named, `ok`, the TLS test among them).
+  `master`'s push run on the records commit: PUSH_RUN.
+- **Loop engineering:** CLOUD_ROUTINE step 5: a mutant that swaps an expression for `None` names its type (M1061 read
+  `BUILD-ERROR` first); a value a program hands its client, which no test server can see, is witnessed by a refusal the
+  client makes on it before connecting (the PUT body by the 1 MiB limit — the mutant that dropped it survived every
+  other test). `HANDOFF.md` §11.5 says the same, with *one set, one list*.
+- **Redo on the laptop:** delete `laptop/records-0102` (`d75b65b`), `laptop/sandbox-fault-place` (`9a82bf9`),
+  `laptop/unread-repair` (`3543faa`), `claude/peaceful-carson-em21b1` (`1ee12c7`) and this run's
+  `claude/peaceful-carson-yl72j8` from `origin` — each in `master`'s history (`git merge-base --is-ancestor`, this run).
+- For the laptop's memory: `HANDOFF.md` §11.4 (a redirect changes a method by the Fetch standard's rule; a method other
+  than GET never leaves the program's origin) and §11.5.
+- **Open / next, in order** (the inbox for the next session, routine or laptop):
+  1. Read `launch/2.0.0` `1487163`'s `everything` run `41383380395` to its end (at this entry's writing 17 of 18 jobs
+     success, the broker's Miri running past two hours), then cite it and the dry run `41383382785` (read green) in
+     CHECKLIST-2.0 criteria 1, 3, 4 and 8, in a records commit on `launch/2.0.0` — unless this run's closing commit says
+     it did.
+  2. Bring `launch/2.0.0` current with `master` (release procedure step 1): D-V2-208's CHANGELOG section folded and judged
+     additive against `STABILITY.md` §1 and v1.0.0 (v1.0.0 had `get` alone; the primitive table's version moves 8 → 9, as
+     D-V2-183's 7 → 8 did, which the fold recorded as a *Changed* entry and not in the *Breaking* paragraph — judge it
+     the same way, by hand), criterion 2 re-measured (366/366),
+     `scripts/launch-gates.sh`, then `everything` and the release dry run dispatched and read.
+  3. RW 3.24: a compiled form. Design it first (`V2_LOG.md`, this run: slots alone buy about a tenth; a compiled form
+     pays only if it is total over `interp.rs`, closures and the plugin budget's per-node fuel included).
+  4. The broker's Miri: watch its time under the 240-minute cap (1 h 44 min on `41347076820`, over two hours on
+     `41383380395`).
+  5. *[laptop]* delete the five branches named under *Redo on the laptop*.
+  6. *[laptop]* the launch, only on the owner's word.
