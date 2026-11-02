@@ -2149,6 +2149,156 @@ file = "crates/delulu-runtime/src/egress/tests.rs"
 test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
 kind = "negative"
 
+# D-V2-208 (on-demand routine run 18, 2026-11-02, under the owner's delegation — ENTRENCHED_CHANGE_RECORD.md): `put`,
+# `patch` and `delete` — the table's two; the egress client sending each by its own method (a PUT's and a
+# PATCH's body, a DELETE's none), kept on a 301 or 302 and never sent to another origin; and the judge that refuses each
+# under an entry naming no methods (GET alone) or another method alone.
+[[witness]]
+anchor = "ref.prim.http.put"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.put"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.put"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.put"
+file = "crates/delulu-broker/src/netscope.rs"
+test = "an_entry_judges_its_host_then_its_path_then_its_method"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.patch"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.patch"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.patch"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.patch"
+file = "crates/delulu-broker/src/netscope.rs"
+test = "an_entry_judges_its_host_then_its_path_then_its_method"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.delete"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.delete"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.delete"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.delete"
+file = "crates/delulu-broker/src/netscope.rs"
+test = "an_entry_judges_its_host_then_its_path_then_its_method"
+kind = "negative"
+
+# And their `_with_secret` forms (the same decision): the table's two; the egress client carrying the secret by the
+# request's method only inside the audience; and the secret refused outside its audience before anything is resolved.
+[[witness]]
+anchor = "ref.prim.http.put_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.put_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.put_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.put_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.patch_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.patch_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.patch_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.patch_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.delete_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.delete_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.delete_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.delete_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.clock.now_ms"
 file = "crates/delulu-check/src/prim_table.rs"

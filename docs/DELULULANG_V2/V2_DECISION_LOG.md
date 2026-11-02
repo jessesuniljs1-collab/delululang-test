@@ -5709,3 +5709,111 @@ target), M1034 (`_` exempts nothing), M1036 (an inner block's bindings never rep
 read) were red. M1035 (a second `let` keeps the first binding's place) survived, and is equivalent: `bind` clears the
 name's place before `bind_let` records the new one. `delulu-conform --coverage` passes at 100% (360 of 360, 157 codes),
 and the reference is in sync. `core_invariance` changed in three reject programs only, each by one added warning.
+
+## D-V2-207 — DL0414 offers a repair, `prefix-underscore`, for a person to choose, withheld wherever `_x` already means something in the binding's scope — TAKEN (head chef, 2026-11-02, under the owner's delegation)
+
+**Context.** D-V2-206 left a repair out (*"Not taken: a repair that renames a binding to `_x`, which would need a new
+repair id"*). The laptop drafted one the same night (`laptop/unread-repair`, `3543faa`, session
+`session_01Deh6WAoHjZ5jxkZ1RtCCft`), and the laptop ran out of memory before its suites ran; the commit said *do not land*.
+On-demand routine run 17 read the draft as a stranger's and found two things it got wrong:
+- **RENAME-CAPTURE-1.** The draft said the rename *"changes nothing the program does"*. That is false wherever `_x`
+  already means something inside the binding's scope. With `let _x = 5`, `let x = 1`, then `_x` printed, the repaired
+  program printed `value: 1` where the original printed `value: 5`, and it checked clean. A `var _x = 7` bound after
+  `var x` took the write `x = 2` (7 became 2). An outer `_x = 3` inside the binding's block would have written the renamed
+  binding (3 became 7), and an inner `var _x = 1` would have taken `x = "b"`, and the repaired program would not check
+  (DL0401). Witnessed on the draft's binary before the fix.
+- **The editor showed it as nothing.** The language server stripped the edits of every `requires_human` repair (*"no
+  automatic edit"*), because until this repair none carried any. So in an editor the action did nothing, and the edit
+  existed only in `check --json`. `fix.rs`'s header, STAGE8 §3 and the server's own comment all said such a repair never
+  carries an edit.
+
+**Decision.**
+1. **The repair.** DL0414 carries `prefix-underscore`: an insertion of `_` at the binding and at every assignment
+   `x = v` to it (`LetUse::writes`, noted by `FnCtx::note_write`). `confidence: "safe"`, `authority_widening: false`,
+   **`requires_human: true`**: the rename changes nothing the program does, and it can still hide a mistake (the Book's
+   `ok`, D-V2-206), so a person chooses it. `delulu fix` never applies it. A new repair id is additive (`STABILITY.md` §1:
+   codes and repair ids are add-only).
+2. **Withheld where it would capture.** The repair is offered only when no `_x` is met between the binding and the end
+   of its block. The checker keeps a clock over the names a body meets (`NameClock`): every `lookup`,
+   `lookup_to_assign` and `bind` meets its name, and a name that is not local (a function, a constant, a builtin, a
+   constructor) is asked of `lookup` first, so meeting it there is meeting every use. A `let` records the clock when
+   bound; when its block closes, a `_x` met since is a `_x` inside its scope. `_x` met only before the binding (its own
+   value among those) or after its block has closed does not withhold it. The warning itself is unchanged: DL0414 still
+   names the binding, with or without the repair.
+3. **The editor offers its edits.** A `requires_human` repair that carries edits becomes a code action with those edits,
+   **never preferred** (so a client's automatic fix never takes it), titled *"… (a human decides — review before
+   applying)"*, `requires_human: true` in its `data` for a harness to refuse by policy, as an authority-widening repair
+   already is. An editless one stays documentation (*"no automatic edit"*). The documents that said otherwise are
+   corrected (`fix.rs`, `lsp.rs`, STAGE8 §3, `editors.md`, `for-agents.md`), and DL0414's explanation names the repair and
+   when it is withheld.
+
+**Not taken:** offering the repair as `exact` (applied by `delulu fix`): an unread binding is as often a mistake as an
+intention, and only a person can tell; renaming to a fresh name such as `_x2` when `_x` is taken, which would make the
+repair's text depend on the rest of the scope and still need the same capture check.
+
+**Evidence.** `delulu-check` `the_repair_is_withheld_where_the_new_name_is_already_spoken_for` (nine shapes withheld,
+three offered) and the draft's `the_repair_names_the_binding_and_each_assignment_to_it_unread`; `fix_cli`
+`prefix_underscore_changes_nothing_a_program_prints` (applies the edits from `check --json`, runs both programs and
+compares their output; five programs where `_x` is taken offer nothing; `delulu fix` leaves the file as it was) and the
+draft's corpus case; `lsp_cli` `a_repair_a_human_decides_offers_its_edits_and_is_never_preferred` (applies the action's
+edits, the program has nothing left to say; where `_n` is taken, no action). Each was red before its fix. Mutants M1044–M1046
+(the draft's, re-run) and M1047–M1055 red, the control green; M1049 (an assignment's target never met) and M1050 (a
+binding never met) first survived, which named two witness shapes the test lacked, now added. `core_invariance`: the
+three reject programs' DL0414 each gain the repair, its edit at the binding's first byte; nothing else moved.
+
+## D-V2-208 — P9-05 (d), third slice: `Cap[Http].put`, `patch` and `delete`, each with a `_with_secret` form, judged by its method everywhere a POST is; a redirect changes a method by the Fetch standard's rule, and a method other than GET never leaves the program's origin — TAKEN (head chef, 2026-11-02, under the owner's delegation)
+
+**Context.** RW 2.12's last open part. D-V2-182 gave a `net` entry its methods (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+`DELETE`; none named = GET alone), and D-V2-183 built the first request that is not a GET, `post`. A program could still
+not update or delete anything over a REST API it was granted, and an agent that must could not be granted exactly that
+and no more. The grammar already parsed `HOST:PUT,PATCH,DELETE`, and the broker already judged any of its methods, but
+`check` refused `h.put(…)` with DL0405 (witnessed on `1ee12c73`: *"type `Cap[Http]` has no method `put`"*, and the same
+for `patch` and `delete`).
+
+**Decision.**
+1. **The primitives.** `put(url, headers, body)` and `patch(url, headers, body)` take `post`'s arguments; `delete(url,
+   headers)` takes `get_with`'s and carries no body. Each has a `_with_secret` form with `get_with_secret`'s arguments and
+   then the body (`put_with_secret`, `patch_with_secret`: arity 5; `delete_with_secret`: arity 4). All answer
+   `Result[Str, NetErr] ! {Net}`, with the URL as argument one, so every check that reads a request's URL reads it where
+   it reads `get`'s. `PRIM_TABLE_VERSION` goes from 8 to 9 (additive; a `.dpx` holding a v8 DIR is refused DL1503 and
+   rebuilt, as at every bump). Six conformance anchors, four witnesses each (`ENTRENCHED_CHANGE_RECORD.md`); the reference
+   is at 366 of 366.
+2. **Judged by its method wherever a POST is**, from one list (`prim::HTTP_REQUESTS`, `http_method_of`, `http_body_index`,
+   `http_carries_secret`) that the first check, the custody gate, the trace, the broker-held secret's send, `--within`,
+   `authority --json` (`requests[].method`, and the schema's enum) and both engines read, where five hand-written lists
+   named the five requests before: the first check (DL0904: *"a `DELETE` to … is outside the methods the grant names for
+   it"*), every egress hop by its own method, the broker's use check and the chain's `use` record (`method` beside
+   `url_path`; OCSF `http_request.http_method`), and `--within`, which decides the request at its call by its method.
+3. **Redirects, by the Fetch standard's rule** (HTTP-redirect fetch): a 301 or 302 turns a POST into a GET with no body,
+   and a 303 turns every method but GET and HEAD into one. Every other redirect keeps the method and the body — a PUT, a
+   PATCH or a DELETE on a 301 or 302, anything on a 307 or 308. RFC 9110 (§15.4.2, §15.4.3) lets a client change only a
+   POST on a 301 or 302; D-V2-183's rule changed every method on them, which was right for the one method it could see,
+   and would have turned a moved DELETE into a GET whose answer read as the DELETE's. A POST is unchanged.
+4. **A method other than GET never leaves the origin the program named.** A kept body was refused elsewhere already
+   (`body-elsewhere`). A DELETE has no body, and is no less the program's to aim, so a redirect that would send it to
+   another origin is refused: `Reason::MethodElsewhere`, reason `method-elsewhere`, the program told `Refused`. A 303's GET
+   may leave, judged as a GET.
+5. **One implementation for L0, every guest and the WASM engine.** A sandboxed guest's request is performed by the host in
+   the same `prim` arm. The WASM engine gains six imports (`delulu:cap.http_put`, `http_patch`, `http_delete` and their
+   `_with_secret` forms), emitted from one table (`MORE_REQUESTS`) and performed by the host's `send_plain` and
+   `send_with_secret` — `send_plain` now also performs `get_with` and `post`, which had two copies of the same body.
+6. **Not built: a `head` primitive.** A grant may name HEAD (D-V2-182), but a program is answered a body
+   (`Result[Str, NetErr]`) and never a response's headers, so a HEAD would answer nothing it could read. It waits for a
+   response type that carries headers.
+
+**Evidence.** The egress client: `a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin`
+(each method sent by itself, the body kept or none; refused under GET alone and under POST alone before anything is
+resolved; kept on 301, 302, 307 and 308 to the same origin; refused `body-elsewhere` or `method-elsewhere` to another;
+a 303 a GET with no body; a POST's 301 and 302 unchanged), `a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience`,
+and over real TLS `a_put_a_patch_and_a_delete_arrive_over_tls_by_their_own_methods` (the request line, the body whole, a
+DELETE's none). End to end: `egress_cli` `a_put_a_patch_and_a_delete_leave_under_a_grant_that_names_their_method_and_no_other`
+(L0 and a guest: TLS out under `:METHOD`, the report's hop naming it; DL0904 in words about the method under a host-only
+grant and under `:POST`, nothing connects) and `a_programs_put_and_patch_carry_its_body_to_the_client` (a 2 MiB body
+refused `request-too-large` before anything connects); `within_cli`
+`a_put_a_patch_and_a_delete_are_decided_by_their_methods_against_the_boundary` (*exceeds* naming the method; `authority
+--json`'s `requests` and `secret_destinations`; the report valid against its schema); `broker_cli`
+`a_put_a_patch_and_a_delete_are_judged_by_their_methods_under_the_daemon_as_embedded` (embedded and daemon custody, a
+guest, the WASM engine; the chain naming each method, a POST refused) and
+`a_broker_held_secret_rides_a_put_a_patch_and_a_delete_by_their_methods` (both engines, the broker's `send`, a capability
+without DELETE refused before a byte is asked); `audit_ocsf_cli` (a DELETE's `http_method`); `trace` `effect_for`. Mutants
+M1056–M1071 (`V2_LOG.md`).

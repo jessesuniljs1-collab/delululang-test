@@ -1577,7 +1577,7 @@ impl Interp {
             // origin the request names, after everything that can be judged without them.
             Value::Cap(c)
                 if c.kind == ResourceKind::Http
-                    && (name.name == "get_with_secret" || name.name == "post_with_secret")
+                    && prim::http_carries_secret(&name.name)
                     && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) =>
             {
                 self.send_broker_secret(c, &name.name, &argvals, span)
@@ -2496,12 +2496,8 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
         // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
         // and the trace is printed and stored (P9-04 (a), D-V2-128).
-        // `post`'s body is never shown either: the program's data, as a header's value is (P9-05 (d), D-V2-183).
-        ("Http", "get")
-        | ("Http", "get_with")
-        | ("Http", "get_with_secret")
-        | ("Http", "post")
-        | ("Http", "post_with_secret") => args.first().map(|v| v.display()),
+        // A request's body is never shown either: the program's data, as a header's value is (P9-05 (d), D-V2-183, D-V2-208).
+        ("Http", m) if prim::is_http_request(m) => args.first().map(|v| v.display()),
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2541,11 +2537,7 @@ pub(crate) fn custody_op_for(
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
         (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => Some((CustodyOp::FsRead, fs_arg(c))),
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => Some((CustodyOp::FsWrite, fs_arg(c))),
-        (ResourceKind::Http, "get")
-        | (ResourceKind::Http, "get_with")
-        | (ResourceKind::Http, "get_with_secret")
-        | (ResourceKind::Http, "post")
-        | (ResourceKind::Http, "post_with_secret") => {
+        (ResourceKind::Http, m) if prim::is_http_request(m) => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no

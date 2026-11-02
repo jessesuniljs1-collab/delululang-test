@@ -450,6 +450,87 @@ fn a_post_sends_its_body_by_its_method_and_a_redirect_keeps_or_drops_them_by_its
     assert!(rec.to_json()["hops"][0].get("method").is_none());
 }
 
+/// D-V2-208: a PUT and a PATCH send their body, and a DELETE none, each by its own method and judged by it; a redirect
+/// changes the method by the Fetch standard's rule — a 301 or 302 changes a POST alone, so these keep their method (and
+/// body) there, and a 303 makes each a GET with no body — and a request that keeps a method other than GET never leaves
+/// the origin the program named, a DELETE with no body among them.
+#[test]
+fn a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let sent = |t: &FakeTransport| -> Vec<(String, String, Option<String>)> {
+        t.sent.borrow().iter().map(|s| (s.method.clone(), s.url.clone(), s.body.clone())).collect()
+    };
+    let doc = "{\"k\":2}";
+    for (method, body) in [("PUT", Some(doc)), ("PATCH", Some(doc)), ("DELETE", None)] {
+        let send = |allow: &[&str], t: &FakeTransport| {
+            request(&policy(allow, &[]), method, "https://a.example.com/items/1", &[], body, None, &r, t)
+        };
+        let own = format!("a.example.com:{method}");
+        let carried = body.map(str::to_string);
+
+        let t = FakeTransport::answering(vec![ok("done")]);
+        let (rec, got) = send(&[own.as_str()], &t);
+        assert_eq!(got.as_deref(), Some("done"), "{method}: {:?}", rec.outcome);
+        assert_eq!(sent(&t), [(method.to_string(), "https://a.example.com/items/1".to_string(), carried.clone())]);
+        assert_eq!(rec.to_json()["hops"][0]["method"], method, "the record names the method");
+
+        // Under an entry naming no methods (GET alone), or another method alone, refused before anything is resolved.
+        for allow in ["a.example.com", "a.example.com:POST"] {
+            let t = FakeTransport::answering(vec![ok("never")]);
+            let asked = r.asked.borrow().len();
+            let (rec, got) = send(&[allow], &t);
+            assert_eq!((got, rec.outcome.clone()), (None, Err(Reason::NotAllowlisted)), "{method} under {allow}");
+            assert!(t.sent.borrow().is_empty() && r.asked.borrow().len() == asked, "{method}: nothing resolved, nothing sent");
+        }
+
+        // 301 and 302 keep the method and the body, to the same origin (RFC 9110 lets a client change a POST alone).
+        for status in [301, 302, 307, 308] {
+            let t = FakeTransport::answering(vec![redirect(status, "/items/2"), ok("moved")]);
+            let (rec, got) = send(&[own.as_str()], &t);
+            assert_eq!(got.as_deref(), Some("moved"), "{method} {status}: {:?}", rec.outcome);
+            assert_eq!(
+                sent(&t)[1],
+                (method.to_string(), "https://a.example.com/items/2".to_string(), carried.clone()),
+                "{method} {status}: kept"
+            );
+            // To another origin, refused before it is sent — whether a body rides or not.
+            let t = FakeTransport::answering(vec![redirect(status, "https://b.example.com/items/1"), ok("never")]);
+            let both = format!("b.example.com:{method}");
+            let (rec, got) = send(&[own.as_str(), both.as_str()], &t);
+            let why = if body.is_some() { Reason::BodyElsewhere } else { Reason::MethodElsewhere };
+            assert_eq!((got, rec.outcome.clone()), (None, Err(why)), "{method} {status}");
+            assert_eq!(t.sent.borrow().len(), 1, "{method} {status}: never sent elsewhere");
+        }
+
+        // 303: a GET with no body, judged as one — refused where the entry names the method alone, taken with GET.
+        let t = FakeTransport::answering(vec![redirect(303, "/status"), ok("seen")]);
+        let (rec, got) = send(&[own.as_str()], &t);
+        assert_eq!((got, rec.outcome.clone()), (None, Err(Reason::NotAllowlisted)), "{method}: the GET after a 303");
+        let t = FakeTransport::answering(vec![redirect(303, "https://b.example.com/status"), ok("seen")]);
+        let with_get = format!("a.example.com:GET,{method}");
+        let (rec, got) = send(&[with_get.as_str(), "b.example.com"], &t);
+        assert_eq!(got.as_deref(), Some("seen"), "{method}: a 303 may leave as a GET: {:?}", rec.outcome);
+        assert_eq!(sent(&t)[1], ("GET".to_string(), "https://b.example.com/status".to_string(), None), "{method}: 303");
+    }
+
+    // A POST is unchanged: a 301 or 302 still makes it a GET with no body, which may then leave its origin.
+    for status in [301, 302] {
+        let t = FakeTransport::answering(vec![redirect(status, "https://b.example.com/done"), ok("seen")]);
+        let (rec, got) = request(
+            &policy(&["a.example.com:POST", "b.example.com"], &[]),
+            "POST",
+            "https://a.example.com/x",
+            &[],
+            Some(doc),
+            None,
+            &r,
+            &t,
+        );
+        assert_eq!(got.as_deref(), Some("seen"), "POST {status}: {:?}", rec.outcome);
+        assert_eq!(sent(&t)[1], ("GET".to_string(), "https://b.example.com/done".to_string(), None), "POST {status}");
+    }
+}
+
 /// P9-05 (a), D-V2-138: a path-scoped entry is judged on every hop — a redirect out of the granted path is refused as a
 /// redirect to an ungranted host is, and a path a server could read two ways is refused before anything is resolved. The
 /// query is not the path; a host granted whole reaches every path.
@@ -681,6 +762,43 @@ fn a_post_carries_its_secret_and_its_body_only_inside_the_audience() {
     let (rec, _) = post("https://a.example.com/items", &t);
     assert_eq!(rec.outcome, Err(Reason::BodyElsewhere));
     assert_eq!(t.sent.borrow().len(), 1);
+}
+
+/// D-V2-208: `put_with_secret`, `patch_with_secret` and `delete_with_secret` — the secret in its header, by the request's own
+/// method (with its body for a PUT and a PATCH), only to the audience; outside it refused before anything is resolved; and a
+/// redirect that keeps the method to another origin refused, the secret sent once, to the audience — a DELETE with no body
+/// as a PUT with one.
+#[test]
+fn a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let to = aud(&["a.example.com"]);
+    let secret = SecretHeader { header: "Authorization", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
+    for (method, body) in [("PUT", Some("{}")), ("PATCH", Some("{}")), ("DELETE", None)] {
+        let a = format!("a.example.com:{method}");
+        let b = format!("b.example.com:{method}");
+        let p = policy(&[a.as_str(), b.as_str()], &[]);
+        let send = |url: &str, t: &FakeTransport| request(&p, method, url, &[], body, Some(&secret), &r, t);
+        let t = FakeTransport::answering(vec![ok("done")]);
+        let (rec, got) = send("https://a.example.com/items/1", &t);
+        assert_eq!(got.as_deref(), Some("done"), "{method}: {:?}", rec.outcome);
+        let sent = t.sent.borrow();
+        assert_eq!((sent[0].method.as_str(), sent[0].body.as_deref()), (method, body), "{method}");
+        assert_eq!(sent[0].headers, hs(&[("authorization", SECRET_BYTES)]), "{method}");
+        assert_eq!((rec.hops[0].secret.as_deref(), rec.hops[0].method.as_str()), (Some("API_TOKEN"), method));
+        drop(sent);
+        let t = FakeTransport::answering(vec![ok("never")]);
+        let (rec, got) = send("https://b.example.com/items/1", &t);
+        assert_eq!(got, None, "{method}");
+        assert_eq!(rec.outcome.unwrap_err().code(), "audience", "{method}");
+        assert!(t.sent.borrow().is_empty(), "{method}");
+        for status in [301, 302, 307, 308] {
+            let t = FakeTransport::answering(vec![redirect(status, "https://b.example.com/x"), ok("never")]);
+            let (rec, _) = send("https://a.example.com/items/1", &t);
+            let why = if body.is_some() { Reason::BodyElsewhere } else { Reason::MethodElsewhere };
+            assert_eq!(rec.outcome, Err(why), "{method} {status}");
+            assert_eq!(t.sent.borrow().len(), 1, "{method} {status}");
+        }
+    }
 }
 
 #[test]
@@ -1198,6 +1316,27 @@ mod real_transport {
         assert!(lines.contains(&"content-type: application/json".to_string()), "{lines:?}");
         assert_eq!(seen[0].body, sent, "the body arrives whole");
         assert_eq!(rec.hops[0].method, "POST");
+    }
+
+    /// D-V2-208: over real TLS, a PUT and a PATCH arrive by their own request line with their body whole, and a DELETE by its
+    /// own with none.
+    #[test]
+    fn a_put_a_patch_and_a_delete_arrive_over_tls_by_their_own_methods() {
+        for (method, body) in [("PUT", Some("{\"qty\":3}")), ("PATCH", Some("{\"qty\":4}")), ("DELETE", None)] {
+            let s = serve(&["pinned.test"], |_| http("200 OK", "done"), Duration::from_secs(5));
+            let r = FakeResolver::with(&[("pinned.test", &["127.0.0.1"])]);
+            let t = ReqwestTransport::with_roots(s.roots.clone());
+            let url = format!("https://pinned.test:{}/items/7", s.port);
+            let entry = format!("pinned.test:{method}");
+            let p = policy(&[entry.as_str()], &[entry.as_str()]);
+            let (rec, got) = request(&p, method, &url, &hs(&[("Content-Type", "application/json")]), body, None, &r, &t);
+            assert_eq!(got.as_deref(), Some("done"), "{method}: {:?}", rec.outcome);
+            let seen = s.seen.lock().unwrap().clone();
+            assert_eq!(seen.len(), 1, "{method}: {seen:?}");
+            assert!(seen[0].head.starts_with(&format!("{method} /items/7 HTTP/1.1\r\n")), "{:?}", seen[0].head);
+            assert_eq!(seen[0].body, body.unwrap_or(""), "{method}: the body arrives whole, and a DELETE carries none");
+            assert_eq!(rec.hops[0].method, method);
+        }
     }
 
     /// Verification is ON in the configuration a release uses: the platform's trust store refuses a

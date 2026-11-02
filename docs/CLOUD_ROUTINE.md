@@ -416,6 +416,10 @@ lints only the targets named — about two minutes for one, against seven for al
 first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that
 does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
 kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
+**A mutant that swaps an expression for `None` names its type** (`None::<String>`; on-demand run 18's M1061 read
+`BUILD-ERROR`, not a falsification). **A value a program hands its client, which no test server can see** (the trust store
+refuses a test's certificate at the program level), **is witnessed by a refusal the client makes on that value before it
+connects** — run 18's PUT body by the 1 MiB limit: the mutant that dropped it survived every test but that one.
 **A mutant's witnesses in several targets take one command** (on-demand run 10): libtest takes several name filters —
 `cargo test -p delulu --test broker_cli --test guard_e2e -- NAME_A NAME_B` — fifteen mutants so took about 45 minutes.
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
@@ -437,6 +441,11 @@ target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' -mmin +10 -delet
 **The Z3 model runs in the VM** (on-demand run 6): PyPI is reachable, so `python3 -m venv $S/z3env && $S/z3env/bin/pip
 install z3-solver`, then `$S/z3env/bin/python -I docs/design/models/authority_algebra.py` and each `DELULU_Z3_MUTANT` the
 `formal` job names (about 15 s each). A change to the authority order is proved before it is pushed, not first on a runner.
+**Miri runs in the VM** (on-demand routine run 19): `rustup toolchain install nightly --profile minimal --component
+miri,rust-src`, then `MIRIFLAGS=-Zmiri-disable-isolation cargo +nightly miri test --lib -p CRATE -- --exact TEST`; a test of
+hours is measured on a copy in a scratch crate at a tenth of its size, old form against new. A `miri-slow` job's tests are
+timed from its own log: `scripts/ci-log-summary.py SAVED_LOG --slowest 10` (each `test … ok` line's stamp against the one
+before; Miri runs a binary's tests one at a time).
 **The interpreter is profiled in the VM** (on-demand run 16, RW 3.24): valgrind is installed, and `scripts/interp-profile.sh
 [--base REF] [--profile NAME]` builds a release harness of this checkout's interpreter outside the tree and prints, for
 RW 3.24's five benchmarks, instructions under callgrind, the minimum time and the output's hash; with `--base` it builds
@@ -449,7 +458,9 @@ origin/autosave/dogfood:2026-10-24/_head-chef/VERIFIED.md` names each finding (A
 each agent's `REPORT.txt` beside it has the steps; it is the agents' data, verified on the binary before a word is used.
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
-Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step
+Collect the edits, assert each anchor exactly once against the files as they are, then write. Quote a patch script's heredoc (`<<'EOF'`, its paths
+passed through the environment): an unquoted one runs every backtick in the records as a command (on-demand run 17; the
+anchor check stopped it before any write). **Join a script's input step
 to it with `&&`, and never leave a dry run's dummy input where the real run reads it** (on-demand run 2: a heredoc that
 wrote the evidence file failed its own anchor check, the records script ran anyway on the dry run's `R`/`L`/`S`/`X`, and the
 placeholders were caught only by reading the result). **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
@@ -471,7 +482,9 @@ the third was red at once). One dispatch per form, about three minutes each on a
 **Stop a background job by its PID, never `pkill -f PATTERN`** (run 24): the pattern was in the stopping command's own line, so
 `pkill -f check-other-os.sh` killed the shell that ran it (exit 144) — the edits queued behind it in that command never ran, and
 the lint's `cargo clippy` children lived on. `ps`, read the PIDs, `kill PID…`. **A witness log's last ~62 lines are the cache save and git's cleanup** (run 25: `tail_lines` 62 returned none of three runs'
-test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A whole-library witness log: `tail_lines` about 130** (on-demand run 5: 2,000 brought two 500-line logs into the context whole — a log under about 100 KB comes back inline, not as a file). **A one-test witness log: `tail_lines` 40** — its
+test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A whole-library witness log: `tail_lines` about 130** (on-demand run 5: 2,000 brought two 500-line logs into the context whole — a log under about 100 KB comes back inline, not as a file). **A macOS witness log is longer when its cache SAVES** (a few progress lines) than when it cannot reserve its key: on-demand
+run 18 asked 75 lines of a three-target read and got one target, and 68 of a one-target read and got none — ask 95 for
+three targets on macOS, 80 for one. **A one-test witness log: `tail_lines` 40** — its
 `test result` line is the last test output before the cache save; run 24 asked 3,000 of three such runs and pulled every line of
 three ~550-line logs into the context (run 13's mistake, repeated).
 **A check built as two walls is falsified as two** (run 24, M383/M383b): a mutant that removes one wall survives on the other by
@@ -480,7 +493,10 @@ witness can fail at all. A wall no double mutant can reach is dead code (run 18,
 **A witness of a normalizing comparison spells the colliding pair both ways round** (run 23, M351: `Accept` then `accept`
 let a mutant that compared the WRITTEN name live; the non-canonical spelling must be the one the comparison reads).
 **A measurement that comes back clean is re-asked in the shape that failed** (on-demand run 14): RW 4.53's contention numbers were clean on the current binary, and the red team's F4 — the chain HELD, requests queued — still answered DL1401 at 15 s. Re-run every shape a row's history names before closing it; and a witness of an ORDER places every member it is about (M970, the quarantine left out of the lane, survived a witness that placed only the e-stop). `scripts/estop-measure.py BIN DIR contention N` and `… held Q` time the e-stop in both of RW 4.53's shapes. **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
-the binary's answers never changed); read what the mutated code returns before recording a survivor.
+the binary's answers never changed); read what the mutated code returns before recording a survivor. **A guard that several paths feed is witnessed once per path,
+in a shape where that path alone carries the fact** (on-demand run 17: M1049 and M1050 — an assignment and a binding never
+noted — survived because every `_x` in the witnesses was also READ, which a third path noted; two shapes, each meeting
+`_x` one way only, turned both red).
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
 `git revert` it in a commit of its own — a dispatch records its SHA when it is created, so the next commit may follow at once
 (M108 and the next witness ran side by side). `git revert` takes no `-q`; read `git log -1` after a revert before any amend.
@@ -563,7 +579,10 @@ arm and `cli::SUBCOMMANDS` (`completions_cli` proves the three name one set), `j
 success table (a `--json` form a blind sweep can drive), and `mcp.rs`'s door rule (every command in exactly one of
 `READ_ONLY` and `EFFECTORS`, so one added later cannot reach an agent's tool unreviewed — and a server is classified by
 what it HANDS OUT, not by what it writes). A new **verb of `grants` or `guard`** is one more: `json_contract`'s broker-verbs
-sweep drives every verb the help advertises with `--json` and refuses one it never drove (run 21, `grants propose`). **No witness target reaches these**, so they appear only in the slice's own
+sweep drives every verb the help advertises with `--json` and refuses one it never drove (run 21, `grants propose`). A new **primitive** is four more: `prim_table::tests::count_is_pinned` (the table's length, written by hand — on-demand run 18's
+suite was red on it alone), `PRIM_TABLE_VERSION` (`dir.rs`), its conformance rows in `tests/conformance/witnesses.toml`
+(entrenched: an `ENTRENCHED_CHANGE_RECORD.md` entry) and the reference regenerated (`delulu-conform -- --reference`); run
+`cargo test -p delulu-check --lib` with the slice's own tests. **No witness target reaches these**, so they appear only in the slice's own
 full suite: run it before `master` moves, and put the rows in the slice's commit.
 
 **8. Improve the loop — loop engineering.** Before ending, ask what this run lost time to: an ambiguous

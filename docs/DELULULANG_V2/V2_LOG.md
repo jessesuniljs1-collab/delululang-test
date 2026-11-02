@@ -11531,3 +11531,240 @@ program it produced did not check.
 **Evidence:** `lsp_cli` `rename_finds_a_type_and_an_effect_wherever_one_is_written` renames a type and an effect, applies
 the edits the server returns, and checks the program. It was red before. Mutants M1038–M1043 drop one arm each, and
 each is red. The `lsp_cli` suite passes, 40 tests.
+
+## 2026-11-02 — the laptop: #119–#121 landed and folded into `launch/2.0.0`; the actor probe in full
+
+**Landed on `master`** by fast-forward, each on its green run:
+- #119, INDEX-TARGET-1: `11df603`, run `41341255443`.
+- #120, DL0414: `f6f1306`, run `41343108643`.
+- #121, RENAME-TYPES-1: `bbcaade`, run `41345208398`.
+
+**`launch/2.0.0`, merged twice**:
+- `add7f18` (master `f6f1306`) folded INDEX-TARGET-1 and DL0414. INDEX-TARGET-1 joins the *Breaking* paragraph,
+  judged against v1.0.0's own code: its `check_lvalue` ignored the index, so a program 1.x checked is refused under
+  2.0.0. Each such program broke a rule 1.x's reference already stated, but a refused program is a surface
+  `STABILITY.md` §1 holds stable. DL0414 is additive.
+- `e361f0b` (master `bbcaade`) folded RENAME-TYPES-1, which is not *Breaking*.
+- Criterion 2 was re-measured on each: 360/360, diag 157. `scripts/launch-gates.sh`: `LAUNCH-GATES=ok` on each.
+- `e361f0b`'s `everything` run `41347076820` and its release dry run `41347080030` were dispatched, and are unread at
+  this entry.
+
+**The actor probe, in full.** RENAME-TYPES-1's entry said a capability cannot reach an actor, probed with `val` on the
+constructor's parameter (DL1601). The value was then annotated, as DL1601 asks. Each spelling was refused:
+- `let p: val Cap[Python] = py`: DL1603;
+- `let p: iso Cap[Python] = recover { py }` sent with `consume p`: DL1605 and DL1603;
+- `let p: tag Cap[Python] = py`: DL1603.
+So the foreign-report and plugin-list walks, which visit functions and constants alone, miss nothing an actor can reach.
+
+## 2026-11-02 — on-demand routine run 17: DL0414's repair finished (D-V2-207); RENAME-CAPTURE-1 found in the draft
+
+**Housekeeping.** `master` was at `bbcaade` and every run since the last record was green: #122's `41347267939`,
+`bbcaade`'s push run `41346896446`, and `launch/2.0.0` `e361f0b`'s `everything` `41347076820` (18 of 18 success; the
+broker's Miri 1 h 44 min, against 3 h 07 min on the run before) and release dry run `41347080030` (the four packages
+success, the release job skipped: no tag). #122 (records) landed by fast-forward (`d75b65b`). The Survey matched the tree
+(1613 nodes) and `doctor --check` passed (26 checks).
+
+**The milestone.** The laptop's last session stopped `laptop/unread-repair` (`3543faa`) when the machine ran short of
+memory, before any suite ran: DL0414 (D-V2-206) gained a repair, `prefix-underscore`, which inserts `_` at the binding
+and at each assignment to it, marked `requires_human`. The newest autosave snapshot (`521f2ac`) holds the same code. This
+run merged `master` into it (`5037cc7`), read it as a stranger's, and finished it (`0c3fad1`):
+- **RENAME-CAPTURE-1, witnessed on the draft's binary.** The draft said the rename changes nothing the program does.
+  With `let _x = 5`, `let x = 1`, then `_x` printed, the repaired program printed `value: 1` (the original `value: 5`)
+  and checked clean; with `var x = 0`, `var _x = 7`, `x = 2`, it printed 2 for 7. Fixed: `FnCtx` keeps a `NameClock`,
+  when each name was last met (every `lookup`, `lookup_to_assign` and `bind`; a global is asked of `lookup` first), each
+  `let` records the clock when bound, and the repair is offered only if no `_x` was met before its block closed.
+- **The editor showed it as nothing.** `lsp.rs` dropped the edits of every `requires_human` repair. It now offers the
+  edits of one that has them, never preferred, titled *"a human decides — review before applying"*. The documents that
+  said such a repair never carries an edit were corrected (`fix.rs`, STAGE8 §3, `editors.md`, `for-agents.md`), and
+  DL0414's explanation names the repair.
+
+**Mutants.** The draft's M1044 (an assignment never noted), M1045 (the binding not renamed) and M1046 (no human asked),
+re-run, and M1047 (the guard removed), M1048 (`lookup` meets nothing), M1051 (the clock read as 0 at the binding), M1052
+(the server drops the edits again), M1053 (preferred), M1054 (the title) and M1055 (a name met twice keeps its first
+time) were red. **M1049 (`lookup_to_assign` meets nothing) and M1050 (`bind` meets nothing) survived**: every `_x` in the
+witnesses was also read. Two shapes were added, an outer `_x` only assigned inside the binding's block (renamed, the
+outer `_x` read after it stays 7 for 3) and an inner `_x` only bound before a write to `x` (renamed, the repaired program
+is refused DL0401), each confirmed on the binary by hand; both mutants were then red, and the control green.
+
+**`core_invariance`.** Three reject programs' DL0414 (`DL1602_consume_in_an_index_target`, `DL1602_use_after_consume`,
+`DL1605_recover_captures_ref`) each gain the repair, its one edit at the binding's first byte, in the JSON and the human
+surface; 3 lines removed (`"repairs": []`), 60 added, nothing else. Judged and blessed.
+
+**Evidence.** The full suite in the VM (`scripts/suite.sh`: `EXIT=0`, 2,663 passed, 0 failed, 16 ignored, 192 binaries, the tree unmoved); `scripts/clippy.sh` clean. The new tests on the other runners, `witness.yml` at `0c3fad1` on the session's branch with `fix_cli lsp_cli`: macOS `41381373785` (14 and 41 passed, both new tests named) and Windows `41381376441` (success; `lsp_cli` 41 passed with the new test named, `fix_cli` above the tail read and covered by the job's success). The push run of `master`, `41382701663` on `0d17bca`, is read green (14 success, 2 skipped).
+
+**`launch/2.0.0` brought current.** `1487163` merges `master` `0d17bca`. The one CHANGELOG section was folded by
+`scripts/launch-changelog.py` and judged against `STABILITY.md` §1 and v1.0.0: additive, because a repair id is add-only,
+DL0414 is not in 1.x, and no 1.x repair was both `requires_human` and carried edits (v1.0.0's sources searched), so no
+code action a 1.x program receives changes. CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `e361f0b`'s runs; criterion 2 is
+360/360; `LAUNCH-GATES=ok`, the merged tree's Rust `master`'s. Release dry run `41383382785`: the four packages success.
+`everything` `41383380395`: dispatched, running at the run's close.
+
+## 2026-11-02 — on-demand routine run 18: `put`, `patch` and `delete` (D-V2-208) — RW 2.12 closed, P9-05 complete
+
+**Housekeeping.** `master` was at `1ee12c7` (on-demand routine run 17's close) and every run since the last record was
+green: `1ee12c7`'s push run `41384594047`; `launch/2.0.0` `1487163`'s release dry run `41383382785` (read by run 17). The
+newest autosave snapshot (`521f2ac`, 20:35 UTC on 2026-11-01) differs from `3543faa`, which landed, only in the
+generated map; `autosave/laptop-dl-launch`'s newest (`242ce03`, 2026-11-01 10:55 UTC, base `005372f`) is in `launch/2.0.0`
+whole: its 75 paths are identical in `415eb2e`, the next merge. No branch held a commit `master` lacks but `launch/2.0.0`, `autosave/*`, `archive/*` and `rc/*`, as before.
+The Survey matched the tree (1613 nodes, 18564 edges) and `doctor --check` passed (26 checks). The permission classifier
+refused `git push --delete` again (*"Git Destructive"*), so the four merged branches stay for the laptop.
+
+**Why this milestone, not RW 3.24.** The inbox's second item was RW 3.24, a compiled form for the interpreter. Read
+against `interp.rs`: slots alone buy about a tenth (run 16's profile), and a compiled form pays only if it is total —
+methods on capabilities, closures over scopes (LATE-LET-1), the plugin budget's per-node fuel, CLOSURE-SCOPE-1's home —
+which is a redesign of the interpreter over several runs, to be designed before it is built. RW 2.12's last part was
+designed (D-V2-55, D-V2-182, D-V2-183), a gap for the agents the language serves (no program could update or delete over
+a REST API), and a Linux VM could build and verify it whole. RW 3.24 stays the first *Open / next* item, with this read.
+
+**The milestone.** Witnessed first on `1ee12c7`: `check` refused `h.put(…)`, `h.patch(…)` and `h.delete(…)` with DL0405
+*"type `Cap[Http]` has no method"*, though the grant grammar parsed `HOST:PUT,PATCH,DELETE`. Built (D-V2-208):
+- the six primitives in the table and the checker (`PRIM_TABLE_VERSION` 9), and one list of requests in `prim` that the
+  first check, the custody gate, the trace, the broker-held secret's send, `--within`, `authority --json` and its schema
+  read, where five hand-written lists named the five requests before;
+- the egress client's redirect rule by the Fetch standard (a 301/302 changes a POST alone, a 303 every method but GET and
+  HEAD), and `Reason::MethodElsewhere`: a request that keeps a method other than GET is never sent to another origin;
+- the WASM engine's six imports from one table (`MORE_REQUESTS`), performed by the host's `send_plain` (which now also
+  performs `get_with` and `post`, two copies of one body before) and `send_with_secret`;
+- six conformance anchors (366 of 366), the reference regenerated; `witnesses.toml` recorded in
+  `ENTRENCHED_CHANGE_RECORD.md`.
+
+**Evidence.** Tests (each named in D-V2-208): the egress client's
+`a_put_a_patch_and_a_delete_keep_their_method_on_a_301_or_302_and_never_leave_their_origin`,
+`a_put_a_patch_and_a_delete_carry_their_secret_only_inside_the_audience` and, over real TLS,
+`a_put_a_patch_and_a_delete_arrive_over_tls_by_their_own_methods`; `egress_cli`
+`a_put_a_patch_and_a_delete_leave_under_a_grant_that_names_their_method_and_no_other` (L0 and a guest) and
+`a_programs_put_and_patch_carry_its_body_to_the_client`; `within_cli`
+`a_put_a_patch_and_a_delete_are_decided_by_their_methods_against_the_boundary`; `broker_cli`
+`a_put_a_patch_and_a_delete_are_judged_by_their_methods_under_the_daemon_as_embedded` and
+`a_broker_held_secret_rides_a_put_a_patch_and_a_delete_by_their_methods`; `audit_ocsf_cli` (a DELETE's `http_method`);
+`trace` `effect_for_maps_every_effectful_primitive`. Mutants, each red, the controls green:
+- M1056 a 301/302 changes every method again (D-V2-183's rule), M1057 a 303 changes a POST alone, M1058 no
+  `method-elsewhere` — the egress tests;
+- M1059 `delete` made a GET, M1060 `put` made a POST, M1063 a secret form found by the old two names — the end-to-end
+  tests; M1061 a program's body dropped in `prim` (first a build error, `None` untyped; re-run as `None::<String>`) and
+  M1062 `put` given no body — only `a_programs_put_and_patch_carry_its_body_to_the_client`, written because no other test
+  could see a program's body;
+- M1064 `--within` finds the old five requests, M1065 a secret form's arity read as 4, M1070 the schema's old enum —
+  the `--within` test (the last by its schema validation, added for it); M1071 the checker types `put` no more;
+- M1066 the WASM table gives `put` no body, M1067 the host's PUT and PATCH imports swapped, M1068 the host's custody
+  asked with no method — the daemon test's WASM route; M1069 the trace's old five — `effect_for`.
+**The suite** (`scripts/suite.sh`, alone, `-j 4`): 192 binaries, 2,670 passed, 1 failed, 16 ignored, the tree unmoved. The one
+red was `delulu-check`'s `prim_table::tests::count_is_pinned`, the table's length written by hand (86, now 92) — a
+tripwire doing its job, which the slice's own tests had not run. Updated, its target re-run green (266 passed);
+`scripts/clippy.sh` clean after it. CLOUD_ROUTINE step 7a now lists a new primitive's four places.
+**Runner reads, before `master` moved** (`witness.yml` at `cd55b59` on `claude/peaceful-carson-yl72j8`): macOS
+`41392735108` and Windows `41392737821` (`egress_cli`, `within_cli`, `broker_cli`, filter `_put`: the five new tests
+named, each `ok`), macOS `41392740882` and Windows `41392744038` (`delulu-runtime` `lib`: the three new egress tests named,
+each `ok`, the TLS test among them).
+**The push run** `41394552057` on `4e63eb7` (the records commit, holding `cd55b59`): 14 success, 2 skipped (`miri-slow`,
+`heavy-gates`); `openshell` `41394552103` and `ocsf` `41394552121` success; `actors_pingpong` measured on arm64 (2.92x
+against 1.28x, passed), not measured on the other three.
+
+## 2026-11-02 — on-demand routine run 19: the broker's Miri back under its cap; `launch/2.0.0` brought current with D-V2-208
+
+**Housekeeping.** `master` was at `eeb9c01` (on-demand routine run 18's close), and every run since the last record was
+read green: `eeb9c01`'s push run `41396824431` (14 success, 2 skipped — `miri-slow` and `heavy-gates`, a push run's usual;
+`actors_pingpong` measured on arm64, 2.83x where the machine gave 3.94x, against 1.48x, passed; not measured on the
+other three), and `launch/2.0.0` `1487163`'s `everything` `41383380395` — **18 of 18 success**, read to its end this run
+(the broker's Miri 3 h 10 min 54 s, `delulu-check`'s 1 h 39 min, `delulu-syntax`'s 22 min; arm64 2.89x against 1.48x,
+passed). Its release dry run `41383382785` was read green by run 17. The autosave snapshots are those runs 17 and 18 read
+(`521f2ac`, `242ce03`), each landed. No branch held a commit `master` lacks but `launch/2.0.0`, `autosave/*`, `archive/*`
+and `rc/*`. The Survey matched the tree (1613 nodes, 18600 edges) and `doctor --check` passed (26 checks).
+
+**The finding: the broker's Miri at 80% of its cap.** `41383380395`'s `miri-slow (delulu-broker)` ran 3 h 10 min 54 s of its
+240 minutes; the run before it (`41347076820`, on `e361f0b`) ran the same job in 1 h 43 min 40 s, and `path.rs` has not
+changed since 2026-10-17 — the runner moved, not the code, and the next slow runner could cancel the job and turn a
+launch criterion red. Timed from the job's own log (each test's line against the one before; Miri runs the tests one at a
+time): `path::tests::canonicalization_laws_hold_on_generated_paths` alone 8,119 s of the crate's 11,386 s, natively 0.4 s;
+`netscope::tests::equivalent_net_sets_canonicalize_identically` 748 s (already strided under Miri);
+`path::tests::canonicalizing_never_changes_a_containment_decision` 513 s; `equivalent_spellings_get_one_representative`
+143 s. Read against the code: the laws test's completeness law searched its first 400 classes one by one for each of
+20,000 generated paths, its containment law canonicalized both sides of each of 8,100 pairs, and each path was resolved
+four times; the two corpus tests canonicalized (or resolved) both sides of every one of 5,929 pairs afresh.
+
+**The fix** (`04db8fb`): each value computed once, over the same inputs and the same laws. Law 4 (completeness) looks
+its class up in a `BTreeMap` keyed by the resolved segments — `Seg` derives an order for it, which no decision reads —
+where it scanned a list; law 5 (containment) pairs each of its 90 samples with its canonical form, made once; laws 1 and
+3 read the path's segments resolved once. `equivalent_spellings_get_one_representative` and
+`canonicalizing_never_changes_a_containment_decision` resolve or canonicalize each of the 77 corpus spellings once.
+**Nothing shrinks under `cfg!(miri)`:** Miri still interprets all 20,000 paths and every pair — the CI comment's rule
+for a test that grows (*"doing its work once … never by raising this budget"*), and the strongest form of it here.
+
+**Evidence.** Measured under Miri in the VM (nightly with `miri`, a copy of the test's functions and forms in a scratch
+crate outside the repository, each form alone): the loop at 2,000 paths — the old form 668 s, the old form without law
+4's scan 386 s, the new form 270 s (2.5x); the 8,100 pairs — old 1,497 s, new 806 s (1.9x; the new form measured partly
+beside a workspace clippy, so if anything slow). The old form's projection, 6,680 + 1,497 s, matches the runner's
+8,119 s. Natively the eighteen `path` tests take 0.34 s. Mutants (`scripts/mutants.py`),
+each red at the law it is about, the control green (18 passed): **M1072** `canonicalize` returns the spelling as written —
+the laws test red at law 4, *"resolves like an earlier path but canonicalizes apart"*, iteration 14 (laws 1, 2, 3 and 5
+all hold for it, so law 4's map is what sees it); **M1073** the same against `equivalent_spellings_get_one_representative`
+(*"resolve alike but canonicalize apart"*); **M1074** a relative path rendered without its `./` —
+`canonicalizing_never_changes_a_containment_decision`, *"flipped under canonicalization"*; **M1075** the same with laws 1
+and 2 removed from the laws test — law 5 alone, *"flipped"*. **The suite** (`scripts/suite.sh`, alone, `-j 4`): 192
+binaries, 2,671 passed, 0 failed, 16 ignored, the tree unmoved — run 18's tests among them. `scripts/clippy.sh` clean.
+**The push run** `41414258769` on `04db8fb`: 14 success, 2 skipped (`miri-slow`, `heavy-gates`); `actors_pingpong`
+measured on arm64 (2.88x where the machine gave 3.94x, against 1.48x, passed), not measured on the other three.
+
+**`launch/2.0.0` brought current** (`728a582`, the merge of `master` `04db8fb`): `master`'s one new CHANGELOG section
+(D-V2-208) folded by `scripts/launch-changelog.py`, judged additive against `STABILITY.md` §1 and v1.0.0 — v1.0.0 had no
+`put`, `patch` or `delete`; a grant entry naming no methods still allows GET alone; a GET's and a POST's redirects are
+unchanged; and the primitive table's version moves 8 → 9 inside 2.0.0's own development, from v1.0.0's 1, so a 1.x
+`.dpx` is refused by 2.0.0 already and nothing a 1.x artefact meets changes (as D-V2-183's 7 → 8 was judged). The
+*Breaking* paragraph is unchanged. CHECKLIST-2.0 criteria 1, 3, 4 and 8 cite `1487163`'s runs (`41383380395`, 18 of 18;
+`41383382785`, the four packages), and criterion 3 names the broker's 3 h 11 min with what was done about it. Criterion 2
+re-measured by `scripts/launch-criterion-2.py`: 366/366. `scripts/launch-gates.sh`: `LAUNCH-GATES=ok` (survey 1614 nodes,
+18651 edges; findings 0 errors, 6 warnings; doctor 26 checks; cargo deny), the merged tree's Rust `master`'s. Dispatched
+at it: `everything` `41416143488` and the release dry run `41416147296`.
+
+**The close.** `everything` `41416143488` READ: **18 of 18 success** — `miri-slow (delulu-broker)` **2 h 01 min 16 s** (3 h 10 min 54 s on `41383380395`), its tests 7,190 s (11,386 s), the laws test **4,191 s** (8,119 s) and the corpus containment test 283 s (513 s), on a runner as slow as the last (`delulu-check`'s Miri 1 h 43 min against 1 h 39 min; the untouched `netscope::tests::equivalent_net_sets_canonicalize_identically` 769 s against 748 s); `delulu-syntax` 22 min; arm64 `actors_pingpong` 2.96x against 1.48x, passed; disk Windows 144 → 129 GB. Release dry run `41416147296` READ: the four packages success, the release job skipped (no tag). The records commit's push run `41417695534` on `329d8b1`: 14 success, 2 skipped; arm64 2.95x against 1.47x, passed. So the cut is real on a runner: about 4,200 s off the job, which now has nearly two hours to spare. `scripts/ci-log-summary.py` gained `--slowest N` (each test timed from the log's stamps), which printed the hand count of `41383380395`'s broker log exactly and timed this one.
+
+## 2026-11-02 — the laptop: synced with on-demand runs 17–19; an everyday-program probe; a tour of every surface
+
+**Synced.** The owner fired on-demand runs 17, 18 and 19 by hand (the trigger stays disabled; every run was idle by
+11:20 UTC). They landed #122's records, D-V2-207, D-V2-208 and the broker's Miri fix. The laptop fast-forwarded:
+- `master` to `9c51b4e`;
+- `launch/2.0.0`, in `D:/nelan/dl-launch`, to `728a582`.
+
+Five branches whose tips are in `master`'s history were deleted from `origin`, each checked with
+`git merge-base --is-ancestor` immediately before (run 19's *Redo on the laptop*):
+- `claude/peaceful-carson-em21b1` `1ee12c7`, `claude/peaceful-carson-yl72j8` `eeb9c01` and
+  `claude/peaceful-carson-emptlo` `9c51b4e`;
+- `laptop/records-0102` `d75b65b` and `laptop/unread-repair` `3543faa`.
+
+Kept, under BRANCH-CLEANUP-2026-10-26's rule: `master`, `launch/2.0.0`, `rc/1.0.0-drill`,
+`archive/superseded-2026-10-26` and `autosave/*`. The autosave task was renewed to 2026-11-09 18:17 IST. The Survey
+matched the tree (1613 nodes, 18608 edges), and `doctor --check` passed 29 checks.
+
+**The everyday-program probe.** Told that 2.0 was ready to ship, the owner answered: *"Fundamental things that are
+needed in a programming language are not in delululang. Still cannot write complete program like in java or python,
+Most keywords and their equivalent are missing."* He was right, and the claim had been judged on the wrong axis.
+CHECKLIST-2.0 and `REMAINING_WORK.md` measure quality, security and proof; neither asks whether an ordinary program can
+be written.
+
+The probe ran 39 small programs, each one construct a Java or Python programmer reaches for, with
+`delulu run --grant console` on a debug build of `9c51b4e`. 14 ran and 25 were refused; one of the 14 printed
+`hello {name}` with its braces.
+- Deliberate and kept: no exceptions, no module-level `var`, no implicit conversion in `+`, `let` for a constant, and
+  faults that stop a program.
+- Not built: RW 2.33–2.40, through RW 1.15's correction of this list's opening note, its row 2.1 and the README's
+  status row.
+
+**The tour.** Every surface the owner asked about was run on the same build:
+- `authority`, `atlas`, and `guard` with `broker start` (without the broker it refuses, DL1401, as designed);
+- `sandbox probe`, and a `--sandbox` run (L1 on Windows: a Job Object, a restricted token, an AppContainer);
+- `--isolation microvm` (DL1408 on Windows, as documented);
+- `build --target wasm` and a run of its `.dwx`;
+- the REPL, `plugin build` and `plugin verify`, `new`, `test` and `run` of a fresh package, and `morph list`;
+- the foreign C and Python samples, each refused without its grant (DL1303), as designed.
+
+The launch branch's `everything` run `41416143488` holds the rest: 18 of 18, `microvm` and `editor` among them.
+
+Found:
+- RW 6.50: `sandbox probe` says L3 and L4 are unbuilt.
+- RW 6.51: `test` reads a missing path as a filter.
+- RW 6.52: one file of a package gives DL0301.
+- RW 6.53: the laptop's own `delulu` on `PATH` and its VS Code extension dated from 2026-08-07, three months behind, and
+  nothing noticed.
+
+**Open, the owner's to answer:** hold the 2.0 launch until the language basics land (recommended), or launch and add
+them in 2.x. No code changed. The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

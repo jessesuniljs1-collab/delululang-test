@@ -15,8 +15,10 @@
 //!   person. You may accept one, but you must name it — `--accept-widening <repair-id>` — because
 //!   a blanket flag on a batch command means "widen authority everywhere, unattended", and that
 //!   flag ends up in a CI script.
-//! - **`requires_human` repairs carry no edits at all.** They are documentation of a decision
-//!   someone has to make; there is nothing to apply and nothing is pretended.
+//! - **`requires_human` repairs are never applied.** Most carry no edits at all: they are
+//!   documentation of a decision someone has to make, and nothing is pretended. One that carries
+//!   edits (DL0414's `prefix-underscore`, D-V2-207) changes nothing the program does and may still
+//!   hide a mistake, so it is a person's to choose — in an editor, or by reading `check --json`.
 //! - **Only `Exact` repairs are applied.** `Safe` and `Suggest` are good guesses, and this command
 //!   does not guess into your source. They are reported so you can see them.
 

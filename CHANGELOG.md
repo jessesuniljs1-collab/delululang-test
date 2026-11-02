@@ -11,6 +11,35 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — PUT, PATCH and DELETE requests, each judged by its method, 2026-11-02
+
+- **Added: `http.put(url, headers, body)`, `http.patch(url, headers, body)` and `http.delete(url, headers)`**, each with a
+  `_with_secret` form that carries one `Secret[Str]` in one header, sent only to the secret's audience (D-V2-208, RW
+  2.12). A program mints `root.http(["api.example.com:PUT,DELETE/v1/**"])` and the operator grants the same; an entry
+  naming no methods allows GET alone, so no grant written before widens. Under one that does not name the method the
+  request is refused at the call, DL0904, *"a `DELETE` to … is outside the methods the grant names for it"*. Each is
+  judged by its method on every hop, by the broker (the chain's `use` names it, OCSF `http_request.http_method`), by
+  `authority --within` and in `authority --json`'s `requests`. They run from a `--sandbox` guest (the host performs them)
+  and on `--engine wasm`. The primitive table's version goes from 8 to 9 (additive): a `.dpx` built against 8 is refused
+  DL1503 and rebuilt.
+- **Redirects keep a PUT, a PATCH and a DELETE on a 301 or 302**, by the Fetch standard's rule: only a POST becomes a GET
+  there, and a 303 makes every method a GET with no body. A request that keeps a method other than GET is sent only to
+  the origin the program named; a redirect elsewhere is refused (`body-elsewhere` for one with a body, the new reason
+  `method-elsewhere` for a DELETE), and the program is told `Refused`. A POST's redirects are unchanged.
+
+## Unreleased — DL0414 offers to rename a binding never read, where that changes nothing, 2026-11-02
+
+- **Added: DL0414 carries a repair, `prefix-underscore`** (D-V2-207, RW 2.32). It names the binding and every assignment
+  to it `_x`, which says the binding is meant to go unread and changes nothing the program does. A person decides: an
+  unread binding may be a mistake the rename would hide, so the repair is `requires_human` and `delulu fix` never
+  applies it. **It is not offered where `_x` already means something inside the binding's scope** (an outer `_x` read
+  or assigned there, a later `_x` an assignment would reach, a function or constant `_x` called or read), because there
+  the rename would change what the program does. A new repair id is additive (`STABILITY.md` §1).
+- **Changed: the editor offers the edits of a repair a human decides.** The language server dropped the edits of every
+  `requires_human` repair, so such an action did nothing. One that carries edits now offers them, is never preferred
+  (a client's automatic fix never takes it) and says *"a human decides — review before applying"*; one with no edit is
+  documentation, as before. `requires_human` stays in the action's `data` for a harness to refuse by policy.
+
 ## Unreleased — the editor renames a type or an effect everywhere it is written, 2026-11-02
 
 - **Fixed: renaming a type or an effect in the editor left most of its uses behind** (RENAME-TYPES-1, RW 2.31). The

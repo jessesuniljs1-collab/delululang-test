@@ -777,6 +777,9 @@ struct Imports {
     /// `delulu:cap.http_post_with_secret` — `Cap[Http].post_with_secret(url, headers, header, secret, body)`, a POST
     /// carrying a secret's handle, sent from the host as `get_with_secret`'s is (P9-05 (d), D-V2-183).
     http_post_with_secret: u32,
+    /// `delulu:cap.http_put`, `http_patch`, `http_delete` and their `_with_secret` forms, in [`MORE_REQUESTS`]' order — the
+    /// other requests a grant's methods name, each performed host-side by the interpreter's own method (D-V2-208).
+    http_more: [u32; 6],
     /// `delulu:cap.secret_verify` — `Secret.verify(other)`, compared host-side by the interpreter's own `secret_verify`.
     secret_verify: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
@@ -1041,6 +1044,36 @@ fn body_is_compiled(env: &EnumEnv, f: &FnDecl) -> bool {
 fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
     module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if names.contains(&name.name.as_str())), false)
 }
+
+/// A request beside `get`, `get_with`, `post` and their secret forms (D-V2-208): its method's name, its import, and whether
+/// it carries a body (last) and a secret (arguments 2 and 3, a header's name and the secret's handle).
+struct MoreRequest {
+    method: &'static str,
+    import: &'static str,
+    body: bool,
+    secret: bool,
+}
+
+impl MoreRequest {
+    /// The method's arguments: the URL and the headers, then the secret's two, then the body.
+    fn arity(&self) -> usize {
+        2 + 2 * usize::from(self.secret) + usize::from(self.body)
+    }
+    /// The import's parameters: the capability, the arguments (the headers as a value and its descriptor) and the span's three.
+    fn params(&self) -> usize {
+        self.arity() + 5
+    }
+}
+
+/// The imports [`Imports::http_more`] indexes, in its order.
+const MORE_REQUESTS: [MoreRequest; 6] = [
+    MoreRequest { method: "put", import: "http_put", body: true, secret: false },
+    MoreRequest { method: "patch", import: "http_patch", body: true, secret: false },
+    MoreRequest { method: "delete", import: "http_delete", body: false, secret: false },
+    MoreRequest { method: "put_with_secret", import: "http_put_with_secret", body: true, secret: true },
+    MoreRequest { method: "patch_with_secret", import: "http_patch_with_secret", body: true, secret: true },
+    MoreRequest { method: "delete_with_secret", import: "http_delete_with_secret", body: false, secret: true },
+];
 
 /// Does any compiled body take `str` of, or compare with `==`/`!=`, a value the checker typed as a list, an option, a
 /// result, a sum or a record — or as a type variable, which an inlined generic body may make one? Then the module carries
@@ -1371,6 +1404,7 @@ fn compile_module_typed(
         http_post: u32::MAX,
         http_get_with: u32::MAX,
         http_post_with_secret: u32::MAX,
+        http_more: [u32::MAX; 6],
         secret_verify: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
@@ -1468,6 +1502,15 @@ fn compile_module_typed(
     if needs_post_secret {
         imp.http_post_with_secret = n_imports;
         n_imports += 1;
+    }
+    // D-V2-208: each of the other requests where a `Cap[Http]` is minted (and, for a `_with_secret` form, a secret too).
+    let mut needs_more = [false; 6];
+    for (i, r) in MORE_REQUESTS.iter().enumerate() {
+        needs_more[i] = needs_http && (!r.secret || needs_secret) && module_calls_method(&env, module, &[r.method]);
+        if needs_more[i] {
+            imp.http_more[i] = n_imports;
+            n_imports += 1;
+        }
     }
     // A function taking two secrets compiles wherever it is written, so a module may verify what it never mints.
     let needs_secret_verify = module_calls_method(&env, module, &["verify"]);
@@ -1712,6 +1755,15 @@ fn compile_module_typed(
         types.ty().function([ValType::I32; 10], [ValType::I32]);
         next_type += 1;
     }
+    // http_<method>(cap, url, headers, desc, [header, secret,] [body,] file, start, end) -> result_ptr (D-V2-208)
+    let mut http_more_ty = [0u32; 6];
+    for (i, r) in MORE_REQUESTS.iter().enumerate() {
+        if needs_more[i] {
+            http_more_ty[i] = next_type;
+            types.ty().function(vec![ValType::I32; r.params()], [ValType::I32]);
+            next_type += 1;
+        }
+    }
     let mut secret_verify_ty = 0;
     if needs_secret_verify {
         secret_verify_ty = next_type;
@@ -1936,6 +1988,11 @@ fn compile_module_typed(
     }
     if needs_post_secret {
         imports.import("delulu:cap", "http_post_with_secret", EntityType::Function(http_post_secret_ty));
+    }
+    for (i, r) in MORE_REQUESTS.iter().enumerate() {
+        if needs_more[i] {
+            imports.import("delulu:cap", r.import, EntityType::Function(http_more_ty[i]));
+        }
     }
     if needs_secret_verify {
         imports.import("delulu:cap", "secret_verify", EntityType::Function(secret_verify_ty));
@@ -4316,6 +4373,47 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.http_get_with_secret));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
+            // `Cap[Http].put`, `patch`, `delete` and their `_with_secret` forms -> `Result[Str, NetErr]` (D-V2-208): `post`'s
+            // arguments, `get_with`'s for a DELETE, and `post_with_secret`'s or `get_with_secret`'s for a secret form — sent
+            // from the host by the interpreter's own method, judged there by it.
+            if recv_ty == Ty::Http {
+                if let Some(i) = MORE_REQUESTS.iter().position(|r| r.method == name.name && r.arity() == args.len()) {
+                    let r = &MORE_REQUESTS[i];
+                    if cx.imp.http_more[i] == u32::MAX {
+                        let what = if r.secret { "no secret" } else { "no Cap[Http]" };
+                        return Err(CompileError::Unsupported(format!("`{}` in a module that mints {what}", r.method)));
+                    }
+                    if compile_expr(&args[0], cx)? != Ty::Str {
+                        return Err(CompileError::Unsupported(format!("http {} of a URL that is not a Str", r.method)));
+                    }
+                    let headers = compile_expr(&args[1], cx)?;
+                    if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                        return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                    }
+                    cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                    if r.secret {
+                        if compile_expr(&args[2], cx)? != Ty::Str {
+                            return Err(CompileError::Unsupported("a header name that is not a Str".into()));
+                        }
+                        if compile_expr(&args[3], cx)? != Ty::Secret {
+                            return Err(CompileError::Unsupported(format!(
+                                "`{}` of a value that is not a Secret[Str]",
+                                r.method
+                            )));
+                        }
+                    }
+                    if r.body && compile_expr(&args[args.len() - 1], cx)? != Ty::Str {
+                        return Err(CompileError::Unsupported("a request body that is not a Str".into()));
+                    }
+                    let net_err = cx
+                        .env
+                        .id("NetErr")
+                        .ok_or_else(|| CompileError::Unsupported(format!("http {} without the NetErr prelude type", r.method)))?;
+                    emit_span(cx, *span);
+                    cx.emit(Instruction::Call(cx.imp.http_more[i]));
+                    return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+                }
             }
             // `Cap[Http].post_with_secret(url, headers, header, secret, body)` -> `Result[Str, NetErr]` (P9-05 (d), D-V2-183):
             // `get_with_secret`'s arguments and then the body, sent from the host by the interpreter's own method.

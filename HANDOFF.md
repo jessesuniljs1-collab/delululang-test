@@ -774,6 +774,15 @@ wins, and you should update the memory to match.
   a test, not by memory.
 - **Model-attribution honesty**: check which model is actually running before writing a
   `Co-Authored-By` line. Stage 9 was mis-signed and the correction is recorded rather than rewritten.
+- **"Ready" is judged against an ordinary program too, not only against gates** *(the owner, 2026-11-02)*. Told that
+  2.0 was ready to ship, he answered that a complete program like Java's or Python's still could not be written — and a
+  probe found 25 of 39 everyday constructs refused (RW 1.15, 2.33–2.40). CHECKLIST-2.0 and `REMAINING_WORK.md` measured
+  quality, security and proof; neither asked what a newcomer meets first. Before calling anything ready, write the
+  ordinary programs its users will write, and separate *deliberate by design* from *simply not built* when explaining
+  a gap.
+- **What the owner runs is not what CI runs.** On 2026-11-02 the laptop's `delulu` on `PATH` and its VS Code extension
+  were three months old while every test used a fresh build (RW 6.53). At a laptop session's start, compare
+  `which delulu` and its date with the tree's; reinstall only on the owner's word.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 
@@ -1354,6 +1363,20 @@ spells the same thing?**
   `LValue::index_exprs` names the indices in the order they run. A new walk of a statement names every part the
   runtime evaluates; never write `Assign { value, .. }`. Search key: `Assign { value, .. }` and a
   `Stmt::Let { value, .. } | Stmt::Assign { value, .. }` arm.
+- **RENAME-CAPTURE-1 — a repair that renames is offered only where the new name means nothing in the scope** (on-demand
+  routine run 17, 2026-11-02, D-V2-207). The laptop's draft of DL0414's repair renamed an unread `x` to `_x` and called
+  it a change to nothing. With `let _x = 5` before it and `_x` read after, the renamed binding shadowed the first, and
+  the repaired program printed 1 where it printed 5, and checked clean; a later `var _x` took a write meant for `x`. A
+  rename is safe only when the new name is met nowhere between the binding and the end of its block, as a read, a
+  write or a binding, a function, a constant or a builtin included (`NameClock`). Witness a rename by RUNNING the program
+  before and after, not by checking it. Search key: a `Repair` whose edits insert into a name.
+
+- **A redirect changes a method by the Fetch standard's rule, and a method other than GET never leaves the program's
+  origin** (on-demand routine run 18, 2026-11-02, D-V2-208). D-V2-183 made every non-GET a GET on a 301, 302 or 303 —
+  right for the one method it could see, POST, and wrong for the next: a moved DELETE would have been re-sent as a GET
+  whose answer read as the DELETE's. Only a POST becomes a GET on a 301 or 302 (RFC 9110 §15.4.2–3), a 303 makes every
+  method a GET, and a kept PUT, PATCH or DELETE goes to its own origin only (`body-elsewhere`, `method-elsewhere`). Never
+  widen either back. Search key: `to_get` and `MethodElsewhere` in `egress.rs`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1420,6 +1443,17 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `miri-slow (delulu-check)` out. Before landing a test that spends a bound, multiply its cost by Miri's (here about a
   millisecond a cell) or dispatch `-f jobs=miri-slow` at the branch; give the limit a Miri arm (`EXHAUSTIVE_BUDGET`,
   `LOCK_WAIT`) and size the test to the arm compiled.
+- **A test's cost under Miri is not its native cost's shape, and a job near its cap is a finding before it is red**
+  (on-demand routine run 19, 2026-11-02): `path::tests::canonicalization_laws_hold_on_generated_paths` ran 0.4 s natively
+  and 8,119 s under Miri, 71% of `miri-slow (delulu-broker)`'s 3 h 11 min — 46 minutes from the cap, on code unchanged
+  since 2026-10-17 (1 h 44 min the run before: the runner moved). A linear search over 400 classes was 42% of its loop
+  under Miri; resolving each path four times was most of the rest. Time a job's tests from its own log
+  (`scripts/ci-log-summary.py SAVED_LOG --slowest 10`: each `test … ok` line against the one before — Miri runs them one at
+  a time), then measure the slow one IN THE VM before choosing a fix:
+  `rustup toolchain install nightly --profile minimal --component miri,rust-src` (about a minute), a copy of the test in a
+  scratch crate at a tenth of its size, the old form against the new. Do its work once before shrinking it under
+  `cfg!(miri)`: here the same 20,000 paths and laws, the loop 2.5x and the pairs 1.9x faster in the VM, and on the next
+  runner as slow the test 8,119 → 4,191 s and the job 3 h 11 min → 2 h 01 min (`41416143488`).
 - **Measure an OS limit before claiming it** — Windows' job time limit fires late; macOS does not enforce
   `RLIMIT_DATA`, so no memory ceiling is claimed there. A report states only what was measured.
 - **A sandboxed run writes its audit records only where the chain already exists**
@@ -2047,6 +2081,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   while another job ran reads every cut as a win. Two cuts that each looked right lost on the count: four bindings held
   inline in a scope (+2–5% on every benchmark, as the laptop's timing had found) and an inlined clone of scalars (+3%) —
   each made a hot function bigger than it saved. `scripts/interp-profile.sh --base REF` builds both and prints both.
+- **What a program hands its client is witnessed by a refusal the client makes on it** (on-demand routine run 18, D-V2-208).
+  A program's request cannot reach a test server that sees its body: the platform trust store refuses the test's own
+  certificate, and the end-to-end tests read only the TLS hello. So a mutant that dropped a PUT's body inside `prim`
+  survived every test but one written for it: a body past the client's 1 MiB limit, refused `request-too-large` before
+  anything connects — which happens only if the body arrived. Where a server cannot see a value, find the check the
+  client makes on that value and make it fire. And **one set, one list**: the five requests were five hand-written
+  `matches!` lists (the first check, the custody gate, the trace, `--within`, the schema), each a place a sixth request
+  could be missed; `prim::HTTP_REQUESTS` is now the one every place reads.
 
 - **A new `.delulu` file is also the formatter's corpus** (FMT-CTOR-1, 2026-11-01). `delulu-syntax`'s `laws_hold_over_the_repository_corpus` formats every `.delulu` file in the repository and requires the same program back. A change that adds a conformance program runs `cargo test -p delulu-syntax --lib`, not only the checker's and the CLI's tests. #112 skipped it, and its first run was red on Ubuntu and macOS. The law had found a real defect: `fmt` printed `foo()` as `foo`, a binding.
 

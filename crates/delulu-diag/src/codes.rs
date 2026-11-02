@@ -1005,7 +1005,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              A write is not a read, so a `var` that is only ever assigned is named too. A write \
              through it to a field or an element is a read: the record or list it names may be \
              shared. The program still checks and runs. Remove the binding, or begin its name \
-             with `_` to say it is meant to go unread.",
+             with `_` to say it is meant to go unread. The repair `prefix-underscore` makes that \
+             rename at the binding and at every assignment to it, which changes nothing the program \
+             does; a person decides, because the binding may be a mistake the rename would hide. It \
+             is not offered where `_x` already means something inside the binding's scope, since \
+             there the rename would change what the program does.",
 
         // ===== DL05xx — effects ============================================
         "DL0501" => "This function performs an effect its row does not declare. This is the \

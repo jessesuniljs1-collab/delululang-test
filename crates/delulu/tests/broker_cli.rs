@@ -999,6 +999,180 @@ fn a_post_is_judged_by_its_method_under_the_daemon_as_embedded() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// D-V2-208: a PUT, a PATCH and a DELETE are judged by their methods under the daemon as embedded. Granted
+/// `net.special=*.example.invalid:PUT,PATCH,DELETE/v1/**` (`.invalid` never resolves, so nothing leaves the machine), each
+/// reaches the egress client under both custodies, from a sandboxed guest and on the WASM engine; a POST there is refused
+/// DL0904 at the call, in words about its method. The daemon's chain names each request's `method`, allowed, and the POST's,
+/// refused.
+#[test]
+fn a_put_a_patch_and_a_delete_are_judged_by_their_methods_under_the_daemon_as_embedded() {
+    let base = std::env::temp_dir().join(format!("delulu_bmeth_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let scope = "*.example.invalid:PUT,PATCH,DELETE/v1/**";
+    let url = "https://api.example.invalid/v1/items/1";
+    for (file, call) in [
+        ("put.delulu", format!("put(\"{url}\", Map(), \"{{}}\")")),
+        ("patch.delulu", format!("patch(\"{url}\", Map(), \"{{}}\")")),
+        ("delete.delulu", format!("delete(\"{url}\", Map())")),
+        ("post.delulu", format!("post(\"{url}\", Map(), \"{{}}\")")),
+    ] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{scope}\"])\n    \
+             match h.{call} {{\n        Ok(b) => out.println(\"answered\")\n        Err(e) => out.println(\"not answered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let grant = format!("net.special={scope}");
+    let run = |file: &str, extra: &[&str]| {
+        let mut args = vec!["run", file, "--grant", "console", "--grant", grant.as_str(), "--no-prompt"];
+        args.extend_from_slice(extra);
+        delulu_in(&cwd, &state, &args)
+    };
+    let check = |extra: &[&str]| {
+        for file in ["put.delulu", "patch.delulu", "delete.delulu"] {
+            let o = run(file, extra);
+            assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not answered\n"), "{file} {extra:?}: {}", stderr(&o));
+            assert!(!stderr(&o).contains("DL0904"), "{file} {extra:?}: {}", stderr(&o));
+        }
+        let o = run("post.delulu", extra);
+        assert!(
+            stderr(&o).contains("DL0904") && stderr(&o).contains("a `POST` to") && stderr(&o).contains("outside the methods"),
+            "post {extra:?}: {}",
+            stderr(&o)
+        );
+        assert!(stderr(&o).contains("post.delulu:6:11"), "post {extra:?}: the refusal names its call: {}", stderr(&o));
+        assert!(!stdout(&o).contains("answered"), "post {extra:?}: the program never got an answer: {}", stdout(&o));
+    };
+    check(&[]);
+    check(&["--engine", "wasm"]);
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    check(&["--broker", "daemon"]);
+    check(&["--broker", "daemon", "--sandbox"]);
+    check(&["--broker", "daemon", "--engine", "wasm"]);
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let uses: Vec<(Option<String>, String)> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["target"] == "api.example.invalid" && r["authority"].get("url_path").is_some())
+        .map(|r| (r["authority"]["method"].as_str().map(str::to_string), r["decision"].as_str().unwrap().to_string()))
+        .collect();
+    let one: Vec<(Option<String>, String)> = [("PUT", "allow"), ("PATCH", "allow"), ("DELETE", "allow"), ("POST", "deny")]
+        .iter()
+        .map(|(m, d)| (Some(m.to_string()), d.to_string()))
+        .collect();
+    assert_eq!(uses, [one.clone(), one.clone(), one].concat(), "the interpreter's, the guest's, the WASM engine's: {v:#}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// D-V2-208: `put_with_secret`, `patch_with_secret` and `delete_with_secret` of a broker-held secret under the daemon, on
+/// both engines — the
+/// bytes asked of the broker for the one origin, the request leaving by its own method, the custody's `use` naming it
+/// before the `send`. A capability minted without DELETE refuses the DELETE at the call, before the broker is asked for a
+/// byte: no `send`, nothing connected.
+#[test]
+fn a_broker_held_secret_rides_a_put_a_patch_and_a_delete_by_their_methods() {
+    let base = std::env::temp_dir().join(format!("delulu_bsec_meth_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    let at = format!("https://127.0.0.1:{port}/items/1");
+    for (file, mint, call) in [
+        ("put.delulu", "127.0.0.1:PUT,PATCH,DELETE", format!("put_with_secret(\"{at}\", hs, \"Authorization\", tok, \"{{}}\")")),
+        (
+            "patch.delulu",
+            "127.0.0.1:PUT,PATCH,DELETE",
+            format!("patch_with_secret(\"{at}\", hs, \"Authorization\", tok, \"{{}}\")"),
+        ),
+        ("delete.delulu", "127.0.0.1:PUT,PATCH,DELETE", format!("delete_with_secret(\"{at}\", hs, \"Authorization\", tok)")),
+        ("putonly.delulu", "127.0.0.1:PUT,PATCH", format!("delete_with_secret(\"{at}\", hs, \"Authorization\", tok)")),
+    ] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{mint}\"])\n    \
+             let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+             match h.{call} {{\n        \
+             Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let secret = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
+    let daemon_on = |file: &str, engine: &str| {
+        let net = "net.special=127.0.0.1:PUT,PATCH,DELETE";
+        let args = ["run", file, "--grant", "console", "--grant", net, "--grant", &secret, "--no-prompt", "--broker", "daemon"];
+        let mut args = args.to_vec();
+        args.extend(["--engine", engine]);
+        delulu_in(&cwd, &state, &args)
+    };
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let records = || -> Vec<serde_json::Value> {
+        let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+        v["records"].as_array().expect("records").clone()
+    };
+    let sends = |rs: &[serde_json::Value]| rs.iter().filter(|r| r["action"] == "send").count();
+    for engine in ["interp", "wasm"] {
+        let o = daemon_on("putonly.delulu", engine);
+        assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("a `DELETE` to"), "{engine}: {}{}", stdout(&o), stderr(&o));
+    }
+    assert_eq!(sends(&records()), 0, "{:#?}", records());
+    assert!(l.accept().is_err(), "nothing connected");
+    let accept = |l: std::net::TcpListener| {
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            loop {
+                match l.accept() {
+                    Ok(_) => return true,
+                    Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10))
+                    }
+                    Err(_) => return false,
+                }
+            }
+        })
+    };
+    let mut want = Vec::new();
+    for engine in ["interp", "wasm"] {
+        for (file, verb) in [("put.delulu", "PUT"), ("patch.delulu", "PATCH"), ("delete.delulu", "DELETE")] {
+            let accepter = accept(l.try_clone().unwrap());
+            let o = daemon_on(file, engine);
+            assert_eq!(o.status.code(), Some(0), "{engine} {file}: {}{}", stdout(&o), stderr(&o));
+            assert!(accepter.join().unwrap(), "{engine} {file}: the request went out: {}{}", stdout(&o), stderr(&o));
+            want.push(serde_json::json!(verb));
+            let rs = records();
+            assert_eq!(sends(&rs), want.len(), "{engine} {file}: {rs:#?}");
+            let used: Vec<_> = rs
+                .iter()
+                .filter(|r| r["action"] == "use" && r["target"] == "127.0.0.1" && r["decision"] == "allow")
+                .map(|r| r["authority"]["method"].clone())
+                .collect();
+            assert_eq!(used, want, "{engine} {file}: {rs:#?}");
+        }
+    }
+    for entry in std::fs::read_dir(state.join("audit")).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        assert!(!text.contains(CANARY), "the chain holds the bytes");
+    }
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// RW 4.79: a use the program's OWN capability refuses is judged before its custody is asked — by the interpreter, by the
 /// WASM engine and by a sandboxed guest's host — and the chain says what happened: one `use deny` naming
 /// `refused_by: capability` and why, never the `use allow` its node's grant gave it while the capability then refused the

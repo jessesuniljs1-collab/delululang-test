@@ -593,7 +593,98 @@ fn seed_rng(seed: Option<u64>) -> u64 {
 //   variant `[tag:i32-le @0][field @4]` (8-byte field slot; cell 12 bytes)
 //   Result tags: Ok=0, Err=1.   IoErr tags: NotFound=0, Denied=1, Other=2.
 
-/// `get_with_secret` and `post_with_secret` (D-V2-174; P9-05 (d), D-V2-183): `get`'s order — the record at dispatch, its
+/// A request with headers and no secret — `get_with`, `post`, `put`, `patch` and `delete` (A21; P9-05 (d), D-V2-183 and
+/// D-V2-208) — in `get`'s order: the record at dispatch, naming the URL alone (never a header's value or the body); the
+/// custody on the URL's host, path and (when it is not a GET) method, unless the URL is not `https://`; then the
+/// interpreter's own method — the allowlist by method, the egress client with its redirect rules and all. An egress
+/// refusal after the custody allowed it is said to the custody.
+#[allow(clippy::too_many_arguments)]
+fn send_plain(
+    caller: &mut Caller<'_, HostState>,
+    method: &'static str,
+    cap: i32,
+    url_ptr: i32,
+    headers: i32,
+    desc: i32,
+    body_ptr: Option<i32>,
+    file: i32,
+    start: i32,
+    end: i32,
+) -> i32 {
+    let verb = delulu_runtime::prim::http_method_of(method);
+    if caller.data().refused.is_some() {
+        return 0;
+    }
+    let (allow, special) = match caller.data().caps.get(cap as usize) {
+        Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+        _ => {
+            caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
+            return 0;
+        }
+    };
+    let Some(url) = read_guest_str(caller, url_ptr) else {
+        caller.refuse(format!("DL0903: http {} URL pointer is out of bounds", verb.to_ascii_lowercase()));
+        return 0;
+    };
+    let body = match body_ptr {
+        Some(p) => match read_guest_str(caller, p) {
+            Some(b) => Some(b),
+            None => {
+                caller.refuse("DL0903: a request body lies outside the guest's memory".into());
+                return 0;
+            }
+        },
+        None => None,
+    };
+    let Some(mut hs) = reify_values(caller, desc, &[headers]) else { return 0 };
+    let headers = hs.pop().unwrap_or(Value::Unit);
+    caller.data_mut().push_trace("Net", method, "Http", Some(url.clone()), file, start, end);
+    let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+    if let Some(h) = &host {
+        let url_path = delulu_runtime::prim::request_path(&url);
+        let refused = delulu_runtime::prim::net_scope_refusal(&url, verb, &allow, delulu_diag::Span::new(0, 0, 0));
+        if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), (verb != "GET").then_some(verb), refused) {
+            caller.data_mut().push_refusal_trace("Net", method, "Http", file, start, end);
+            return 0;
+        }
+        delulu_runtime::egress::begin_fetch();
+    }
+    let capv = delulu_runtime::value::CapVal {
+        kind: delulu_check::ResourceKind::Http,
+        scope: delulu_runtime::value::CapScope::Net { allow, special },
+    };
+    let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+    let mut args = vec![Value::str(url.clone()), headers];
+    if let Some(body) = body {
+        args.push(Value::str(body));
+    }
+    let answer = delulu_runtime::prim::call_cap_method(&capv, method, &args, span);
+    if let Some(h) = &host {
+        if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+            if let Some(custody) = &caller.data().custody {
+                custody.borrow_mut().note_egress_refusal(h, reason);
+            }
+        }
+    }
+    let answer = match answer {
+        Ok(v) => v,
+        Err(fault) => {
+            caller.refuse(format!("{}: {}", fault.code, fault.message));
+            caller.data_mut().push_refusal_trace("Net", method, "Http", file, start, end);
+            return 0;
+        }
+    };
+    match build_net_answer(caller, &answer) {
+        Some(Ok(ptr)) => ptr,
+        Some(Err(())) => {
+            caller.refuse("guest heap exhausted building the http result".into());
+            0
+        }
+        None => unheld(caller, &format!("http.{method}"), &answer, 0),
+    }
+}
+
+/// `get_with_secret`, `post_with_secret` and the other `_with_secret` requests (D-V2-174; P9-05 (d), D-V2-183, D-V2-208): `get`'s order — the record at dispatch, its
 /// detail `«opaque»` as every secret-involving record's is; the custody on the URL's host (and, for the POST, its method),
 /// unless the URL is not `https://`; then the secret judged and, if the broker holds it, its bytes asked for the one origin
 /// by the interpreter's own `broker_secret_send`; then the interpreter's own method, its egress client and all. The bytes
@@ -1784,68 +1875,45 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
              start: i32,
              end: i32|
              -> i32 {
-                if caller.data().refused.is_some() {
-                    return 0;
-                }
-                let (allow, special) = match caller.data().caps.get(cap as usize) {
-                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
-                    _ => {
-                        caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
-                        return 0;
-                    }
-                };
-                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
-                    caller.refuse("DL0903: http post URL pointer is out of bounds".into());
-                    return 0;
-                };
-                let Some(body) = read_guest_str(&mut caller, body_ptr) else {
-                    caller.refuse("DL0903: a request body lies outside the guest's memory".into());
-                    return 0;
-                };
-                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
-                let headers = hs.pop().unwrap_or(Value::Unit);
-                caller.data_mut().push_trace("Net", "post", "Http", Some(url.clone()), file, start, end);
-                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
-                if let Some(h) = &host {
-                    let url_path = delulu_runtime::prim::request_path(&url);
-                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "POST", &allow, delulu_diag::Span::new(0, 0, 0));
-                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), Some("POST"), refused) {
-                        caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
-                        return 0;
-                    }
-                    delulu_runtime::egress::begin_fetch();
-                }
-                let capv = delulu_runtime::value::CapVal {
-                    kind: delulu_check::ResourceKind::Http,
-                    scope: delulu_runtime::value::CapScope::Net { allow, special },
-                };
-                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
-                let args = [Value::str(url.clone()), headers, Value::str(body)];
-                let answer = delulu_runtime::prim::call_cap_method(&capv, "post", &args, span);
-                if let Some(h) = &host {
-                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
-                        if let Some(custody) = &caller.data().custody {
-                            custody.borrow_mut().note_egress_refusal(h, reason);
-                        }
-                    }
-                }
-                let answer = match answer {
-                    Ok(v) => v,
-                    Err(fault) => {
-                        caller.refuse(format!("{}: {}", fault.code, fault.message));
-                        caller.data_mut().push_refusal_trace("Net", "post", "Http", file, start, end);
-                        return 0;
-                    }
-                };
-                match build_net_answer(&mut caller, &answer) {
-                    Some(Ok(ptr)) => ptr,
-                    Some(Err(())) => {
-                        caller.refuse("guest heap exhausted building the http result".into());
-                        0
-                    }
-                    None => unheld(&mut caller, "http.post", &answer, 0),
-                }
+                send_plain(&mut caller, "post", cap, url_ptr, headers, desc, Some(body_ptr), file, start, end)
             },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `Cap[Http].put(url, headers, body)` and `patch(url, headers, body)` (D-V2-208): `post`'s order, each by its own method.
+    for method in ["put", "patch"] {
+        linker
+            .func_wrap(
+                "delulu:cap",
+                if method == "put" { "http_put" } else { "http_patch" },
+                move |mut caller: Caller<'_, HostState>,
+                      cap: i32,
+                      url_ptr: i32,
+                      headers: i32,
+                      desc: i32,
+                      body_ptr: i32,
+                      file: i32,
+                      start: i32,
+                      end: i32|
+                      -> i32 {
+                    send_plain(&mut caller, method, cap, url_ptr, headers, desc, Some(body_ptr), file, start, end)
+                },
+            )
+            .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    }
+    // `Cap[Http].delete(url, headers)` (D-V2-208): `get_with`'s arguments, by DELETE — no body.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_delete",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 { send_plain(&mut caller, "delete", cap, url_ptr, headers, desc, None, file, start, end) },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
@@ -1864,64 +1932,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
              file: i32,
              start: i32,
              end: i32|
-             -> i32 {
-                if caller.data().refused.is_some() {
-                    return 0;
-                }
-                let (allow, special) = match caller.data().caps.get(cap as usize) {
-                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
-                    _ => {
-                        caller.refuse(format!("DL0904: handle {cap} is not a granted Http capability"));
-                        return 0;
-                    }
-                };
-                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
-                    caller.refuse("DL0903: http get URL pointer is out of bounds".into());
-                    return 0;
-                };
-                let Some(mut hs) = reify_values(&mut caller, desc, &[headers]) else { return 0 };
-                let headers = hs.pop().unwrap_or(Value::Unit);
-                caller.data_mut().push_trace("Net", "get_with", "Http", Some(url.clone()), file, start, end);
-                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
-                if let Some(h) = &host {
-                    let url_path = delulu_runtime::prim::request_path(&url);
-                    let refused = delulu_runtime::prim::net_scope_refusal(&url, "GET", &allow, delulu_diag::Span::new(0, 0, 0));
-                    if !caller.use_allows(CustodyOp::Net, Some(h), Some(url_path), None, refused) {
-                        caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
-                        return 0;
-                    }
-                    delulu_runtime::egress::begin_fetch();
-                }
-                let capv = delulu_runtime::value::CapVal {
-                    kind: delulu_check::ResourceKind::Http,
-                    scope: delulu_runtime::value::CapScope::Net { allow, special },
-                };
-                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
-                let answer = delulu_runtime::prim::call_cap_method(&capv, "get_with", &[Value::str(url.clone()), headers], span);
-                if let Some(h) = &host {
-                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
-                        if let Some(custody) = &caller.data().custody {
-                            custody.borrow_mut().note_egress_refusal(h, reason);
-                        }
-                    }
-                }
-                let answer = match answer {
-                    Ok(v) => v,
-                    Err(fault) => {
-                        caller.refuse(format!("{}: {}", fault.code, fault.message));
-                        caller.data_mut().push_refusal_trace("Net", "get_with", "Http", file, start, end);
-                        return 0;
-                    }
-                };
-                match build_net_answer(&mut caller, &answer) {
-                    Some(Ok(ptr)) => ptr,
-                    Some(Err(())) => {
-                        caller.refuse("guest heap exhausted building the http result".into());
-                        0
-                    }
-                    None => unheld(&mut caller, "http.get_with", &answer, 0),
-                }
-            },
+             -> i32 { send_plain(&mut caller, "get_with", cap, url_ptr, headers, desc, None, file, start, end) },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
@@ -2072,6 +2083,76 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     header_ptr,
                     secret,
                     Some(body_ptr),
+                    file,
+                    start,
+                    end,
+                )
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `Cap[Http].put_with_secret` and `patch_with_secret(url, headers, header, secret, body)` (D-V2-208): `post_with_secret`'s
+    // order, each by its own method.
+    for method in ["put_with_secret", "patch_with_secret"] {
+        linker
+            .func_wrap(
+                "delulu:cap",
+                if method == "put_with_secret" { "http_put_with_secret" } else { "http_patch_with_secret" },
+                move |mut caller: Caller<'_, HostState>,
+                      cap: i32,
+                      url_ptr: i32,
+                      headers: i32,
+                      desc: i32,
+                      header_ptr: i32,
+                      secret: i32,
+                      body_ptr: i32,
+                      file: i32,
+                      start: i32,
+                      end: i32|
+                      -> i32 {
+                    send_with_secret(
+                        &mut caller,
+                        method,
+                        cap,
+                        url_ptr,
+                        headers,
+                        desc,
+                        header_ptr,
+                        secret,
+                        Some(body_ptr),
+                        file,
+                        start,
+                        end,
+                    )
+                },
+            )
+            .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    }
+    // `Cap[Http].delete_with_secret(url, headers, header, secret)` (D-V2-208): `get_with_secret`'s order, by DELETE.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_delete_with_secret",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             url_ptr: i32,
+             headers: i32,
+             desc: i32,
+             header_ptr: i32,
+             secret: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                send_with_secret(
+                    &mut caller,
+                    "delete_with_secret",
+                    cap,
+                    url_ptr,
+                    headers,
+                    desc,
+                    header_ptr,
+                    secret,
+                    None,
                     file,
                     start,
                     end,
