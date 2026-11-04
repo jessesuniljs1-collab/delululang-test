@@ -1142,7 +1142,7 @@ binary itself uses: the 35 commands with the invocations and options their `--he
 same `usage_lines`/`documented_flags` the option parser refuses by), the ten core effects, the 16
 `--grant` forms each with an example that parses, the 82-entry primitive table (v5), the run budget and
 the three sandbox profiles' limits, the five isolation levels, the two modes, the channel version,
-all 154 diagnostic codes and the seven explanation topics. Three facts lived only in code and were
+all 154 diagnostic codes (the count on 2026-09-26) and the seven explanation topics. Three facts lived only in code and were
 lifted into tables so they could be read rather than restated: `broker::GRANT_FORMS` (a test reads
 `Grants::add`'s own match arms and fails on a key parsed but not listed, or listed but not parsed — its
 first run caught an actuator example missing the mandatory dead-man), `codes::TOPICS` (bound to

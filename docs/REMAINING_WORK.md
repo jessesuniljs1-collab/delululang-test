@@ -34,7 +34,9 @@ and this row still said "not built"); **2.6**, **4.10**, **7.5** and **7.10a** b
 changed; **4.24** is new — PS-D-02, designed and waiting for the owner. **Updated 2026-09-28
 (evening)**, from the study of NVIDIA OpenShell (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md`): **2.11,
 2.12, 4.25–4.30 and 6.14** are new — each designed as a slice of PS-E or P9, and 4.27 is a set of
-hypotheses, not findings, until its witnesses run.
+hypotheses, not findings, until its witnesses run. **Updated 2026-11-02** (the laptop): 1.15, 2.33–2.40, 6.50–6.53
+and §8 item 7 are new. They come from the first pass that asked what an ordinary program needs (1.15), and from
+running every surface on the current build. Rows changed between those two dates say so in their own text.
 
 **This document is a list of gaps, not a list of defects.** Almost everything here is *already
 named honestly somewhere in the repository* — that is the point of the project's honesty clauses,
@@ -436,7 +438,9 @@ of that is a promise with a date. It is the list a maintainer would work from."*
 
 It is also not a list of everything that could be better. It is the set of things that a document
 in this repository **describes, specifies, or implies**, and that the code does not do — plus the
-handful of places where the code has moved ahead of the documents (§1).
+handful of places where the code has moved ahead of the documents (§1). Since 2026-11-02 it also holds what an
+ordinary program needs and the language lacks (1.15, 2.33–2.40): no document described those, and every newcomer
+meets them first.
 
 **Related reading.** `docs/release/CHECKPOINT-1.0.md` §8 (twenty known limitations) and §9 (the
 roadmap) · `docs/QUESTIONS.md` Part 5 (the short list of things this project cannot claim) ·

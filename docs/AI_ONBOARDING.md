@@ -20,8 +20,9 @@ digest. The full texts are in the files each line names, and the head chef's who
   your chat, your tool's private memory, your scratch files, or an uncommitted tree.
 - **The scheduled routine is an AI too.** It is `trig_01HFG6usfzmDAPQigiDu9DLq`: Claude Opus 5.5, cron `25 */4 * * *`
   UTC, which is 01:55, 05:55, 09:55, 13:55, 17:55 and 21:55 IST (set 2026-11-01). It is **paused**, by the owner's word of
-  2026-11-01: *"Let routine be paused, I will resume it whenever I want."* Only the owner switches it on or off. It works
-  on `master` directly and follows [`CLOUD_ROUTINE.md`](CLOUD_ROUTINE.md): one milestone per run, then a clean stop.
+  2026-11-01: *"Let routine be paused, I will resume it whenever I want."* Only the owner switches it on or off. He may also
+  start one run by hand while it stays paused, as he did three times on 2026-11-02 (runs 17 to 19), so read the
+  newest commits on `origin/master` before you work. It works on `master` directly and follows [`CLOUD_ROUTINE.md`](CLOUD_ROUTINE.md): one milestone per run, then a clean stop.
 - **If someone else's commit lands while you work**, stop editing. That means a new commit on `origin/master`, or on your
   branch, that you did not make. Tell the owner, and re-sync before going on. Two AIs at once is exactly the mess he
   asked to avoid.
@@ -78,7 +79,7 @@ digest. The full texts are in the files each line names, and the head chef's who
 | Claim what did not run, or invent a result, contact, key or compliance claim. | "Prepared", "dispatched" and "green" are different words. A CI run counts only once its result is READ and recorded. Failed runs are recorded, not tidied away. |
 | Change what Authority and the Guard *mean*. | Harden, never redefine: closing a hole is welcome, redefining is the owner's. |
 | Edit an entrenched file casually. | Entrenched files: `docs/design/` CONSTITUTION, DELULU_CORE, STABILITY, SOUNDNESS_AUDIT; `SECURITY.md`; `rfcs/`; `docs/security/`; `crates/delulu-check/tests/laundering.rs`; `crates/delulu-conform/`; `tests/conformance/witnesses.toml`; CODEOWNERS "entrenched"; the licence. Each change needs a `D-V2-nn` decision plus an `ENTRENCHED_CHANGE_RECORD.md` entry. Ask `cargo run -p delulu-survey -- query doc:<path>` before editing under `docs/design/`. |
-| Add a new `DL` diagnostic code casually. | There are 156. A new one needs a `D-V2-nn`, and several documents quote the count. |
+| Add a new `DL` diagnostic code casually. | There are 157. A new one needs a `D-V2-nn`, and several documents quote the count. |
 | Commit or ship a built Linux kernel or microVM image. | D-NE-27: GPL obligations first. |
 | Change the licence (Apache-2.0 + `NOTICE` + `TRADEMARK.md`, ruling D27). | The owner's intent of 2026-07-24 is the evidence any change must serve. |
 
@@ -96,7 +97,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
    `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md` and `code:DL0501`.
 2. **Witness the defect failing before you fix it.** Stash the fix and watch the new test go red. Then **falsify the test
    with mutants**: reintroduce the defect, or break the fix, and watch it go red. Mutants are numbered (`M<n>`) in the
-   records; the last one used is **M1017**, so continue from M1018. Run one cargo test target at a time when you do this.
+   records; the last one used is **M1075**, so continue from M1076. Run one cargo test target at a time when you do this.
 3. **Lint after the LAST `.rs` edit**, tests included: `cargo fmt --all`, then `bash scripts/clippy.sh -j 4`. That is
    fmt check plus `clippy --workspace --all-targets -D warnings`, and it writes a stamp the pre-commit hook demands.
 4. **Test.** `cargo test --workspace --no-fail-fast -j 4`, or `scripts/suite.sh`. Freeze the tree while it runs, and read
@@ -105,13 +106,13 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
      2026-10-19). Push the branch, dispatch `ci.yml` with `-f jobs=everything`, read the run to its end, and land only
      on green.
 5. **Regenerate the map LAST**: `cargo run -p delulu-survey -- build`, then `-- check` and `-- findings`, which must show
-   0 errors. A warning is for you to judge: on 2026-11-01 there were 7, each a path some prose names that is not in the
-   tree, or an old log entry's count. Dated records (the archive, the memory notes) are not held to today's counts.
+   0 errors. A warning is for you to judge: on 2026-11-02 there were 6, each a path some prose names that is not in the
+   tree. Dated records (the archive, the memory notes) are not held to today's counts.
    Then `cargo run -p delulu -- doctor --check`.
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-204**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-208**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -133,6 +134,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 | Interpreter profile | `scripts/interp-profile.sh [--base REF] [--profile NAME]` (RW 3.24's harness) |
 | The launch branch | `launch/2.0.0` lives in the worktree `D:\nelan\dl-launch`. Bring it current with `git merge --no-ff --no-commit origin/master`, then `git checkout --theirs docs/survey/`, `python3 -I scripts/launch-changelog.py`, `python3 -I scripts/launch-criterion-2.py '<who>'` and `bash scripts/launch-gates.sh` (it must print `LAUNCH-GATES=ok`) |
 | Other OSes | `scripts/check-other-os.sh` lints macOS and Windows code from Linux. `witness.yml` runs it for real. |
+| The owner's installed toolchain | `which delulu` and its date. On 2026-11-02 the laptop's `delulu` on `PATH` and its VS Code extension were from 2026-08-07, three months behind (RW 6.53). Reinstall only on the owner's word. |
 | WSL | Ubuntu with `/dev/kvm`. The microVM toolchain is at `~/microvm-image-a` and `~/bin/firecracker`. Builds there can be killed for lack of memory, so don't restart a killed job on your own. |
 
 ## 7. Traps that cost real time
@@ -148,7 +150,8 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
   lengthening sleeps, and give the test a control measured on the same machine. On Windows, `sleep(ZERO)` yields a time
   slice.
 - **Miri is about 100× slower.** Shrink a test under `cfg!(miri)` only where its size is not the witness. The broker's Miri
-  job takes about 3 h 05 min, against a 4 h cap.
+  job took 3 h 11 min until on-demand routine run 19's fix (`04db8fb`); since then 2 h 01 min (`41416143488`),
+  against a 4 h cap.
 - **macOS:** unix-socket paths are limited to 104 bytes; a socket answers `EOPNOTSUPP`, not `ENXIO`; and the clock is
   microsecond-grained. **Windows:** 8.3 short names and junctions are other spellings of a path.
 - **A security decision on an unnormalized spelling is walked past by another spelling.** That covers a relative path,
@@ -159,6 +162,11 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 ## 8. The memory, digested (the full files are in `docs/assistant-memory/`)
 
 **Owner instructions in force** (newest first):
+- **2026-11-02:**
+  - *"Still cannot write complete program like in java or python"*: "ready" is judged against an ordinary program too,
+    not only against gates (RW 1.15, 2.33–2.40). Whether the launch waits for the language basics is his choice,
+    asked and not yet answered.
+  - The autosave task renewed for seven days, to 2026-11-09.
 - **2026-11-01:**
   - One AI at a time, handed over through git (§1).
   - The routine is set to every 4 hours but paused until he resumes it.
@@ -192,6 +200,9 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 - **2026-07-24:** Apache-2.0 + `NOTICE` + `TRADEMARK.md` (D27).
 
 **What the project has paid to learn** (each is a memory file; search its name):
+- *"Ready" includes an ordinary program* (2026-11-02): write the programs users will write before calling anything
+  ready, and separate *deliberate by design* from *simply not built* when explaining a gap.
+- *What the owner runs is not what CI runs* (2026-11-02): his installed `delulu` can be months behind the tree.
 - *Discovery over checklist:* a green checklist is not proof. Keep asking which assumption has not been attacked yet.
 - *Two engines that agree prove only that they agree:* LATE-LET-1, LOCAL-CALLEE-1 and CTOR-SHADOW-1 were runtime name
   lookups that differed from the checker, and they made effect rows escapable. Mirror the checker's lookup order (local,
@@ -278,6 +289,7 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the broker's Miri back under its cap (on-demand routine run 19): `miri-slow (delulu-broker)` ran 3 h 11 min of its
     240 on `41383380395`, 8,119 s of it in one test; path canonicalization's tests now do their work once, over the same
     inputs and laws.
+  - #123, records: the everyday-program probe (RW 1.15, 2.33–2.40) and what touring every surface found (RW 6.50–6.53).
 - `launch/2.0.0` is at `728a582`, **prepared, not launched**, with `LAUNCH-GATES=ok`. It holds `master` through `04db8fb`
   (D-V2-208 is additive). CHECKLIST-2.0 cites `1487163`'s runs, read green. `728a582`'s `everything` `41416143488` and
   release dry run `41416147296` were read green by on-demand routine run 19 (18 of 18; the broker's Miri 2 h 01 min). The
@@ -285,9 +297,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - **2.0's readiness is in question (the owner, 2026-11-02):** *"Still cannot write complete program like in java or
   python."* A probe of 39 everyday constructs: 14 ran, 25 were refused (RW 1.15; the gaps are RW 2.33–2.40). The head
   chef recommended holding the launch until the language basics land; **the owner's answer is pending.**
-- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: cite `41416143488` and
-  `41416147296` in CHECKLIST-2.0 at the next merge; RW 3.24, a compiled form, designed
-  first; watch the broker's Miri time; the launch, only on the owner's word.
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: the owner's answer on the language basics;
+  cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge; RW 6.50–6.52; the language basics
+  (RW §8 item 7), then RW 3.24, a compiled form; the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-208;
   - the last mutant is M1075;
