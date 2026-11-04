@@ -7683,3 +7683,42 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. The language basics, in RW §8 item 7's order, then RW 3.24, a compiled form.
   5. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension from the tree (RW 6.53).
   6. The launch, only on the owner's word.
+
+### 2026-11-05 — the laptop: the owner's Codex prompt and Codex's strategic review committed; a second RUNNER-DISK-1 death read
+- Session: `https://claude.ai/code/session_01Deh6WC2VFsycMvHSuMgFXM`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/codex-review-docs`   Base: `e97c747`. Records only.
+- **What came in since 2026-11-02:** no commit on `origin/master` and no other branch moved, apart from the autosave
+  task's two snapshots on `origin/autosave/laptop` (`4161879`, `409c822`, 2026-11-04), which hold exactly the two files
+  below. On 2026-11-04 the owner ran Codex (GPT-6 Astra) on the laptop for a read-only research session — one AI at a
+  time; no Claude session was running — and put its prompt and its report into the checkout. Codex made no commit; the
+  working tree was otherwise clean. Two nightlies ran on `e97c747`: `41619070519` (2026-11-03) red — its Ubuntu test
+  job died of a full disk, RUNNER-DISK-1's second death (RW 7.26: the before-suite notice died with the runner, so the
+  margin is unknown) — and `41813603704` (2026-11-04) 18 of 18 green.
+- **What changed:**
+  - the two documents, at the owner's request. The prompt is byte for byte his. In the review, the 69 links the Survey
+    called broken were rewritten: 26 absolute `D:/` links now point into the repository, and 43 links to Codex's scratch
+    files are plain paths. The review gained a note at its top saying exactly that. Nothing else in it was edited, and
+    its findings are not re-verified;
+  - `docs/REPOSITORY_STRUCTURE.md` §5.2 names the two new folders;
+  - RW 7.26 records the second death.
+- Files and folders (`git diff --name-status e97c747..HEAD`):
+  - A `docs/prompt/DeluluLang_Codex_GPT6_Astra_Research_Prompt (1).md` and
+    `docs/review/DeluluLang_Codex_Strategic_Review.md`. The prompt's name keeps the ` (1)`: the review cites that path.
+  - M `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md` (7.26), `docs/CLOUD_SYNC_LOG.md` and `docs/survey/*`.
+  - Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message and the pull request.
+- **Open / next, in order** (the 2026-11-02 list, plus the review):
+  1. **The owner's answer.** Asked on 2026-11-02 whether to hold the 2.0 launch for the language basics: the head chef
+     recommended holding it for a defined set (RW 2.33–2.40 less interfaces, plus a CHECKLIST-2.0 criterion *"an
+     ordinary program can be written"*). Codex's review (§1, §11) also says to hold the public-readiness claim to a
+     small task-completion bar. Still unanswered at this entry.
+  2. Re-run each finding of the review that `REMAINING_WORK.md` does not already hold before it becomes a row. For
+     example, it says a `range` loop runs in the interpreter but fails WASM code generation, and that device APIs are
+     refused under WASM.
+  3. Cite `launch/2.0.0` `728a582`'s `everything` `41416143488` and release dry run `41416147296` in CHECKLIST-2.0
+     criteria 1, 3, 4 and 8 at the next merge of `master` (unchanged).
+  4. RW 6.50–6.52: three small CLI fixes, each witnessed red first.
+  5. The language basics, in RW §8 item 7's order, then RW 3.24, a compiled form.
+  6. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension from the tree (RW 6.53).
+  7. The launch, only on the owner's word.

@@ -5,6 +5,8 @@ Research date: 4 November 2026. Repository: `D:\nelan\DeluluLang`. Inspected com
 
 > **Follow-up, 4 November 2026:** At the owner's explicit request, this report was checked against the original prompt, expanded with §7.1–7.3 and Appendix F, and copied to `D:/nelan/DeluluLang/docs/review/DeluluLang_Codex_Strategic_Review.md`. The external original is retained with identical contents. Earlier read-only/integrity statements describe the original research session; this authorized follow-up adds the report inside the checkout. No recommendations were implemented. Coverage does not mean that every proposed experiment or deployment has been verified.
 
+> **Repository copy, 5 November 2026 (Claude, head chef, at the owner's request to push it):** this copy differs from the external original in its links alone. 26 links written as absolute paths on the owner's disk (`D:/nelan/DeluluLang/<path>:<line>`) now point into the repository (`../../<path>#L<line>`); 43 links to this review's scratch files under `C:/Users/…/Temp/delulu-codex-review-20261104-75e41c98/` are written as plain paths, since those files exist only on that laptop. Its line endings were stored as LF (`.gitattributes`). No other text changed. Its findings are Codex's, made on `e97c747`, and are not re-verified here.
+
 ## 1. Executive summary and recommendation
 
 **DeluluLang should remain a programming language and become a language plus an agent-focused toolchain.** Keep the parser, checker, compiler, runtime, Authority, Guard, containment and verification machinery. Make the CLI and its versioned machine interfaces the primary product. Keep an editor-independent language server and a small optional VS Code client. Pause expansion of the editor and speculative autonomy surfaces while completing ordinary agent programs.
@@ -77,7 +79,7 @@ This is the **net-enabled, Python-free portable profile**. It does not establish
 
 The fresh Survey check and `doctor --check --json` both failed the checkout's map-freshness requirement. Findings separately reported **0 errors, 6 warnings and 37 notes**, with 1,616 nodes and 18,651 edges. These are different results: zero finding errors does not make a stale map fresh. No map was regenerated.
 
-The Survey scans the filesystem, including the pre-existing untracked prompt; its query returned a node for that 267-line file. This is a plausible contributor to the freshness failure, not proof that committed `master` alone has a broken map. A clean tracked-tree reproduction was not performed. See [scan.rs](D:/nelan/DeluluLang/crates/delulu-survey/src/scan.rs:93).
+The Survey scans the filesystem, including the pre-existing untracked prompt; its query returned a node for that 267-line file. This is a plausible contributor to the freshness failure, not proof that committed `master` alone has a broken map. A clean tracked-tree reproduction was not performed. See [scan.rs](../../crates/delulu-survey/src/scan.rs#L93).
 
 | Run read | Commit / purpose | Actual conclusion |
 |---|---|---|
@@ -94,7 +96,7 @@ No full local workspace test/clippy/formal/Miri campaign was run. The local evid
 
 ### 3.1 What the product actually is
 
-There is not an independent obsolete compiler product that can simply be removed while leaving today's CLI intact. The shipped `delulu` binary **is already the main front door to the language implementation**. Its Cargo manifest declares one binary and depends directly on syntax, checking, runtime, WASM, Atlas, broker and Survey crates. The VS Code extension starts that binary with `lsp`; it does not contain a separate compiler. See [CLI manifest](D:/nelan/DeluluLang/crates/delulu/Cargo.toml:24) and [extension launcher](D:/nelan/DeluluLang/editors/vscode/extension.js:273).
+There is not an independent obsolete compiler product that can simply be removed while leaving today's CLI intact. The shipped `delulu` binary **is already the main front door to the language implementation**. Its Cargo manifest declares one binary and depends directly on syntax, checking, runtime, WASM, Atlas, broker and Survey crates. The VS Code extension starts that binary with `lsp`; it does not contain a separate compiler. See [CLI manifest](../../crates/delulu/Cargo.toml#L24) and [extension launcher](../../editors/vscode/extension.js#L273).
 
 ```text
 AI client / shell / optional editor
@@ -119,7 +121,7 @@ Optional process / microVM / external boundary:
 Survey maps the repository; doctor checks installation/environment/posture/map.
 ```
 
-This diagram is architectural, not a claim that every backend supports every primitive or every deployment boundary. FFI exists in the WASM host path too; “WASM means no native interaction” would be an incorrect simplification. The compiler explicitly lowers foreign operations to host imports in [codegen.rs](D:/nelan/DeluluLang/crates/delulu-wasm/src/codegen.rs:30).
+This diagram is architectural, not a claim that every backend supports every primitive or every deployment boundary. FFI exists in the WASM host path too; “WASM means no native interaction” would be an incorrect simplification. The compiler explicitly lowers foreign operations to host imports in [codegen.rs](../../crates/delulu-wasm/src/codegen.rs#L30).
 
 ### 3.2 Size and responsibilities
 
@@ -208,7 +210,7 @@ Three first drafts were author/setup errors and are retained rather than counted
 
 Observed CLI discovery exposes 12 schemas and structured toolchain metadata. `check --json` returned DL0501 plus an exact byte insertion repair for a missing `Write` effect. The corrected scratch source checked successfully. The returned repair was inspected and the corrected source checked; this does **not** claim that the full `delulu edit` transaction was exercised in this session.
 
-The real MCP server completed a stdio initialize/list/check sequence using protocol `2025-06-18`. It exposed 12 tools outside the repository, all annotated read-only. An invalid program returned `isError:false` with `structuredContent.summary.errors:1`: this is intentional for `check`, as [mcp.rs](D:/nelan/DeluluLang/crates/delulu/src/mcp.rs:428) shows. An option-like path was rejected; an attempted nonexistent run tool returned JSON-RPC `-32602`. Consumers must read the result's semantics, not just the transport's success flag.
+The real MCP server completed a stdio initialize/list/check sequence using protocol `2025-06-18`. It exposed 12 tools outside the repository, all annotated read-only. An invalid program returned `isError:false` with `structuredContent.summary.errors:1`: this is intentional for `check`, as [mcp.rs](../../crates/delulu/src/mcp.rs#L428) shows. An option-like path was rejected; an attempted nonexistent run tool returned JSON-RPC `-32602`. Consumers must read the result's semantics, not just the transport's success flag.
 
 The real LSP completed initialization, document open, diagnostics, shutdown and exit; it published DL0501. This establishes an operational editor-independent server. It does not establish that the installed VS Code extension activated or found the correct server.
 
@@ -222,16 +224,16 @@ The aim is not to imitate all of Python or Java. Exceptions, classes, implicit c
 
 | Priority | Gap and evidence | Correct layer / decision |
 |---|---|---|
-| P0 | Stale installed identity; missing test path succeeds; file/package invocation mismatch | Distribution and CLI semantics. Fix before promising autonomous reliable test loops. [RW 6.51–6.53](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:360). |
-| P0 | No ordinary argv/environment/application-exit interface | Define bounded immutable invocation inputs and explicit environment selection. They must enter Authority/host policy; do not expose ambient process state. Choose a structured `main` outcome contract. [RW 2.40](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:162). |
+| P0 | Stale installed identity; missing test path succeeds; file/package invocation mismatch | Distribution and CLI semantics. Fix before promising autonomous reliable test loops. [RW 6.51–6.53](../../docs/REMAINING_WORK.md#L360). |
+| P0 | No ordinary argv/environment/application-exit interface | Define bounded immutable invocation inputs and explicit environment selection. They must enter Authority/host policy; do not expose ambient process state. Choose a structured `main` outcome contract. [RW 2.40](../../docs/REMAINING_WORK.md#L162). |
 | P0 | No demonstrated standard JSON parser/serializer for ordinary programs | A pure standard-library module, with depth/size/number/error semantics and both-engine support. `parse_json` was absent; the broader library inventory and RW gaps support this conclusion, not that one spelling alone. |
 | P0 | Backend selection can fail only after an otherwise valid program is written | Versioned target capability discovery and a target-aware preflight. Preserve explicit refusals. `range` and actuator probes are minimal examples. |
-| P1 | Basic math and checked arithmetic missing | Pure library/prelude functions with precise overflow/NaN/rounding behavior; checked operations returning explicit values. Avoid a large new authority surface. [RW 2.38](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:160). |
-| P1 | Search/formatting/interpolation/string access incomplete | Library functions first; define Unicode indexing policy before syntax. Typed formatting must retain secret restrictions. [RW 2.37](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:159). |
-| P1 | Missing reusable record methods/interfaces | Start with function-call ergonomics or a small method design preserving effects and reference rules. Defer a large inheritance/typeclass system until tasks prove the need. [RW 2.33](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:155). |
-| P1 | Bitwise operations absent; useful for binary protocols | Explicit fixed-width integer semantics and invalid-shift behavior on both engines. A host driver can cover specialist protocols meanwhile. [RW 2.35](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:157). |
-| P2 | Tuples, sets, comparator sorting and sugar absent | Prioritize comparator sorting/set use cases. Records can substitute for many tuples; `map`/`filter` for comprehensions; `while` for range syntax. [RW 2.39](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:161). |
-| P2 | `+=` absent | Useful sugar, but evaluate an indexed/field target once and preserve its effects. Less important than inputs/data/exit semantics. [RW 2.34](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:156). |
+| P1 | Basic math and checked arithmetic missing | Pure library/prelude functions with precise overflow/NaN/rounding behavior; checked operations returning explicit values. Avoid a large new authority surface. [RW 2.38](../../docs/REMAINING_WORK.md#L160). |
+| P1 | Search/formatting/interpolation/string access incomplete | Library functions first; define Unicode indexing policy before syntax. Typed formatting must retain secret restrictions. [RW 2.37](../../docs/REMAINING_WORK.md#L159). |
+| P1 | Missing reusable record methods/interfaces | Start with function-call ergonomics or a small method design preserving effects and reference rules. Defer a large inheritance/typeclass system until tasks prove the need. [RW 2.33](../../docs/REMAINING_WORK.md#L155). |
+| P1 | Bitwise operations absent; useful for binary protocols | Explicit fixed-width integer semantics and invalid-shift behavior on both engines. A host driver can cover specialist protocols meanwhile. [RW 2.35](../../docs/REMAINING_WORK.md#L157). |
+| P2 | Tuples, sets, comparator sorting and sugar absent | Prioritize comparator sorting/set use cases. Records can substitute for many tuples; `map`/`filter` for comprehensions; `while` for range syntax. [RW 2.39](../../docs/REMAINING_WORK.md#L161). |
+| P2 | `+=` absent | Useful sugar, but evaluate an indexed/field target once and preserve its effects. Less important than inputs/data/exit semantics. [RW 2.34](../../docs/REMAINING_WORK.md#L156). |
 
 JSON is not a new keyword. A retry policy is not a new keyword. A robot, drone or satellite is not a new keyword. Their reusable policies belong in packages and their effects at host boundaries. This keeps the core coherent while making AI-authored programs practical.
 
@@ -256,7 +258,7 @@ Do not add exceptions just to resemble other languages; explicit `Result` and `?
 
 The distinction is **CLI-first versus terminal-only**. Machines should submit structured arguments and receive typed results, without scraping colored terminal prose or synthesizing shell strings. Existing JSON, MCP and LSP already provide parts of this. A reusable internal request/result API can serve the CLI and long-lived agent processes without inventing a new language protocol for each surface.
 
-The extension's safe executable resolution and argument-array execution are worth retaining: [server-resolve.js](D:/nelan/DeluluLang/editors/vscode/server-resolve.js:68), [extension.js](D:/nelan/DeluluLang/editors/vscode/extension.js:65). An old installed extension and PATH binary are distribution drift, not evidence that the current compiler should be discarded.
+The extension's safe executable resolution and argument-array execution are worth retaining: [server-resolve.js](../../editors/vscode/server-resolve.js#L68), [extension.js](../../editors/vscode/extension.js#L65). An old installed extension and PATH binary are distribution drift, not evidence that the current compiler should be discarded.
 
 ## 7. Authority, Guard, Survey, Doctor, Atlas and integrations
 
@@ -278,7 +280,7 @@ These tools overlap in their **data**, not their purpose. Consolidate shared rep
 
 Observed Survey impact: `crate:delulu-check` reaches **242** nodes; its `affected-by` walk reaches **43**; `crate:delulu-wasm` impact reaches **132**, with a 64-depth limit and cited hop locations. The checker directly feeds CLI, Atlas, broker, runtime, WASM and conformance. The constitution query marks it entrenched. These are change-planning maps, not proofs that every affected behavior is covered by a test.
 
-The MCP implementation runs fixed CLI argv with a deadline, and reads stdout/stderr on reader threads. It currently buffers them to completion; the deadline is not an explicit output-byte ceiling. See [mcp.rs](D:/nelan/DeluluLang/crates/delulu/src/mcp.rs:367). A persistent service should bound request sizes and response buffers and distinguish protocol failure, analysis failure, denied operation, task failure and timeout.
+The MCP implementation runs fixed CLI argv with a deadline, and reads stdout/stderr on reader threads. It currently buffers them to completion; the deadline is not an explicit output-byte ceiling. See [mcp.rs](../../crates/delulu/src/mcp.rs#L367). A persistent service should bound request sizes and response buffers and distinguish protocol failure, analysis failure, denied operation, task failure and timeout.
 
 Some machine-facing prose says grants are “a person's decision.” That is narrower than the owner's clarified design principle. Revise prose to describe authorized principals and configured approval policy when implementation work is authorized; do not remove any existing policy constraint merely to make the language sound more autonomous.
 
@@ -366,15 +368,15 @@ Measure binary sections and feature contributions before splitting packages. The
 | Embedded/edge runtime | Published memory/CPU/IO limits on named hardware | Desktop bounded computation only in this review. No microcontroller or small ARM board measured. |
 | Domain control | Timing/fault behavior and device/safety case for a deployment | Not established by a language build or simulator. |
 
-The process guest carries console, filesystem, clock, randomness, HTTP, actuator and sensor effects today; [guest.rs](D:/nelan/DeluluLang/crates/delulu/src/guest.rs:516) is the actual list. That is not a claim that Python, plugins, foreign code, actors, secrets or compute handles all cross that channel. Source portability, portable bytecode and native binary portability are three different promises. A Windows executable does not run unchanged on Linux; a `.dwx` still depends on a compatible host ABI and supported capabilities.
+The process guest carries console, filesystem, clock, randomness, HTTP, actuator and sensor effects today; [guest.rs](../../crates/delulu/src/guest.rs#L516) is the actual list. That is not a claim that Python, plugins, foreign code, actors, secrets or compute handles all cross that channel. Source portability, portable bytecode and native binary portability are three different promises. A Windows executable does not run unchanged on Linux; a `.dwx` still depends on a compatible host ABI and supported capabilities.
 
 ### 8.4 Security claims that survive scrutiny
 
 Keep explicit capabilities, checked effects, attenuation, operation-time scope enforcement, revocation, secret custody, artifact/plugin verification and explicit containment refusals. These mechanisms are the main reason to choose DeluluLang for agent-authored tasks.
 
-The formal core is **not a machine proof of the whole compiler/runtime/OS stack**. The current core document describes machine-checked progress-or-fault, preservation/effect soundness and authority properties for a monomorphic closed-row fragment. It assumes conditions about primitive signatures/behavior and does not establish all implemented polymorphism, open rows, foreign execution, networking or OS confinement. See [DELULU_CORE.md](D:/nelan/DeluluLang/docs/design/DELULU_CORE.md:392).
+The formal core is **not a machine proof of the whole compiler/runtime/OS stack**. The current core document describes machine-checked progress-or-fault, preservation/effect soundness and authority properties for a monomorphic closed-row fragment. It assumes conditions about primitive signatures/behavior and does not establish all implemented polymorphism, open rows, foreign execution, networking or OS confinement. See [DELULU_CORE.md](../../docs/design/DELULU_CORE.md#L392).
 
-Secrets also need exact wording. `Secret.verify` reveals a chosen bit and carries `Declassify` without requiring `Cap[Declassify]`; this residue is explicitly documented. Arbitrary pure transformation plus repeated verification is not general information-flow secrecy. Broker-held secrets have additional restrictions. Do not market the type as “secrets can never leak.” See [core exception](D:/nelan/DeluluLang/docs/design/DELULU_CORE.md:144) and [soundness discussion](D:/nelan/DeluluLang/docs/design/SOUNDNESS_AUDIT.md:221).
+Secrets also need exact wording. `Secret.verify` reveals a chosen bit and carries `Declassify` without requiring `Cap[Declassify]`; this residue is explicitly documented. Arbitrary pure transformation plus repeated verification is not general information-flow secrecy. Broker-held secrets have additional restrictions. Do not market the type as “secrets can never leak.” See [core exception](../../docs/design/DELULU_CORE.md#L144) and [soundness discussion](../../docs/design/SOUNDNESS_AUDIT.md#L221).
 
 In-process execution is not an OS sandbox. WASM's linear-memory isolation does not eliminate authority of host imports. Process/microVM/external confinement depends on actual host properties and configured profiles. The observed Windows simulator report requested/granted `contained`, level 1, listed an AppContainer and resource ceilings, and recorded the denied command. It also retained `fully_enforced:false` and a `privilege_escalation` limitation alongside property derivations. Consumers should evaluate the explicit requested-profile/property contract; one legacy Boolean is insufficient, and the report terminology deserves clarification. No hostile-agent or privileged-kernel immunity claim follows from this run.
 
@@ -436,7 +438,7 @@ The existing `delulu-check/src/dir.rs` already represents checked/serialized pro
 
 ### Milestone A — establish one trustworthy installed toolchain
 
-Make package identity include immutable commit, target, feature profile, schema versions and artifact hash. The source already supports an injected commit through [build.rs](D:/nelan/DeluluLang/crates/delulu/build.rs:9) and [version output](D:/nelan/DeluluLang/crates/delulu/src/cli.rs:1298); the gap is making identity reliable in distribution and comparing what the user actually runs. Doctor should identify the executable used by PATH and the editor, and distinguish unknown identity from an exact match. Do not infer age from `1.0.0` alone.
+Make package identity include immutable commit, target, feature profile, schema versions and artifact hash. The source already supports an injected commit through [build.rs](../../crates/delulu/build.rs#L9) and [version output](../../crates/delulu/src/cli.rs#L1298); the gap is making identity reliable in distribution and comparing what the user actually runs. Doctor should identify the executable used by PATH and the editor, and distinguish unknown identity from an exact match. Do not infer age from `1.0.0` alone.
 
 Acceptance: install a prepared package in a disposable environment; CLI, MCP, LSP and editor report the same immutable build; a deliberately stale binary is detected; no checkout-local executable can silently replace the configured server. Resolve missing-test-path and zero-test ambiguity. Either resolve package context from an entry file or give a specific package invocation diagnostic.
 
@@ -478,7 +480,7 @@ The owner should decide the target scope, release hold versus a narrower preview
 
 **Convenience versus ambient authority.** Argv, environment and exit behavior are urgent, but the implementation should accept explicit input values and selected authority rather than expose the whole host process. Basic usability need not mean hidden privilege.
 
-**Audit availability versus stopping machinery.** Fail-closed recording and prompt emergency handling can conflict under lock/storage failure. The project records a residual five-second per-request audit wait; its corrected queued-revocation experiment still took 9.81 seconds under a held chain. That is prior recorded evidence, not a new measurement here. It rules out treating this software e-stop as a hard real-time physical interlock. [RW 4.53](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:263).
+**Audit availability versus stopping machinery.** Fail-closed recording and prompt emergency handling can conflict under lock/storage failure. The project records a residual five-second per-request audit wait; its corrected queued-revocation experiment still took 9.81 seconds under a held chain. That is prior recorded evidence, not a new measurement here. It rules out treating this software e-stop as a hard real-time physical interlock. [RW 4.53](../../docs/REMAINING_WORK.md#L263).
 
 **Machine editing versus text.** Zerolang demonstrates a plausible structural approach. Delulu already has Atlas and hash-checked edits. Measure stale-edit failures, repair success, authority widening, token use and merge/debug costs before changing canonical source storage. Human inspection remains essential even when agents author most code.
 
@@ -539,7 +541,7 @@ The machine-facing workflow should be: discover exact build → discover target 
 | P9-05 method/path network authority | Completed in current records, including added HTTP methods | Source/CI evidence; no real network program executed | Revalidate adapters/redirects under the actual deployment; do not repeat the outdated “GET only” claim. |
 | Process/microVM/external/attested boundaries | Several implemented profiles with different host requirements | Windows L1 observed; L2 unavailable here | External launcher/attestation code exists despite stale probe prose. Signed attester statements are not automatically hardware-rooted TEE evidence. |
 
-The top of [P8 design](D:/nelan/DeluluLang/docs/DELULULANG_V2/V2_P8_DESIGN.md:9) says P8-04 is not complete, while its later ledger at [line 265](D:/nelan/DeluluLang/docs/DELULULANG_V2/V2_P8_DESIGN.md:265) says the build order is complete. Treat the later implementation ledger and current source as stronger evidence. Likewise, the actual `sandbox probe` prints obsolete L3/L4 availability explanations; [RW 6.50](D:/nelan/DeluluLang/docs/REMAINING_WORK.md:359) already records this. Do not infer “unimplemented” solely from those strings.
+The top of [P8 design](../../docs/DELULULANG_V2/V2_P8_DESIGN.md#L9) says P8-04 is not complete, while its later ledger at [line 265](../../docs/DELULULANG_V2/V2_P8_DESIGN.md#L265) says the build order is complete. Treat the later implementation ledger and current source as stronger evidence. Likewise, the actual `sandbox probe` prints obsolete L3/L4 availability explanations; [RW 6.50](../../docs/REMAINING_WORK.md#L359) already records this. Do not infer “unimplemented” solely from those strings.
 
 The strongest physical-AI evidence here is still **software simulation and authorization enforcement**. The program handles a stale sample, invalid value, e-stop flag, low-battery mission transition, duplicates/delays and a bounded queue. It does not establish sensor integrity, synchronized clocks, scheduling deadlines, actuator dynamics, collision avoidance, stability, safe stopping distance, reliable communications, watchdog independence or recovery after power loss.
 
@@ -682,7 +684,7 @@ The first package manifest contained only `[package]`, name `review_package`, ve
 
 ### A — args_missing.delulu
 
-Source: [args_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/args_missing.delulu). SHA-256: `9f2e2e770b6c0f32a164d15bfcb75d1edf2ff2ad2935feb14e90d22be37332f9`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/args_missing.delulu`. SHA-256: `9f2e2e770b6c0f32a164d15bfcb75d1edf2ff2ad2935feb14e90d22be37332f9`.
 
 ```text
 module review.args_missing
@@ -691,7 +693,7 @@ fn main(root: Root) { let args = root.args() }
 
 ### A — basics.delulu
 
-Source: [basics.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/basics.delulu). SHA-256: `3970b06cc6f22aa90975ae3c4282c250c45e5231069a9b15912c2a5f7bf2bccb`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/basics.delulu`. SHA-256: `3970b06cc6f22aa90975ae3c4282c250c45e5231069a9b15912c2a5f7bf2bccb`.
 
 ```text
 module review.basics
@@ -723,7 +725,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — basics_while.delulu
 
-Source: [basics_while.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/basics_while.delulu). SHA-256: `d6532a9c2672204505a3a0d314f50df39299c2fecc61c3610c0aa1ea8dfbba9a`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/basics_while.delulu`. SHA-256: `d6532a9c2672204505a3a0d314f50df39299c2fecc61c3610c0aa1ea8dfbba9a`.
 
 ```text
 module review.basics
@@ -757,7 +759,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — budget.delulu
 
-Source: [budget.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/budget.delulu). SHA-256: `ddf67ae06d5a9e027b80ab674c2cc425d3ef26cc3e1245ef80f3465c0fcd00d9`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/budget.delulu`. SHA-256: `ddf67ae06d5a9e027b80ab674c2cc425d3ef26cc3e1245ef80f3465c0fcd00d9`.
 
 ```text
 module review.budget
@@ -770,7 +772,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — compound_missing.delulu
 
-Source: [compound_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/compound_missing.delulu). SHA-256: `ef5614676653cdbbf4429ec766d3113d65d7cc6462e5b458505d8aeeec9aca59`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/compound_missing.delulu`. SHA-256: `ef5614676653cdbbf4429ec766d3113d65d7cc6462e5b458505d8aeeec9aca59`.
 
 ```text
 module review.compound_missing
@@ -780,7 +782,7 @@ fn main(root: Root) { var n = 1
 
 ### A — delegation.delulu
 
-Source: [delegation.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/delegation.delulu). SHA-256: `722c59495fc013cf4084291f5743299838eb41fedf526484c64d76f9ec1eb5ce`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/delegation.delulu`. SHA-256: `722c59495fc013cf4084291f5743299838eb41fedf526484c64d76f9ec1eb5ce`.
 
 ```text
 module review.delegation
@@ -795,7 +797,7 @@ fn main(root: Root) ! {Read, Write} {
 
 ### A — delegation_denied.delulu
 
-Source: [delegation_denied.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/delegation_denied.delulu). SHA-256: `c710469e6390dec0dfef071dcb312d8dc72af1c09b98489b40b6b9a4522fb8c1`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/delegation_denied.delulu`. SHA-256: `c710469e6390dec0dfef071dcb312d8dc72af1c09b98489b40b6b9a4522fb8c1`.
 
 ```text
 module review.delegation
@@ -810,7 +812,7 @@ fn main(root: Root) ! {Read, Write} {
 
 ### A — device_missing.delulu
 
-Source: [device_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/device_missing.delulu). SHA-256: `9fbc943f7e391b8a2bdd227f2b6a5a8404a893f0f4fba204565c0cdc9841a657`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/device_missing.delulu`. SHA-256: `9fbc943f7e391b8a2bdd227f2b6a5a8404a893f0f4fba204565c0cdc9841a657`.
 
 ```text
 module review.device_missing
@@ -819,7 +821,7 @@ fn main(root: Root) { let arm = root.actuator("review/motor") }
 
 ### A — device_sim.delulu
 
-Source: [device_sim.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/device_sim.delulu). SHA-256: `29fe566b9bd34b1bccd4965c1ecbd026d924a3d95062815cee768f9d2b484578`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/device_sim.delulu`. SHA-256: `29fe566b9bd34b1bccd4965c1ecbd026d924a3d95062815cee768f9d2b484578`.
 
 ```text
 module review.device_sim
@@ -849,7 +851,7 @@ fn main(root: Root) ! {Write, Read, Actuate} {
 
 ### A — dynamic.delulu
 
-Source: [dynamic.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/dynamic.delulu). SHA-256: `d5806563665005d370e47a975380e127fde8a3f31c8f4685216bd82353b87783`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/dynamic.delulu`. SHA-256: `d5806563665005d370e47a975380e127fde8a3f31c8f4685216bd82353b87783`.
 
 ```text
 module review.dynamic
@@ -863,7 +865,7 @@ fn main(root: Root) ! {Read, Write} {
 
 ### A — edge.delulu
 
-Source: [edge.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/edge.delulu). SHA-256: `b43889eff0fbbb44931bee45637e3c07335cddce09b1f860f21a9d03f1d57817`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/edge.delulu`. SHA-256: `b43889eff0fbbb44931bee45637e3c07335cddce09b1f860f21a9d03f1d57817`.
 
 ```text
 module review.edge
@@ -882,7 +884,7 @@ fn main(root: Root) ! {Write} { root.console().println(str(aggregate(100000))) }
 
 ### A — effect_missing.delulu
 
-Source: [effect_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/effect_missing.delulu). SHA-256: `0dafcce97ac7ff73c03e989c8d7354a7480f6ac2d769fa651a23cb832ab74e0a`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/effect_missing.delulu`. SHA-256: `0dafcce97ac7ff73c03e989c8d7354a7480f6ac2d769fa651a23cb832ab74e0a`.
 
 ```text
 module review.effect_missing
@@ -891,7 +893,7 @@ fn main(root: Root) { root.console().println("should not run") }
 
 ### A — effect_repaired.delulu
 
-Source: [effect_repaired.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/effect_repaired.delulu). SHA-256: `09e9c04ca67cb178f3a7f9ec9fd5c876fccf570061c1fbe1d7e52ffb89b54cc9`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/effect_repaired.delulu`. SHA-256: `09e9c04ca67cb178f3a7f9ec9fd5c876fccf570061c1fbe1d7e52ffb89b54cc9`.
 
 ```text
 module review.effect_missing
@@ -900,7 +902,7 @@ fn main(root: Root) ! {Write} { root.console().println("should not run") }
 
 ### A — interpolation.delulu
 
-Source: [interpolation.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/interpolation.delulu). SHA-256: `4475fa2a64c55d92aa1af25602297bd73fdcc2bd2b815aa6758367ef37cb5bce`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/interpolation.delulu`. SHA-256: `4475fa2a64c55d92aa1af25602297bd73fdcc2bd2b815aa6758367ef37cb5bce`.
 
 ```text
 module review.interpolation
@@ -910,7 +912,7 @@ fn main(root: Root) ! {Write} { let name = "agent"
 
 ### A — json_missing.delulu
 
-Source: [json_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/json_missing.delulu). SHA-256: `b4b370ca2b5a9348542a1fe5aa6ce5e549df353879a243a243cd58250a91c8e7`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/json_missing.delulu`. SHA-256: `b4b370ca2b5a9348542a1fe5aa6ce5e549df353879a243a243cd58250a91c8e7`.
 
 ```text
 module review.json_missing
@@ -919,7 +921,7 @@ fn main(root: Root) { let data = parse_json("{}") }
 
 ### A — math_missing.delulu
 
-Source: [math_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/math_missing.delulu). SHA-256: `7e464a838524462d851bf9bcde451fa2d389adf30ac553f7a66435068aa78ece`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/math_missing.delulu`. SHA-256: `7e464a838524462d851bf9bcde451fa2d389adf30ac553f7a66435068aa78ece`.
 
 ```text
 module review.math_missing
@@ -928,7 +930,7 @@ fn main(root: Root) { let n = sqrt(4.0) }
 
 ### A — method_missing.delulu
 
-Source: [method_missing.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/method_missing.delulu). SHA-256: `354c27eda5fa6eb92862cc8f5546b9d2ecda83ea05afa94ec5f49bed8551c140`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/method_missing.delulu`. SHA-256: `354c27eda5fa6eb92862cc8f5546b9d2ecda83ea05afa94ec5f49bed8551c140`.
 
 ```text
 module review.method_missing
@@ -939,7 +941,7 @@ fn main(root: Root) { let p = Point{x:1}
 
 ### A — outside.delulu
 
-Source: [outside.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/outside.delulu). SHA-256: `9f3e74e776b00b60662595effc648446ed21d72d068ba573a67a12b42a482a34`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/outside.delulu`. SHA-256: `9f3e74e776b00b60662595effc648446ed21d72d068ba573a67a12b42a482a34`.
 
 ```text
 module review.outside
@@ -951,7 +953,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — package/src/helpers.delulu
 
-Source: [helpers.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/package/src/helpers.delulu). SHA-256: `da53d590b75da8302a7bd9a90eb091fb53f503bb644b478587e83483e1f99e6b`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/package/src/helpers.delulu`. SHA-256: `da53d590b75da8302a7bd9a90eb091fb53f503bb644b478587e83483e1f99e6b`.
 
 ```text
 module review_package.helpers
@@ -960,7 +962,7 @@ pub fn twice(n: Int) -> Int { n * 2 }
 
 ### A — package/src/main.delulu
 
-Source: [main.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/package/src/main.delulu). SHA-256: `b6d82e8fee7a9d6c420b1126d328568c32288d202f9a4b210ae5c6e1ab7323d2`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/package/src/main.delulu`. SHA-256: `b6d82e8fee7a9d6c420b1126d328568c32288d202f9a4b210ae5c6e1ab7323d2`.
 
 ```text
 module review_package
@@ -970,7 +972,7 @@ fn main(root: Root) ! {Write} { root.console().println(str(twice(21))) }
 
 ### A — plugin/host.delulu
 
-Source: [host.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/host.delulu). SHA-256: `4bbbe55dbb757e4adaea80013d28922548758b9f58c75c73b68c233c60a870dd`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/host.delulu`. SHA-256: `4bbbe55dbb757e4adaea80013d28922548758b9f58c75c73b68c233c60a870dd`.
 
 ```text
 module host
@@ -1028,7 +1030,7 @@ fn main(root: Root) ! {Load, Read, Write} {
 
 ### A — plugin/overbroad.delulu
 
-Source: [overbroad.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/overbroad.delulu). SHA-256: `30c6f41e223357249a153aa367b67a611dc1775f82c33e5c1f2878568d999d05`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/overbroad.delulu`. SHA-256: `30c6f41e223357249a153aa367b67a611dc1775f82c33e5c1f2878568d999d05`.
 
 ```text
 module host
@@ -1086,7 +1088,7 @@ fn main(root: Root) ! {Load, Read, Write} {
 
 ### A — plugin/src/shout.delulu
 
-Source: [shout.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/src/shout.delulu). SHA-256: `ca70a06e21e07c291155e49420fb440b8c178b839cb00dd17ae6dab650c824e4`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/src/shout.delulu`. SHA-256: `ca70a06e21e07c291155e49420fb440b8c178b839cb00dd17ae6dab650c824e4`.
 
 ```text
 module shout
@@ -1095,7 +1097,7 @@ pub fn shout(s: Str) -> Str { s + "!" }
 
 ### A — plugin_host.delulu
 
-Source: [plugin_host.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin_host.delulu). SHA-256: `7def42bba02a8907be5b33358e8a815cf25b4332fdc0cfb9eeea8f492849ee7b`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin_host.delulu`. SHA-256: `7def42bba02a8907be5b33358e8a815cf25b4332fdc0cfb9eeea8f492849ee7b`.
 
 ```text
 module host
@@ -1153,7 +1155,7 @@ fn main(root: Root) ! {Load, Read, Write} {
 
 ### A — plugin_overbroad.delulu
 
-Source: [plugin_overbroad.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin_overbroad.delulu). SHA-256: `a22de154bcf40163cb0844e39adae82f5792dfb50af9a7b8c65af680733a4450`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin_overbroad.delulu`. SHA-256: `a22de154bcf40163cb0844e39adae82f5792dfb50af9a7b8c65af680733a4450`.
 
 ```text
 module host
@@ -1211,7 +1213,7 @@ fn main(root: Root) ! {Load, Read, Write} {
 
 ### A — simulation.delulu
 
-Source: [simulation.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/simulation.delulu). SHA-256: `b4040827dbd0cc1a4b5d494ba1b6aac5314344bc256a87f7b96bb600710e22b2`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/simulation.delulu`. SHA-256: `b4040827dbd0cc1a4b5d494ba1b6aac5314344bc256a87f7b96bb600710e22b2`.
 
 ```text
 module review.simulation
@@ -1252,7 +1254,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — utility.delulu
 
-Source: [utility.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/utility.delulu). SHA-256: `68dc8ade0d5d692a05ca09b20fbe5cfb74dccbdda5337c1eeacbac9efdcc18e4`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/utility.delulu`. SHA-256: `68dc8ade0d5d692a05ca09b20fbe5cfb74dccbdda5337c1eeacbac9efdcc18e4`.
 
 ```text
 module review.utility
@@ -1307,7 +1309,7 @@ fn main(root: Root) ! {Read, Write} {
 
 ### A — workflow.delulu
 
-Source: [workflow.delulu](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/workflow.delulu). SHA-256: `b32e01c8358b0ae1f8e6f72568b38c195d1a6781ca0067d894dcdafc13267a52`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/workflow.delulu`. SHA-256: `b32e01c8358b0ae1f8e6f72568b38c195d1a6781ca0067d894dcdafc13267a52`.
 
 ```text
 module review.workflow
@@ -1340,7 +1342,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — package/delulu.toml
 
-Source: [delulu.toml](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/package/delulu.toml). SHA-256: `25141340305e133a851406b306bfa7c3e48be78d2ffd6fa2571f88dc34a091c2`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/package/delulu.toml`. SHA-256: `25141340305e133a851406b306bfa7c3e48be78d2ffd6fa2571f88dc34a091c2`.
 
 ```toml
 [package]
@@ -1354,7 +1356,7 @@ effects=["Write"]
 
 ### A — plugin/delulu.toml
 
-Source: [delulu.toml](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/delulu.toml). SHA-256: `a05b4a44bee5165d45cd46d4faf7290800cfb7a417fd853cb9a3aff7ea5bd837`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/plugin/delulu.toml`. SHA-256: `a05b4a44bee5165d45cd46d4faf7290800cfb7a417fd853cb9a3aff7ea5bd837`.
 
 ```toml
 [package]
@@ -1373,7 +1375,7 @@ shout="fn(Str) -> Str"
 
 ### A — basics.first-draft.txt
 
-Source: [basics.first-draft.txt](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/basics.first-draft.txt). SHA-256: `4ef36025b97292a01fd315eb3df5220e405cc83c41447fe50436c9e39b770b7e`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/basics.first-draft.txt`. SHA-256: `4ef36025b97292a01fd315eb3df5220e405cc83c41447fe50436c9e39b770b7e`.
 
 ```text
 module review.basics
@@ -1405,7 +1407,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — outside.first-draft.txt
 
-Source: [outside.first-draft.txt](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/outside.first-draft.txt). SHA-256: `62e0b84c9790ae4baeb235f153d42cdeed9f2859dd7faa81ea033300cb28848c`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/outside.first-draft.txt`. SHA-256: `62e0b84c9790ae4baeb235f153d42cdeed9f2859dd7faa81ea033300cb28848c`.
 
 ```text
 module review.outside
@@ -1417,7 +1419,7 @@ fn main(root: Root) ! {Write} {
 
 ### A — utility.py
 
-Source: [utility.py](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/utility.py). SHA-256: `8ebf7b77adc6fc06d0d98b544b82b08f5ca0c35d879600d0bfd05316643168e7`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/utility.py`. SHA-256: `8ebf7b77adc6fc06d0d98b544b82b08f5ca0c35d879600d0bfd05316643168e7`.
 
 ```python
 from pathlib import Path
@@ -1443,7 +1445,7 @@ print(answer)
 
 ### A — edge.py
 
-Source: [edge.py](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/edge.py). SHA-256: `ef6b981d90c00b3b85eb8d185920707aebe4dfc225ca0a73b0e88a07254cb865`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/edge.py`. SHA-256: `ef6b981d90c00b3b85eb8d185920707aebe4dfc225ca0a73b0e88a07254cb865`.
 
 ```python
 n=100000
@@ -1456,7 +1458,7 @@ print(total)
 
 ### A — edge.rs
 
-Source: [edge.rs](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/edge.rs). SHA-256: `58ff423c9b004f4d4b0592e8c44e54b7f04db8de33814a0a4c2645f5a124e5f4`.
+Source: `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/work/edge.rs`. SHA-256: `58ff423c9b004f4d4b0592e8c44e54b7f04db8de33814a0a4c2645f5a124e5f4`.
 
 ```rust
 fn main() { let n=std::hint::black_box(100000i64); let mut total=0i64; for i in 0..n { let r=i%101; if r<=90 { total+=r; } } println!("{}", std::hint::black_box(total)); }
@@ -5054,7 +5056,7 @@ error: `--sandbox` cannot carry this program yet: it uses PluginHost. Nothing ra
 }
 ```
 
-stdout: 14645 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `survey-findings---json`. Summary used in the main report; not silently truncated here.
+stdout: 14645 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `survey-findings---json`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -5079,7 +5081,7 @@ stderr: empty.
 }
 ```
 
-stdout: 48942 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `survey-query-crate:delulu-check`. Summary used in the main report; not silently truncated here.
+stdout: 48942 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `survey-query-crate:delulu-check`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -5104,7 +5106,7 @@ stderr: empty.
 }
 ```
 
-stdout: 58728 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `survey-impact-crate:delulu-check`. Summary used in the main report; not silently truncated here.
+stdout: 58728 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `survey-impact-crate:delulu-check`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -5129,7 +5131,7 @@ stderr: empty.
 }
 ```
 
-stdout: 10915 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `survey-affected-by-crate:delulu-check`. Summary used in the main report; not silently truncated here.
+stdout: 10915 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `survey-affected-by-crate:delulu-check`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -5154,7 +5156,7 @@ stderr: empty.
 }
 ```
 
-stdout: 24294 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `survey-query-crate:delulu`. Summary used in the main report; not silently truncated here.
+stdout: 24294 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `survey-query-crate:delulu`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -5179,7 +5181,7 @@ stderr: empty.
 }
 ```
 
-stdout: 32062 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `survey-impact-crate:delulu-wasm`. Summary used in the main report; not silently truncated here.
+stdout: 32062 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `survey-impact-crate:delulu-wasm`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -6012,7 +6014,7 @@ stderr: empty.
 }
 ```
 
-stdout: 64381 characters; full response in [results.jsonl](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl) under label `toolchain`. Summary used in the main report; not silently truncated here.
+stdout: 64381 characters; full response in `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/results.jsonl` under label `toolchain`. Summary used in the main report; not silently truncated here.
 
 stderr: empty.
 
@@ -7109,7 +7111,7 @@ Full sample timings and peak working sets:
 | bench-workflow-interp | 14.4692, 15.2185, 14.9175, 17.136, 13.873, 12.898, 16.8068, 15.906, 14.6156, 16.9498, 15.4986 | 8359936, 8359936, 8355840, 8384512, 8380416, 8372224, 8355840, 8388608, 8376320, 8364032, 8359936 |
 | bench-workflow-wasm | 20.7272, 21.006, 20.4769, 23.8815, 18.802, 17.723, 17.6705, 24.8934, 22.9071, 22.897, 24.7169 | 18329600, 18145280, 17862656, 17993728, 17965056, 17686528, 17240064, 17432576, 17334272, 18067456, 17399808 |
 
-The complete raw records also remain at [benchmark-raw.json](C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/benchmark-raw.json). The control build command appears in Appendix B; no C++, Mojo, Zerolang, Go, Deno or other competitor benchmark ran. The first fresh version invocation was about 780 ms; later warm identity median was 13.05 ms. One first-run observation is not a reliable cold-start distribution.
+The complete raw records also remain at `C:/Users/jesse/AppData/Local/Temp/delulu-codex-review-20261104-75e41c98/benchmark-raw.json`. The control build command appears in Appendix B; no C++, Mojo, Zerolang, Go, Deno or other competitor benchmark ran. The first fresh version invocation was about 780 ms; later warm identity median was 13.05 ms. One first-run observation is not a reliable cold-start distribution.
 
 ## Appendix D. Naming search log and coverage limits
 
