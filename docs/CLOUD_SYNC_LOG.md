@@ -7722,3 +7722,26 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   5. The language basics, in RW §8 item 7's order, then RW 3.24, a compiled form.
   6. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension from the tree (RW 6.53).
   7. The launch, only on the owner's word.
+- **Landed:** `f45c565`, by fast-forward, on the owner's word (*"can u just push it and stop"*) before its CI was read.
+  Read afterwards: PR run `41914869502` and `master`'s push run `41918036687` were green, with 14 jobs passing and
+  `heavy-gates` and `miri-slow` skipped, as on every pull-request and push run.
+
+### 2026-11-05 — the laptop: the owner's prompt for a Claude Code cloud research session committed
+- Session: `https://claude.ai/code/session_01Deh6WB8Y7VsBhJQ8NSU8dW`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Base: `f45c565`. Records only, committed on `master` and pushed at the owner's request (*"push it to test github repo
+  and stop"*). Nothing came in on `origin` since `f45c565`. The autosave snapshot `052c2ce` holds this file alone.
+- **What changed:**
+  - A `docs/prompt/DeluluLang_Claude_Code_Cloud_Strategic_Verification_Prompt.md`: the owner's brief for a later Claude
+    Code cloud session, kept as he wrote it. It is research and a report only, covering:
+    - an independent audit of Codex's review;
+    - competitors;
+    - whether to integrate NVIDIA OpenShell;
+    - the smallest defensible 2.0.
+  - The owner: it is *"not for this session"*, so nothing in it was acted on.
+  - M `docs/REPOSITORY_STRUCTURE.md` (§5.2's `docs/prompt/` row), `docs/CLOUD_SYNC_LOG.md` and `docs/survey/*`.
+  - Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  - The 2026-11-05 list above, unchanged.
+  - This prompt waits for the owner to start that cloud session. A routine run does not take it up.
