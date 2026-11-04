@@ -7739,6 +7739,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
     - whether to integrate NVIDIA OpenShell;
     - the smallest defensible 2.0.
   - The owner: it is *"not for this session"*, so nothing in it was acted on.
+  - **Corrected on the owner's word** (*"Correct the prompt. Double Verify before making any changes"*), in one place.
+    - Its *Scale* bullet gave the crate count as a bare thirteen. It now says **13 workspace members**: 9 shipped
+      language crates plus 4 tooling crates (`delulu-conform`, `delulu-fuzz`, `delulu-measure`, `delulu-survey`).
+    - Checked against `Cargo.toml`'s members, the 13 directories under `crates/`, each tooling crate's
+      `surface = "tooling"`, the Survey's measured facts, and the review's own doctor reading ("13 workspace members,
+      9 shipped").
+    - The Survey had warned that it read that bare count as shipped language crates. Its other figure, 199k Rust
+      lines, matches the Survey's 199,342 and stands.
+    - The prompt's remaining warning is left as it is: its line 91 names the report the future session is to create
+      under `docs/review/`, and that report does not exist yet.
   - M `docs/REPOSITORY_STRUCTURE.md` (§5.2's `docs/prompt/` row), `docs/CLOUD_SYNC_LOG.md` and `docs/survey/*`.
   - Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

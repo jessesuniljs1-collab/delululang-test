@@ -10,7 +10,6 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 | Severity | Class | Count |
 |---|---|---:|
 | warning | `prose-cites-missing-path` | 7 |
-| warning | `stale-count` | 1 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
@@ -28,12 +27,6 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/prompt/DeluluLang_Claude_Code_Cloud_Strategic_Verification_Prompt.md:91` — prose names `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`, which is nowhere in the tree
-
-## warning — `stale-count` (1)
-
-**What to do:** update the number, or say plainly that it is a snapshot of a past moment
-
-- `docs/prompt/DeluluLang_Claude_Code_Cloud_Strategic_Verification_Prompt.md:143` — says 13 shipped language crates; the tree has 9
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
