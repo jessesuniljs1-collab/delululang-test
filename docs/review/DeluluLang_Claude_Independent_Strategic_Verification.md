@@ -8,6 +8,22 @@ read in full, plus his request in this session to *"check for bugs and security 
 source, test, configuration, existing document or memory file was changed. This file is the only addition to the
 repository (§2.4 says exactly how it got there).
 
+**Second pass (2026-11-05, same session), on the owner's request to *"double verify and research about everything once
+again … don't miss out anything … test everything"*:**
+- **Codex:** every one of its 102 Appendix B ledger entries was re-run with the fixture state it used (§3.3); every
+  source link in its §§1–18 was checked (§3.3); and its naming claims were checked on the web.
+- **Prompt:** every requirement was mapped to this report (Appendix E).
+- **Surfaces neither review had run were tested** (§6.7): the L3 launcher and attestation seam; broker and guest loss
+  mid-run; strict anchored roots; the Guard seal; the proposal → approval loop; the HTTPS egress client against a
+  local server that logged what reached it; endpoint-bound secrets; Python; a signed driver through a separate device
+  process; drone and satellite simulations; multi-package locking; long LSP and MCP sessions.
+- **Corrections, all recorded where they land:**
+  - F7 is downgraded: no reachable panic was found.
+  - F1 is reframed: the null device is undocumented, not unenforced.
+  - The WASM parity gap is wider than first written: three constructs, not two.
+- **New findings:** F12–F18 (§6.3).
+- **Decisions:** §1 is unchanged. None of the new evidence moves a verdict.
+
 Evidence labels, used throughout: **OBSERVED HERE** (run in this cloud session, output retained) · **CURRENT SOURCE**
 (read in `0670e0b`) · **CURRENT CI** (a named run whose completed result and SHA I read) · **CODEX REPORTED** (from the
 Codex review only) · **HISTORICAL DOC/DECISION** · **OFFICIAL EXTERNAL** (vendor page or repository, fetched
@@ -50,12 +66,18 @@ read its arguments, parse JSON, call `sqrt`, or set an exit code.
 1. **Hold the 2.0 launch behind an "ordinary agent utility" bar** (§13, Phase 1): argv and selected environment as
    capabilities; an explicit application outcome and exit code; JSON parse and serialise with size and depth limits;
    math and checked arithmetic; string search, formatting and interpolation; methods on user types. On WASM, the
-   *documented* spellings must work: today `for i in range(0, n)` and any user-defined higher-order function fail to
-   compile there.
-2. **Fix the machine-contract defects agents trip on** (§6.3, §9): `test` reporting success when nothing ran; `fix`
-   exiting 0 with errors left; null-device actuation reported as `COMMANDED`; a DL0703 hint that recommends an invalid
-   grant; `run --json` putting two different things on stdout; `--version` printing `commit: null` for every source
-   install.
+   *documented* spellings must work: today `for i in range(0, n)`, any user-defined higher-order function, and an
+   `if` without `else` used as a value inside a `match` arm all fail to compile there. Most of this bar is core
+   language, so it needs RFCs (14-day comment periods) or a recorded decision to unfreeze the core (§13).
+2. **Fix the machine-contract defects agents trip on** (§6.3, §9):
+   - `test` reporting success when nothing ran;
+   - `fix` exiting 0 with errors left;
+   - null-device actuation reported as `COMMANDED`;
+   - grant hints that are not this program's (DL0703, DL1303);
+   - `run --json` putting two different things on stdout;
+   - a guest killed mid-run leaving no reason in the run report;
+   - exit 2 ("usage") on a closed pipe;
+   - `--version` printing `commit: null` for every source install.
 3. **Generate one capability matrix from the code** (primitive table × engine × containment × OS) and expose it as
    `toolchain --json` and a `check --target …` preflight, so an agent learns before running that a plan cannot run.
 4. **Freeze breadth and consolidate the surface:** no new PS, P8 or P9 slices and no new commands until (1)–(3) land.
@@ -88,7 +110,9 @@ a graph database the canonical source (§11.2); do not build GPU, robotics or AG
 | Build | `cargo build --locked --release -j 4 -p delulu -p delulu-survey`, `CARGO_TARGET_DIR` in the session scratch directory, **default features** (`python`, `net`): **4 min 18 s**, exit 0. `delulu` = 41,768,640 bytes, SHA-256 `e82a774332935407b7436d55d3172811c5b1429df9da0d86f9a34277771a676a`, dynamically linked to `libpython3.13.so.1.0` |
 | Build identity | `delulu --version --json` → `"delulu_version":"1.0.0","commit":null,"target":"x86_64-unknown-linux-gnu"` |
 | State isolation | every run used `DELULU_HOME` and `DELULU_STATE_DIR` in scratch; programs, fixtures and logs lived only in scratch |
-| Agents | none spawned (the prompt allows only verified-cheap ones; I did not need them) |
+| Agents | none in the first pass. **Second pass:** the session's direct page-fetch tool was withdrawn mid-session, so one *page-fetch* helper (the harness's stand-in for that tool; I did not choose its model) read seven public URLs (§3.3, §8.1). It wrote nothing and ran nothing. Its one consequential claim, that `github.com/delulu-lang` is a 404, I re-checked myself with GitHub's user search (0 results) |
+| Second-pass sync (2026-11-05) | `git fetch origin`: no ref moved; `origin/master` still `0670e0b`; the only new ref is this branch's own report commit |
+| Scheduled routines (read only) | both **disabled** (`enabled: false`): `trig_01HFG6usfzmDAPQigiDu9DLq` (on demand, last fired 2026-11-02 07:11 UTC, run succeeded) and `trig_01GG41tCGxZXyt7bZUid8Vuu` (cloud period, ended). Nothing was changed, started or fired |
 
 ### 2.2 Health baseline: Survey and doctor first (OBSERVED HERE, clean tree)
 
@@ -177,9 +201,17 @@ difference between its results and mine is a platform difference or an error, ne
 | C31 | 12 schemas discoverable (§4.3) | Observed | `delulu schema --json`: 12 | **CONFIRMED** | — |
 | C32 | Zerolang latest commit `7e1a64d…`, 16 Sep 2026 (§9) | External | GitHub page now shows 1,188 commits and no releases; date not shown | **STALE** | Re-check before relying on it |
 | C33 | Mojo stable 1.2.0, 22 Oct; Windows only via WSL (§9) | External | Same (mojolang.org, requirements page) | **CONFIRMED** | — |
-| C34 | Koka v3.2.8, 17 Sep 2026 (§9) | External | My search found v3.2.3 as the newest visible tag; the official book was not re-read | **INCONCLUSIVE** | Irrelevant to the decision |
-| C35 | Trademark and naming findings (§18) | External | Not re-researched (out of the prompt's decision scope) | **NOT RE-VERIFIED** | Background only; no legal conclusion |
+| C34 | Koka v3.2.8, 17 Sep 2026 (§9) | External | Two searches (2026-11-04/05) found v3.2.3 as the newest visible tag (a mirror page, "18 Mar", no year) and Alpine's edge package still at 3.2.2 on 2026-02-15; no source shows v3.2.8 | **INCONCLUSIVE** (unsupported by what I found) | Irrelevant to the decision |
+| C35 | Naming facts (§18): KingLang repositories, a Chinese patent naming KingLang, a pending DELULU application | External | **Second pass:** `github.com/ShubhamBhut/kinglang` exists ("An interpreted programming language written in rust"); `github.com/publidoo/kinglang` exists ("Language app"); patents.google.com shows CN110737431A, which mentions "KingLang" and was granted as **CN110737431B on 2023-07-14**; a trademark aggregator lists DELULU serial 99795106 (Decart.Ai Inc., filed 2026-04-29, classes 9/41/42) as pending | **CONFIRMED** for the facts checked; **no legal conclusion** | Background only |
 | C36 | Device simulation *"in Windows AppContainer at L1"* (§1) | Observed (Windows) | On Linux the same program runs at L1 under Landlock and seccomp, `fully_enforced:true` | **NOT REPRODUCIBLE HERE** (Linux equivalent CONFIRMED) | — |
+| C37 | Survey: `crate:delulu-check` impact 242, affected-by 43; `crate:delulu-wasm` impact 132 (§7) | Observed | Identical numbers (§4.3) | **CONFIRMED** | — |
+| C38 | `.dwx` artifact 1,196 bytes; pure plugin `.dpx` 1,307 bytes (§8.1) | Observed | 1,196 and 1,307 bytes here too | **CONFIRMED** | Artifacts are tiny; the runtime is the size |
+| C39 | Codex's cited e-stop 9.81 s under a held audit chain (§12) | Recorded | RW 4.53 (closed 2026-10-31, D-V2-198) records exactly that | **CONFIRMED** as recorded | Software e-stop is not an interlock |
+| C40 | Cargo repository metadata differs from the test origin (§11) | Source | Workspace `Cargo.toml` line 30 names `https://github.com/delulu-lang/delulu`; **`delulu-lang` is not a GitHub account** (404; GitHub user search: 0 results); `launch/2.0.0` already names `jessesuniljs1-collab/DeluluLang` | **CONFIRMED**, extended (F15) | Pre-launch namespace hygiene |
+| C41 | Java's Security Manager is no longer a sandbox strategy (§9) | External | JEP 486 (JDK 24) permanently disables it | **CONFIRMED** | — |
+| C42 | Zerolang ships data-format modules (§9) | External | Its repository docs (indexed copy) describe a `std.json` module (validation, parsing, cursor access) | **CONFIRMED** (secondary index) | DeluluLang's JSON gap is a competitive gap |
+| C43 | Appendix B: 102 executed commands and outputs | Observed | **All 102 re-run** (§3.3): 101 of 101 comparable exit codes equal; 87 identical in exit, stdout and first stderr line; 14 differ only by platform, line endings, build profile or timing | **CONFIRMED** (whole ledger) | Codex's evidence is reproducible |
+| C44 | Every source link in §§1–18 (26 distinct) | Source | All resolve to the cited text in `0670e0b`; `Cargo.toml#L24` is now one line above the `[[bin]]` it means | **CONFIRMED** | — |
 
 ### 3.2 Codex's recommendations
 
@@ -196,6 +228,30 @@ difference between its results and mine is a platform difference or an error, ne
 | Hold the broad launch until A01–A11 and A18 | **AGREE, MODIFY** | Add A19 (WASM parity for documented constructs) and A20 (no success reported for actions that did not happen; F1). |
 | Order: installation → tasks → matrix → workflows → performance → specialists | **MODIFY** | Run installation identity (small) **in parallel** with language basics. The basics are the long pole and the owner's own complaint. |
 | Keep the working name; clear a final one | **No position** | Outside this decision; Codex's legal statements are background, not clearance. |
+
+### 3.3 Second pass: the whole Codex ledger re-run (OBSERVED HERE)
+
+All 102 entries of Codex's Appendix B were parsed from the review, mapped from Windows to this checkout, and re-run on
+the release build. Before each entry I recreated the fixture state it used:
+- the first drafts of `basics` (B002–B003) and `outside` (B010–B011);
+- the four task-input variants (B044–B051);
+- the original manifest with no `[authority]` (B052–B056);
+- the in-package plugin hosts (B070–B072).
+
+The sentinel `forbidden.txt` kept its bytes throughout.
+
+| Result | Entries |
+|---|---|
+| Exit code equal to Codex's | **101 of 101** comparable (B096, the `rustc` control, is not a `delulu` command) |
+| Exit, stdout and first stderr line identical | **87** |
+| Same exit, stdout differs | 12, each explained: `target`/`commit` in `--version` (B001; Codex injected `DELULU_BUILD_COMMIT`, I did not); Windows vs Linux probe text (B063); byte offsets 1–3 lower in diagnostics because Codex's sources were CRLF (B035, B040, B060, B062, and the plugin's `dir` hash in B068); a trailing blank line (B012–B013); a `ms` field (B085); the Survey seeing documents added since `e97c747` (B080); Python compiled in here, not in Codex's build (B102) |
+| Same exit and stdout, stderr differs | 2 (B064, B100): AppContainer text on Windows, Landlock/seccomp text and "no `uidmap`" on Linux |
+
+**Every one of Codex's executed observations reproduces on Linux.** No result reverses. Its §§1–18 links (26 distinct)
+resolve to the cited text. Its Appendix E (a requirement map and a zero-changed-files integrity statement) and Appendix F
+(proposals A–G, eleven scenarios, a list of what it left partial) are consistent with the tree. Of what Appendix F lists
+as *not* done, this session ran: two independent broker principals with ancestor revocation, the full `edit`
+transaction, a signed device-adapter path, and the L3 and attestation boundary (§6.7).
 
 ---
 
@@ -304,13 +360,14 @@ Programs, fixtures and outputs are in Appendix A and B. All runs used the fresh 
 |---|---|---|---|
 | P0 | No program inputs, no exit outcome | `root.args()` → DL0405 *type `Root` has no method `args`*; handled errors exit **0** (Codex `utility` "error" JSON, plugin refusals) | capability + `main` outcome |
 | P0 | No JSON read **or correct write** | `parse_json` → DL0301; no JSON or escape primitive in `prim.rs`'s `Str` table (`len, trim, contains, starts_with, split, to_upper, replace, chars …`); JSON is built by concatenation, so a value containing `"` produces invalid JSON | pure stdlib |
-| P0 | **WASM cannot compile documented constructs** | `for i in range(0,4)` → DL1201; `fn apply(f: fn(Int)->Int, x: Int)` called with **any** function (named or lambda) → DL1201 *"a call to `apply` (not a compilable function)"*. Cause: `codegen.rs:1027 is_compilable` requires every parameter to have a `wasm_ty`, and function types have none | codegen |
+| P0 | **WASM cannot compile documented constructs** | `for i in range(0,4)` → DL1201; `fn apply(f: fn(Int)->Int, x: Int)` called with **any** function (named or lambda) → DL1201 *"a call to `apply` (not a compilable function)"*. Cause: `codegen.rs:1027 is_compilable` requires every parameter to have a `wasm_ty`, and function types have none. **Second pass, a third construct:** `match … { Some(p) => if c { found = true }, … }` → DL1201 *"an `if` without `else` used as a value"* (my telemetry simulation, which runs on the interpreter). None of the three is named in RW 3.4 or 2.36 | codegen |
 | P0 | `test` succeeds when nothing ran | §3 C13 | CLI |
 | P1 | No math, no checked arithmetic | `sqrt(4.0)` → DL0301 | prelude |
 | P1 | Strings: no interpolation, search or indexing | `"hello {name}"` printed literally | stdlib, then syntax |
 | P1 | No methods or interfaces on user types | `p.norm()` → DL0405 | language |
 | P1 | Scope refusals are not catchable | `match wr.write_text("../x", …) { … Err(e) => … }` → **DL0904 aborts the program**; the `Err` arm never runs | runtime semantics (decide deliberately) |
 | P2 | `+=`, bitwise, tuples, sets, `sort_by` | `n += 2` → DL0202 | syntax and stdlib |
+| P2 | Authoring traps a model meets (second pass) | `else` on the line after `}` → DL0202 *"expected an expression, found `else`"*; a parameter named `cap` → DL0106 (reserved); both cost me a cycle while writing the simulations | syntax and docs: teach both in the first-program kit |
 
 The earlier claims are **true gaps, not wrong API guesses**. I checked each against the parser and primitive table.
 The interpolation case is the most dangerous: it type-checks and prints the wrong text.
@@ -319,17 +376,24 @@ The interpolation case is the most dangerous: it type-checks and prints the wron
 
 | ID (mine) | Defect | Witness | Severity |
 |---|---|---|---|
-| **F1 NULL-DEVICE-OK** | With no `--broker-profile`, `arm.command(...)` inside the envelope returns `Ok` (`COMMANDED`, exit 0) though **no device exists**; the run report says nothing about devices. The source states it (`delulu-runtime/src/device.rs` (lines 720–727): *"With no broker (the null device profile) an in-envelope command answers `Ok(())`"*), contradicting the CLI's own principle at `cli.rs:9476` (*"a … run that commanded nothing while reporting success would be a lie"*) | `device_sim.delulu` with actuator and sensor grants, no profile → `COMMANDED`, then `NO READING` | **Medium** for physical-AI honesty (nothing moves, but an agent concludes it actuated) |
-| **F2 HINT-INVALID** | DL0703 for an actuator tells the user to pass `--grant "actuator=review/motor:DIM=LO..HI"`; following it gives exit 2 *"no `heartbeat_ms` — a device grant with no dead-man is not a grant"* | `device_missing.delulu` | Low–medium (breaks an agent repair loop) |
+| **F1 NULL-DEVICE-OK** | With no `--broker-profile`, `arm.command(...)` inside the envelope returns `Ok` (`COMMANDED`, exit 0) though **no device exists**; the run report says nothing about devices. The source states it (`delulu-runtime/src/device.rs` (lines 720–727): *"With no broker (the null device profile) an in-envelope command answers `Ok(())`"*), at odds with the CLI's own principle at `cli.rs:9476` (*"a … run that commanded nothing while reporting success would be a lie"*). **Second pass, framing corrected:** the null profile is a real `DeviceBroker` (`cli.rs:9485` → `Profile::Null`), so envelope, lease and rate checks still run (its unit tests at `device.rs` (lines 1209–1235) rely on that). Only the device is absent. This is an **undocumented mode**, not a missing check: no RW row, Book or for-agents text names it | `device_sim.delulu` with actuator and sensor grants, no profile → `COMMANDED`, then `NO READING` | **Medium** for physical-AI honesty (nothing moves, but an agent concludes it actuated). Fix: name `device_profile` in the report and the command's result, or refuse `command` without a profile |
+| **F2 HINT-INVALID** | DL0703 for an actuator tells the user to pass `--grant "actuator=review/motor:DIM=LO..HI"` (hard-coded at `delulu-runtime/src/prim.rs:752`); following it gives exit 2 *"no `heartbeat_ms` — a device grant with no dead-man is not a grant"* | `device_missing.delulu` | Low–medium (breaks an agent repair loop) |
 | **F3 FIX-OUTCOME** | `delulu fix` exits **0** with `fix.errors_after: 1` (widening repair skipped), and after a successful fix `summary.errors` still says **1** (`errors_after: 0`), against for-agents.md's "1 = diagnostics" | `fix app.delulu --json` without and with `--accept-widening` | Low–medium |
 | **F4 TTL-IS-A-TIMESTAMP** | `grants delegate --json` prints `"ttl_millis": 1793836483844`, an absolute epoch time, not a TTL; `Denial::Expired { ttl_millis: claims.exp_millis }` repeats it (`delulu-broker/src/lease.rs`) | broker run | Low (a misread contract) |
-| **F5 IDENTITY-NULL** | Every non-packaged build reports `commit: null`; doctor cannot compare PATH vs tree (RW 6.53) | `--version --json` | Medium for adoption |
+| **F5 IDENTITY-NULL** | Every non-packaged build reports `commit: null`; doctor cannot compare PATH vs tree (RW 6.53). *Second pass:* this is **documented and intended** (`INSTALL.md`: "One built without being told its commit says `null`, never a guess"). The finding is the consequence: the README's and INSTALL's own `cargo install --path` route yields a binary nobody can later identify | `--version --json` | Medium for adoption |
 | **F6 LEASE-BURNED** | A single-use lease is consumed by a run that faults on an unrelated missing grant (console), so the agent must re-mint | broker run → DL1407 on retry | Low (by design, but surprising) |
-| **F7 WATCHDOG-POISON** *(hypothesis, CURRENT SOURCE, not reproduced)* | The device dead-man thread takes `inner.leases.lock().unwrap()` every tick (`device.rs:543`; 18 such unwraps in production device code). The release profile is `panic = unwind` (no `[profile]` override), and actors carry actuator envelopes onto other threads. A panic while holding `leases`, `sim`, `adapter` or `journal` would poison the mutex, and the watchdog would then die silently instead of engaging the fail-state | — | Medium *if* reachable; fix cheaply: poison-tolerant locks, and make a poisoned lock **engage** the fail-state |
+| **F7 WATCHDOG-POISON** *(hypothesis, CURRENT SOURCE, not reproduced; **downgraded in the second pass**)* | The device dead-man thread takes `inner.leases.lock().unwrap()` every tick (`device.rs:543`; 18 such unwraps in production device code), the release profile is `panic = unwind`, and a panic while a device lock is held would poison it and stop the watchdog. **Second pass:** no production code that runs under those locks can panic: `sim.rs` (lines < 275), `adapter.rs` (< 426), `verified_adapter.rs` (< 376) and `device.rs` contain no `unwrap`, `expect`, `panic!` or bare index outside the lock calls themselves. No reachable trigger was found | — | **Low**: defensive hardening only (poison-tolerant locks that *engage* the fail-state), not a fix for a known fault |
 | **F8 STALE-EDIT-AS-USAGE** | A stale-hash edit refusal is exit **2** ("usage") and returns the current hash, inviting a blind retry | `edit --expect-hash 0000` | Low (contract clarity) |
 | **F9 SURVEY-GRANULARITY** | §4.3 | — | Medium for maintainers |
 | **F10 CHECK-MEMORY** | `check` uses about 14 KiB of RSS per source line: 224 MiB for a 16,002-line program, 315 MiB to compile it to WASM | §10.2 | Medium for edge and long LSP sessions |
 | **F11 STALE-OPENSHELL-PIN** | `openshell.yml` pins v0.1.2; upstream is v0.1.7 with breaking changes in 0.1.5–0.1.7; the live runtime witness last ran 2026-10-04 | CURRENT CI, OFFICIAL EXTERNAL | Medium (integration drift) |
+| **F12 HINT-NUMPY** *(second pass)* | DL1303 tells every program to `--grant foreign.python=numpy` whatever it imports (hard-coded at `crates/delulu/src/cli.rs:9713`) | `py_json.delulu` imports `json` and `os` | Low (the same class as F2: a hint that is not this program's) |
+| **F13 EPIPE-EXIT-2** *(second pass)* | When the reader closes the pipe before `delulu` finishes writing (`… \| head -2`), the run exits **2**, the "usage error" code, instead of 1. It depends on how much output is still unwritten | `telemetry.delulu` with a static error: exit 1 to a file, exit 2 into `head -2` | Low (a machine reader misclassifies) |
+| **F14 GUEST-DEATH-UNSTRUCTURED** *(second pass)* | A sandboxed guest killed mid-run (SIGKILL) ends the run with exit 1 and the stderr line *"the guest closed the channel without saying goodbye"*, but the `--report-out` report says only `outcome: {exit: 1, ran: true}`: no `stopped_by`, no diagnostic. A budget stop does carry `stopped_by` | kill of `__guest` after 17 ticks | Low–medium (agents can't classify the failure) |
+| **F15 UNREGISTERED-NAMESPACE** *(second pass)* | `master`'s workspace `Cargo.toml` (line 30) and `editors/vscode/package.json` name `https://github.com/delulu-lang/delulu`. **No GitHub account `delulu-lang` exists** (404; GitHub user search: 0), so anyone could register it and receive the project's metadata links. `launch/2.0.0` already points both at `jessesuniljs1-collab/DeluluLang`; the VS Code **publisher** id `delulu-lang` stays on both branches, and whether it is reserved on the Marketplace or Open VSX is unknown | `git grep`, `gh api search/users` | Low now; **Medium at launch** (reserve the names, or keep `launch/2.0.0`'s fix) |
+| **F16 L3-DEFAULT-PROCEEDS** *(second pass; documented, D-V2-59/D-V2-92)* | Under the default `contained` profile, an external launcher's run proceeds with `requested: contained, granted: none` and every property `unknown`; only `hostile-agent` refuses. Stated in README and stderr, so not silent, but it is a weaker-confinement run under the default profile | `l3-ok` (§6.7) | Design choice to revisit: refuse a requested profile that is not granted unless the operator names `--accept-unmeasured` |
+| **F17 LEASE-IN-ARGV** *(second pass)* | A lease token, a bearer credential, can be passed only as `--lease TOKEN` (`cli.rs:832`), so it appears in `ps`, `/proc/<pid>/cmdline` and shell history. The broker socket is in an owner-only state directory, so another account cannot simply redeem it; the exposure is logs and history, and Tier-2 setups where an agent account reaches the socket | `ps -o args` during a leased run | Low; hardening: `--lease-file` or standard input |
+| **F18 APPROVAL-BY-NODE-ID** *(second pass; inside the documented same-user residual)* | `grants approve <pp> --parent g_ID` approves under any node named by id. On one OS account an agent can approve its own proposal by naming its parent (a child naming itself is refused, DL0802). Only a separate OS account, or strict anchored roots with the anchor key elsewhere, makes approval a boundary | §6.7 proposal flow | Same-uid residual (category 7, DISC-1); state it next to P9-03 in `for-agents.md` |
 
 ### 6.4 Hostile probes: all held (expected authority denials; OBSERVED HERE)
 
@@ -357,6 +421,32 @@ delegating `input/` gets **DL0802** (attenuation violation). Revoking the parent
 **DL1403** *"revoked by audit seq 10"*; `audit verify` reports a good chain of 11 records. **Not shown:** separate OS accounts,
 replay and idempotency of non-idempotent effects, and broker crash recovery.
 
+### 6.7 Second pass: boundaries and scenarios neither review had run (OBSERVED HERE)
+
+| Probe | What happened | Outcome class |
+|---|---|---|
+| **Broker killed mid-run** (SIGKILL of the daemon, at about 2.0 s into a leased run reading a file in a loop; timestamped) | ticks 0–29 before the kill; **the very next effect at 2.050 s → DL1401** *"broker unreachable … (fail closed, invariant 27)"*, exit 1 | expected denial: **fail-closed** |
+| **Sandbox guest killed mid-run** (SIGKILL of `__guest` after 17 ticks) | host: *"the guest closed the channel without saying goodbye"*, exit 1; report lacks a reason (F14) | true failure, reported |
+| **L3 launcher, honest** (`external:` script that runs the guest) | runs; report: level 3, backend `external`, `granted: none`, all five properties `unknown`, `launcher_blake3` recorded | passed, labelled honestly (F16) |
+| **L3 launcher that lies** (prints text instead of a guest) | *"the guest never confirmed its boundary, so it was not sent the program"*, exit 1 | expected denial |
+| **L3 launcher that stays silent** (`sleep 100`) | refused after about **60 s**, *"it said nothing within the channel's deadline"*; the launcher process was cleaned up | expected denial (slow) |
+| **L3 with a wrong `--launcher-digest`** | refused before anything started, both digests named | expected denial |
+| **L3 under `hostile-agent`** | refused: five properties not established or vouched for, exit 2 | expected denial |
+| **`--require-attestation`**: no attester / valid software attester / wrong pinned key / at L1 | refused after the 10 s window / **runs, with the claims recorded as the attester's** (`verified: true`, `host_guarantees: []`) / refused / usage error, "Nothing ran" | as designed |
+| **Guard seal** on `fs_write:<abs>/output` (daemon) | `grants delegate` of that scope → **DL1413** *"sealed authority is not runtime-approvable"*; but `run --broker daemon --grant fs.write=./output` **wrote** (a fresh root passes the Guard: DISC-1, documented, `QUESTIONS.md` lines 249–262) | denial, plus the documented same-uid bypass, **observed** |
+| **Strict anchored roots** (`broker start --require-anchored-roots <pub>`) | `run --grant` and the delegate auto-root → **DL1421** *"root issuance refused"*; `doctor` reports `root issuance STRICT` | the mitigation works; the anchor key's custody is the residual |
+| **Proposal → approval (P9-03)** | a run refused for `fs.write=./output` (`--report-out`) → `grants propose` gives exactly `fs.write=./output` from the source line → filed as `pp_0000` → the child approving under itself → DL0802 → approval under the parent mints a lease → the re-run prints `{"ok":true,"value":42}` | passed useful task (F18 caveat) |
+| **HTTPS egress, local server with its own CA** (`SSL_CERT_FILE`); the server logged every request | granted `GET /v1/ok` → `GOT pong` (interpreter, WASM, `--sandbox`); `/v2/secret` outside the path scope → DL0904; `POST` without the method → DL0904; `:GET,POST/v1/**` → `POSTED`; `/v1/../v2/secret` → DL0904; a 302 to `https://localhost/…` → `Err(Refused)`, *not-allowlisted*; plain `http://` → `Err(Refused)`, *scheme*. **The server saw exactly** `GET /v1/ok` ×3, `POST /v1/ok`, `GET /redir`: no refused request reached it | expected denials, with **independent evidence of no forbidden network effect** |
+| **Endpoint-bound secret** | `str(secret)` → DL0604 at check; sent with an audience → the server received it once, only in the `authorization` header; no audience → not sent (*audience*); another origin → not sent | as designed |
+| **Python** (`--grant foreign.python=json`) | `json.dumps` works; `import os` → `ImportNotAllowed` (DL1305); `--sandbox` → refused, "Nothing ran" | expected denial / unsupported refusal |
+| **Signed Verified driver + device process** (`examples/line_driver` signed with a test key; `delulu device sim` as transport behind my frame-logging tee) | commands 42.5 and 80.0 → `COMMANDED`; 120 → refused by the host envelope; **the device process saw only `CMD … 42.5` and `CMD … 80.0`**; a one-bit-tampered driver → DL1504, **0 frames** reached the device; the hardware profile required the simulator sign-off of this exact program hash first | **independent no-command proof** |
+| **Drone mission simulation** (my `drone.delulu`, Appendix A) | identical on both engines: duplicate command dropped, geofence refusal, priority arbitration picks the safety command, comms loss → RTL, commands held in RTL, low battery → LAND | passed (logic only) |
+| **Satellite telemetry simulation** (my `telemetry.delulu`) | interpreter: queue `[1, 4, 5, 6]`, 1 dropped at the bound, 1 duplicate, 1 stale beyond a clock-skew window; WASM: DL1201 (the third parity gap, §6.2) | passed on one engine |
+| **Multi-package program** (`tests/corpus/tier4-multimodule` copied out) | `build` and `lock` ok; `authority` lists every module's reach; `run` asks for the grants; a dependency's manifest edited under `--locked` → **DL1010** *"possible tampering"* | as designed |
+| **Budgets** | `--limits cpu=1` stops a busy loop at 1.0 s of CPU; `--sandbox --mode audit` → `ran: false` plus the exact `required_grants` | as designed |
+| **Determinism** | `--seed 42 --clock fixed:1000` twice → identical `rand` and `clock` values; without them they vary | as designed |
+| **Actors** (`examples/guide/06_actors.delulu`) | interpreter and WASM exit 0 (WASM: *"cooperative single-threaded"*); `--sandbox` → refused | unsupported refusal under sandbox |
+
 ---
 
 ## 7. CLI-first versus CLI-only, and the compiler and editor question
@@ -367,7 +457,7 @@ replay and idempotency of non-idempotent effects, and broker crash recovery.
 | Separate "compiler" product | **There is none.** Do not create one. |
 | **CLI-only** (agents compose shell strings, parse terminal text) | **Reject.** Agents already need `--json`, MCP and LSP. Shell-only invites unsafe string building and makes outcome semantics (C16, F3) worse. |
 | **CLI-first + one machine API + thin editor** | **Adopt.** Concretely: (a) split `cli.rs` into services (`check`, `authority`, `edit`, `run`, `test`, `grants`) with serde request and result types; (b) MCP and LSP call the services in-process instead of forking `delulu` (`mcp.rs::run_self`); (c) the CLI becomes a parser and printer over the same calls. |
-| Persistent analysis service? | **Only where measured.** A small check costs about 7 ms per fresh process (p95 9 ms), so a daemon buys nothing for utilities. A 16k-line program costs 580 ms and 224 MiB per check, and *there* the LSP process already is the persistent service. **Do not add a new daemon.** |
+| Persistent analysis service? | **Only where measured.** A small check costs about 7 ms per fresh process (p95 9 ms), so a daemon buys nothing for utilities. A 16k-line program costs 580 ms and 224 MiB per check, and *there* the LSP process already is the persistent service. **Do not add a new daemon.** **Second-pass soak (OBSERVED HERE):** one `delulu lsp` process took 1,000 alternating good/bad edits: 0 wrong diagnostics, **p50 0.16 ms**, p95 0.29 ms, memory flat at 15.6→15.7 MiB. On a 4,002-line file, 200 edits ran at p50 55 ms, plateauing at 76.7 MiB after edit 60. One `delulu mcp` process took 200 `check` calls: 0 wrong, **p50 5.6 ms** (each call forks the CLI), memory flat at 13.9 MiB. |
 | VS Code | Keep the 409-line client; freeze features; test that the installed server identity matches (F5). |
 
 Decision criteria to revisit: if an external agent client completes the §15 loop *without* the CLI binary on PATH, the
@@ -388,6 +478,10 @@ service layer is right; if it still needs `--json` scraping, it is not finished.
 | Requirements | Docker ≥ 28 or Podman 5 or Kubernetes ≥ 1.29; **Landlock ABI ≥ 3 (Linux ≥ 6.2)**, seccomp user notification, `process_vm_readv`; microVM via libkrun (KVM or Hypervisor.framework); **no GPU requirement stated** | same |
 | Components | **gateway** (control plane, authentication, policy delivery, prover), **compute driver**, **supervisor** (trusted: policy, DNS, opens connections, **injects credentials**), **sandbox** (in the boundary; identifies the calling binary from `/proc`; "makes no policy decisions"), providers, SDKs (Python, TS, Go, Rust) | [architecture](https://docs.nvidia.com/openshell/latest/about/architecture) |
 | Fail-closed | workload frozen if the supervisor link drops; a new supervisor cannot take over a running sandbox; tokens bound to a sandbox generation | same |
+| Static vs live policy *(second pass)* | filesystem and process layers: "No. Requires sandbox re-creation"; **network and provider credentials: changeable on a running sandbox** (`openshell policy update`/`set`, or operator approval) | [security best practices](https://docs.nvidia.com/openshell/latest/security/best-practices) (v0.1.7) |
+| Filesystem fallback *(second pass)* | a mandatory baseline needs Landlock ABI ≥ 3, and "Startup fails if this baseline cannot be enforced". The *additional* filesystem policy defaults to `compatibility: best_effort`, which "may skip unavailable policy paths" (with a High-severity OCSF finding); `hard_requirement` refuses startup instead. **DeluluLang's export pins `hard_requirement`** (`crates/delulu/src/openshell.rs:407`, OBSERVED in the export) | same; CURRENT SOURCE |
+| Credentials *(second pass)* | the agent gets an opaque placeholder; "Provider-credentialed endpoints reject uninspected modes unless an operator explicitly opts in" (`allow_uninspected_credentials`); `tls: skip` disables credential rewriting and L7 inspection for that endpoint | same |
+| Docs version | the "latest" documentation states "Latest (v0.1.7)" (a search index still showed v0.1.6 as default, which is stale) | [docs](https://docs.nvidia.com/openshell/latest/) |
 
 ### 8.2 Responsibilities compared
 
@@ -446,15 +540,33 @@ security posture to a 0.1.x API that broke three times in five releases. **Unsaf
 **E. (mine) "Policy-author" integration only:** DeluluLang emits OpenShell policy for *agents written in other
 languages*, from a DeluluLang-checked manifest. Useful later; not a containment decision.
 
-| Criterion | A | **B** | C | D |
-|---|---|---|---|---|
-| Keeps native Windows and macOS | yes | **yes** | yes (L1 kept off-Linux) | no |
-| Offline, single binary | yes | **yes** (OpenShell optional) | partly | no |
-| Extra control plane | none | **optional** | required on Linux servers | required |
-| Upstream break exposure | none | **contained in an adapter** | high | very high |
-| Maintainer burden | high | **medium** (adapter plus pin CI) | medium | low code, high integration |
-| Fleet and Kubernetes story | none | **via OpenShell** | via OpenShell | via OpenShell |
-| Evidence today | full | **prover green on v0.1.2; runtime last green 2026-10-04** | none | none |
+| Criterion | A (keep all) | **B (optional backend; today's shape)** | C (OpenShell-first on Linux servers) | D (replace) | E (policy author only) |
+|---|---|---|---|---|---|
+| Trust boundary | DeluluLang host + its L0–L2 walls | **host decides; OpenShell is a second wall at L3, reported as the launcher's** | host decides; OpenShell is the only wall on Linux servers | OpenShell's wall everywhere; DeluluLang host inside it | unchanged (export only) |
+| DeluluLang code affected | none | **`openshell.rs` (692), `launcher.rs` (184), `attest.rs` (819), `scripts/openshell-*.sh`, `openshell.yml`** | + freeze/remove `microvm.rs` (1,476) and the image pipeline; parts of `jail.rs` (1,737) and `identity.rs` (1,223) on Linux | + most of the 13,255 containment lines | `openshell.rs` |
+| Upstream surface used | none | `openshell sandbox create`, `ssh-config`/ssh proxy, policy YAML v1, `openshell-prover` (pinned tag) | gateway API or SDK, compute drivers, providers | all of it | policy YAML, prover |
+| OS matrix | L1 native on Windows (AppContainer), macOS (Seatbelt), Linux (Landlock+seccomp); L2 Linux+KVM | **same, plus L3 where OpenShell runs (Linux ≥ 6.2 + Docker ≥ 28; macOS via Docker Desktop; Windows WSL 2 experimental)** | Linux servers via OpenShell; laptops keep L1 | Linux, plus macOS via Docker Desktop and Windows via WSL only | any |
+| Dependency footprint | none added | **none linked**: OpenShell is a separate install, and no crate is a dependency (D-V2-52) | runtime dependency on a gateway, a supervisor and a container runtime | same, mandatory | none |
+| Release / upgrade risk | none | **contained**: a broken upstream release breaks L3 only; pin plus a CI witness | high: weekly 0.1.x with breaking changes in 3 of the last 5 releases | very high | low |
+| Maintainer burden | high (all walls are ours) | **medium**: adapter, pin bumps, witnesses | medium | low code, high integration | low |
+| Attack surface added | none | **a launcher script and ssh through the gateway**; pinned by `--launcher-digest` / attestation | a gateway with auth (≥ 0.1.6 refuses to start unauthenticated), supervisor, container runtime | same, everywhere | none |
+| Policy semantics | DeluluLang's ⊑ only | ⊑ decides; OpenShell policy is *derived* and never wider (export soundness rule) | two policies that must agree; OpenShell's network policy can be widened live, ⊑'s cannot | OpenShell's policy decides the wall; ⊑ still decides effects | derived |
+| Security evidence | full CI + this session | **prover `within`/`exceeds` green on v0.1.2 (`41394552103`); runtime green once (`37234907676`, 2026-10-04)** | none | none | prover green |
+| Performance / cold start | L1 ≈ +45 ms per run (§10.1) | **L3 via ssh: not measured** (§8.5 item 8) | not measured | not measured | n/a |
+| Deployment complexity | one binary | **one binary; OpenShell only where the operator chooses** | gateway + Docker per server | gateway + Docker per machine | one binary |
+| Operator experience | `delulu run --sandbox` | **same; or `--sandbox-backend external:<openshell launcher>`** | must run OpenShell before DeluluLang can confine | always run OpenShell | `delulu sandbox policy --format openshell` |
+| Failure cases | ours | **launcher silent, lying or swapped → refused before the program is sent (§6.7)**; upstream break → L3 refuses | gateway down → no confined runs | gateway down → nothing runs confined | — |
+| Rollback | — | **drop the flag; L1 untouched** | re-enable the frozen L2 | rebuild walls (hard) | — |
+| Incremental migration | — | **today's state** → pin bump → §8.5 suite → only then C | B first, then per-server opt-in | not advisable | any time |
+| An agent on a Windows or macOS laptop | full L1 | **full L1** | full L1 | **degraded**: needs WSL or Docker Desktop | n/a |
+| Fleet and Kubernetes | none | via OpenShell | via OpenShell | via OpenShell | — |
+
+**How a user runs it, with and without OpenShell (option B):** without it, `delulu run app.delulu --sandbox --grant …`
+(L1 native, as tested here). With it, the operator installs OpenShell, writes the policy with
+`delulu sandbox policy app.delulu --format openshell --grant … > p.yaml`, creates the sandbox from an image that carries
+the same `delulu` version, and runs
+`delulu run app.delulu --sandbox --sandbox-backend external:/usr/local/bin/delulu-openshell --grant …`. The recipe is in
+`docs/DEPLOYMENT.md` (PS-E-05 (b)), and the L3 report says `unknown` unless an attester vouches.
 
 ### 8.4 Invariants that must survive any integration
 
@@ -538,6 +650,10 @@ security-equivalent**: no confinement, no authority. Raw samples are in Appendix
 | **aggregate 5M, interpreter** | **1,968** | 2,088 | 2,117 | 14.4 |
 | aggregate 5M, WASM / `.dwx` | 34.0 / 32.6 | 47.5 / 45.9 | 50.5 / 47.2 | 23.9 / 22.1 |
 | aggregate 5M, Python / Rust | 623.6 / 10.0 | 723.0 / 14.9 | 748.1 / 16.9 | 10.4 / 9.6 |
+| **agent loop** *(second pass)*: `check --json` → `authority --within` (3 grants) → `run --report-out` → parse the report's `outcome.exit` (one script, 31 samples after 3 warm-ups, all valid) | 34.31 | 37.80 | — | 17.5 |
+
+The agent loop includes about 15 ms of Python start-up for the parse step, so the DeluluLang part of a full
+analyse-authorise-run-report cycle is about 20 ms.
 
 What this says: startup and analysis are **fast enough for agent loops** (≤ 10 ms p95). The tree-walking interpreter is
 **about 3.2× slower than CPython** on a hot loop (RW 3.24); WASM is **about 18× faster than CPython** and about 3.4×
@@ -602,7 +718,9 @@ DeluluLang hosts, and the fourth and fifth only per named OS and tier.
 | **Koka** | Effect handlers | **Defer**: effect *typing* is enough for authority; handlers are not a 2.0 need. |
 | **Pony** | Reference capabilities (aliasing) ≠ object capabilities (authority) | **Keep the distinction in docs**; DeluluLang has both. |
 | **Roc** | Platform/host separation | **Already the design** (guest ⇄ host); express target profiles as "platforms" in the matrix. |
-| **Wasmtime and WASI** | A maintained runtime (DeluluLang pins 48.0.8, a line still patched on 2026-10-29); the component model and WASI p2/p3 | **Integrate, don't rebuild**: research a WASI-component `.dwx` profile for host portability (§13 phase 3). Do not write a new VM. |
+| **Wasmtime and WASI** | A maintained runtime (DeluluLang pins 48.0.8, a line still patched on 2026-10-29). *Second pass:* **WASI 0.3 is stable** (wasi.dev: 0.3.0 on 2026-06-11, native async with `stream`/`future`, `wasi:io` folded into the component model, `wasi:cli/exit` gained `exit-with-code`); Wasmtime ≥ 46 runs 0.3 components by default | **Integrate, don't rebuild**: research a WASI-component `.dwx` profile for host portability (§13 phase 3), and note that WASI's own `exit-with-code` is the shape DeluluLang's missing exit outcome (§6.2) could map onto. Do not write a new VM. |
+| **Node.js permission model** *(second pass)* | Stable (`--permission`, `--allow-fs-read/-write`, `--allow-net`, `--allow-child-process`, `--permission-audit`); the docs say it restricts `node:fs` and "does not guarantee that users will not be able to access the file system through other means" | Same lesson as Deno: runtime permission flags are not a sandbox. DeluluLang's typed authority plus host-performed effects is stronger, and should say so precisely, not loosely. |
+| **Python inside a microVM sandbox service** (e.g. E2B, Firecracker-based; secondary sources only) *(second pass)* | The baseline the prompt asks about: the full Python ecosystem, per-run kernel isolation, a managed or self-hosted service | **The honest competitor.** It wins on libraries and model familiarity today; it cannot tell you *before running* what the code will touch, nor refuse a single effect by capability. That difference is DeluluLang's whole case, and §15.3's study measures it. |
 | **MoonBit** (included as the additional system: an AI-oriented, Wasm-first toolchain that ships agent skills and policy-gated skill sandboxes) | Agent skills shipped with the toolchain; formal checks in the AI loop; multiple backends | **Borrow**: ship the existing `delulu skill` as the first-program kit, with the capability matrix in it. Versions come from secondary sources; recheck before citing. |
 
 ---
@@ -620,6 +738,18 @@ DeluluLang hosts, and the fourth and fifth only per named OS and tier.
 | **Deprecate (2.x)** | rarely used top-level commands into groups: e.g. `login`/`publish`/`add` under `pkg`; `keygen`/`sign`/`verify-sig` under `sign`; `morph`/`locale`/`completions` under `tools` | — | low with aliases | 41 → about 15 groups; keep aliases one release |
 | **Remove** | nothing now | — | — | no component has evidence of zero value; the gains are proportion and contracts, not deletion |
 | **Remove from claims** | "total … across all code" wording in README's first line; "production ready" status box for a language that cannot read argv | — | — | trust |
+| **Fix metadata before launch** *(second pass)* | `Cargo.toml` line 30 and `editors/vscode/package.json` name an unregistered GitHub namespace (F15); reserve `delulu-lang` (GitHub, Marketplace, Open VSX) or keep `launch/2.0.0`'s corrected URLs | — | low | prevents namespace squatting at launch |
+
+**The prompt's six questions, answered for each substantial change** (the Survey numbers are crate-level, because module
+level is unreliable, F9):
+
+| Change | What disappears | What stays | What breaks | Survey says | How confidence is kept | Migrating without two competing systems |
+|---|---|---|---|---|---|---|
+| `cli.rs` → services | the 11,866-line dispatcher's private logic | every command, flag, exit code and diagnostic order | nothing visible, if done command by command | `crate:delulu` impact 104, affected-by 193 | `core_invariance` snapshot, `cli-sweep.sh`, `json_contract`, CI on 3 OSes per move | move one command at a time; the old path is deleted in the same commit as the new one goes live |
+| MCP in-process | `run_self` forking and its unbounded buffers | the 12 read-only tools and their JSON | nothing visible (same envelopes) | `mod:…/mcp.rs` affected-by 16 | the MCP wire tests plus my 200-call soak (0 wrong) as a regression bar | switch tool by tool behind the same schemas |
+| Shared lookup and compilability table | duplicated name resolution in checker, interpreter and codegen | each engine's own evaluation | parity bugs become refusals before execution | `crate:delulu-check` 242, `crate:delulu-wasm` 132 | the differential fuzzer, conformance (366 anchors) and the parity corpus; **keep the conformance witnesses independent of the table** | introduce the table as a read-only oracle first, then switch each consumer |
+| PS-C microVM freeze | new microVM work (aarch64, jailer-as-user) | the built L2, its CI job and its tests | nothing: the freeze changes no code | `mod:…/microvm.rs` 106 | the CI `microvm` job stays on | external launchers (OpenShell VM driver, gVisor) carry new VM-grade needs at L3 |
+| Command grouping (2.x) | 41 flat top-level names | every verb, under a group, with aliases | scripts using old names, after the alias release | crate-level only | `cli-sweep.sh` both spellings; `skill` regenerated from `--help` | aliases for one release, with a deprecation warning that names the new spelling |
 
 ---
 
@@ -653,6 +783,17 @@ WASI-component `.dwx` study; seeded simulator under `--sandbox`; OpenShell PREFE
 **Owner decisions needed:** (1) hold 2.0 for Phase 1, yes or no; (2) adopt the OpenShell verdict; (3) catchable
 scope refusals (P1 row in §6.2) vs fault: a semantic change to the Constitution's fault rules needs his word or a recorded
 decision; (4) the exit-code mapping.
+
+**Process constraint found in the second pass (CURRENT SOURCE):** README says *"The language core has been change-frozen
+since Stage 9"*. `CONTRIBUTING.md` §5 requires any core change to go through `rfcs/`, with a **public comment period of
+at least 14 days** and an irreducibility analysis. Most of Phase 1 is core syntax or semantics:
+- core syntax or semantics: interpolation, methods, `+=`, `main`'s outcome, catchable refusals;
+- new capabilities (argv, environment), which touch Authority, a guarded area;
+- **library-only**: JSON, math and string functions; adding primitives still needs conformance anchors and touches the
+  entrenched `delulu-conform`.
+
+So **(5)**: either open the RFCs now (their 14-day clocks are the critical path), or record a `D-V2-nn` that
+unfreezes the core for a defined set under the delegation. The library-only items can start immediately.
 
 ---
 
@@ -691,20 +832,24 @@ decision; (4) the exit-code mapping.
 | A08 engine preflight | **fails** (late DL1201) |
 | A09 hash-checked repair and delta | **passes** (F3 and F8 caveats) |
 | A10 CLI, MCP and LSP contract | **partial** (C16, C17) |
-| A11 limits | **passes** (wall, memory); cancellation and descendants not tested here |
-| A12 plugins | **passes** (allowed, overbroad, tampered, sandbox refusal) |
-| A13 two principals | **passes as custody** (same OS user) |
-| A14 durable workflow | **not built** (in-memory only) |
-| A15 offline package | **passes** (build used only `cargo fetch --locked` sources) |
-| A16 simulation | **passes with a profile; F1 without one** |
-| A17 performance record | **done here** (§10) |
-| A18 evidence and claims | **partial** (Survey fresh; probe strings stale) |
+| A11 limits | **passes** (wall, memory, and CPU in the second pass); broker loss and guest loss end the run (§6.7). External cancellation of a run was not tested |
+| A12 plugins | **passes** (allowed, overbroad, tampered, sandbox refusal); signed Verified *driver*: tampered → DL1504, nothing reaches the device (§6.7) |
+| A13 two principals | **passes as custody** (same OS user), including the P9-03 proposal → approval → re-run loop (§6.7, F18) |
+| A14 durable workflow | **not built** (in-memory only); the drone simulation shows the language can express duplicate rejection, but there is no durable store or idempotency key |
+| A15 offline package | **passes** (build used only `cargo fetch --locked` sources; a multi-package program builds and locks, and a changed dependency under `--locked` → DL1010) |
+| A16 simulation | **passes with a profile; F1 without one**; independent no-command proof via the device process's frame log (§6.7) |
+| A17 performance record | **done here** (§10), including the agent loop and the LSP/MCP soaks |
+| A18 evidence and claims | **partial** (Survey fresh; probe strings stale; F15 metadata) |
 
 ### 15.2 Added
 
 - **A19:** every construct `docs/for-agents.md` and the Book teach compiles on WASM, or `check --target wasm` refuses it.
 - **A20:** no success value for an action that did not happen (null device, `test` with zero matches, `fix` with errors left).
-- **A21:** a poisoned device-broker lock engages the fail-state (F7).
+- **A21:** a poisoned device-broker lock engages the fail-state (F7; defensive: no reachable trigger was found).
+- **A22** *(second pass)*: every run that ends abnormally (guest death, broker loss, launcher refusal) carries a
+  machine-readable reason in `--report-out` (F14), and no outcome uses exit 2 except a usage error (F13).
+- **A23** *(second pass)*: every diagnostic hint that suggests a grant produces, when followed literally, a grant the CLI
+  accepts for *this* program (F2, F12).
 
 ### 15.3 The study that would settle "why a new language?"
 
@@ -718,21 +863,28 @@ and the study would measure that instead of the authority model.
 
 ## 16. Unresolved questions and honest unknowns
 
-- Windows and macOS behaviour of every new finding (F1–F11): source-level, so expected identical, **not observed**.
+- Windows and macOS behaviour of every new finding (F1–F18): source-level, so expected identical, **not observed**.
 - The laptop's installed binary and extension (C15): **blocked** here.
 - OpenShell runtime behaviour at v0.1.3–v0.1.7, its TLS interception of granted HTTPS, and its overhead: **unknown**
-  until §8.5 runs.
-- F7 reachability (a panic while a device lock is held): **hypothesis**.
+  until §8.5 runs (OpenShell was not installed: its installer is `curl | sh`, and the prompt forbids running one).
+- F7: **no reachable trigger found** in the second pass, so it is kept as defensive hardening only.
 - Zerolang's real task-completion advantage: **unknown**; nothing independent was found.
-- Koka's exact current version; MoonBit's version (secondary source only).
-- Memory behaviour of a long LSP session over many edits: **not measured**.
+- Koka's exact current version (newest seen v3.2.3; Codex's v3.2.8 not found); MoonBit's version (secondary source only);
+  whether the `delulu-lang` publisher id is free on the VS Code Marketplace and Open VSX.
+- ~~Memory behaviour of a long LSP session~~: **measured in the second pass**, and it plateaus (§7).
+- Cold start from an empty page cache: **not measured** (dropping the VM's caches is a system-wide side effect; all
+  timings here are warm).
 - ARM edge hardware, constrained devices, real-time behaviour: **not measured**.
+- **Still not run, after the second pass:**
+  - a durable workflow with restart, replay and idempotency (not built; A14);
+  - broker *crash recovery* (loss was tested: fail-closed);
+  - replayed or duplicated *effect* requests (only replay of a single-use *token* was tested: DL1407);
+  - FFI (`foreign.c`) and Python process isolation (`--foreign-isolation process`);
+  - two separate OS accounts;
+  - P8-04's out-of-band monitor (`delulu monitor watch`; covered in CI by `monitor_cli.rs`, not re-run here);
+  - external cancellation of a running program.
 
-- **Scenarios and boundary tests the prompt listed that were not run here:** a durable workflow with restart, replay and
-  idempotency (not built; A14); vehicle and drone geofence or comms-loss and satellite out-of-order telemetry beyond
-  Codex's `simulation.delulu` (reproduced, logic only); loss of the broker or supervisor mid-run and broker crash recovery;
-  replayed or duplicated effect requests; Python and FFI process spawning; two separate OS accounts. Each needs the
-  setup named in §15 or §8.5.
+  Each needs the setup named in §15 or §8.5.
 
 **Rejected alternatives:** full rewrite (no evidence the code is the problem); a graph database as canonical source;
 CLI-only; OpenShell replacement (option D); a new agent-platform layer or daemon.
@@ -746,9 +898,9 @@ CLI-only; OpenShell replacement (option D); a new agent-platform layer or daemon
 | Versioned structured outcomes matter more than new syntax | **Supported**: C13, C16, F1–F5 and F8 are all outcome defects; agents cannot tell success from nothing | §6.3 |
 | Capability discovery and preflight prevent late failures | **Supported**: every WASM refusal (`range`, HOF, devices, plugins) comes after the plan was chosen | §6.2, §10.3 |
 | OpenShell hybridisation removes duplicate infrastructure | **Partly**: only the VM layer is a real duplicate. It brings an extra control plane, weekly breaking releases, and Docker or WSL on macOS and Windows | §8 |
-| A cheap, fast analysis service beats spawning the CLI | **Rejected for small programs** (7 ms p95 9 ms per process); **supported for large ones** (580 ms, 224 MiB at 16k lines), where the LSP already is that service | §7, §10.2 |
+| A cheap, fast analysis service beats spawning the CLI | **Rejected for small programs** (7 ms p95 9 ms per process); **supported for large ones** (580 ms, 224 MiB at 16k lines), where the LSP already is that service. The second-pass soak shows it already exists and is stable: 0.16 ms per edit, flat memory over 1,000 edits | §7, §10.2 |
 | Interop over rebuilding AI frameworks | **Supported**: keep Python, FFI and plugins as adapters; do not build GPU or robotics stacks | §11.2 |
-| Security and UX are linked | **Supported**: F2 (a hint that fails), F6 (a burnt lease) and DL0904 aborting instead of returning `Err` all push an agent toward broader grants | §6.3 |
+| Security and UX are linked | **Supported**: F2 and F12 (hints that are not this program's), F6 (a burnt lease), F18 (approval is only as strong as the OS account) and DL0904 aborting instead of returning `Err` all push an agent toward broader grants or a human workaround. Conversely, the P9-03 loop (§6.7), which proposes the *narrowest* grant from the refusal itself, is the best AI-facing security UX found here | §6.3, §6.7 |
 | Task-completion studies beat feature lists | **Supported**: §15.3, after Phase 1 | — |
 | "Any AI" needs stable, self-describing interfaces, not AGI predictions | **Supported** | §5 |
 | A lean optional editor and LSP preserve inspection without becoming the bottleneck | **Supported**: 409 lines | §7 |
@@ -838,6 +990,243 @@ times, with `main` printing `f{n-1}(10)`.
 Fixtures: `input/task.txt` = `value=10\nvalue=11\n`; `input/child/safe.txt` = `child-ok`; `forbidden.txt` =
 `sentinel-unchanged` (unchanged at the end); `outside/s.txt` = `secret-outside` (unchanged).
 
+### A.2 Second-pass programs (complete sources; `$SCRATCH` = the session scratch directory, `$D` = the release binary)
+
+`drone.delulu`
+
+```delulu
+module sims.drone
+type Cmd { id: Int, src: Str, prio: Int, lat: Float, lon: Float }
+type St { mode: Str, battery: Int, lat: Float, lon: Float, last_id: Int, silent: Int, log: List[Str] }
+fn inside(lat: Float, lon: Float) -> Bool { lat >= 10.0 && lat <= 11.0 && lon >= 20.0 && lon <= 21.0 }
+fn step(s: St, c: Option[Cmd]) -> St {
+    if s.battery < 20 && s.mode != "LAND" {
+        St { mode: "LAND", battery: s.battery - 1, lat: s.lat, lon: s.lon, last_id: s.last_id, silent: s.silent, log: s.log.concat(["LAND:low-battery"]) }
+    } else {
+        match c {
+            None => {
+                let quiet = s.silent + 1
+                if quiet >= 3 && s.mode == "MISSION" {
+                    St { mode: "RTL", battery: s.battery - 1, lat: s.lat, lon: s.lon, last_id: s.last_id, silent: quiet, log: s.log.concat(["RTL:comms-lost"]) }
+                } else {
+                    St { mode: s.mode, battery: s.battery - 1, lat: s.lat, lon: s.lon, last_id: s.last_id, silent: quiet, log: s.log }
+                }
+            }
+            Some(k) => {
+                if k.id <= s.last_id {
+                    St { mode: s.mode, battery: s.battery, lat: s.lat, lon: s.lon, last_id: s.last_id, silent: 0, log: s.log.concat(["DROP:dup-or-stale:" + str(k.id)]) }
+                } else if !inside(k.lat, k.lon) {
+                    St { mode: s.mode, battery: s.battery - 1, lat: s.lat, lon: s.lon, last_id: k.id, silent: 0, log: s.log.concat(["REFUSE:geofence:" + str(k.id)]) }
+                } else if s.mode == "RTL" || s.mode == "LAND" {
+                    St { mode: s.mode, battery: s.battery - 1, lat: s.lat, lon: s.lon, last_id: k.id, silent: 0, log: s.log.concat(["HOLD:" + s.mode + ":" + str(k.id)]) }
+                } else {
+                    St { mode: "MISSION", battery: s.battery - 2, lat: k.lat, lon: k.lon, last_id: k.id, silent: 0, log: s.log.concat(["GOTO:" + str(k.id)]) }
+                }
+            }
+        }
+    }
+}
+fn arbitrate(a: Cmd, b: Cmd) -> Cmd { if a.prio >= b.prio { a } else { b } }
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    var s = St { mode: "IDLE", battery: 30, lat: 10.5, lon: 20.5, last_id: 0, silent: 0, log: [] }
+    s = step(s, Some(Cmd { id: 1, src: "op", prio: 1, lat: 10.6, lon: 20.6 }))
+    s = step(s, Some(Cmd { id: 1, src: "op", prio: 1, lat: 10.6, lon: 20.6 }))
+    s = step(s, Some(Cmd { id: 2, src: "op", prio: 1, lat: 12.0, lon: 20.6 }))
+    s = step(s, Some(arbitrate(Cmd { id: 3, src: "op", prio: 1, lat: 10.7, lon: 20.7 }, Cmd { id: 4, src: "safety", prio: 9, lat: 10.5, lon: 20.5 })))
+    s = step(s, None)
+    s = step(s, None)
+    s = step(s, None)
+    s = step(s, Some(Cmd { id: 5, src: "op", prio: 1, lat: 10.8, lon: 20.8 }))
+    var i = 0
+    while i < 12 { s = step(s, None)
+ i = i + 1 }
+    out.println(s.mode + " battery=" + str(s.battery) + " " + s.log.join(" "))
+}
+```
+
+`telemetry.delulu (final; runs on the interpreter, DL1201 on WASM)`
+
+```delulu
+module sims.telemetry
+type Pkt { seq: Int, t_ms: Int, v: Float }
+type Q { items: List[Pkt], dropped: Int, dups: Int, stale: Int, highest: Int }
+fn has(xs: List[Pkt], seq: Int) -> Bool {
+    var i = 0
+    var found = false
+    while i < xs.len() { match xs.get(i) { Some(p) => if p.seq == seq { found = true }, None => {} }
+ i = i + 1 }
+    found
+}
+fn admit(q: Q, p: Pkt, now_ms: Int, skew_ms: Int, limit: Int) -> Q {
+    if p.t_ms + 5000 + skew_ms < now_ms { Q { items: q.items, dropped: q.dropped, dups: q.dups, stale: q.stale + 1, highest: q.highest } } else if has(q.items, p.seq) || p.seq <= q.highest - limit { Q { items: q.items, dropped: q.dropped, dups: q.dups + 1, stale: q.stale, highest: q.highest } } else {
+        let hi = if p.seq > q.highest { p.seq } else { q.highest }
+        let xs = q.items.concat([p])
+        if xs.len() > limit { Q { items: xs.slice(1, xs.len()), dropped: q.dropped + 1, dups: q.dups, stale: q.stale, highest: hi } } else { Q { items: xs, dropped: q.dropped, dups: q.dups, stale: q.stale, highest: hi } }
+    }
+}
+fn seqs(xs: List[Pkt]) -> List[Int] {
+    var out: List[Int] = []
+    var i = 0
+    while i < xs.len() { match xs.get(i) { Some(p) => { out = out.concat([p.seq]) }, None => {} }
+ i = i + 1 }
+    out.sort()
+}
+fn main(root: Root) ! {Write} {
+    let o = root.console()
+    let now = 100000
+    let skew = 200
+    var q = Q { items: [], dropped: 0, dups: 0, stale: 0, highest: 0 }
+    q = admit(q, Pkt { seq: 3, t_ms: 99000, v: 1.0 }, now, skew, 4)
+    q = admit(q, Pkt { seq: 1, t_ms: 98000, v: 1.0 }, now, skew, 4)
+    q = admit(q, Pkt { seq: 3, t_ms: 99000, v: 1.0 }, now, skew, 4)
+    q = admit(q, Pkt { seq: 2, t_ms: 90000, v: 1.0 }, now, skew, 4)
+    q = admit(q, Pkt { seq: 4, t_ms: 99500, v: 1.0 }, now, skew, 4)
+    q = admit(q, Pkt { seq: 5, t_ms: 99600, v: 1.0 }, now, skew, 4)
+    q = admit(q, Pkt { seq: 6, t_ms: 99700, v: 1.0 }, now, skew, 4)
+    o.println("queue=" + str(seqs(q.items)) + " dropped=" + str(q.dropped) + " dups=" + str(q.dups) + " stale=" + str(q.stale) + " highest=" + str(q.highest))
+}
+```
+
+`loop_effects.delulu (broker-kill and guest-kill witness)`
+
+```delulu
+module p2.loop_effects
+fn spin(n: Int) -> Int { var i = 0
+ var t = 0
+ while i < n { t = t + i % 7
+ i = i + 1 }
+ t }
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let rd = root.fs_read("./input")
+    var k = 0
+    while k < 80 {
+        let _t = spin(400000)
+        match rd.read_text("task.txt") { Ok(v) => out.println("tick " + str(k)), Err(e) => out.println("read-err " + str(k)) }
+        k = k + 1
+    }
+    out.println("finished")
+}
+```
+
+`arm.delulu (signed-driver run; `examples/line_driver` built with `--sign`)`
+
+```delulu
+module robot.arm
+type Elbow { angle_deg: Float }
+fn say(r: Result[Unit, ActuateErr]) -> Str {
+    match r {
+        Ok(u) => "COMMANDED"
+        Err(e) => match e {
+            Envelope(reason) => "REFUSED: " + reason
+            LeaseRevoked(reason) => "REVOKED: " + reason
+            NoDevice => "NODEVICE"
+        }
+    }
+}
+fn main(root: Root) ! {Write, Read, Actuate} {
+    let c = root.console()
+    let a = root.actuator("arm0/elbow")
+    c.println(say(a.command(Elbow { angle_deg: 42.5 })))
+    c.println(say(a.command(Elbow { angle_deg: 120.0 })))
+    c.println(say(a.command(Elbow { angle_deg: 80.0 })))
+}
+```
+
+`get_ok.delulu / post_ok.delulu (egress; server on 127.0.0.1:18443)`
+
+```delulu
+module n.get_ok
+fn main(root: Root) ! {Write, Net} {
+ let out = root.console()
+ let h = root.http(["127.0.0.1/v1/**"])
+ match h.get("https://127.0.0.1:18443/v1/ok") { Ok(b) => out.println("GOT " + b), Err(e) => out.println("ERR") }
+}
+```
+
+`post_ok.delulu`
+
+```delulu
+module n.post_ok
+fn main(root: Root) ! {Write, Net} {
+    let out = root.console()
+    let h = root.http(["127.0.0.1:GET,POST/v1/**"])
+    let hs = Map()
+    match h.post("https://127.0.0.1:18443/v1/ok", hs, "data") { Ok(b) => out.println("POSTED " + b), Err(e) => out.println("ERR") }
+}
+```
+
+`sec_send_ok.delulu`
+
+```delulu
+module s.ok
+fn main(root: Root) ! {Write, Net, Read} {
+    let out = root.console()
+    let s = root.secret("TOKEN")
+    let h = root.http(["127.0.0.1"])
+    let hs = Map()
+    match h.get_with_secret("https://127.0.0.1:18443/v1/ok", hs, "Authorization", s) { Ok(b) => out.println("SENT " + b), Err(e) => out.println("ERR") }
+}
+```
+
+`py_json.delulu`
+
+```delulu
+module py.json
+fn parse(py: Cap[Python]) -> Result[Str, PyErr] ! {ForeignCall} {
+    let json = py.import("json")?
+    let v = json.call_method("dumps", [py.list([py.of_float(1.0), py.of_float(2.5)])])?
+    py.to_str(v)
+}
+fn escape(py: Cap[Python]) -> Result[Str, PyErr] ! {ForeignCall} {
+    let os = py.import("os")?
+    let v = os.call_method("getcwd", [])?
+    py.to_str(v)
+}
+fn main(root: Root) ! {ForeignCall, Write} {
+    let c = root.console()
+    let load = root.foreign_load()
+    match root.python(load) {
+        Ok(py) => {
+            match parse(py) { Ok(v) => c.println("json: " + v), Err(e) => c.println("py error " + e.kind) }
+            match escape(py) { Ok(v) => c.println("os.getcwd: " + v), Err(e) => c.println("os refused: " + e.kind + " " + e.message) }
+        }
+        Err(_) => c.println("python unavailable")
+    }
+}
+```
+
+`L3 launchers: l3ok.sh / l3liar.sh / l3attested.sh`
+
+```sh
+#!/bin/sh
+exec $D $DELULU_GUEST_ARGS
+```
+
+`l3liar.sh`
+
+```sh
+#!/bin/sh
+echo "I am not a guest"
+exit 0
+```
+
+`l3attested.sh`
+
+```sh
+#!/bin/sh
+exec $D sandbox attest --key $SCRATCH/home/keys/att1 --attester "test-ci" --guarantee "egress_confinement: test only" -- $SCRATCH/progs/l3/l3ok.sh
+```
+
+The frame tee between host and device process (`frametee.py`) copied each line in both directions into a log, prefixed
+`HOST>` or `DEV<`, and the device process was `$D device sim --seed 7 --actuator "arm0/elbow:angle_deg=-120..120,heartbeat_ms=60000,ttl_ms=600000,fail=safe-park"`
+(the bench is *wider* than the grant's `-95..95`, so a refused command missing from the log was refused by the host). The
+HTTPS server (`server.py`) was Python's `http.server` behind `ssl`, with a leaf certificate signed by a throwaway CA
+generated with `openssl` in scratch and given to `delulu` via `SSL_CERT_FILE`; it logged method, path and headers. The
+secret's value was masked when the log was read.
+
+
 ## Appendix B. Command ledger
 
 Common environment: `DELULU_HOME` and `DELULU_STATE_DIR` in scratch, `NO_COLOR=1`; `$D` = the release binary.
@@ -893,6 +1282,70 @@ Per-probe outcomes (last run of each ID; `$SCRATCH` = the session scratch direct
 | MCP probe | 0 | 28 | 12 tools, all `readOnlyHint:true`; check bad → isError False, errors 1; `run` → -32602; `--help` path refused |
 | LSP probe | 0 | 6 | 15 capabilities; diagnostics `['DL0501']` |
 
+### B.2 Second-pass probe ledger (last run of each ID)
+
+| Probe ID | argv (after `delulu`) | Exit | ms | First line of stdout / stderr |
+|---|---|---:|---:|---|
+| `new-hello` | `new hello --json` | 0 | 6 | out: { |
+| `new-hello-run` | `run . --grant console --no-prompt` | 0 | 5 | out: hello, world |
+| `new-hello-test` | `test` | 0 | 5 | out: test result: 1 passed, 0 failed |
+| `fmt-check` | `fmt --check utility.delulu` | 1 | 6 | out: would reformat: utility.delulu |
+| `explain` | `explain E-DL0703` | 0 | 4 | out: DL0703: root slice not granted |
+| `examples` | `examples --json` | 0 | 7 | out: { |
+| `skill` | `skill --json` | 0 | 4 | out: { |
+| `toolchain` | `toolchain --json` | 0 | 7 | out: { |
+| `atlas-mermaid` | `atlas utility.delulu --format mermaid` | 0 | 6 | out: graph LR |
+| `why` | `why Write utility.delulu` | 0 | 4 | out: main (utility.delulu:30) — Write |
+| `cpu-limit` | `run busy.delulu --grant console --no-prompt --limits cpu=1` | 1 | 1010 | err: error: the run was stopped: it used 1.0 s of processor time and its budget is 1 s (D-V2-25). Budgets are the operator's, set per run with `- |
+| `audit-mode` | `run utility.delulu --sandbox --mode audit --grant console --no-prompt` | 0 | 5 | out: { |
+| `trace` | `run utility.delulu --grant console --grant fs.read=./input --grant fs.write=./output --trace-effects --asse…` | 0 | 6 | out: {"ok":true,"value":42} |
+| `openshell-export` | `sandbox policy utility.delulu --format openshell --grant console --grant fs.read=./input --grant fs.write=.…` | 0 | 4 | out: { |
+| `l3-ok` | `run utility.delulu --sandbox --sandbox-backend external:$SCRATCH/progs/l3/l3ok.sh --grant console --grant f…` | 0 | 34 | out: {"ok":true,"value":42} |
+| `l3-silent` | `run utility.delulu --sandbox --sandbox-backend external:$SCRATCH/progs/l3/l3silent.sh --grant console --gra…` | 1 | 8007 | err: error: the run was stopped: it ran for 8 s of wall-clock time, its budget. Budgets are the operator's, set per run with `--limits wall=SECON |
+| `l3-liar` | `run utility.delulu --sandbox --sandbox-backend external:$SCRATCH/progs/l3/l3liar.sh --grant console --grant…` | 1 | 8 | err: sandbox: the guest never confirmed its boundary, so it was not sent the program: frame length exceeds the channel's bound |
+| `l3-wrong-digest` | `run utility.delulu --sandbox --sandbox-backend external:$SCRATCH/progs/l3/l3ok.sh --launcher-digest 0000000…` | 1 | 7 | err: error: the sandboxed run failed: `$SCRATCH/progs/l3/l3ok.sh` is not the pinned launcher: its BLAKE3 is d75f231f5550f4c42f448504690c6e348bd5d |
+| `l3-hostile` | `run utility.delulu --sandbox --sandbox-profile hostile-agent --sandbox-backend external:$SCRATCH/progs/l3/l…` | 2 | 31 | err: launcher: sandbox: the guest narrowed its own view — no file writes; reads only from the system paths; no TCP bind or connect |
+| `att-none` | `run utility.delulu --sandbox --require-attestation 4ac1e7ac99c1305f07d553e970fea7a5b191ea0c87824dc90829fe76…` | 1 | 10023 | err: error: the sandboxed run failed: the guest was not served: the launcher wrote no attestation within 10s (an attester writes it to `$DELULU_A |
+| `att-good` | `run utility.delulu --sandbox --require-attestation 4ac1e7ac99c1305f07d553e970fea7a5b191ea0c87824dc90829fe76…` | 0 | 52 | out: {"ok":true,"value":42} |
+| `att-wrongkey` | `run utility.delulu --sandbox --require-attestation 87ffb825f3ff61f7163739ea8c32265bb47d6bfae10a86f9d285c72b…` | 1 | 27 | err: error: the sandboxed run failed: the guest was not served: the attestation is signed by 4ac1e7ac99c1305f07d553e970fea7a5b191ea0c87824dc90829 |
+| `att-l1` | `run utility.delulu --sandbox --require-attestation 4ac1e7ac99c1305f07d553e970fea7a5b191ea0c87824dc90829fe76…` | 2 | 3 | err: error: `--require-attestation` is for an external launcher (`--sandbox-backend external:CMD`, level 3): this host measures the jailed proces |
+| `net-get-nogrant` | `run get_ok.delulu --grant console --no-prompt` | 1 | 6 | err: error[DL0703]: network access to `127.0.0.1/v1/**` was not granted to this program — pass `--grant net.special=127.0.0.1/v1/**` |
+| `net-get-plain-net` | `run get_ok.delulu --grant console --grant net=127.0.0.1/v1/** --no-prompt` | 2 | 4 | err: error: bad --grant: bad grant `net=127.0.0.1/v1/**` — `127.0.0.1/v1/**` is a special-use address: loopback (127.0.0.0/8). A plain `net=` gra |
+| `net-get-ok` | `run get_ok.delulu --grant console --grant net.special=127.0.0.1/v1/** --no-prompt --report-out $SCRATCH/log…` | 0 | 10 | out: GOT pong |
+| `net-get-outside` | `run get_outside.delulu --grant console --grant net.special=127.0.0.1/v1/** --no-prompt` | 1 | 5 | err: error[DL0904]: the path of `https://127.0.0.1:18443/v2/secret` is outside every path the grant names for its host |
+| `net-post-noperm` | `run post_noperm.delulu --grant console --grant net.special=127.0.0.1/v1/** --no-prompt` | 1 | 5 | err: error[DL0904]: a `POST` to `https://127.0.0.1:18443/v1/ok` is outside the methods the grant names for it |
+| `net-post-ok` | `run post_ok.delulu --grant console --grant net.special=127.0.0.1:GET,POST/v1/** --no-prompt` | 0 | 7 | out: POSTED posted |
+| `net-redirect` | `run redirect.delulu --grant console --grant net.special=127.0.0.1 --no-prompt --report-out $SCRATCH/logs/ne…` | 0 | 7 | out: ERR redirect refused as value |
+| `net-plain-http` | `run plain_http.delulu --grant console --grant net.special=127.0.0.1 --no-prompt` | 0 | 4 | out: ERR scheme refused as value |
+| `net-dotdot` | `run dotdot.delulu --grant console --grant net.special=127.0.0.1/v1/** --no-prompt` | 1 | 4 | err: error[DL0904]: `https://127.0.0.1:18443/v1/../v2/secret` is refused under a path scope: a `.` or `..` segment in the path, which a URL parse |
+| `net-sandbox-get` | `run get_ok.delulu --sandbox --grant console --grant net.special=127.0.0.1/v1/** --no-prompt` | 0 | 52 | out: GOT pong |
+| `net-wasm-get` | `run get_ok.delulu --engine wasm --grant console --grant net.special=127.0.0.1/v1/** --no-prompt` | 0 | 13 | out: GOT pong |
+| `net-within` | `authority post_ok.delulu --within console --within net.special=127.0.0.1/v1/**` | 1 | 4 | out: exceeds: the program asks for authority the boundary does not grant |
+| `sec-print` | `check sec_print.delulu` | 1 | 4 | err: error[DL0604]: value of type `Secret[Str]` cannot be stringified |
+| `sec-send-ok` | `run sec_send_ok.delulu --grant console --grant net.special=127.0.0.1 --grant secret:TOKEN@127.0.0.1:18443=s…` | 0 | 8 | out: SENT pong |
+| `sec-send-noaudience` | `run sec_send_ok.delulu --grant console --grant net.special=127.0.0.1 --grant secret:TOKEN=<throwaway-test-value> --no…` | 0 | 4 | out: ERR |
+| `sec-send-elsewhere` | `run sec_send_elsewhere.delulu --grant console --grant net.special=localhost --grant secret:TOKEN@127.0.0.1:…` | 0 | 4 | out: ERR |
+| `sec-authority` | `authority sec_send_ok.delulu --json` | 0 | 4 | out: { |
+| `py-check` | `check py_json.delulu` | 0 | 5 | err: ok: py_json.delulu checked clean |
+| `py-nogrant` | `run py_json.delulu --grant console --no-prompt` | 1 | 4 | err: error[DL1303]: embedded Python was not granted — pass `--grant foreign.python=numpy` (an import allowlist pattern; the human chooses which m |
+| `py-json-only` | `run py_json.delulu --grant console --grant foreign.python=json --no-prompt` | 0 | 410 | out: json: [1.0, 2.5] |
+| `py-sandbox` | `run py_json.delulu --sandbox --grant console --grant foreign.python=json --no-prompt` | 2 | 5 | err: error: `--sandbox` cannot carry this program yet: it uses ForeignLoad, Python. Nothing ran. Run it with `--sandbox=off` if you accept no con |
+| `py-authority` | `authority py_json.delulu` | 0 | 4 | out: Authority of `py.json` — what this program can do to your system: |
+| `multi-build` | `build . --json` | 0 | 6 | out: { |
+| `multi-lock` | `lock . --json` | 0 | 6 | out: { |
+| `multi-run` | `run . --grant console --no-prompt` | 1 | 6 | err: error[DL0703]: filesystem read of `./data` was not granted — pass `--grant fs.read=./data` |
+| `multi-authority` | `authority .` | 0 | 6 | out: Authority of `station` — what this program can do to your system: |
+| `multi-build-after-widen` | `build . --locked --json` | 1 | 5 | out: { |
+| `actors-interp` | `run 06_actors.delulu --grant console --no-prompt` | 0 | 6 | -:  |
+| `actors-wasm` | `run 06_actors.delulu --engine wasm --grant console --no-prompt` | 0 | 10 | err: engine: wasm (actors: cooperative single-threaded — semantics identical, parallelism absent) |
+| `actors-sandbox` | `run 06_actors.delulu --sandbox --grant console --no-prompt` | 2 | 4 | err: error: `--sandbox` cannot carry this program yet: it uses actors. Nothing ran. Run it with `--sandbox=off` if you accept no confinement, or  |
+
+Not in this table because they were driven by scripts (their transcripts are summarised in §6.7): the 102-entry Codex
+re-run (`rerun_appendix_b.py`), the timestamped broker-kill and guest-kill runs (`tsrun.py`), the attestation runs, the
+proposal flow, the Guard and strict-root runs, the egress and secret runs against the logging server, the signed-driver
+runs, the LSP and MCP soaks, and the agent-loop benchmark. Lease tokens and the Guard owner code printed by those runs
+stayed in scratch and are not reproduced.
+
 ## Appendix C. Raw benchmark samples
 
 Wall-clock ms per sample (31 per case, collection order) and median peak RSS in MiB:
@@ -947,3 +1400,51 @@ edge5M-rust              rss_med=9.62  9.9 9.5 9.9 10.2 18.5 10.4 11.0 25.8 12.2
 ([#2006](https://github.com/NVIDIA/OpenShell/discussions/2006), [DeepWiki MXC page](https://deepwiki.com/NVIDIA/OpenShell/8.10-windows-native-support-(mxc-driver)));
 Koka version listings ([gittrend](https://gittrend.io/repo/koka-lang/koka)); MoonBit version
 ([issoh.co.jp](https://www.issoh.co.jp/tech/details/8968/)).
+
+**Second pass (fetched or searched 2026-11-05):**
+- **OFFICIAL EXTERNAL:**
+  - [OpenShell docs, latest = v0.1.7](https://docs.nvidia.com/openshell/latest/) ·
+    [OpenShell security best practices](https://docs.nvidia.com/openshell/latest/security/best-practices)
+  - [JEP 486](https://openjdk.org/jeps/486) ·
+    [Oracle: the Security Manager is permanently disabled](https://docs.oracle.com/en/java/javase/24/security/security-manager-is-permanently-disabled.html)
+  - [WASI releases](https://wasi.dev/releases) · [WASI P3](https://wasi.dev/releases/wasi-p3)
+  - [Node.js permissions](https://nodejs.org/api/permissions.html)
+  - [Roc platforms](https://www.roc-lang.org/platforms)
+  - [CN110737431A on Google Patents](https://patents.google.com/patent/CN110737431A/en)
+  - [ShubhamBhut/kinglang](https://github.com/ShubhamBhut/kinglang) · [publidoo/kinglang](https://github.com/publidoo/kinglang)
+  - `github.com/delulu-lang`: HTTP 404; `gh api search/users q=delulu-lang` → `total_count: 0`.
+- **Secondary:**
+  - [Gleanmark: USPTO 99795106 DELULU](https://gleanmark.com/trademark/uspto-99795106)
+  - [Better Stack guide to Zero](https://betterstack.com/community/guides/ai/zero-language/) and an
+    [indexed copy of the zerolang docs](https://docsearch.algolia.com/mcp/docs/repo/vercel-labs/zerolang) (for `std.json`)
+  - [E2B about](https://e2b.dev/about.md)
+  - [Modular forum: Windows timeline](https://forum.modular.com/t/timeline-for-windows-support/3268)
+  - Koka mirror [v3.2.3](https://github.xxxxic.workers.dev/koka-lang/koka/releases/tag/v3.2.3) and
+    [Alpine package](https://pkgs.alpinelinux.org/package/edge/community/x86_64/koka)
+
+## Appendix E. The prompt's requirements, one by one (second pass)
+
+| Prompt § | Requirement | Where answered | Status |
+|---|---|---|---|
+| 0 | AI-first purpose; kind-blind authority; authorization ≠ physical safety; core vs stdlib vs adapter vs plugin vs external | §1, §5, §6.2 (layer column), §11.2, §14 | done |
+| 1 | Direct choice among options 1–4; CLI-only vs CLI-first; simplify / modularise / replace / narrow / rebuild verdict | §1, §7 | done (option 3; narrow + incremental) |
+| 2 | Read onboarding, AGENTS, HANDOFF (§0, §1, §11), REMAINING_WORK, README, INSTALL, CONTRIBUTING, Codex review in full | §2, §3 | done. **Correction:** the first pass had not read `INSTALL.md` or `CONTRIBUTING.md`; the second pass did, in full. Three consequences: F5 is documented behaviour; language-core changes need RFCs (§13); `CONTRIBUTING.md`'s Survey example is stale (`check.rs` impact is 244 now, not 134) |
+| 2 | Record working dir, branch, SHA, cleanliness, origin, branches, tools, OS/CPU, resources, CI with IDs | §2.1–§2.3 | done; CI read, nothing dispatched |
+| 2 | Don't start or unpause the routine; verify its state | §2.1 | done: both disabled, read only |
+| 3 | Research, test and report only; no edits; new report only; disclose metadata writes and the delivery mechanism | header, §2.4 | done; report-only commits on the session branch |
+| 4 | Survey and Doctor first, then reuse (`impact`, `affected-by`, `path`, `query`, `findings`, `rdeps` semantics); no `survey build`, no plain `doctor` | §2.2, §4.3, §12 | done; `path`/`rdeps` limits recorded (F9, §4.3 note) |
+| 4 | Keep Authority, Guard, broker, Survey, Doctor, Atlas, plugins, MCP and LSP distinct; derive shared facts without merging security responsibilities | §4.2, §9, §12 | done |
+| 5 | Codex claim ledger: ID, statement, evidence, availability, independent evidence, verdict, references, impact | §3.1 (C01–C44) | done |
+| 5 | Re-examine architecture, scale, fundamentals, backend drift, test/outcome contracts, installed binary, authority, health/CI, programs, benchmarks, formal/security, naming, recommendations | §3.1, §3.2, §3.3 | done; the installed laptop binary is blocked |
+| 5 | Reproducible command ledger, separate from the narrative | Appendix B (B.1, B.2), §3.3 | done |
+| 6 | Zerolang, Mojo, Python, Rust, Go, Java, TS/JS, Zig, Koka, Pony, Roc, Deno, WASI/Wasmtime, one more, OpenShell; matrix with verified/partial/unknown/absent/roadmap; lesson verdicts; the "Python in a strong sandbox" baseline | §11.1, §11.2 | done at documentary level; nothing installed (`curl \| sh` forbidden). Go and Zig rest on Codex's sources plus general knowledge, labelled; Rust, C/C++ and Zig are trusted host/adapter languages, not competitors |
+| 7 | OpenShell: upstream as of today; responsibilities matrix; options A–E with every criterion; boundary tests; PoC plan; unequivocal verdict; invariants; first removal; reversal evidence | §8.1–§8.6, §6.7 | done; no live OpenShell run (not installable here) |
+| 7.3 | Boundary tests: allowed/denied files, network method/path, secret injection and refusal, inconclusive, narrowing, expiry, revocation, stale decisions, broker/supervisor loss, launch before confirmation, guest crash, competing grants, replay, duplicates, Python/FFI, root issuance, absent OpenShell, physical-envelope placement | §6.4, §6.6, §6.7 | most done; not done: duplicate *effect* idempotency, FFI, broker crash *recovery*, OpenShell-specific supervisor loss (§16) |
+| 8 | Component audit with practical improvements; six questions per simplification | §9, §12 (six-question table) | done |
+| 9 | Portability tiers; five kinds of "same"; physical vs supervisory separation | §10.3, §14 | done |
+| 10 | Real programs, negative probes, scenarios 1–11, benchmarks (agent utility, analysis loop, edge compute; warm-up, samples, percentiles, RSS, interpreter vs WASM, cold vs warm, repeated sessions, fair controls) | §6, §6.7, §10, Appendix C | done except cold start (not measured; reason in §16) and scenario 4's durable restart (not built) |
+| 11 | Which V2 phases are complete or overengineered; the smallest defensible release; roadmap with deletion order; pass/fail criteria; OpenShell gates | §13, §15, §8.6 | done |
+| 12 | Owner's hypotheses proved or refuted | §16.1 | done |
+| 13 | Sub-agents only if cheap and verified | §2.1 | first pass: none; second pass: one page-fetch helper, disclosed, its consequential claim re-checked |
+| 14 | 18-section structure; evidence labels; five outcome classes | whole report | done |
+| 15 | Completeness checklist | this appendix | done; the open items are in §16 |
