@@ -5888,6 +5888,9 @@ the source before it was fixed:
 4. **The monitor noted a beat only once its answer returned, and named its progress after joining its beater.** Now it
    notes each beat when it is sent, and names its progress first.
 
-Mutants M1086–M1090 are red. Two orders are not witnessed by a test:
-- the write is timed after the write;
-- the progress comes before the join.
+Mutants M1086–M1090 are red. Two orders had no witness at first, and both have one since (the same day):
+- **The write is timed after the write.** A test-only seam holds a beat's answer 300 ms before it is written
+  (`a_beats_answer_is_timed_when_it_is_written`). M1091, the write timed at handling, is red: *"0ns apart"*.
+- **The progress comes before the join.** The watch's end is one function, `end_the_watch`, and its test blocks a beater
+  as a stuck request would (`a_watch_says_its_progress_before_it_waits_for_a_stuck_beater`). M1092, the join first, is
+  red.

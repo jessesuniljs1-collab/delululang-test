@@ -12249,3 +12249,35 @@ noted that the broker's slow Miri check has not yet run on `ab10583`.
 - Survey and `doctor`: in the commit message.
 
 The counters: D-V2-209, M1090, 157 codes, 366 anchors.
+
+## 2026-11-06 — the laptop: RW 4.98's two unwitnessed orders witnessed; Miri and the flaky test dispatched on CI
+
+**Why.** The owner: *"continue working, Finish this thing completely and verify. Run monitor to check on CI runs."* What
+#133 had left open: the broker's Miri on the dead-man code, and two orders it named but no test held.
+
+**The two orders, now witnessed:**
+- **A beat's answer is timed when it is written.** A test-only seam (`answer_seam`, `#[cfg(test)]`) holds the answer to
+  the next beat 300 ms before the serve loop writes it. `a_beats_answer_is_timed_when_it_is_written` requires the loop's
+  record to show that gap between `handled` and `written`. M1091, the write timed at handling, is red: *"handled and
+  written 0ns apart, where the answer was held 300 ms"*.
+- **A watch says its progress before it waits for its beater.** The end of a watch is now one function, `end_the_watch`:
+  say the progress, stop the beater, join it. `a_watch_says_its_progress_before_it_waits_for_a_stuck_beater` blocks a
+  beater as a request waiting out its 15 s deadline would, and requires the progress while it still blocks. M1092, the
+  join first, is red: *"the progress waited behind a beater that was still blocked"*.
+
+**Dispatched on CI, on `master` `31b1692`:**
+- `ci.yml` `jobs=miri-slow`, run `42093191962`: the broker's Miri over the dead-man code, which the nightly has not yet
+  run;
+- `witness.yml` with `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor` (RW 7.25's test), three runs on
+  `windows-latest` (`42093261520`, `42093278446`, `42093295263`) and three on `macos-latest` (`42093310306`,
+  `42093323509`, `42093337696`), to look for a red with the new timing in place.
+
+Their results are in the next entry, once read.
+
+**Verified on the laptop (Windows):**
+- `cargo test -p delulu --bin delulu`: 208 passed;
+- `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8: all passed;
+- `scripts/clippy.sh -j 4`: clean;
+- Survey and `doctor`: in the commit message.
+
+The counters: D-V2-209, M1092, 157 codes, 366 anchors.

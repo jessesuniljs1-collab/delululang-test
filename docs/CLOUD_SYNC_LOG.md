@@ -8237,3 +8237,34 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. RW 7.25 stays open. Its next red names its path in the job log.
   4. Then as before: the Windows re-runs of the reviews' rows into their rows; RW 4.95 first with 4.96 and 4.97; the
      owner's answers; the launch only on his word.
+
+### 2026-11-06 — the laptop: RW 4.98's two unwitnessed orders witnessed; Miri and RW 7.25's test dispatched
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-4-98-orders`   Base: `master` `31b1692` (#133 landed; its PR run `42083936108` and push run
+  `42087864563` each 14 + 2 skipped, read green). Nothing else came in on `origin`.
+- **Why:** the owner: *"continue working, Finish this thing completely and verify. Run monitor to check on CI runs."*
+- **What changed:**
+  - `crates/delulu/src/brokerd.rs`: a test-only seam holding a beat's answer before it is written (`answer_seam`), and
+    `a_beats_answer_is_timed_when_it_is_written` (M1091 red).
+  - `crates/delulu/src/monitor_cmd.rs`: the watch's end as one function, `end_the_watch` (say the progress, stop the
+    beater, join it), and `a_watch_says_its_progress_before_it_waits_for_a_stuck_beater` (M1092 red).
+  - Records: RW 4.98 and D-V2-209's amendment (both orders now witnessed); `AI_ONBOARDING.md` §10 (M1092); `V2_LOG.md`;
+    this entry; `docs/survey/*`.
+- Files and folders (`git diff --name-status 31b1692..HEAD`): M `crates/delulu/src/brokerd.rs`,
+  `crates/delulu/src/monitor_cmd.rs`, `docs/AI_ONBOARDING.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Nothing added, deleted or renamed.
+- **CI dispatched on `master` `31b1692`, watched by a monitor:**
+  - `miri-slow`: `42093191962`;
+  - RW 7.25's test through `witness.yml`: Windows `42093261520`, `42093278446`, `42093295263`; macOS `42093310306`,
+    `42093323509`, `42093337696`.
+
+  Results in the next entry.
+- **Verified on the laptop (Windows):**
+  - the `delulu` binary 208 passed; `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8;
+  - mutants M1091 and M1092 red;
+  - `scripts/clippy.sh -j 4` clean.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** land this on a green run; read the dispatched runs to their end and record them; RW 7.25 stays open
+  unless a run reads it.

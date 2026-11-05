@@ -370,7 +370,7 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-209;
-  - the last mutant is M1090;
+  - the last mutant is M1092;
   - there are 157 DL codes and 366 reference anchors;
   - pull requests are numbered on GitHub, and #128 was the last merged.
 

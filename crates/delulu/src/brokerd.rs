@@ -880,6 +880,37 @@ mod beat_times_seam {
     }
 }
 
+/// The independent review's finding 3: delay the answer to the next beat, before it is written, for one state directory —
+/// so a test can tell a beat's write time from its handling time. Test builds only.
+#[cfg(test)]
+mod answer_seam {
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
+
+    fn holds() -> &'static Mutex<HashMap<PathBuf, Duration>> {
+        static HOLDS: OnceLock<Mutex<HashMap<PathBuf, Duration>>> = OnceLock::new();
+        HOLDS.get_or_init(Default::default)
+    }
+
+    /// Delay the answer to the next beat the daemon on `state` handles by `by`.
+    pub(super) fn hold_next_beat_answer(state: &Path, by: Duration) {
+        holds().lock().unwrap().insert(state.to_path_buf(), by);
+    }
+
+    /// Called by the serve loop before it writes an answer to a request of `kind`.
+    pub(super) fn before_write(state: &Path, kind: &str) {
+        if kind != "Beat" {
+            return;
+        }
+        let hold = holds().lock().unwrap().remove(state);
+        if let Some(by) = hold {
+            std::thread::sleep(by);
+        }
+    }
+}
+
 /// RW 4.98's witness: hold a beat between its reader's stamp and its hand-over to the serve loop — the window in which a
 /// beat that arrived in time is not yet counted. For one state directory at a time, so tests running beside it are not
 /// held. Test builds only: the daemon a user runs has no such hook.
@@ -2192,6 +2223,9 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
+        // A test may hold a beat's answer here, so that a write timed before the write shows. Test builds only.
+        #[cfg(test)]
+        answer_seam::before_write(state_dir, kind);
         let written = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp);
         if let Err(e) = &written {
             match e.get_ref().and_then(|i| i.downcast_ref::<crate::broker_ipc::FrameTooLarge>()) {
@@ -3299,6 +3333,37 @@ mod tests {
         assert!(codes.iter().any(|c| c == "DL1401"), "the baseline — wrong-key beats were sent and refused: {codes:?}");
         let at = fired.unwrap_or_else(|| panic!("{} wrong-key beats held a 300 ms dead-man off for 2 s", codes.len()));
         assert!(at < std::time::Duration::from_millis(1500), "it fired only {at:?} in, with wrong-key beats still coming");
+    }
+
+    /// **The independent review's third finding: a beat's answer is timed when it is written, not when it was handled.**
+    /// The test-only seam holds the answer 300 ms between handling and writing it; what the loop keeps of the beat must
+    /// show that gap. A write time taken before the write would show none.
+    #[test]
+    fn a_beats_answer_is_timed_when_it_is_written() {
+        let state = temp_state("dmwrite");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let key = arm(&state, &node, 60_000);
+        answer_seam::hold_next_beat_answer(&state, std::time::Duration::from_millis(300));
+        assert!(matches!(request(&state, ReqBody::Beat { node: node.clone(), key }), Ok(Response::Ok)));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let view = loop {
+            match beat_times_seam::view(&state) {
+                Some(v) if v.0 .0.contains_key(&node) => break Some(v),
+                _ if std::time::Instant::now() > deadline => break None,
+                _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        };
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        let (table, _) = view.expect("the loop recorded the beat");
+        let beat = table.0[&node].back().expect("its beat").clone();
+        let written = *beat.written.as_ref().expect("the answer was written");
+        let gap = written.saturating_duration_since(beat.handled);
+        assert!(
+            gap >= std::time::Duration::from_millis(250),
+            "handled and written {gap:?} apart, where the answer was held 300 ms"
+        );
     }
 
     /// **The independent review's first finding: beats naming no armed dead-man leave no timing behind.** The serve loop
