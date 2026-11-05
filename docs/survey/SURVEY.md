@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 199788 |
+| Rust lines | 199969 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 317 |
-| Markdown lines | 108606 |
+| Markdown lines | 108755 |
 | DeluluLang programs | 258 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1629 / 19529 |
+| Nodes / edges in this map | 1629 / 19540 |
 | Open discrepancies | 43 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 48436 lines
+- **Modules:** 44 files, 48567 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -102,7 +102,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_client.rs` | 779 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 724 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 676 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 5636 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 5767 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 397 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 126 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 189 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 14548 lines
+- **Modules:** 19 files, 14598 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -170,7 +170,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/authority.rs` | 648 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/budget_scope.rs` | 187 | PS-B-05: the resource-budget dimension of authority. |
 | `src/cert.rs` | 1716 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
-| `src/deadman.rs` | 450 | P8-04 step 5 — a dead-man FOR A NODE, held by the broker: what happens when a monitor dies |
+| `src/deadman.rs` | 500 | P8-04 step 5 — a dead-man FOR A NODE, held by the broker: what happens when a monitor dies |
 | `src/device_scope.rs` | 497 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 503 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
 | `src/guard.rs` | 2003 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |

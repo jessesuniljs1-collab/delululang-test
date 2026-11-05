@@ -714,6 +714,27 @@ fn fire_deadmen(
     fired.iter().map(|f| f.node.as_str().to_string()).collect()
 }
 
+/// RW 4.98 (D-V2-209): the beats readers have read whole and stamped since the serve loop last judged — node, key and the
+/// time on the hearing clock — behind the one lock both the stamping and the judgment take. What is noted proves nothing
+/// by being noted: the loop counts a note only through [`Broker::deadman_heard`], which checks its key and that it arrived in
+/// time. Bounded: past [`HEARD_NOTED`] notes a beat goes un-noted, and is judged when it is handled, as before.
+#[derive(Clone, Default)]
+struct HeardBeats(std::sync::Arc<std::sync::Mutex<Vec<(String, String, std::time::Instant)>>>);
+
+/// The most beats noted between two judgments. A flood of beats with wrong keys can fill it; it cannot hold a dead-man off.
+const HEARD_NOTED: usize = 1024;
+
+/// Stamp a beat that was read whole, and note it, under [`HeardBeats`]'s lock: its wall-clock stamp (for the timing
+/// lines) and its time on the hearing clock (what it is judged by).
+fn note_beat(heard: &HeardBeats, node: &str, key: &str, clock: &HearingClock) -> (std::time::Instant, std::time::Instant) {
+    let mut noted = heard.0.lock().unwrap_or_else(|p| p.into_inner());
+    let stamp = (std::time::Instant::now(), clock.now());
+    if noted.len() < HEARD_NOTED {
+        noted.push((node.to_string(), key.to_string(), stamp.1));
+    }
+    stamp
+}
+
 /// A reader's own delay worth naming: the shortest dead-man period, so a delay that could have cost a beat its dead-man is
 /// in `broker.log` (RW 4.98).
 const READER_NOTED: std::time::Duration = delulu_broker::deadman::MIN_PERIOD;
@@ -1944,11 +1965,14 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     // The readers reading or handing over a request: the loop names how many when a dead-man fires (RW 4.98).
     let reading = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    // RW 4.98 (D-V2-209): the beats read whole and stamped since the loop last judged, for it to count.
+    let heard_beats = HeardBeats::default();
     #[cfg(test)]
     let seam_dir = state_dir.to_path_buf();
     {
         let stopping = stopping.clone();
         let reading = reading.clone();
+        let heard_beats = heard_beats.clone();
         let clock = clock.clone();
         std::thread::spawn(move || loop {
             let mut conn = match listener.accept() {
@@ -1972,6 +1996,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                 continue;
             }
             let (whole, revocation, reading, clock) = (whole.clone(), revocation.clone(), reading.clone(), clock.clone());
+            let heard_beats = heard_beats.clone();
             #[cfg(test)]
             let seam_dir = seam_dir.clone();
             std::thread::spawn(move || {
@@ -2000,8 +2025,13 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
                     Ok(req) => {
                         let kind = req.body.kind();
-                        let stamped_request = (conn, req, std::time::Instant::now(), clock.now());
-                        let stamped = stamped_request.2;
+                        // RW 4.98 (D-V2-209): a beat read whole is stamped and noted under one lock, the one the loop
+                        // judges under, so a beat stamped before a judgment is counted by it however late its hand-over.
+                        let (stamped, heard) = match &req.body {
+                            ReqBody::Beat { node, key } => note_beat(&heard_beats, node, key, &clock),
+                            _ => (std::time::Instant::now(), clock.now()),
+                        };
+                        let stamped_request = (conn, req, stamped, heard);
                         // RW 4.98's witness holds a beat here, stamped and not yet handed over. Test builds only.
                         #[cfg(test)]
                         handover_seam::before_hand_over(&seam_dir, &stamped_request.1);
@@ -2063,7 +2093,18 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // lose its dead-man to the e-stop's place in the line. An unbeaten dead-man still fires at the first request that
         // arrived after its deadline, so a stream of requests cannot hold one off. All on the hearing clock: a daemon woken
         // from a stop judges nothing by the time it was stopped (DEADMAN-DEAF-1).
-        let as_of = urgent.iter().chain(waiting.iter()).map(|(_, _, _, heard)| *heard).min().unwrap_or_else(|| clock.now());
+        // RW 4.98 (D-V2-209): the judgment's time is fixed under the lock readers note beats under, and the beats noted
+        // by then are counted before it: one stamped earlier is counted however late its hand-over, and one stamped
+        // later was stamped at or after `as_of`, so it is late to this judgment by its own stamp. Each counts only if
+        // its key proves it and it arrived in time (`Broker::deadman_heard`).
+        let (as_of, heard) = {
+            let mut noted = heard_beats.0.lock().unwrap_or_else(|p| p.into_inner());
+            let as_of = urgent.iter().chain(waiting.iter()).map(|(_, _, _, heard)| *heard).min().unwrap_or_else(|| clock.now());
+            (as_of, std::mem::take(&mut *noted))
+        };
+        for (node, key, at) in heard {
+            broker.deadman_heard(&GrantId::from_trusted(node), &key, at);
+        }
         for node in fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of) {
             let handed_over = waiting.len() + usize::from(urgent.is_some());
             let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
@@ -3107,6 +3148,97 @@ mod tests {
         eprintln!("measured: {served} listings of a 2,001-node tree answered ({past} after the deadline), and the dead-man fired among them");
     }
 
+    /// Polls the chain for `node`'s dead-man revocation while `traffic` runs, for `span`: when it fired, if it did, and
+    /// whether the traffic was still running then.
+    fn fired_during(
+        state: &Path,
+        node: &str,
+        span: std::time::Duration,
+        mut traffic: impl FnMut(),
+    ) -> Option<std::time::Duration> {
+        let start = std::time::Instant::now();
+        let mut fired = None;
+        while start.elapsed() < span {
+            traffic();
+            if fired.is_none() && !deadman_revocations(state, node).is_empty() {
+                fired = Some(start.elapsed());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        fired
+    }
+
+    /// **RW 4.98's counter-test: connections that never finish a request cannot hold a silent dead-man off.** D-V2-209
+    /// counts a beat only once its reader has read it whole and its key proves it, never "while any reader is active":
+    /// that rule would let overlapping connections, each sending part of a frame and nothing more, hold a dead-man off for
+    /// as long as they keep coming (each reader waits out its 5 s read bound). Here a new one opens every 100 ms for 2 s,
+    /// so several readers are always mid-read, and the dead-man (300 ms) must fire while they are.
+    #[test]
+    fn incomplete_connections_do_not_hold_a_silent_dead_man_off() {
+        let state = temp_state("dmhalf");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let _key = arm(&state, &node, 300);
+        let mut held = Vec::new();
+        let mut opened = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        let fired = fired_during(&state, &node, std::time::Duration::from_millis(2000), || {
+            if opened.elapsed() >= std::time::Duration::from_millis(100) {
+                if let Ok(mut c) = broker_transport::connect(&state) {
+                    // Two bytes of a four-byte length: the reader waits for the rest.
+                    let _ = std::io::Write::write_all(&mut c, &[7, 0]);
+                    held.push(c);
+                }
+                opened = std::time::Instant::now();
+            }
+        });
+        let opened_count = held.len();
+        drop(held);
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        assert!(opened_count >= 10, "the baseline — connections were opened and held: {opened_count}");
+        let at = fired.unwrap_or_else(|| {
+            panic!("{opened_count} incomplete connections held a 300 ms dead-man off for 2 s: it never fired while they came")
+        });
+        assert!(at < std::time::Duration::from_millis(1500), "it fired only {at:?} in, with connections still coming");
+    }
+
+    /// **RW 4.98's counter-test: beats with a wrong key cannot hold a silent dead-man off.** D-V2-209 notes every beat read
+    /// whole, so these are noted too — and counted by none: `deadman_heard` checks the key. Each is refused DL1401, and the
+    /// dead-man (300 ms) fires while they keep coming.
+    #[test]
+    fn beats_with_a_wrong_key_do_not_hold_a_silent_dead_man_off() {
+        let state = temp_state("dmwrong");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let _key = arm(&state, &node, 300);
+        let mut codes = Vec::new();
+        let fired = fired_during(&state, &node, std::time::Duration::from_millis(2000), || {
+            let wrong = ReqBody::Beat { node: node.clone(), key: "0".repeat(32) };
+            if let Ok(Response::Error { code, .. }) = request(&state, wrong) {
+                codes.push(code);
+            }
+        });
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        assert!(codes.iter().any(|c| c == "DL1401"), "the baseline — wrong-key beats were sent and refused: {codes:?}");
+        let at = fired.unwrap_or_else(|| panic!("{} wrong-key beats held a 300 ms dead-man off for 2 s", codes.len()));
+        assert!(at < std::time::Duration::from_millis(1500), "it fired only {at:?} in, with wrong-key beats still coming");
+    }
+
+    /// RW 4.98 (D-V2-209): the notes between two judgments are bounded; past the bound a beat goes un-noted (and is judged
+    /// when it is handled, as before), and its stamp is still taken.
+    #[test]
+    fn the_beats_noted_between_judgments_are_bounded() {
+        let (heard, clock) = (HeardBeats::default(), HearingClock::start());
+        for i in 0..HEARD_NOTED + 5 {
+            let (stamped, _) = note_beat(&heard, &format!("g_{i}"), "k", &clock);
+            assert!(stamped <= std::time::Instant::now());
+        }
+        let noted = heard.0.lock().unwrap();
+        assert_eq!(noted.len(), HEARD_NOTED);
+        assert_eq!(noted[0].0, "g_0", "the first are kept; the overflow is not noted");
+    }
+
     /// **A beat is a proof of possession, over the wire.** A beat or a disarm with another key, and a second
     /// arming, are each refused DL1401 and change nothing: the dead-man fires on time. And the next beat is
     /// told why it is too late — DL1403, its node revoked.
@@ -3330,16 +3462,15 @@ mod tests {
         (stamped_at, fired, beat)
     }
 
-    /// **RW 4.98 (the witness, red until it is fixed): a beat stamped in time and handed over late is not counted.** A
-    /// reader stamps a beat and only then hands it to the serve loop, and the loop judges each dead-man as of the earliest
-    /// request already handed over, or as of now. The beat here is stamped about 1.5 s into a 2 s period, and its reader is
-    /// held (by the test-only seam) past the first deadline: the loop, seeing nothing handed over, judges as of now and
-    /// fires, and the beat that arrived in time is answered with the revocation (DL1403). Its twin below, the same beat
-    /// handed over at once, keeps the dead-man past that deadline — so the hold alone is the difference. A runner that
-    /// starves one reader thread does the same without a seam — RW 7.25's flaky monitor test may be that, or not (its cause
-    /// is not known). Ignored so that CI stays green until RW 4.98 is fixed; run it with `--ignored` to see it red.
+    /// **RW 4.98 (D-V2-209): a beat stamped in time and handed over late keeps its dead-man.** A reader stamps a beat and
+    /// then hands it to the serve loop, and the loop judges each dead-man as of the earliest request already handed over,
+    /// or as of now. The beat here is stamped about 1.5 s into a 2 s period, and its reader is held (by the test-only seam)
+    /// past the first deadline. Before D-V2-209 the loop, seeing nothing handed over, judged as of now and fired, and the
+    /// beat that arrived in time was answered with the revocation (DL1403): red 10 of 10. Now a beat read whole is stamped
+    /// and noted under the lock the loop judges under, and counted. Its twin below, the same beat handed over at once, keeps
+    /// the dead-man the same way, so the hold is the only difference. A runner that starves one reader thread did the same
+    /// without a seam; whether RW 7.25's flaky monitor test was that is not known.
     #[test]
-    #[ignore = "RW 4.98: red until a beat stamped in time counts at the dead-man's judgment"]
     fn a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man() {
         let (stamped_at, fired_while_held, beat) = beat_late_in_its_period("handover", true);
         assert!(

@@ -5817,3 +5817,58 @@ guest, the WASM engine; the chain naming each method, a POST refused) and
 `a_broker_held_secret_rides_a_put_a_patch_and_a_delete_by_their_methods` (both engines, the broker's `send`, a capability
 without DELETE refused before a byte is asked); `audit_ocsf_cli` (a DELETE's `http_method`); `trace` `effect_for`. Mutants
 M1056–M1071 (`V2_LOG.md`).
+
+## D-V2-209 — RW 4.98: a beat read whole and stamped before a dead-man's judgment is counted by it, however late its hand-over; only a beat its key proves, and only for the period it bought — TAKEN (head chef, 2026-11-05, under the owner's delegation)
+
+**Context.** DEADMAN-BUSY-1 (D-V2-127) judges a beat by when it arrived: each request is read on a reader thread of its own
+and stamped there. DEADMAN-DEAF-1 (D-V2-194) puts every such instant on a hearing clock that stands still while the
+daemon is stopped. But the serve loop judges each dead-man as of the earliest request already *handed over* to it, or as
+of now. A reader stamps a beat, then hands it over. A beat stamped before a judgment and handed over after it was not
+counted, and the dead-man fired on a holder that had beaten in time. RW 4.87 named the window (*"one reader thread starved
+while the rest of the daemon runs"*) and took it to be microseconds. A starved reader makes it as long as the starvation.
+The witness `a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man` was red 10 of 10: a test-only seam held a
+beat stamped 1.5 s into a 2 s period past the first deadline. Whether RW 7.25's two reds were this is not known.
+
+The owner, with an independent read of the source: *"Do not implement the proposed reader-count fix as written."* That fix,
+deferring the judgment while any reader is active, would let overlapping incomplete connections (no key needed) hold a
+dead-man off for ever. A per-connection read bound limits one reader, not the overlap, the time before a reader runs, or
+a hand-over blocked on a full line.
+
+**Decision.**
+1. **A beat read whole is stamped and noted under one lock** (`HeardBeats`, `note_beat`): its node, its key and its time
+   on the hearing clock. Only a complete frame that parses as a `Beat` is noted. A connection still being read, or still
+   waiting to be accepted, notes nothing.
+2. **The loop fixes each judgment's time under that same lock and takes the notes** (`as_of` as before: the earliest
+   arrival already handed over, or now). Every beat stamped before the judgment is among them. One stamped after it was
+   stamped at or after `as_of`, so it is late to this judgment by its own stamp.
+3. **A note counts only through `Broker::deadman_heard`.** It counts only if the key proves it and it arrived before
+   the deadline. It moves the deadline to one period after the beat was heard, as a beat handled then would, and never
+   shortens it. A wrong key, an unarmed node and a late beat change nothing there. The beat is judged as ever when it is
+   handled, a late one firing its dead-man then. A note is not a beat (`beats` unchanged), and a beat never handed over
+   buys one period and no more.
+4. **The notes are bounded** (`HEARD_NOTED`, 1,024 between two judgments). A flood of wrong-key beats can fill them, and
+   then a beat goes un-noted and is judged as before D-V2-209. A flood cannot hold a dead-man off.
+5. **Not covered: delays before a beat is read whole**, such as a connection waiting to be accepted or a reader not yet
+   run. A daemon cannot stamp what it has not received. The monitor's own timing (its last beats and when they were
+   sent) now shows that side, and it is a separate problem.
+
+**Why this hardens and does not redefine.** D-V2-127's rule was already that a beat counts from its arrival. This makes
+the judgment keep that rule across the reader's hand-over. It grants no authority, extends no lease, and lets nothing but
+the arming key keep a dead-man from firing. A false quarantine was the safe direction, and a holder that falls silent is
+still revoked within its period.
+
+**Evidence.** The witness, now green (it held a beat 1.5 s in past the first deadline: red 10 of 10 before), and its twin
+`a_beat_late_in_its_period_handed_over_at_once_keeps_its_dead_man_past_the_first_deadline`. `delulu-broker`
+`a_beat_heard_in_time_counts_at_the_judgment_and_only_as_far_as_it_bought`. The counter-tests over the wire, a 300 ms
+dead-man firing while each kind of traffic still came:
+- `incomplete_connections_do_not_hold_a_silent_dead_man_off`: 20 connections, each two bytes of a frame;
+- `beats_with_a_wrong_key_do_not_hold_a_silent_dead_man_off`;
+- `a_busy_daemon_still_fires_an_unbeaten_dead_man`.
+
+Also `the_beats_noted_between_judgments_are_bounded`. Mutants, each red:
+- M1081, the withdrawn fix (no judgment while any reader is active): the incomplete-connections test, *"20 incomplete
+  connections held a 300 ms dead-man off for 2 s"*;
+- M1082, a note counted without its key: the wrong-key test (84 beats held it off) and the unit test;
+- M1083, the notes taken and not applied: the witness;
+- M1084, a note buying two periods: the unit test;
+- M1085, a late note counted: the unit test.
