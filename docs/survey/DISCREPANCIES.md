@@ -9,14 +9,14 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
-| warning | `prose-cites-missing-path` | 7 |
+| warning | `prose-cites-missing-path` | 6 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
 | note | `dependency-never-used-in-source` | 3 |
 | note | `ruling-cited-without-its-stage` | 1 |
 
-## warning — `prose-cites-missing-path` (7)
+## warning — `prose-cites-missing-path` (6)
 
 **What to do:** correct the path, or say plainly that it no longer exists
 
@@ -26,13 +26,12 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/assistant-memory/release-program-progress.md:97` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
-- `docs/prompt/DeluluLang_Claude_Code_Cloud_Strategic_Verification_Prompt.md:91` — prose names `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`, which is nowhere in the tree
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
 **What to do:** no action if these are C-language references; otherwise the ledger is missing a row
 
-- `docs` — these `C<n>` tokens are not campaign findings and were not linked: C0, C99
+- `docs` — these `C<n>` tokens are not campaign findings and were not linked: C0, C01, C02, C03, C04, C05, C06, C07, C08, C09, C99
 
 ## note — `cites-archived-path` (31)
 

@@ -415,7 +415,10 @@ nothing: whoever holds the authority decides, and `grants diff` tells them what 
 --json` files the proposal with the broker as that node's request — `filed.id` is its `pp_` id. Nothing is granted until an
 operator answers: `grants approve pp_ID --parent g_THEIRS` delegates, under THEIR node, your node's authority joined with
 the ask, and hands you a new lease token — re-run under it; your old node is never widened, and approving under your own
-node is refused (DL0802). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
+node is refused (DL0802). An approval is a boundary only when the approving node is out of your reach. On one OS
+account, a process that can reach the broker can name any node's id, its parent's included, and approve a proposal under
+it. A separate OS account for the operator (`docs/DEPLOYMENT.md` Tier 2), or strict anchored roots with the anchor key held
+elsewhere, makes the answer the operator's (the same-user residual, DISC-1; `docs/REMAINING_WORK.md` row 4.91). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
 `approved.node`) or `rejected` (with the operator's `reason` — propose narrower, or not at all). An operator may approve
 within a standing node automatically (`grants auto-approve --parent g_B`, D-V2-126): what your approval would mint must be
 within that node, and guarded authority (declassify, native code) is never approved that way — a person approves it.

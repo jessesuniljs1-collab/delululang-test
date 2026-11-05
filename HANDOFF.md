@@ -790,6 +790,15 @@ wins, and you should update the memory to match.
 - **What the owner runs is not what CI runs.** On 2026-11-02 the laptop's `delulu` on `PATH` and its VS Code extension
   were three months old while every test used a fresh build (RW 6.53). At a laptop session's start, compare
   `which delulu` and its date with the tree's; reinstall only on the owner's word.
+- **A minimal failing case names its shape, not its class** (Claude's cloud review, 2026-11-05). The review wrote that
+  *"any user-defined higher-order function"* failed on WASM from one witness, a non-generic `fn apply(f: fn(Int) -> Int,
+  x: Int)`. Before that became a work row, the generic `fn apply[T, U]` was tried, and it compiles
+  (`named_fn_parity.rs` had said so all along). RW 3.25 names the shape that fails. Try the neighbouring spellings
+  (generic, wrapped in a block, a lambda) before a claim says *any*.
+- **Witness a denial on the far side too** (Claude's cloud review, 2026-11-05). An exit code and a DL code say what the
+  host decided; they do not show that nothing left. The review put a logging HTTPS server behind the egress client and a
+  frame-logging tee in front of the device process. The server saw exactly the granted requests, and the device saw only
+  the in-envelope commands, none from a tampered driver. Where a refusal is the claim, read what the other side received.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 
@@ -2098,6 +2107,20 @@ Added in V2 (2026-09-17 → 2026-09-28):
   could be missed; `prim::HTTP_REQUESTS` is now the one every place reads.
 
 - **A new `.delulu` file is also the formatter's corpus** (FMT-CTOR-1, 2026-11-01). `delulu-syntax`'s `laws_hold_over_the_repository_corpus` formats every `.delulu` file in the repository and requires the same program back. A change that adds a conformance program runs `cargo test -p delulu-syntax --lib`, not only the checker's and the CLI's tests. #112 skipped it, and its first run was red on Ubuntu and macOS. The law had found a real defect: `fmt` printed `foo()` as `foo`, a binding.
+- **What reads `delulu`'s output can change the exit code you record** (Claude's cloud review, 2026-11-05, RW 6.58).
+  Into `| head -2`, a run with a static error exited 2 instead of 1, because `delulu` treats the closed pipe as a usage
+  error. And in bash, `echo "$(basename "$f") exit=$?"` prints `basename`'s status, not the run's. Capture `$?` on
+  the line right after the command, and never measure through a pipe.
+- **Two spellings cost a check cycle each when writing DeluluLang** (RW 2.43). `}` and `else` belong on one line
+  (`} else {`): `else` on the next line is DL0202. `cap` is reserved (DL0106), so do not use it as a parameter name.
+- **A local HTTPS server can see what the egress client sends, on Linux** (Claude's cloud review, 2026-11-05). A
+  self-signed leaf is refused. A test CA plus a leaf it signed, with `SSL_CERT_FILE` pointing at the CA, made a
+  release build trust the server, so it logged every request that reached it. That is how §11.2's far-side witness
+  was read. Windows and macOS read their own trust stores, so on those this is not established (compare §11.5's
+  D-V2-208 lesson, which found the platform store refusing a test certificate).
+- **Inside `crates/delulu`, the Survey's module-level `impact` is the same number for every module** (106 for each of
+  13 queried, 2026-11-04; RW 6.63). Plan a removal there from `cargo` references and the tests that name the module,
+  never from that number. The crate-level numbers are sound.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

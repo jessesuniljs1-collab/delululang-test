@@ -27,7 +27,7 @@ gate fail on purpose, it is not a gate.
 
   Use `impact`, not `rdeps`, for that question. `rdeps` answers **one hop**, and one hop is not the
   blast radius: `mod:crates/delulu-check/src/check.rs`, the module that decides what type-checks,
-  has one *structural* edge arriving at it and reaches 134 transitively. `affected-by <id>` is the same
+  has one *structural* edge arriving at it and reaches 244 transitively (recounted 2026-11-05). `affected-by <id>` is the same
   walk outward, and `path <a> <b>` prints one chain hop by hop.
 - **A language change needs an RFC.** From 1.0 the core is frozen except through `rfcs/`. See §5.
 - **A bug fix does not.** Open an issue, or just send the fix with its test.

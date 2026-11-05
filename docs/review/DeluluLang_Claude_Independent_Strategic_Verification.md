@@ -24,6 +24,22 @@ again … don't miss out anything … test everything"*:**
 - **New findings:** F12–F18 (§6.3).
 - **Decisions:** §1 is unchanged. None of the new evidence moves a verdict.
 
+**Third pass (2026-11-05, same session), when the owner asked for the repository's other documents to be updated from
+this report.** Two claims were re-checked before they became work rows, and both are corrected here, in place:
+- **The WASM higher-order gap is narrower than written.** Only a **non-generic** function with a function-typed
+  parameter fails (`fn apply(f: fn(Int) -> Int, x: Int)`, with a named function or a lambda: DL1201). The generic
+  spelling `fn apply[T, U](f: fn(T) -> U, x: T) -> U` compiles and prints the interpreter's answer on WASM, with a named
+  function and with a lambda (OBSERVED HERE, the same release build; `crates/delulu-wasm/tests/named_fn_parity.rs`
+  witnesses the generic form). The first two passes had tested only the non-generic form.
+- **README has no "production ready" status box.** That box is in `HANDOFF.md` (*"Status: PRODUCTION READY WITH
+  DOCUMENTED DEPLOYMENT REQUIREMENTS"*), and since 2026-11-02 it says that it covers containment and deployment only, not
+  the everyday language. §12 is corrected.
+
+The findings went into `docs/REMAINING_WORK.md` as rows (2.41–2.44, 3.25, 4.88–4.92, 6.54–6.66, 7.27–7.28), and the
+records were updated from this report (`docs/CLOUD_SYNC_LOG.md`, 2026-11-05 entry). With them the Survey was
+regenerated, so §2.4's "the map does not list this report" no longer holds. No decision was recorded: §13's owner
+decisions are still his.
+
 Evidence labels, used throughout: **OBSERVED HERE** (run in this cloud session, output retained) · **CURRENT SOURCE**
 (read in `0670e0b`) · **CURRENT CI** (a named run whose completed result and SHA I read) · **CODEX REPORTED** (from the
 Codex review only) · **HISTORICAL DOC/DECISION** · **OFFICIAL EXTERNAL** (vendor page or repository, fetched
@@ -66,8 +82,9 @@ read its arguments, parse JSON, call `sqrt`, or set an exit code.
 1. **Hold the 2.0 launch behind an "ordinary agent utility" bar** (§13, Phase 1): argv and selected environment as
    capabilities; an explicit application outcome and exit code; JSON parse and serialise with size and depth limits;
    math and checked arithmetic; string search, formatting and interpolation; methods on user types. On WASM, the
-   *documented* spellings must work: today `for i in range(0, n)`, any user-defined higher-order function, and an
-   `if` without `else` used as a value inside a `match` arm all fail to compile there. Most of this bar is core
+   *documented* spellings must work: today `for i in range(0, n)`, a non-generic function with a function-typed
+   parameter (the generic spelling compiles; third pass), and an `if` without `else` used as a value inside a `match`
+   arm all fail to compile there. Most of this bar is core
    language, so it needs RFCs (14-day comment periods) or a recorded decision to unfreeze the core (§13).
 2. **Fix the machine-contract defects agents trip on** (§6.3, §9):
    - `test` reporting success when nothing ran;
@@ -220,7 +237,7 @@ difference between its results and mine is a platform difference or an error, ne
 | Keep the language and checker; do not rewrite | **AGREE** | The effect/authority core works and held every attack I ran (§6.4). |
 | Keep a lightweight LSP and a thin VS Code client | **AGREE** | 409 lines of JS. Removing it saves nothing; the LSP is also the only persistent analysis process. |
 | CLI-first, usable through machine APIs | **AGREE, MODIFY** | The "machine API" should be an in-process service layer with typed requests and results, which MCP, LSP and CLI call. Today MCP forks the CLI per call (C18). Measured startup (~7 ms) makes forking acceptable for small programs, but it duplicates contracts. |
-| Fundamentals first | **AGREE, MODIFY** | Add three things Codex did not list: **WASM support for the documented constructs** (`range`, user higher-order functions; §6.2), **JSON *escaping*** (a program cannot even emit correct JSON for arbitrary strings today), and **catchable scope refusals** (DL0904 aborts the program; `match … Err` never runs). |
+| Fundamentals first | **AGREE, MODIFY** | Add three things Codex did not list: **WASM support for the documented constructs** (`range`, non-generic higher-order functions; §6.2), **JSON *escaping*** (a program cannot even emit correct JSON for arbitrary strings today), and **catchable scope refusals** (DL0904 aborts the program; `match … Err` never runs). |
 | Target capability matrix | **AGREE, strongly** | Generate it from `prim.rs`, `codegen.rs::is_compilable` and the guest channel's surface list, not by hand. |
 | Versioned outcomes | **AGREE** | Defects F2–F5 (§6.3) are all outcome-contract defects. |
 | Preserve Authority and the Guard | **AGREE** | Also against OpenShell (§8). |
@@ -360,7 +377,7 @@ Programs, fixtures and outputs are in Appendix A and B. All runs used the fresh 
 |---|---|---|---|
 | P0 | No program inputs, no exit outcome | `root.args()` → DL0405 *type `Root` has no method `args`*; handled errors exit **0** (Codex `utility` "error" JSON, plugin refusals) | capability + `main` outcome |
 | P0 | No JSON read **or correct write** | `parse_json` → DL0301; no JSON or escape primitive in `prim.rs`'s `Str` table (`len, trim, contains, starts_with, split, to_upper, replace, chars …`); JSON is built by concatenation, so a value containing `"` produces invalid JSON | pure stdlib |
-| P0 | **WASM cannot compile documented constructs** | `for i in range(0,4)` → DL1201; `fn apply(f: fn(Int)->Int, x: Int)` called with **any** function (named or lambda) → DL1201 *"a call to `apply` (not a compilable function)"*. Cause: `codegen.rs:1027 is_compilable` requires every parameter to have a `wasm_ty`, and function types have none. **Second pass, a third construct:** `match … { Some(p) => if c { found = true }, … }` → DL1201 *"an `if` without `else` used as a value"* (my telemetry simulation, which runs on the interpreter). None of the three is named in RW 3.4 or 2.36 | codegen |
+| P0 | **WASM cannot compile documented constructs** | `for i in range(0,4)` → DL1201; `fn apply(f: fn(Int)->Int, x: Int)` called with **any** function (named or lambda) → DL1201 *"a call to `apply` (not a compilable function)"*. Cause: `codegen.rs:1027 is_compilable` requires every parameter to have a `wasm_ty`, and function types have none. **Third pass, narrowed:** the generic `fn apply[T, U](f: fn(T) -> U, x: T) -> U` compiles and agrees with the interpreter (a generic function is inlined; `named_fn_parity.rs`), so the gap is the non-generic spelling. **Second pass, a third construct:** `match … { Some(p) => if c { found = true }, … }` → DL1201 *"an `if` without `else` used as a value"* (my telemetry simulation, which runs on the interpreter). None of the three is named in RW 3.4 or 2.36 | codegen |
 | P0 | `test` succeeds when nothing ran | §3 C13 | CLI |
 | P1 | No math, no checked arithmetic | `sqrt(4.0)` → DL0301 | prelude |
 | P1 | Strings: no interpolation, search or indexing | `"hello {name}"` printed literally | stdlib, then syntax |
@@ -678,7 +695,7 @@ Time is linear; **memory (~14 KiB per line) is the constraint** for edge devices
 | Linux x86_64 host tools; L0; L1 (Landlock ABI 7, seccomp) | **verified here** | §2.2, §6 |
 | Linux L2 microVM | **verified by named CI** (`microvm` job, `41929573373`) | not runnable here (no KVM) |
 | Windows (AppContainer), macOS (Seatbelt), Linux arm64 | **verified by named CI** (test jobs, `41929573373`) | not run here |
-| Same source, same results, interpreter ↔ WASM | **partial**: of 17 valid everyday programs, 15 behave identically (12 outputs, 3 identical faults) and 2 are refused at compile time on WASM (`range`, user higher-order functions); devices, plugins and actors with `Str` fields are refused too | §6.2 |
+| Same source, same results, interpreter ↔ WASM | **partial**: of 17 valid everyday programs, 15 behave identically (12 outputs, 3 identical faults) and 2 are refused at compile time on WASM (`range`, a non-generic higher-order function); devices, plugins and actors with `Str` fields are refused too | §6.2 |
 | Same *artifact* (`.dwx`) | **Delulu-host-specific**: a core-WASM module importing `delulu:cap` (`root_console`, `console_println`) with a `delulu:authority` section. **Not WASI**; it needs a `delulu` runtime | OBSERVED (`strings`) |
 | Single-binary distribution (Linux x86_64) | **verified here**: about 33.4 MB stripped in either profile; the default profile needs `libpython3.13.so` at run time, the portable one needs only libc | §3 C06 |
 | OpenShell L3 | **source and old CI only** (v0.1.2) | §2.3 |
@@ -737,7 +754,7 @@ DeluluLang hosts, and the fourth and fifth only per named OS and tier.
 | **Defer** | P8 hardware drivers, new device stacks, fleet/deploy growth, new agent-named commands, Koka-style handlers, native/AOT backend | — | — | wait for named users |
 | **Deprecate (2.x)** | rarely used top-level commands into groups: e.g. `login`/`publish`/`add` under `pkg`; `keygen`/`sign`/`verify-sig` under `sign`; `morph`/`locale`/`completions` under `tools` | — | low with aliases | 41 → about 15 groups; keep aliases one release |
 | **Remove** | nothing now | — | — | no component has evidence of zero value; the gains are proportion and contracts, not deletion |
-| **Remove from claims** | "total … across all code" wording in README's first line; "production ready" status box for a language that cannot read argv | — | — | trust |
+| **Remove from claims** | "total … across all code" wording in README's first line. *(Third pass: the "production ready" status box this row also named is `HANDOFF.md`'s, not README's, and since 2026-11-02 it says it covers containment and deployment only.)* | — | — | trust |
 | **Fix metadata before launch** *(second pass)* | `Cargo.toml` line 30 and `editors/vscode/package.json` name an unregistered GitHub namespace (F15); reserve `delulu-lang` (GitHub, Marketplace, Open VSX) or keep `launch/2.0.0`'s corrected URLs | — | low | prevents namespace squatting at launch |
 
 **The prompt's six questions, answered for each substantial change** (the Survey numbers are crate-level, because module
@@ -765,7 +782,7 @@ OpenShell v0.1.7 and re-run. *Exit:* contract tests green; `doctor` names PATH v
 4. `math` and `checked_*`.
 5. String `find`/`index_of`/`ends_with`/padding and interpolation (secret-checked like `str`).
 6. Methods on user types.
-7. WASM: `range` and higher-order user functions.
+7. WASM: `range`, non-generic higher-order functions, and an `if` without `else` as a value.
 8. The generated capability matrix and `check --target`.
 
 *Exit criteria (objective):* the §15 suite A01–A20 passes on Linux, Windows and macOS CI; three reference tasks (JSON task
@@ -981,6 +998,9 @@ fn apply(f: fn(Int) -> Int, x: Int) -> Int { f(x) }
 fn inc(x: Int) -> Int { x + 1 }
 fn main(root: Root) ! {Write} { root.console().println(str(apply(inc, 5))) }
 ```
+
+*(Third pass: the program above is non-generic. Its generic form, `fn apply[T, U](f: fn(T) -> U, x: T) -> U`, compiles
+on WASM with a named function and with a lambda, and prints `6` on both engines.)*
 
 The everyday corpus `e01`–`e18` used one construct each (listed in §6.1). `e18` used an effect name (`Random`) that does not
 exist (DL0306). That is **my own error**, not counted as a gap. Scaling programs (§10.2): `module scale.big`, then `fn f0(x)`

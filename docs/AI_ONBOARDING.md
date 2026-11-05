@@ -272,7 +272,7 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - `docs/REPOSITORY_STRUCTURE.md` lists every file and what it is for.
 - `docs/for-agents.md` is different: it is for agents that *use* DeluluLang, not for developers of it.
 
-## 10. Where the project stands (2026-11-02) — the newest sync-log entry supersedes this
+## 10. Where the project stands (2026-11-05) — the newest sync-log entry supersedes this
 
 - `master` holds #119 to #123 and on-demand routine runs 17 to 19's milestones, each landed on a green run:
   - INDEX-TARGET-1 (D-V2-205, RW 2.29): every walk of an assignment skipped its index, so a function the checker called
@@ -297,14 +297,31 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - **2.0's readiness is in question (the owner, 2026-11-02):** *"Still cannot write complete program like in java or
   python."* A probe of 39 everyday constructs: 14 ran, 25 were refused (RW 1.15; the gaps are RW 2.33–2.40). The head
   chef recommended holding the launch until the language basics land; **the owner's answer is pending.**
-- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: the owner's answer on the language basics;
-  cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge; RW 6.50–6.52; the language basics
-  (RW §8 item 7), then RW 3.24, a compiled form; the launch, only on the owner's word.
+- **Two independent reviews (2026-11-04/05)**, both in `docs/review/`. Both are research only, and neither took a
+  decision:
+  - **Codex's** (#124), committed as received.
+  - **Claude's**, from a Claude Code cloud session on `master` `0670e0b`. It audited Codex's review and re-ran all 102
+    of its commands on Linux; every one reproduces. It found no containment or authority escape, and recommends:
+    - CLI-first;
+    - the compiler, LSP and VS Code client kept as they are;
+    - OpenShell as an **optional backend**, with the microVM (PS-C) frozen;
+    - the 2.0 launch held behind an *ordinary agent utility* bar.
+  - Its findings are `REMAINING_WORK.md` rows 2.41–2.44, 3.25, 4.88–4.92, 6.54–6.66, 7.27 and 7.28, and RW §8 item 8
+    gives its order. The OpenShell part is `V2_OPENSHELL_STUDY.md` §8.
+  - Its owner decisions (the review's §13) are open: hold 2.0 for that bar; adopt the OpenShell verdict; whether a
+    scope refusal is catchable (RW 2.42); the exit-code mapping; and RFCs or a recorded unfreeze for the core changes.
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
+  - the owner's answers (the language basics, and the reviews' decisions above);
+  - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
+  - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
+  - the OpenShell pin bump (RW 7.28);
+  - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
+  - the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-208;
   - the last mutant is M1075;
   - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #123 was the last opened.
+  - pull requests are numbered on GitHub, and #124 was the last opened.
 
 ## 11. Keep this file true
 
