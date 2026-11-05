@@ -322,9 +322,17 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - **Found seven defects,** each re-run before it was recorded: RW 4.93, 4.94, 5.7, 6.67–6.70, the first three in the
     DIR path. The cause of RW 6.58 was found too.
   - Its §14 holds suggestions that cross current rules, under the owner's permission above. None was acted on.
+- **A third verification pass (2026-11-05)**, the same cloud session, with no sub-agents:
+  - it replayed the audit's 71 probes (all identical) and re-witnessed every defect;
+  - it read the PR's and `master`'s CI (both green, nothing to fix);
+  - it found **RW 4.95 (HIGH)**: `p.get` never checks a plugin export's type against the one the host asks for, so a
+    `! {Load, Read}` program wrote a file through a `! {Write}` export. `check`, `authority` and a package's DL1009
+    ceiling all passed. The grant still bounded the write;
+  - it also found RW 4.96 (programs load only Verified plugins) and RW 6.71 (`plugin verify` miscounts exports).
 - **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
   - the owner's answers (the language basics, and the reviews' decisions above);
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
+  - **RW 4.95 first** (enforce R-Get at `p.get`; its two witnesses red first), with RW 4.96;
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);

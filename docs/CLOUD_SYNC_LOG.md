@@ -7879,3 +7879,41 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   6. The language basics (RW §8 items 7 and 8), then RW 3.24 and RW 3.3 (`--engine auto`).
   7. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension (RW 6.53). The launch, only
      on the owner's word.
+
+### 2026-11-05 — the same Claude Code cloud session: the third verification pass; R-Get found unenforced (RW 4.95)
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5. **No sub-agents** (the
+  owner: *"No need to run agents this time"*).
+- Branch: `claude/dazzling-goodall-iaapyw`, fast-forwarded to `master` `6397a98` (the owner's merge of PR #125), then
+  this commit. A pull request into `master` carries it. The owner, this session: *"u can merge, No need to wait for my
+  approval"*. So it lands on a green run of its own head, by fast-forward where the proxy allows. The PR records how.
+- **Why:** the owner's request to *"Double Verify And Research About Everything Once Again"*, against both prompts in
+  `docs/prompt/` and the reports made from them, and to *"Check CI run in master and current branch and make fixes"*.
+- **CI read:**
+  - PR run `41983232404` (`3d6c881`) and `master` push run `41983782231` (`6397a98`): success, 14 jobs each, 2 skipped
+    by design. Recorded on PR #125.
+  - **No red job, so no CI fix was needed.**
+- **What changed** (documents and the map only; no `.rs`, test, configuration, manifest, workflow, editor or entrenched
+  file):
+  - A `docs/assistant-memory/a-rule-is-enforced-where-it-is-called.md`;
+  - M `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md`: §19, the third pass; header and §1 notes;
+    the §12 rows; priority 0 in §15; §17's DIR row; five figures and a citation corrected in place, listed in §19.4;
+  - M `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`: §19, old claim → new observation; a header
+    note; the first item under §1 action 2; C15's citation;
+  - M `docs/REMAINING_WORK.md`: rows 4.95, 4.96 and 6.71 new; 4.93 driven end to end; a header note;
+  - M `docs/for-agents.md`: annotate a plugin export with its real type until RW 4.95 is fixed;
+  - M `HANDOFF.md` §11.2: *"A rule written as a function is enforced only where something calls it"*;
+  - M `docs/AI_ONBOARDING.md` §10, `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`, this file and
+    `docs/survey/*`;
+  - deleted, renamed: nothing.
+- **Verified:**
+  - the audit's 71 probes replayed: 71 identical;
+  - the seven defects re-witnessed, RW 4.93 through `plugin verify`;
+  - every cited source line re-read;
+  - RW 4.95, 4.96 and 6.71 each run twice: the escape, then its control or the honest form.
+- **For the laptop's memory:** `HANDOFF.md` §11.2's new lesson and the memory note above.
+- **Open / next, in order:**
+  1. **RW 4.95:** enforce R-Get at `p.get`. The checker hands each site's `F` to the runtime, and `plugin_get` calls
+     `r_get_verified`/`r_get_contained`. Its two witnesses go red first, then mutants. RW 4.96 rides with it.
+  2. RW 4.93, 4.94, 5.7 and 6.67 (DIR and review surfaces), then 6.68, 6.69 and 6.71.
+  3. As before: the owner's answers; the answer contracts; RW 7.28; RW 3.26; the language basics; the launch only on his
+     word.

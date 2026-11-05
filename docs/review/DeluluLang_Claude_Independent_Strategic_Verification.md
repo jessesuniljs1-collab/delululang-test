@@ -46,6 +46,10 @@ it with `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Pr
 §18 below records what it changed here: each old claim, the new observation, its evidence, and the effect on the
 recommendation. Nothing above §18 was rewritten for it.
 
+**Second follow-up (2026-11-05, same session): a third verification pass**, on the owner's request to *"double
+verify and research about everything once again"*, with no sub-agents. §19 records it in the same form. One citation
+above was corrected in place (C15's `build.rs` line); nothing else above §19 was rewritten.
+
 Evidence labels, used throughout: **OBSERVED HERE** (run in this cloud session, output retained) · **CURRENT SOURCE**
 (read in `0670e0b`) · **CURRENT CI** (a named run whose completed result and SHA I read) · **CODEX REPORTED** (from the
 Codex review only) · **HISTORICAL DOC/DECISION** · **OFFICIAL EXTERNAL** (vendor page or repository, fetched
@@ -93,6 +97,7 @@ read its arguments, parse JSON, call `sqrt`, or set an exit code.
    arm all fail to compile there. Most of this bar is core
    language, so it needs RFCs (14-day comment periods) or a recorded decision to unfreeze the core (§13).
 2. **Fix the machine-contract defects agents trip on** (§6.3, §9):
+   - *(added by §19, first)* `p.get` taking a plugin's export at a narrower effect row than its own (RW 4.95);
    - `test` reporting success when nothing ran;
    - `fix` exiting 0 with errors left;
    - null-device actuation reported as `COMMANDED`;
@@ -205,7 +210,7 @@ difference between its results and mine is a platform difference or an error, ne
 | C12 | Sandboxed `--seed` unsupported (§4.2) | Observed | exit 2, "Nothing ran" | **CONFIRMED** | Honest refusal |
 | C13 | Missing test path → success with zero tests (§1, A05) | Observed | In a package: `delulu test /no/such/dir` → exit 0, `0 passed, 0 failed`; `--json` identical to "no tests"; a filter matching nothing is the same | **CONFIRMED** | Agents read success when nothing ran |
 | C14 | Package entry file with an import fails; package dir works (§1) | Observed | `run src/main.delulu` → DL0301 `twice`; `run .` → `42` | **CONFIRMED** | RW 6.52 |
-| C15 | Installed `delulu` stale, 1.0.0 (§1) | Observed (laptop) | Laptop not accessible. **New:** a fresh source build reports `commit: null`; only `DELULU_BUILD_COMMIT` (the packaging script, the release workflow) fills it (`crates/delulu/build.rs:11`) | **NOT REPRODUCIBLE HERE**; Codex's "RW 6.53 partly stale" **MODIFIED**: README's `cargo install --path` still yields an unidentifiable binary | Identity not fixed for source installs |
+| C15 | Installed `delulu` stale, 1.0.0 (§1) | Observed (laptop) | Laptop not accessible. **New:** a fresh source build reports `commit: null`; only `DELULU_BUILD_COMMIT` (the packaging script, the release workflow) fills it (`crates/delulu/build.rs` lines 9–15; first cited as line 11, which sets the target; §19) | **NOT REPRODUCIBLE HERE**; Codex's "RW 6.53 partly stale" **MODIFIED**: README's `cargo install --path` still yields an unidentifiable binary | Identity not fixed for source installs |
 | C16 | `run --json` prints the program's own stdout on success and an envelope on failure (§4.3) | Observed | Same: success → `{"ok":true,"value":42}`; no grant → DL0703 envelope | **CONFIRMED** | Contract hazard (§9) |
 | C17 | MCP: 12 read-only tools; a failing `check` is `isError:false` with `errors:1`; option-like path rejected; unknown tool → -32602 (§4.3) | Observed wire | Same, on protocol `2025-06-18` | **CONFIRMED** | By design; must be taught |
 | C18 | MCP buffers subprocess output with no byte cap (§7) | Source | `crates/delulu/src/mcp.rs` (lines 367–410): `read_to_end`; input lines *are* capped at 16 MiB (`mcp.rs:508`). **New:** every tool call spawns a fresh CLI process | **CONFIRMED** | §7 |
@@ -976,6 +981,29 @@ other .md file rules and regulations."* The suggestions that cross a rule are it
 **The decisions in §1 stand.** The audit narrows how to make DeluluLang faster and safer for agents. It is the engine,
 the process and the edit path that change, never the checker. Its first priority is the seven defects its §12 lists, before
 any machine-first input is widened.
+
+---
+
+## 19. Second follow-up, 2026-11-05: the third verification pass
+
+The pass replayed the companion audit's 71 probes (71 identical) and re-witnessed its seven defects on the same code,
+now `master` `6397a98`. It re-read every cited source line, refreshed the primary sources, and read CI for the PR and
+for `master`. Both runs were green, 14 jobs each, with nothing to fix. The details are in the companion's §19.
+
+| Old claim (where) | New observation | Evidence | Effect on the recommendation |
+|---|---|---|---|
+| The hostile probes *"all held"*: no containment or authority escape (§6.4); C23 *"Plugin: allowed call works; overbroad grant refused"* | Still true for grants and containment. But **the effect type system does not hold across a plugin's export.** `p.get` never checks the type a host asks for against the export (rule R-Get; its runtime functions exist and nothing on a program's path calls them). A program whose `main` and `authority` say `Load, Read` wrote a file through a `! {Write}` export taken as `! {}`. A package's DL1009 ceiling passed it, and a function listed as pure read a file. The run's grant still bounded the write | companion §19.2; RW 4.95 (HIGH) | **A new first action** (§1 action 2 gains it, ahead of the contract defects): enforce R-Get at `p.get`, with the two witnesses red first. It strengthens §8.4's case: the language's own checks are the part no external sandbox supplies, so they must be enforced at every boundary they claim |
+| C26: *"Only the monomorphic, closed-row fragment is machine-checked … Never claim whole-system proof"* | Confirmed, and now with a concrete case. `SOUNDNESS_AUDIT.md`'s F-1 obligation is met by no test on a program's path, because the laundering suite leaves it to the runtime loader | `laundering.rs` lines 4–5; RW 4.95 | Wording discipline stays; add a CLI witness per laundering obligation that names a runtime path |
+| RW 4.11 is closed: *"A program can load a plugin at run time"*, refused only for Contained on Windows | A program can load **only Verified** plugins. `Plugin[Contained]` checks clean and is refused at run time (DL1508) | RW 4.96 (LOW) | None to the architecture; a record correction |
+| `plugin verify` gives *"identical verdicts to a real load"* | True for the verdict. The export count is not: it counts private functions (RW 6.71, LOW). And the DIR node-id collision (RW 4.93) is now shown **through `plugin verify`**, not only `dir::verify` | companion §19.2 | 4.93 stays MEDIUM; fix with 4.95 |
+| Wasmtime: *"keep the 48 LTS pin"* (implicit in §10 and §11) | 48.0.8, the pin, carries the fixes for every advisory found: the critical aarch64 `br_table` escape (RUSTSEC-2026-0379, fixed in 48.0.7), a component-model panic (fixed in 48.0.7) and unchecked memory usage (fixed in 48.0.8). 50.0.1 exists | companion §19.3 (OFFICIAL EXTERNAL: GHSA, RustSec) | Unchanged; the advisory gate in CI is what keeps it true |
+| OpenShell: v0.1.7 newest (§8.1, §18) | Still newest; the docs still say not production-qualified | companion §19.3 | **OPTIONAL BACKEND** unchanged |
+| §11's competitors had no AI-first language that targets WASM and native | MoonBit (*"AI native programming language toolchain for cloud and edge"*; wasm, wasm-gc, js, native; 1.0 not yet shipped) | companion §19.3 | Supports WASM as the portable target; offers nothing on authority |
+| C15 cites `crates/delulu/build.rs:11` for the commit | Line 11 sets the target; the commit is lines 9–15 | re-read | Corrected in place |
+
+**The decisions in §1 stand, with one change of order:** RW 4.95 comes first among the fixes, because it is the one
+finding of the three reviews in which a checked guarantee (an effect row, a package ceiling) fails for an ordinary
+program. Nothing in this pass changes the architecture, the CLI-first verdict, or the OpenShell verdict.
 
 ---
 

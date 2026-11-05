@@ -821,6 +821,13 @@ wins, and you should update the memory to match.
 
   Every rule the text path applies (lexer bans, parser caps, unique ids, package checks) must be re-applied to every
   other way a program can arrive, and every review surface must read through the same verifier as the loader.
+- **A rule written as a function is enforced only where something calls it** (the third verification pass,
+  2026-11-05; RW 4.95). R-Get, *"`p.get[F]` succeeds only if `row(export) ⊆ row(F)`"*, was built in July as
+  `r_get_verified` and `r_get_contained` and unit-tested. The commit said *"R-Get at runtime"*, yet the interpreter's
+  `p.get` never called either function, and its annotation never reached the runtime. So a `! {Load, Read}` program
+  wrote a file through a `! {Write}` export, and `check`, `authority` and DL1009 all passed. The unit tests and the
+  laundering suite each assumed the other covered the program path. For every security rule, find its callers
+  (`grep -rn 'fn_name('`) and keep one CLI witness that drives it the way a program does.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

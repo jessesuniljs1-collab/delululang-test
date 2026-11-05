@@ -15,6 +15,11 @@ constitution.md, license or any other .md file rules and regulations. Do full re
 attached earlier, No restrictions."* §14 holds the recommendations that cross a current rule; each names the rule.
 They are suggestions only. No entrenched file was edited.
 
+**Third verification pass (2026-11-05, same session, on the owner's request to *"double verify and research about
+everything once again … test everything"*; no sub-agents).** §19 records it. Every probe of Appendix A.4 was replayed
+and every defect below re-witnessed on the same code, now `master` `6397a98`. It found **one new defect, the most
+serious of this audit: RW 4.95**, below. A few figures were corrected in place, each listed in §19.4.
+
 Evidence labels: **OBSERVED HERE** (run in this session, output retained in the session's scratch) · **CURRENT
 SOURCE** (read in `0670e0b`) · **CURRENT CI** (a named run whose result I read) · **HISTORICAL DOC** · **OFFICIAL
 EXTERNAL** (a vendor page or repository) · **THIRD-PARTY** · **SUB-AGENT** (a Sonnet 5.5 sub-agent's report; marked
@@ -57,9 +62,9 @@ new compiler backend, graph database or agent runtime.**
 | Is parsing a cost worth removing for AI authors? | lex+parse is **3 µs** of an 85 µs front end for a 2-line program, and **64 ms of 381 ms** (17%) at 16,002 lines. Checking is 68%, resolving 2% | A parser-free path saves at most about a sixth of the front end. It is not worth a second input language |
 | Is the existing machine form (DIR) a faster input than text? | **No.** At 16,002 lines DIR is **23.6 MB against 838 KB of text** (28×). Decoding it takes 322 ms against 64 ms to lex and parse the text; verifying it (decode + re-check) takes **716 ms against 381 ms** for the whole text front end | Keep text as the interchange. Use node-addressed edits over text, not a DIR or graph store, as the agent's authoring surface |
 | What dominates a short WASM run? | Cranelift compiling the module: **1.6 ms** of a 1.8 ms hello run, **652 ms** of 676 ms at 16,002 lines | A precompiled artifact loads in **35 µs** (hello) and **5.7 ms** (16,002 lines), 45–115× faster |
-| What dominates a short command? | The process itself. `delulu --version` takes 3.35 ms, against 0.9 ms for `/bin/true`, and **1.1–2.0 ms of it is loading `libpython`**: a Python-less build of the same source takes 2.21–2.86 ms (three comparisons, §10.2). `check hello` adds 0.3 ms | Moving embedded Python out of the main binary is the cheapest measurable win for agent loops |
+| What dominates a short command? | The process itself. `delulu --version` takes 3.35 ms, against 0.9 ms for `/bin/true`, and **1.1–2.0 ms of it is loading `libpython`**: a Python-less build of the same source takes 2.21–2.86 ms (three comparisons, §10.2). `check hello` adds 0.5–0.9 ms (§19; first written as 0.3 ms) | Moving embedded Python out of the main binary is the cheapest measurable win for agent loops |
 | Interpreter or WASM? | A 5M-iteration loop: interpreter **910 ms**, WASM **34 ms**, CPython 246 ms, Rust 10 ms. A 4,002-line program with little work: interpreter **136 ms**, `.dwx` 179 ms | Neither engine wins everywhere. Choose per program (RW 3.3's tiering), and cache compiled code |
-| Do the baseline compiler (Winch) or the portable interpreter (Pulley) help? | Winch compiles 15–33% faster but runs the loop 43% slower, and Wasmtime 48 documents epoch interruption, which DeluluLang's limits engine uses, as *"not compatible with the Winch compiler"*. Pulley compiles no faster and runs 11× slower than Cranelift | Neither replaces Cranelift. Pulley is a fallback for CPUs Cranelift does not support |
+| Do the baseline compiler (Winch) or the portable interpreter (Pulley) help? | Winch compiles 15–33% faster but runs the loop 42% slower, and Wasmtime 48 documents epoch interruption, which DeluluLang's limits engine uses, as *"not compatible with the Winch compiler"*. Pulley compiles within 11% of Cranelift's time either way and runs 11× slower | Neither replaces Cranelift. Pulley is a fallback for CPUs Cranelift does not support |
 | Can an AI emit trustworthy machine code? | Wasmtime itself refuses to trust compiled bytes: `Module::deserialize` is `unsafe` and *"Arbitrary input could … replace valid compiled code"* (OFFICIAL EXTERNAL, vendored `wasmtime-48.0.8/src/runtime/module.rs`, lines 372–398) | No. Native code must come only from the deterministic compiler, behind an authenticated, version-bound cache |
 
 **Seven new defects, all re-verified by me before they were recorded** (§12; `REMAINING_WORK.md` 4.93, 4.94, 5.7,
@@ -81,6 +86,16 @@ new compiler backend, graph database or agent runtime.**
 
 RW 6.58 also gained its cause: a closed pipe makes `delulu` **panic** (*"failed printing to stdout: Broken pipe"*) and
 exit 2, even for a program that succeeded.
+
+**Found in the third pass (§19), and first in priority:**
+- **RW 4.95, HIGH. `p.get` never checks the type a host asks for against the plugin's export.** The spec's rule R-Get
+  is written as runtime functions that the interpreter never calls. A host whose `main` declares `! {Load, Read}`
+  took a Verified plugin's `! {Write}` export as `! {}`, and it wrote a file. `check`, `authority` (`effects: Load,
+  Read`) and a package's DL1009 ceiling all said it could not. The run's grant still bounded it, so this is an
+  effect-row and ceiling hole, not an authority escape.
+- **RW 4.96, LOW.** A program can load only Verified plugins: `Plugin[Contained]` checks clean and is refused at
+  run time.
+- **RW 6.71, LOW.** `plugin verify` counts private functions as exports.
 
 **The recommendations, in order** (§13, §15, §16):
 1. Land the 2.0 language basics and the answer contracts already in `REMAINING_WORK.md` (§8 items 7 and 8). Nothing
@@ -177,7 +192,7 @@ Trust boundaries:
 | Verified WASM cache | `crates/delulu-wasm/src/lib.rs` `verified_executable_wasm` (lines 57–62), called only from tests (lines 1149, 1160) |
 | Edit | `crates/delulu/src/edit.rs`: the whole-file blake3 (line 31); the package prefix discarded (line 138) |
 | MCP | `crates/delulu/src/mcp.rs` `run_self` (line 367): a fork per call, `read_to_end` |
-| Toolchain description | `crates/delulu/src/toolchain.rs` (line 77): `engines: ["interpreter", "wasm"]`, the primitive table, no per-engine support |
+| Toolchain description | `crates/delulu/src/toolchain.rs` (lines 87 and 77): `engines: ["interpreter", "wasm"]`, the primitive table, no per-engine support |
 
 ---
 
@@ -224,7 +239,7 @@ an optional optimisation. Costs are the in-process medians of §10.1 at 2 / 1,00
 | 2 | AI → **validated typed tree / IR** → interpreter | structural validation **with the lexer's and parser's rules**, unique ids, resolve, check | text | as 1 | **Partly BUILT** as DIR for Verified plugins; not an authoring input | Not worth it as a second input: DIR verify is 1.9× slower than the text front end and 28× larger, and has two holes (RW 4.93, 4.94) |
 | 3 | checked program → **portable bytecode / WASM** → JIT or interpreter | as 1, then codegen; validation by Wasmtime | WASI | Cranelift-generated machine code (or Pulley's interpreter) | **BUILT** (`--engine wasm`, `.dwx`) | Keep. It is DeluluLang's portable target (Constitution §5.13) |
 | 4 | WASM → **precompiled target-specific artifact** | as 3, then `Engine::precompile_module` | — | machine code made earlier by the same Cranelift | **Not built** (no `precompile_module` or `deserialize` in the tree; the sub-agent's grep, re-checked) | PROPOSED as a **cache**, never as an interchange: 35 µs–5.7 ms to load against 1.6–652 ms to compile, but only behind §5.4's rules |
-| 5 | **native AOT** or a JIT of DeluluLang itself | a new backend (LLVM ORC/MLIR or similar) | — | a native code generator | **Not built** (RW 3.2; D18) | Reject for now: WASM through Cranelift already runs the loop within 3.4× of `rustc -O`. A native backend needs its own soundness and parity argument |
+| 5 | **native AOT** or a JIT of DeluluLang itself | a new backend (LLVM ORC/MLIR or similar) | — | a native code generator | **Not built** (RW 3.2; D18) | Reject for now: WASM through Cranelift already runs the loop within 3.3× of `rustc -O`. A native backend needs its own soundness and parity argument |
 | 6 | **hybrid** | as 1 or 3 per program | the cache | both | **Not built** (RW 3.3; the engine is chosen by hand) | PROPOSED: `--engine auto`, a static policy first (loops → WASM), then measured tiering |
 | 7 | **operation or workflow plans** interpreted without a new agent framework | a plan is a DeluluLang program; its steps are capability calls | — | as 1 or 3 | expressible today (the drone and telemetry simulations ran) | Keep plans as ordinary programs. A durable workflow store is RW A14's gap, not a new framework |
 
@@ -487,8 +502,8 @@ Two conclusions follow:
 | **Zerolang** (Vercel Labs) | *"an experimental graph-native programming language where the semantic graph is the program database"*; `zero.graph` is the checked input; `.0` files are *"human-readable projections"*; `zero patch` *"applies checked graph edits and rejects stale or invalid changes"*; README: *"Expect breaking changes, rough edges, and security issues. Run it in isolated workspaces"*. Apache-2.0. Releases to v0.3.4 (June 2026; the page shows no year), commits to 2026-09-16 (SUB-AGENT via the page, confirmed in outline by search). zerolang.app is a **community** site (THIRD-PARTY): *"Compiles to native executables targeting sub-10 KiB binaries"*, no method given | The hash-guarded, node-addressed edit is the idea worth having, and DeluluLang already has it over text (`edit --node --expect-hash`). The graph-as-database is not: here it would be DIR, measured 28× larger and slower to verify than text. No sandbox or capability enforcement is documented. **Not installed or run**: its installer is a remote shell script, and the session held push credentials |
 | **Mojo** (Modular) | 1.2.0 of 2026-10-22; *"mojo build and mojo run both perform ahead-of-time (AOT) compilation"* (FAQ, SUB-AGENT raw read; an older second-hand quote says the REPL was JIT-compiled); MLIR and LLVM; *"supports Windows via WSL"* (confirmed by search) | A different problem: native performance across CPU and GPU. Its AOT path does not bear on authority |
 | **CPython** | tokenize → AST → symbol table → instruction sequence → CFG → bytecode; a specializing adaptive interpreter; `.pyc` marshal caches invalidated by `MAGIC_NUMBER`; an experimental copy-and-patch JIT behind `--enable-experimental-jit` (InternalDocs, SUB-AGENT raw read) | "Compiling" without a native executable is normal: Python compiles to bytecode and caches it, keyed by a version number. DeluluLang's equivalent cache is §5.4's, and it needs authentication because its bytes are machine code, not bytecode |
-| **Rust, Go, Java** | AOT native (Rust, Go); JIT with tiering (HotSpot) | Constitution §5.11 already names tiering as the normal design; measured here, WASM via Cranelift is 3.4× `rustc -O` on the loop |
-| **Wasmtime** | 50.0.0 of 2026-10-20 (confirmed by search; the agent also saw 50.0.1 of 2026-10-29, unconfirmed); LTS every 12th release, supported 24 months, so **48 is an LTS line**; Cranelift default; Winch *"performs only a single, quick pass … will run Wasm programs slower"*; Pulley *"expect a ~10x … slowdown"*; `precompile_module` output *"is safe to send to another host"*, but loading it is `unsafe`; tiers: Tier 1 x86-64 Linux, macOS, Windows | Measured here: Pulley 11.4× slower than Cranelift; Winch 43% slower code with 15–33% faster compiles. **Winch cannot serve the limits engine**: epoch interruption is documented as incompatible with it (vendored 48.0.8 `config.rs`, lines 776–784) |
+| **Rust, Go, Java** | AOT native (Rust, Go); JIT with tiering (HotSpot) | Constitution §5.11 already names tiering as the normal design; measured here, WASM via Cranelift is 3.3× `rustc -O` on the loop |
+| **Wasmtime** | 50.0.0 of 2026-10-20 (confirmed by search; 50.0.1 confirmed in the third pass as a patched version of advisory GHSA-6fr9-xmw9-5352, §19); LTS every 12th release, supported 24 months, so **48 is an LTS line**; Cranelift default; Winch *"performs only a single, quick pass … will run Wasm programs slower"*; Pulley *"expect a ~10x … slowdown"*; `precompile_module` output *"is safe to send to another host"*, but loading it is `unsafe`; tiers: Tier 1 x86-64 Linux, macOS, Windows | Measured here: Pulley 11.4× slower than Cranelift; Winch 42% slower code with 15–33% faster compiles. **Winch cannot serve the limits engine**: epoch interruption is documented as incompatible with it (vendored 48.0.8 `config.rs`, lines 776–784) |
 | **WAMR** | 2.4.5 (June; year inferred); six modes (fast interpreter, classic interpreter, AOT via `wamrc`, LLVM JIT, Fast JIT, multi-tier); core text size on Cortex-M4F: about 58.9K (fast interpreter), 56.3K (classic), 29.4K (AOT runtime) (confirmed by search) | The candidate for RW 3.6's microcontroller tier, **not** for desktop or server: it would be a second host ABI for `delulu:cap` and a second engine to hold to parity |
 | **WASI 0.3 / Component Model** | WASI 0.3.0 shipped 2026-06-11; components type their interfaces in WIT; *"a component may not export a memory"* | `.dwx` is a core module with custom `delulu:cap` imports (OBSERVED earlier). A component would buy typed interfaces and composition, not authority. Study it for `.dwx` 2, after the basics |
 | **LLVM ORCv2, MLIR** | *"ORC provides a modular API for building JIT compilers"*; MLIR is a multi-level IR framework with dialects | The road to a native backend (RW 3.2). Rejected for now (§5, model 5) |
@@ -518,6 +533,9 @@ Two conclusions follow:
 | 6.69 | `edit` checks the file alone, so inside a package the delta and `--if-checks` go blind | `examples/greeter` copied; `main` replaced via `--node` with a body adding `Net` and `evil.example.com`: exit 0, `written: true`, `before: null`, `widened: null`, also under `--if-checks`; `check .` → DL1009. A bogus prefix `fn:BOGUSPKG/greeter.main` was accepted | MEDIUM for agent editing loops |
 | 6.70 | Morph skins: cwd lookup, unpinned, look-alike aliases | Identical source bytes (SHA-256 `9dbf6040…`) printed `yes` and `no` under two skin files in two working directories' morphs folders mapping a Cyrillic look-alike of `false`; `authority` identical | LOW today (no skin ships); MEDIUM if skins ship |
 | (6.58) | The closed-pipe exit is a panic | §10.3 | LOW |
+| 4.95 | `p.get` does not enforce R-Get: an export is callable under a narrower row than its own | §19.2: a `! {Load, Read}` program wrote a file through a `! {Write}` export typed `! {}`. `check`, `authority` and a package's `check .` (DL1009) all passed | **HIGH** for the effect system; bounded by the run's grants |
+| 4.96 | A program can load only Verified plugins | §19.2: `Plugin[Contained]` → `BadArtifact` (DL1508) at run time | LOW |
+| 6.71 | `plugin verify` counts private functions as exports | §19.2: *"2 export(s)"* for a one-export plugin with a helper | LOW |
 | — | `.dwx` authority output says *"re-verified"* and *"provably pure"* for an edited manifest | **Already closed** as RW 4.73 (ARTIFACT-CLAIM-1): the output also says the effects are *"its builder's claim"*, and `run` refuses an undeclared effect (DL1202, re-run). Only the wording remains | wording only; no row |
 
 **What did not happen** (OBSERVED HERE, read on the far side):
@@ -621,6 +639,7 @@ Each suggestion names the rule it would change. None was acted on.
 
 | Priority | Action | Target | Evidence |
 |---|---|---|---|
+| 0 | **Fix first** | RW 4.95: enforce R-Get at `p.get` (third pass) | §19 |
 | 1 | **Fix** | RW 4.93, 4.94, 6.67, 5.7 (DIR and `why`) | §12 |
 | 2 | **Fix** | RW 6.68, 6.58, 6.69 (signals, pipes, package edits) | §12 |
 | 3 | **Build** | the 2.0 basics and answer contracts (RW §8 items 7–8) | §10.3 |
@@ -658,7 +677,7 @@ Each suggestion names the rule it would change. None was acted on.
 | RTOS, MCU, flight, vehicle, satellite hardware | **unverified**; nothing physical was touched. Drone and telemetry were simulations; the device ran under the `sim` profile |
 | Zerolang execution | **not run** (see §11) |
 | Token and tool-call overhead per task | **not measured** (needs the task-completion study) |
-| DIR collision through a real `.dpx` load | reproduced at `dir::verify`, **not** end to end |
+| DIR collision through a real `.dpx` load | first pass: at `dir::verify` only. **Third pass: through `plugin verify`**, the loader's step 5 (§19). A run that calls the colliding function was not attempted |
 | Winch with epoch interruption on Wasmtime 50 | **unknown**; read for 48.0.8 only |
 | Precompiled cache under the limits engine | **not built, not measured** |
 | Cold start from an empty page cache | **not measured** (dropping caches is a system-wide side effect); all timings are warm |
@@ -677,6 +696,181 @@ Each suggestion names the rule it would change. None was acted on.
 - WASI and components: [WASI releases](https://wasi.dev/releases); [roadmap](https://wasi.dev/roadmap); [why the component model](https://component-model.bytecodealliance.org/design/why-component-model.html).
 - LLVM: [ORCv2](https://llvm.org/docs/ORCv2.html); [MLIR LangRef](https://mlir.llvm.org/docs/LangRef/).
 - NVIDIA OpenShell: [releases](https://github.com/NVIDIA/OpenShell/releases); [docs](https://docs.nvidia.com/openshell/latest/).
+
+---
+
+## 19. Third verification pass (2026-11-05, same session)
+
+**Why.** The owner asked once more: *"Double Verify And Research About Everything Once Again … Test Everything. No
+need to run agents this time … Check CI run in master and current branch and make fixes."* So this pass used **no
+sub-agents**. Everything in it is OBSERVED HERE by the head chef, or OFFICIAL EXTERNAL where marked.
+
+### 19.1 State and CI (CURRENT CI)
+
+| Item | Value |
+|---|---|
+| `master` | `6397a98`, the owner's merge commit of PR #125 (06:56 UTC, a merge commit rather than a fast-forward). `3d6c881` is its second parent and the two trees are identical. No code changed since `0670e0b` (`git diff --stat 0670e0b 6397a98 -- crates scripts .github Cargo.toml Cargo.lock editors` is empty), so the provenance build of §2 is this code |
+| PR run [`41983232404`](https://github.com/jessesuniljs1-collab/delululang-test/actions/runs/41983232404) on `3d6c881` | **success**: 14 jobs passed, 2 skipped by design (`heavy-gates`, `miri-slow`). Covered: tests on ubuntu-24.04, macos-latest, windows-latest and arm64; lints, supply-chain, formal, fuzz, editor, microvm, microvm-reproducible; miri for diag, atlas and ffi |
+| `master` push run [`41983782231`](https://github.com/jessesuniljs1-collab/delululang-test/actions/runs/41983782231) on `6397a98` | **success**, the same 14 jobs and 2 skips. Both runs are recorded on the PR ([comment](https://github.com/jessesuniljs1-collab/delululang-test/pull/125#issuecomment-6652265892)) |
+| CI failures to fix | **none**: neither run had a red job |
+| `origin/autosave/laptop` | new snapshot `ea8a903` (06:27 UTC). Compared with its base `0670e0b`, it adds only the audit prompt, byte-identical to the committed one (SHA-256 `3dbe437e…`). Nothing to recover |
+
+### 19.2 What was re-run
+
+| Check | Result |
+|---|---|
+| Appendix A.4's whole probe ledger (71 probes), replayed on a fresh copy of the scratch work with fresh state | **71 of 71 identical**: the same exit code, stdout and first stderr line once scratch paths and timestamps are normalised |
+| RW 4.94 (bidi name in a DIR) | `plugin verify bidi.dpx` → *"ok … verifies"*; `why Read` printed U+202E and `ESC[31m` raw. **Holds** |
+| RW 6.67 (`why` on forged facts) | `plugin verify forged.dpx` → DL1504, exit 1; `why Read forged.dpx` → *"has no export that performs `Read`"*, exit 0. **Holds** |
+| RW 6.70 (morph skins) | identical bytes (SHA-256 `9dbf6040…`) printed `yes` in one directory and `no` in the other. **Holds** |
+| RW 6.69 (`edit` in a package) | `examples/greeter`, `main` replaced through `--node` with a `Net` body under `--if-checks`: exit 0, `written: true`, `before: null`, `widened: null`; `check .` → DL1009; the bogus prefix `fn:BOGUSPKG/greeter.main` accepted. **Holds** |
+| RW 6.68 (signals) | SIGTERM → 143, SIGINT → 130, `--report-out` absent both times, no `delulu` left running. **Holds** |
+| RW 6.58 (closed pipe) | large output into `head -1`: exit 2, *"failed printing to stdout: Broken pipe (os error 32)"*, one panic. **Holds** |
+| RW 4.93 (DIR node-id collision) | the scratch harness rebuilt: both `push` cases verify after collision; the DL0501 and field-write DL1604 controls stay refused. **Holds, and now end to end through the loader:** a `.dpx` whose DIR is the collided form of a module holding `fn poke(xs: List[Int]) { xs.push(1) }` beside the honest export, re-bound by its manifest's `dir_blake3`, gets `plugin verify` → *"ok: `rcap.dpx` verifies — verified plugin, 2 export(s)"*, exit 0. `plugin verify` runs the load's own `step5_verified` (`plugin.rs` lines 935–961: *"identical verdicts to a real load"*) |
+| Every file and line the §3 table cites | re-read: all match except `toolchain.rs`, whose `engines` line is 87, not 77 (corrected in place) |
+| MCP | **12 tools** in an ordinary directory, **16** inside a DeluluLang checkout (adding `doctor_check`, `survey_diff`, `survey_impact`, `survey_query`). A `check` call over a live session costs a **median 5.79 ms** (41 calls; one outlier of 59 ms), against 5.6 ms in §7: the fork per call (RW 6.62) |
+| Process floor, interleaved (41 rounds, all cases launched by the same fork-and-exec launcher, so every figure carries the launcher's cost) | `/bin/true` 2.17 ms; `--version`: default 4.91, default stripped 4.74, Python-less stripped 3.48; `check hello`: default 5.55, Python-less 3.99. **libpython: 1.3–1.4 ms per command** (inside §1's 1.1–2.0 ms), and **4.1 MiB of peak RSS** (11.8 against 7.7 MiB for `check hello`: new). `check hello` costs **0.5–0.6 ms** over `--version` here and 0.9 ms in §10.2's runs, not the 0.3 ms §1 first said |
+
+**New findings, each re-run before it was written:**
+
+1. **RW 4.95, HIGH: R-Get is not enforced.** The spec (`STAGE1_SPECIFICATION.md` line 716) says `p.get[F](name)`
+   succeeds only if the export's type matches `F` with `row(export) ⊆ row(F)`. The checker leaves that half to run
+   time (`check.rs` lines 2617–2630). `plugin.rs` implements it as `r_get_verified` and `r_get_contained` (lines
+   583–668), but the interpreter's `plugin_get` (`interp.rs` lines 1902–1919) checks only that the name exists, and the
+   annotated `F` never reaches the runtime. The functions arrived in `33f08d1` (2026-07-15, *"R-Get at runtime,
+   fail-closed throughout"*); their only caller is the P8-02 device adapter. Witnesses (sources in §19.5):
+   - **Program level.** `esc.delulu`'s `main` is `! {Load, Read}`. It loads the Verified plugin `putter` (export
+     `put: fn(Cap[FsWrite], Str) -> Unit ! {Write}`) and takes `put` as `! {}`. `check`: clean. `authority`:
+     `effects: Load, Read`. The run with `--grant plugin=. --grant fs.write=./out` **wrote `out/written-by-plugin.txt`**.
+   - **Package ceiling.** The same program as package `escpkg`, whose `[authority] effects` are `["Load", "Read"]`:
+     `check .` → *"authority within manifest and pins"*; the run wrote the file. DL1009 did not fire.
+   - **Function level.** `pure_call`, declared with no row (`authority` lists it under `pure fns`), returned
+     `TOPSECRET` from a file through the `! {Read}` export `scan` taken as `! {}`.
+   - **Wrong parameter types are not refused either.** `scan` (two parameters) taken as `fn(Str) -> Str ! {}` faulted
+     inside the plugin: DL0907, *"unbound name `p`"*.
+   - **What still held:** the run needed `--grant fs.write=./out`, and the Guard scoped the write to it. `authority`'s
+     `plugins:` section lists `putter [verified] grant.effects: [Write]`, the one place the effect shows. The WASM
+     engine refuses `plugin_host` (DL1201), and `--sandbox` refuses a program that uses PluginHost (*"Nothing ran"*).
+   - **Why the earlier passes missed it:** `plugin_load_cli.rs` only takes exports at their honest type, the
+     laundering suite leaves F-1 to *"the runtime plugin loader (Stage 6)"* (`laundering.rs` lines 4–5), and the unit
+     tests call `r_get_verified` directly. **A rule written as a function is enforced only where something calls it.**
+2. **RW 4.96, LOW: programs load only Verified plugins.** `interp.rs` line 1879 calls `load_verified` for every
+   `load`, so `let p: Plugin[Contained] = load(…)` on a Contained `.dpx` checks clean and returns `BadArtifact`
+   (DL1508, *"the host requested `Plugin[verified]`"*). RW 4.11 names only Windows as refusing Contained. By accident
+   this keeps `SOUNDNESS_AUDIT.md` F-1's Contained form from running.
+3. **RW 6.71, LOW: `plugin verify` counts every DIR function as an export.** For a one-export plugin with a private
+   `helper`: `plugin build` says *"1 export(s)"*, `plugin verify` says *"2 export(s)"*, and its JSON says `["helper",
+   "scan"]` (`plugin.rs` line 953 reports `dir.fn_types`). `p.get("helper")` is refused, so the surface is overstated,
+   not opened.
+
+### 19.3 Primary sources refreshed (OFFICIAL EXTERNAL unless marked; searched 2026-11-05)
+
+| Item | Now | Effect |
+|---|---|---|
+| Wasmtime | v50.0.0 (2026-10-20) and **50.0.1** exist; no v51 (monthly releases, so expected around 2026-11-20, INFERENCE). Advisories: **GHSA-mghf-wjfp-p5xm / RUSTSEC-2026-0379** (CVSS 9.9, aarch64 `br_table` jump to an arbitrary target) is fixed in 36.0.19, **48.0.7**, 49.0.4 and 50.0.0. **GHSA-897f-g5gm-fmxm** (a Cranelift miscompilation on any architecture; THIRD-PARTY write-up) is reported fixed in the same versions. **GHSA-9pvw-hwfg-92h5 / RUSTSEC-2026-0378** (a component-model panic) is fixed in 48.0.7. **GHSA-6fr9-xmw9-5352** (unchecked memory usage) is fixed in 36.0.20, **48.0.8**, 49.0.5 and 50.0.1 | DeluluLang pins **48.0.8** (`Cargo.lock`), which carries every fix found. The aarch64 fix applies to a platform CI tests (the arm64 job). Keep the LTS pin: the `supply-chain` job's `cargo deny check advisories` step gates every CI run (`ci.yml` lines 613–621), and it has caught Wasmtime advisories before (D-V2-67) |
+| NVIDIA OpenShell | **v0.1.7** is still *"Latest"* in its docs. A `v0.1.7-pre.1` workflow ran on 2026-10-28. Its notes add OTLP exporters with auth headers and CLI browser login inside containers. The installation page still says it is not production-qualified | The earlier verdict stands: **optional backend**. The pin is still v0.1.2 (RW 7.28) |
+| Zerolang | v0.3.4 (June 2026) is still the newest tag found (THIRD-PARTY directories); no v0.4 | No change |
+| Mojo | Search found only the May–June nightlies of 1.0.0b2. The 1.2.0 of 2026-10-22 rests on the earlier passes' read of mojolang.org | Not re-confirmed this pass; no effect |
+| WAMR | 2.4.4 was a security release (2025-11-25); 2.4.5 is listed with no date | No change: still a microcontroller candidate only |
+| **MoonBit** (new here; the prompt names it) | Its docs call it *"an AI native programming language toolchain for cloud and edge computing"*, targeting wasm, wasm-gc, js and native. v0.10.17 (October 2026), 1.0 not yet shipped; reference counting on wasm and C, host GC on wasm-gc and JS (THIRD-PARTY detail) | The nearest design neighbour on the *target* question: one source compiled ahead of time to WASM or native, no authority model. It supports §5's answer: WASM as the portable target, a native backend only when measured. It offers nothing for effects, grants or custody |
+
+### 19.4 Corrections made in place (old → new)
+
+| Where | Old | New | Why |
+|---|---|---|---|
+| §1 table, §11 | Winch *"runs the loop 43% slower"* | 42% | 38,664 / 27,145 µs = 1.424 |
+| §1 table | Pulley *"compiles no faster"* | *"compiles within 11% of Cranelift's time either way"* | §10.1: 8% and 11% faster at 2 and 4,002 lines, 6–11% slower at 1,002 and 16,002 |
+| §1 table | *"`check hello` adds 0.3 ms"* | 0.5–0.9 ms | §10.2 (4.26 − 3.35) and §19.2's interleaved run |
+| §5 model 5, §11 | WASM *"within 3.4× of `rustc -O`"* | 3.3× | 34.13 / 10.22 ms |
+| §3 table | `toolchain.rs` (line 77) for `engines` | lines 87 and 77 | re-read |
+| §11 Wasmtime | 50.0.1 *"unconfirmed"* | confirmed | §19.3 |
+| §15 | priorities started at 1 | priority 0 is RW 4.95 | §19.2 |
+| §17 | the DIR collision *"not end to end"* | through `plugin verify` | §19.2 |
+
+None of these moves a recommendation.
+
+### 19.5 Reproducibility for the new witnesses (scratch; not in the repository)
+
+The Verified plugin `putter`:
+
+```toml
+[package]
+name = "putter"
+version = "0.1.0"
+kind = "plugin"
+
+[plugin]
+api = 1
+class = "verified"
+
+[plugin.authority]
+effects  = ["Write"]
+requires = []
+
+[plugin.exports]
+put = "fn(Cap[FsWrite], Str) -> Unit ! {Write}"
+```
+
+```delulu
+module putter
+
+pub fn put(fs: Cap[FsWrite], s: Str) ! {Write} {
+    match fs.write_text("written-by-plugin.txt", s) {
+        Ok(_) => {}
+        Err(_) => {}
+    }
+}
+```
+
+The host, `esc.delulu` (`delulu plugin build .` in the plugin's directory, then copy `putter.dpx` beside the host):
+
+```delulu
+module host
+
+fn go(h: Cap[PluginHost], w: Cap[FsWrite]) -> Result[Int, PluginErr] ! {Load, Read} {
+    let g = Grant {
+        effects: ["Write"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let p = load(h, "putter.dpx", g)?
+    let f: fn(Cap[FsWrite], Str) -> Unit ! {} = p.get("put")?
+    f(w, "the host's row has no Write")
+    Ok(0)
+}
+
+fn main(root: Root) ! {Load, Read} {
+    let w = root.fs_write("./out")
+    match go(root.plugin_host(), w) {
+        Ok(_) => {}
+        Err(_) => {}
+    }
+}
+```
+
+```bash
+delulu check esc.delulu                       # ok: checked clean
+delulu authority esc.delulu                   # effects: Load, Read
+delulu run esc.delulu --grant plugin=. --grant fs.write=./out --no-prompt
+cat out/written-by-plugin.txt                 # the host's row has no Write
+```
+
+The package form adds a `delulu.toml` with `[package] name = "escpkg"`, `language = "1.0"` and `[authority] effects =
+["Load", "Read"]`, with the host as `src/main.delulu` (`module escpkg`). The function-level form takes the
+`scan` plugin of §12's fixtures (`fn(Cap[FsRead], Str) -> Str ! {Read}`) as `! {}` inside `fn pure_call(f: …, fs:
+Cap[FsRead]) -> Str` and reads `secret.txt` under `--grant fs.read=./data`. The end-to-end DIR collision uses a
+scratch crate `dirforge` (the §A.5 harness, writing the collided DIR to a file). A short script then replaces the
+`delulu:dir` section of an honest `scan.dpx` and its manifest's `dir_blake3`.
+
+### 19.6 The audit prompt, re-walked
+
+Nothing in §§3–12 of the prompt was found unaddressed. These stay open, and are recorded rather than claimed:
+- **Token and tool-call overhead per completed task**: still not measured. It needs the task-completion study.
+- **Zerolang**: still not run, for the same reason as before (a remote installer).
+- **Windows, macOS and arm64 runs of the new witnesses**: not run. The two CI runs above are the existing suite,
+  which has no R-Get witness.
+- **The fixes themselves**: not made. This pass recorded them. RW 4.95's fix touches the checker, the runtime and
+  DIR, so it needs its own witnessed and mutant-tested change, not a documents PR.
 
 ---
 

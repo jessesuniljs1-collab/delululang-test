@@ -11891,3 +11891,40 @@ desktop. The report's §14 holds the suggestions that cross current rules, B1–
 - the sync log and the map.
 
 The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — a Claude Code cloud session: the third verification pass; R-Get found unenforced
+
+**Why.** The owner asked: *"Double Verify And Research About Everything Once Again … Test Everything. No need to run
+agents this time … Check CI run in master and current branch and make fixes."* So this pass used no sub-agents.
+
+**CI.** The PR run `41983232404` on `3d6c881` and `master`'s push run `41983782231` on `6397a98` were both read to the
+end: success, 14 jobs each, 2 skipped by design. There was nothing to fix. Both are recorded on PR #125.
+
+**Re-run** on the provenance build of `0670e0b`, whose code `master` carries unchanged:
+- the audit's 71 probes: 71 identical;
+- RW 4.93, 4.94, 6.58, 6.67, 6.68, 6.69 and 6.70: each still holds. RW 4.93 was driven through `plugin verify`, the
+  loader's step 5;
+- every cited source line was re-read;
+- the libpython cost (1.3–1.4 ms, plus 4.1 MiB of peak RSS) and MCP's 5.8 ms per call.
+
+**Found:**
+- **RW 4.95 (HIGH).** R-Get (*"`p.get[F]` succeeds only if `row(export) ⊆ row(F)`"*) exists as `r_get_verified` and
+  `r_get_contained`, but the interpreter's `p.get` never calls them. A `! {Load, Read}` program wrote a file through a
+  Verified plugin's `! {Write}` export taken as `! {}`. `check`, `authority` and a package's DL1009 ceiling all passed.
+  A pure function read a file. The run's grant still bounded the write.
+- **RW 4.96.** A program can load only Verified plugins.
+- **RW 6.71.** `plugin verify` counts private functions as exports.
+
+**Corrected in the reports:** five figures and two citations (the audit's §19.4; the review's §19). No recommendation
+moved, except that RW 4.95 is now first among the fixes.
+
+**Web:**
+- Wasmtime 48.0.8, the pin, carries the fixes for every advisory found: RUSTSEC-2026-0379 (critical, aarch64) and
+  RUSTSEC-2026-0378, both fixed in 48.0.7, and GHSA-6fr9-xmw9-5352, fixed in 48.0.8.
+- OpenShell v0.1.7 is still the newest; Zerolang v0.3.4 likewise.
+- MoonBit was added as a comparator.
+
+**Not done:** the fixes. RW 4.95's touches the checker, the runtime and DIR, so it needs its own witnessed change.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+

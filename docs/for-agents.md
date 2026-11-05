@@ -438,6 +438,13 @@ sends — an effect only; there is no futures runtime and no `await`), and `Actu
 physical device). A module may declare more with `effect Name`; those are user effects and are
 reported by name.
 
+**Until `REMAINING_WORK.md` RW 4.95 is fixed, annotate a plugin's export with its real type.**
+`let f: fn(…) -> T ! {…} = p.get("name")?` is not checked against the export at run time. An export taken at a
+narrower row runs anyway, and then your function's row, `authority`'s `effects` and a package's ceiling under-report
+what the program does; the run's grants still bound it. Read the real signature with `delulu plugin inspect
+<file.dpx> --json` (`exports`) and copy it. `authority`'s `plugins:` section shows each loaded plugin's
+`grant.effects`. A program can load only **Verified** plugins today (RW 4.96).
+
 `Async` asks for no grant, so **no lease or grant can refuse an actor program**: a lease bounds what a run
 can reach, and spawning an actor reaches nothing outside the run. What bounds how much it computes, actors
 included, is the run's budget, `--limits mem=N,cpu=S,wall=S` (D-V2-189). `delulu authority` lists `Async`
