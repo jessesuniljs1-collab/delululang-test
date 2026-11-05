@@ -1007,6 +1007,19 @@ program. Nothing in this pass changes the architecture, the CLI-first verdict, o
 
 ---
 
+## 20. Third follow-up, 2026-11-05: the hidden-complexity audit
+
+Answered in [`DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`](DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md). That audit looked for the costs an AI pays to finish a task, on the same binary as §19. Old claim,
+then new observation:
+
+| Old claim (this report) | New observation | Effect |
+|---|---|---|
+| §1 action 2's list of soundness work | Unchanged; RW 4.95 re-run, still holds | Still first |
+| `delulu lsp` as the agent's warm loop (§7) | It is package-blind: false DL0301 on the shipped greeter (RW 6.72) | The warm loop is right for loose files only until it is fixed |
+| `run` outcome shapes (C16, RW 6.60) | Four shapes: a budget stop leaves standard output empty; a signal leaves no report | RW 6.60 amended |
+| MCP "works" (C18, RW 6.62) | Works, but cannot be cancelled and holds the next request (RW 6.74); one call returned 3.4 MB | RW 6.62 amended, 6.74 new |
+| — | `build --target wasm` writes an unrunnable `.dwx` for `fn main()` (RW 3.28); DL0905 becomes SIGABRT under `ulimit -v` (RW 3.29); grants refused after earlier effects (RW 6.73) | New rows |
+
 ## Appendix A. Programs written for this session (complete sources)
 
 Codex's 35 Appendix A files were re-extracted byte-exact (SHA-256 match) and used as written. My own:

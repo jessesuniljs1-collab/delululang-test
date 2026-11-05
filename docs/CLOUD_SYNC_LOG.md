@@ -7917,3 +7917,48 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. RW 4.93, 4.94, 5.7 and 6.67 (DIR and review surfaces), then 6.68, 6.69 and 6.71.
   3. As before: the owner's answers; the answer contracts; RW 7.28; RW 3.26; the language basics; the launch only on his
      word.
+
+### 2026-11-05 — the same Claude Code cloud session: the hidden-complexity audit (RW 3.28, 3.29, 6.72–6.74)
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5. **No sub-agents.**
+- Branch: `claude/dazzling-goodall-iaapyw`, at `master` `35f1a2d` (PR #126's fast-forward), then this commit. A pull
+  request into `master` carries it. The owner, this session: *"u can merge, No need to wait for my approval"*. It
+  lands on a green run of its own head, by fast-forward. The PR records how.
+- **Why:** the owner's prompt
+  `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`, added here byte for byte. It
+  asks for hidden human-centric complexity and avoidable costs on an AI's task path, measured and double-verified.
+  Also: *"Check CI run in master and current branch and make fixes"*.
+- **CI read:** `master` push run `41990062363` and PR run `41988110890`, both on `35f1a2d`: success. **No red job, so
+  no CI fix was needed.**
+- **What changed** (documents and the map only; no `.rs`, test, configuration, manifest, workflow, editor or entrenched
+  file):
+  - A `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`;
+  - A `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`;
+  - A `docs/assistant-memory/a-fast-path-must-see-what-the-slow-path-sees.md`;
+  - M `docs/REMAINING_WORK.md`: rows 3.28, 3.29, 6.72, 6.73 and 6.74 new; 3.26, 6.60, 6.62 and 6.69 amended; a header
+    note;
+  - M `docs/for-agents.md`: the LSP's package caveat; the `DELULU_HOME` row corrected (theme, locale and catalogs come
+    from `$HOME/.delulu`); a budget stop's empty stdout; zero tests exit 0; MCP does not honour cancellation;
+  - M `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md` §20 and
+    `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md` §20: dated amendments;
+  - M `HANDOFF.md` §11.2: *"A fast path must see what the slow path sees"*;
+  - M `docs/AI_ONBOARDING.md` §10, `docs/REPOSITORY_STRUCTURE.md` (`docs/prompt/`, `docs/review/`),
+    `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`, this file and `docs/survey/*`;
+  - deleted, renamed: nothing.
+- **Verified:**
+  - every new row witnessed on the binary named in it, with a control where one applies;
+  - RW 4.95 and 6.69 re-run;
+  - every cited source line re-read;
+  - after the last edit:
+    - survey build: 1627 nodes, 19439 edges, 0 errors, 6 warnings (the six standing ones);
+    - survey check: ok;
+    - doctor --check: ok, 28 checks passed;
+    - the nine document-gate targets: 64 passed, 0 failed;
+    - delulu-survey's suite: 74 passed, 0 failed.
+- **For the laptop's memory:** `HANDOFF.md` §11.2's new lesson and the memory note above.
+- **Open / next, in order:**
+  1. **RW 4.95:** R-Get at `p.get`, unchanged (it still holds), with RW 4.96.
+  2. **RW 6.72 with 6.69:** the package-blind fast paths (one cause); then RW 3.28, 3.29, 6.73 and 6.74, each red
+     first. The audit's §7 gives each its proof and stop condition.
+  3. RW 4.93, 4.94, 5.7 and 6.67, then 6.68 and 6.71.
+  4. As before: the owner's answers (the audit's §9 adds five); the answer contracts; RW 7.28; RW 3.26 and 3.27 (the
+     audit's P2); the language basics; the launch only on his word.

@@ -329,10 +329,22 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     `! {Load, Read}` program wrote a file through a `! {Write}` export. `check`, `authority` and a package's DL1009
     ceiling all passed. The grant still bounded the write;
   - it also found RW 4.96 (programs load only Verified plugins) and RW 6.71 (`plugin verify` miscounts exports).
+- **The hidden-complexity audit (2026-11-05)**, the same cloud session, no sub-agents, in `docs/review/`:
+  - it followed an AI's whole task path, from discovery to outcome, on the same binary;
+  - it disproved several suspected costs: pure tasks open no keys, plugins or audit files; nothing waits on a prompt
+    without a terminal; an incremental query engine is not needed; MCP's process per call is cheap;
+  - it found five new rows, each witnessed:
+    - RW 6.72: the LSP is package-blind (false DL0301 on the shipped greeter);
+    - RW 6.73: grants are refused after earlier effects;
+    - RW 3.28: an unrunnable `.dwx` for `fn main()`;
+    - RW 3.29: DL0905 becomes SIGABRT under an address-space cap;
+    - RW 6.74: MCP ignores cancellation;
+  - it amended RW 3.26, 6.60, 6.62 and 6.69. RW 4.95 still holds.
 - **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
   - the owner's answers (the language basics, and the reviews' decisions above);
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
   - **RW 4.95 first** (enforce R-Get at `p.get`; its two witnesses red first), with RW 4.96;
+  - then the package-blind fast paths, RW 6.72 with 6.69 (one cause), and RW 3.28, 3.29, 6.73 and 6.74 (the audit's §7 order);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);

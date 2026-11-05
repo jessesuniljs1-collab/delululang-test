@@ -11928,3 +11928,64 @@ moved, except that RW 4.95 is now first among the fixes.
 
 The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
 
+## 2026-11-05 — a Claude Code cloud session: the hidden-complexity audit of an AI's whole task path
+
+**Why.** The owner's prompt `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`
+(placed byte for byte) asked where human-centric assumptions and avoidable costs hide in what an AI does to finish a
+task, and for every hypothesis to be tested, falsified where it was wrong, and double-verified. He also asked: *"Check
+CI run in master and current branch and make fixes"*.
+
+**CI.** `master`'s push run `41990062363` and the branch's PR run `41988110890` (both on `35f1a2d`) were read: success.
+There was nothing to fix.
+
+**How.**
+- No sub-agents.
+- Every probe ran on the release build of `0670e0b` with its commit injected (SHA-256 `751c6458…`). `master` carries
+  that code unchanged. A no-Python build of the same tree was the comparison.
+- Seven experiments, each with medians, p10/p90 and peak memory, all in scratch:
+  - fresh process against the warm LSP and MCP;
+  - a 13-module package;
+  - a complete CSV utility with every outcome;
+  - the engines;
+  - authority probes;
+  - edge conditions;
+  - MCP under stress.
+
+**Found (each witnessed, then recorded):**
+- **RW 6.72:** the LSP checks each file alone, giving false DL0301 on the shipped greeter.
+- **RW 6.73:** grants are refused at first use, after earlier effects.
+- **RW 3.28:** `build --target wasm` exits 0 on a `fn main()` the host can never call.
+- **RW 3.29:** under `ulimit -v`, DL0905 becomes SIGABRT with no report.
+- **RW 6.74:** MCP ignores `notifications/cancelled`, and a long call holds up the next.
+
+**Amended:**
+- RW 3.26: 1.35 ms per command; `LD_BIND_NOW` is not the cause.
+- RW 6.60: four stdout shapes; a budget stop prints nothing.
+- RW 6.62: a 5 ms poll; a 3.4 MB reply.
+- RW 6.69: also refuses correct edits.
+- RW 4.95 still holds.
+
+**Disproved:**
+- pure tasks touching keys, plugins or audit files;
+- a prompt blocking a non-terminal agent;
+- the need for an incremental query engine (0.21 ms per warm change; 31 ms for a 1,482-line package);
+- MCP's process per call being its main cost.
+
+**Web:**
+- MCP `2026-07-28`: stateless, `server/discover`, cancellation SHOULD stop work;
+- Wasmtime's `deserialize` trust rules;
+- Salsa 0.28.5, not used directly in rustc;
+- Deno's hash-keyed check cache.
+
+**Changed:**
+- the audit, `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`;
+- §20 amendments in both earlier reviews;
+- `docs/for-agents.md`: the LSP's package caveat; `DELULU_HOME` does not isolate theme, locale or catalogs; a budget
+  stop's empty stdout; zero tests exit 0; MCP has no cancel;
+- REMAINING_WORK;
+- HANDOFF §11.2 (*a fast path must see what the slow path sees*), with a memory note;
+- AI_ONBOARDING §10, REPOSITORY_STRUCTURE, CLOUD_SYNC_LOG, `docs/survey/*`.
+
+**Not done:** the fixes. Each is a separately witnessed change; the audit's §7 orders them.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

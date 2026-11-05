@@ -874,6 +874,25 @@ Nothing in §§3–12 of the prompt was found unaddressed. These stay open, and 
 
 ---
 
+## 20. Amendment, 2026-11-05: what the hidden-complexity audit changed here
+
+The owner's next prompt (`docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`) was
+answered by [`DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`](DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md). It used the same binary as this audit (SHA-256 `751c6458…`). Nothing above is rewritten. This
+section records what it re-measured or corrected:
+
+- **§10.2's "MCP 5.8 ms per call"** (and §19.2's figure) is mostly a 5 ms polling sleep in `run_self` (`mcp.rs`
+  line 400). A check the CLI does in 24.4 ms answers in 26.0–26.3 ms over MCP. RW 6.62 is amended.
+- **The warm path this audit recommended** (`delulu lsp`, 0.21 ms a change on this binary) **is package-blind**. It
+  checks each open file alone (`lsp.rs` line 204), so the shipped greeter's entry module shows two false DL0301
+  errors. That is RW 6.72; the "one service layer, shared by the CLI, MCP and LSP" (§13) should start with package resolution.
+- **libpython** (RW 3.26): 1.35 ms a command on 100 interleaved runs; `LD_BIND_NOW=1` changes nothing.
+- **New rows from that audit:**
+  - RW 3.28: an unrunnable `.dwx` for a `main` without `Root`;
+  - RW 3.29: DL0905 becomes SIGABRT on an address-space-capped host;
+  - RW 6.73: grants refused late, after earlier effects;
+  - RW 6.74: MCP ignores cancellation.
+- **RW 4.95 re-run:** it still holds.
+
 ## Appendix A. Reproducibility
 
 All paths below were in the session scratch, which a cloud container discards; the sources are reproduced here so the

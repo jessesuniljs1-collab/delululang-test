@@ -828,6 +828,12 @@ wins, and you should update the memory to match.
   wrote a file through a `! {Write}` export, and `check`, `authority` and DL1009 all passed. The unit tests and the
   laundering suite each assumed the other covered the program path. For every security rule, find its callers
   (`grep -rn 'fn_name('`) and keep one CLI witness that drives it the way a program does.
+- **A fast path must see what the slow path sees** (the hidden-complexity audit, 2026-11-05; RW 6.72, 6.69, 3.28).
+  The warm language server, the checked `edit` and the WASM build each reuse a component built for a narrower case: one
+  file, one `main` shape. The server publishes false DL0301 errors on the shipped greeter, which `check <package>`
+  passes. `edit --if-checks` both writes a `Net` widening and refuses a correct edit. `build --target wasm` exits 0 on
+  a `fn main()` its own host can never call. When a path is offered as the fast or machine way to do what another
+  command does, keep one witness that compares the two on a package and on every `main` shape the checker accepts.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

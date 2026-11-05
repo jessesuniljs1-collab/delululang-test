@@ -44,6 +44,10 @@ Four rules that will save you time:
    If you are running a long edit→check loop, `delulu lsp` pays the process cost once and every
    check after that is the sub-millisecond part.
 
+   **Except inside a multi-module package (until `docs/REMAINING_WORK.md` row 6.72 is closed):** the server checks each
+   open file alone, so a module that uses an import shows false `DL0301 unknown name` errors (the shipped
+   `examples/greeter/src/main.delulu` does). For a package, `delulu check <package-dir> --json` is the answer to trust.
+
 5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
    the same compiler, so its answers cannot drift from `delulu check --json`. Four of them are worth
    knowing about specifically:
@@ -196,6 +200,8 @@ Every `--json` command emits one object:
   **One exception today:** a run you stop with a signal (SIGTERM, SIGINT) exits 143 or 130 and
   writes no report (`docs/REMAINING_WORK.md` row 6.68), so read a missing report after a kill as
   "stopped from outside", not as a crash of the program.
+  A run stopped by its **budget** (`--limits`) exits 1 with **nothing** on standard output, even under `--json`;
+  the report's `outcome.stopped_by` says which budget (row 6.60). Read the report, not standard output, for the outcome.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
   diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
   parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of
@@ -507,6 +513,9 @@ fs_read = ["./fixtures"]
 Inside a package, bare `delulu test` targets the package; outside one it refuses rather than guess a
 directory.
 
+**Zero tests is exit 0.** A file or package with no `test` block passes with `summary.passed: 0` and
+`failed: 0`; read `passed` if "no test ran" must not count as success.
+
 ## [agents.sandbox] Running code you did not write
 
 ```
@@ -619,6 +628,10 @@ with `-` is refused, so nothing can be passed through as an option. A command th
 `summary.errors` in the answer — and a refused argument is `isError: true` with the reason. To run a
 program, use the CLI: granting authority stays a person's decision.
 
+**It does not honour `notifications/cancelled` yet** (`docs/REMAINING_WORK.md` row 6.74): it answers one request at a
+time, a cancelled call still answers, and a request sent behind a long call waits for it. Set your own timeout and
+restart the server rather than counting on a cancel. A command's whole output comes back in one reply (row 6.62).
+
 ## [agents.registry] Registry
 
 ```
@@ -654,7 +667,7 @@ collect the results and print them in an order the program decides.
 | Variable | Effect |
 |---|---|
 | `DELULU_NO_FIRST_RUN=1` | Suppress the first-run picker and welcome. **Set this in CI.** |
-| `DELULU_HOME` | State directory (keys, credentials, locales). Isolate it per job. |
+| `DELULU_HOME` | State directory (keys, credentials). Isolate it per job. **It does not hold the human-facing settings:** the theme, the locale choice and installed locale catalogs are read from `$HOME/.delulu` (or `DELULU_THEME_FILE`, `DELULU_CONFIG_FILE`, `DELULU_LOCALES_DIR`), so set `HOME` per job too if those must not leak in. They change human text only; JSON never changes. |
 | `DELULU_COLOR=never` / `NO_COLOR` | No ANSI. `--json` is never colored regardless. |
 | `DELULU_BROKER` | `embedded` or `daemon`. |
 | `DELULU_MORPH_PATH` | Where to find surface morphs, searched after `./morphs`. |
