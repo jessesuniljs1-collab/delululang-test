@@ -11825,3 +11825,69 @@ recorded unfreeze. No `D-V2-nn` was taken, and the review's §13 owner decisions
 
 **Changed.** Documents only. The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors. The Survey and
 `doctor` readings are in `docs/CLOUD_SYNC_LOG.md`'s 2026-11-05 cloud entry.
+
+## 2026-11-05 — a Claude Code cloud session: the AI-first compiler and execution-pipeline audit
+
+**Why.** The owner's prompt `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Prompt.md` asked for
+three things:
+- which stages of the program-to-execution pipeline exist mainly for human programmers;
+- whether an AI-first path could replace, optimise or remove them;
+- a documentation PR, merged only on green checks and an independent review.
+
+During the session he added: *"I allow u to suggest any changes that is against current constitution.md, license or
+any other .md file rules and regulations."*
+
+**What was run.** All of it ran on a provenance build of `master` `0670e0b` (`DELULU_BUILD_COMMIT` injected, SHA-256
+`751c6458…`), on Linux x86-64:
+- **A scratch stage harness** linking the crates by path. It timed, in-process: lex, parse, resolve, check, DIR
+  serialize/decode/verify, WASM codegen, Cranelift, Winch and Pulley compiles, precompile and deserialize, and the
+  interpreter and WASM runs. The programs ran from 2 to 16,002 lines.
+- **Fresh-process timings,** 21 runs each, with real peak memory, against CPython and `rustc -O`.
+- **Functional probes:** the agent loop, packages, plugins, budgets, simulations, delegation with a mid-run revocation,
+  and cancellation by signal.
+- **Two Sonnet 5.5 sub-agents,** whose model was read from their own system prompts: one for primary-source research
+  and one for adversarial code reading. Every consequential claim was re-run by the head chef.
+
+**Found** (`REMAINING_WORK.md`):
+- DIR node-id collisions pass `dir::verify` where the same text is DL1604 (4.93);
+- DIR names skip DL0107 (4.94);
+- the DIR fuzz target never runs `verify` (5.7);
+- `why` reads DIR without verifying it (6.67);
+- a run stopped by a signal writes no report (6.68);
+- `edit` is blind to packages (6.69);
+- morph skins are read from the working directory, unpinned (6.70);
+- `libpython` costs 1.1–2.0 ms on every command (3.26);
+- the Verified shipped-WASM cache is dead in production (3.27);
+- RW 6.58's cause is a panic on a broken pipe.
+
+Every earlier finding re-tested was still open. No code has changed since `0670e0b`.
+
+**Measured** (the report's §10):
+- **Parsing:** 17% of the front end at 16,002 lines.
+- **DIR:** 28× the size of the text, and 1.9× slower to verify than the whole text front end.
+- **Cranelift:** 1.6–652 ms per WASM run, where a precompiled module loads in 35 µs–5.7 ms.
+- **Winch:** documented as incompatible with the epoch interruption the limits engine uses.
+- **Pulley:** 11× slower than Cranelift.
+- **A 5M-iteration loop:** interpreter 910 ms, WASM 34 ms, CPython 246 ms, Rust 10 ms.
+
+**Recommended, not decided:**
+- text canonical, with package-aware, content-addressed node edits;
+- one service layer;
+- `--engine auto`;
+- an authenticated, version-bound precompiled cache, off by default;
+- Python out of the main binary.
+
+Rejected: AI-emitted machine code, a graph store, a native backend now, Winch for the limits engine, and WAMR on the
+desktop. The report's §14 holds the suggestions that cross current rules, B1–B8. No `D-V2-nn` was taken.
+
+**Changed.** Documents only:
+- the report;
+- §18 of the earlier review;
+- the prompt;
+- `REMAINING_WORK.md`, `for-agents.md` (the signal exception, the package caveat on `edit`) and `INSTALL.md` (the
+  portable build's start-up);
+- `HANDOFF.md` §11.1 and §11.2, and two assistant-memory notes;
+- the phase status, onboarding and the structure table;
+- the sync log and the map.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

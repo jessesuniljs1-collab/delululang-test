@@ -162,6 +162,9 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 ## 8. The memory, digested (the full files are in `docs/assistant-memory/`)
 
 **Owner instructions in force** (newest first):
+- **2026-11-05:** *"I allow u to suggest any changes that is against current constitution.md, license or any other .md
+  file rules and regulations"*. A recommendation may cross any rule; it names the rule and its cost, and stays a
+  suggestion. Entrenched files change only by the recorded route (`HANDOFF.md` §11.1).
 - **2026-11-02:**
   - *"Still cannot write complete program like in java or python"*: "ready" is judged against an ordinary program too,
     not only against gates (RW 1.15, 2.33–2.40). Whether the launch waits for the language basics is his choice,
@@ -310,9 +313,19 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     gives its order. The OpenShell part is `V2_OPENSHELL_STUDY.md` §8.
   - Its owner decisions (the review's §13) are open: hold 2.0 for that bar; adopt the OpenShell verdict; whether a
     scope refusal is catchable (RW 2.42); the exit-code mapping; and RFCs or a recorded unfreeze for the core changes.
+- **The AI-first compiler and execution-pipeline audit (2026-11-05)**, the same cloud session, in `docs/review/`:
+  - **Measured each pipeline stage.** Parsing is a sixth of the front end. The existing machine form (DIR) is 28×
+    larger than text. The real costs are Cranelift on every WASM run and `libpython` on every command.
+  - **Recommends:** text stays canonical, with package-aware node edits; `--engine auto`; an authenticated precompiled
+    cache, off by default; Python out of the main binary. It rejects AI-emitted machine code, a graph store and a new
+    backend.
+  - **Found seven defects,** each re-run before it was recorded: RW 4.93, 4.94, 5.7, 6.67–6.70, the first three in the
+    DIR path. The cause of RW 6.58 was found too.
+  - Its §14 holds suggestions that cross current rules, under the owner's permission above. None was acted on.
 - **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
   - the owner's answers (the language basics, and the reviews' decisions above);
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
+  - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);
   - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;

@@ -74,6 +74,11 @@ cargo install --path crates/delulu --no-default-features --features net
 alone builds a delulu with neither Python nor a network client, in which every `http.get` answers
 `Err(Refused)`; `delulu doctor` says which one you have, on its `network client` line.
 
+The portable configuration also starts faster, because it does not load `libpython` at start-up. On
+Linux x86-64 on 2026-11-05, `delulu --version` took a median of 2.2–2.9 ms against 3.4–4.8 ms for the
+Python-capable build of the same source. A loop of many short commands, such as an agent's checks, notices the
+difference (`docs/REMAINING_WORK.md` row 3.26).
+
 ## 3. Not available: `cargo install delulu` from crates.io
 
 This is a decision, not an oversight, and it is unlikely to change.

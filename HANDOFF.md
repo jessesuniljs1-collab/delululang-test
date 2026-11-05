@@ -762,6 +762,12 @@ wins, and you should update the memory to match.
   `D:\nelan\DeluluLang-agent-transcripts\` (local only: a transcript holds reasoning), and pushes a filtered snapshot
   to `autosave/dogfood` (no keys, tokens, owner code or test secret; never merged; no CI). Write every brief to a file
   at launch, and tell each agent to write findings to disk the moment they are confirmed.
+- **The owner may be told to change any rule** (owner, 2026-11-05, during the AI-first pipeline audit: *"I allow u to
+  suggest any changes that is against current constitution.md, license or any other .md file rules and regulations.
+  Do full research based prompt .md file I attached earlier, No restrictions"*). A recommendation may cross the
+  Constitution, the licence or any document's rule; it names the rule it crosses and its cost. It is a suggestion, not
+  an edit: entrenched files still change only by the recorded route (`AGENTS.md`), and the prompt's own limits stay
+  (that audit's: no code, test or configuration change). The suggestions that audit made are its report's §14.
 
 ### 11.2 Working rules the project has paid for
 
@@ -799,6 +805,22 @@ wins, and you should update the memory to match.
   host decided; they do not show that nothing left. The review put a logging HTTPS server behind the egress client and a
   frame-logging tee in front of the device process. The server saw exactly the granted requests, and the device saw only
   the in-envelope commands, none from a tampered driver. Where a refusal is the claim, read what the other side received.
+
+- **Measure each stage before proposing to remove it** (the AI-first pipeline audit, 2026-11-05). "Skip the parser
+  for AI authors" sounded like a saving. In-process timing showed lexing and parsing to be 17% of the front end at
+  16,002 lines, and the existing machine form (DIR) 28× larger than the text and slower to verify than the whole text
+  front end. The real costs were elsewhere: Cranelift's compile on every WASM run, and 1.1–2.0 ms of `libpython` on
+  every command. Time each stage separately, in a scratch harness that links the crates by path
+  (`docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md` Appendix A.2), before an architecture
+  recommendation names one.
+- **Attack the second input as hard as the first** (same audit, RW 4.93, 4.94, 6.67). Two review passes probed text
+  input hard and never attacked DIR, the checked program as data. A Sonnet 5.5 sub-agent then found three things:
+  - colliding node ids let a DIR pass `dir::verify` where its text is DL1604;
+  - a DIR name skips the lexer's DL0107;
+  - `why` reads a DIR without verifying it.
+
+  Every rule the text path applies (lexer bans, parser caps, unique ids, package checks) must be re-applied to every
+  other way a program can arrive, and every review surface must read through the same verifier as the loader.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

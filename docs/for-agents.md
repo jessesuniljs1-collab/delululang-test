@@ -193,6 +193,9 @@ Every `--json` command emits one object:
   the `egress` record —
   goes to the file named by `--report-out <path>`, written by the runtime in every outcome and
   refused inside any `fs.write` grant; never trust a `sandbox` object read from a program's stdout.
+  **One exception today:** a run you stop with a signal (SIGTERM, SIGINT) exits 143 or 130 and
+  writes no report (`docs/REMAINING_WORK.md` row 6.68), so read a missing report after a kill as
+  "stopped from outside", not as a crash of the program.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
   diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
   parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of
@@ -298,6 +301,10 @@ delulu edit <file> --expect-hash <blake3> --node <Atlas id> --with '<one item>' 
   `required_grants`, `foreign_calls`), and `edit.authority.widened` lists what the edit **adds**.
   A non-empty `widened` is the same signal as `authority_widening: true` on a repair: a person
   decides it, not a loop. It is `null` when either side does not check.
+- **In a package, `edit` checks the edited file alone.** A module that imports another never checks
+  alone, so `before` and `widened` are `null` for every edit of it, and `--if-checks` can write an
+  edit the package refuses. After editing a package, run `delulu check <package-dir> --json` and
+  `delulu authority <package-dir> --json` yourself (`docs/REMAINING_WORK.md` row 6.69).
 - A file stored in a surface morph is refused: offsets and Atlas ids refer to the canonical text.
 - The answer is described by `delulu schema edit` (a closed `anyOf` of the applied and the refused
   shape).

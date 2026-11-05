@@ -40,6 +40,12 @@ records were updated from this report (`docs/CLOUD_SYNC_LOG.md`, 2026-11-05 entr
 regenerated, so §2.4's "the map does not list this report" no longer holds. No decision was recorded: §13's owner
 decisions are still his.
 
+**Follow-up (2026-11-05, same session): the AI-first compiler and execution-pipeline audit.** The owner commissioned
+it with `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Prompt.md`. Its report is
+[`DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md`](DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md).
+§18 below records what it changed here: each old claim, the new observation, its evidence, and the effect on the
+recommendation. Nothing above §18 was rewritten for it.
+
 Evidence labels, used throughout: **OBSERVED HERE** (run in this cloud session, output retained) · **CURRENT SOURCE**
 (read in `0670e0b`) · **CURRENT CI** (a named run whose completed result and SHA I read) · **CODEX REPORTED** (from the
 Codex review only) · **HISTORICAL DOC/DECISION** · **OFFICIAL EXTERNAL** (vendor page or repository, fetched
@@ -941,6 +947,35 @@ proof, safe autonomy, flight or vehicle readiness, or universal portability.
 capability at run time. Every probe here confirmed that core. What blocks AI users is not missing infrastructure. It is that
 an agent cannot yet write the ordinary program that would use it, and cannot always tell from the tool's answer whether
 the task succeeded.
+
+---
+
+## 18. Follow-up, 2026-11-05: what the AI-first pipeline audit changed in this report
+
+The audit ran on a provenance build of the same commit (`master` `0670e0b`, `DELULU_BUILD_COMMIT` injected, SHA-256
+`751c6458…`). It added an in-process stage harness, fresh-process timings with real peak memory, and a Sonnet 5.5
+security sub-agent whose findings I re-ran before using them. Its report is the companion
+[`DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md`](DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md).
+**The owner, during it:** *"I allow u to suggest any changes that is against current constitution.md, license or any
+other .md file rules and regulations."* The suggestions that cross a rule are its §14; none was acted on.
+
+| Old claim (where) | New observation | Evidence | Effect on the recommendation |
+|---|---|---|---|
+| A small check costs *"about 7 ms per fresh process (p95 9 ms)"*, so a daemon buys nothing (§7, §10.1) | 4.3 ms median on the provenance build. Of that, 3.35 ms is the process floor, of which **1.1–2.0 ms is loading `libpython`**; the front end is 85 µs | the audit's §10.1–§10.2 | Unchanged (no daemon). Added: move Python out of the main binary (RW 3.26) |
+| *"Machine-first authoring is a candidate"*; the service layer and validated edits are the machine API (§1, §7, §16.1) | The existing machine form, DIR, is **28× larger than text** at 16,002 lines and **1.9× slower to verify** than the whole text front end; parsing is 17% of the front end | the audit's §10.1 | Stronger: keep text as the interchange, and put structure in the edits (`edit --node`), not in a second representation |
+| The WASM engine is *"faster on loops, slower to start"* (C25, §10.1) | Cranelift's compile is the start-up cost: 1.6 ms (hello) to 652 ms (16,002 lines). A precompiled module loads in 35 µs to 5.7 ms. Winch is incompatible with the limits engine's epoch interruption on Wasmtime 48; Pulley runs 11× slower | the audit's §5, §10.1, §11 | New: `--engine auto` (RW 3.3) and an authenticated precompiled cache (the audit's §5.4), never author-supplied native code |
+| F13: a closed pipe gives exit 2, *"depends on how much output is still unwritten"* (§6.3) | The cause is a **panic** (*"failed printing to stdout: Broken pipe"*). It fired for a successful program with large output (3 runs of 3), not for a small error output (exit 1 into a pipe and into a file, one run each) | the audit's §10.3 | RW 6.58 now names the cause |
+| The hostile probes found *"no containment or authority escape"* (§6.4) | Still true for effects and authority. But a DIR whose node ids collide **passes `dir::verify` while the same program as text is DL1604**: a reference-capability hole on the Verified-plugin path | the audit's §12; RW 4.93 | Fix before DIR is widened; I had not attacked DIR in either pass |
+| `why` and `authority` were read as review surfaces that cannot vouch for refused bytes (C65, ruling D59, cited at §6.3) | `why` on a `.dpx` reads unverified DIR facts (RW 6.67); a DIR name bypasses DL0107 and reaches the terminal raw (RW 4.94) | the audit's §12 | Fix (§15 priority 1 there) |
+| The agent loop `check → fix → edit → authority → run` *"works"* (§6.5) | In a **package**, `edit` checks the file alone: `widened: null` and `--if-checks` passed an edit the package refused (DL1009) | the audit's §12; RW 6.69 | The loop works for single files only; the docs now say so (`for-agents.md`) |
+| A11: *"External cancellation of a run was not tested"* (§15.1) | Tested: SIGTERM and SIGINT end the run (exit 143, 130) and leave no guest, but **write no run report** | the audit's §12; RW 6.68 | A11 stays partial; A22 now covers signals |
+| *"No component has evidence of zero value"* (§12) | One exception: the Verified plugin's shipped-WASM cache path is called only by tests (RW 3.27) | CURRENT SOURCE | Remove it, or wire it behind the cache rules |
+| The WASM parity gap: three constructs (§6.2, third pass) | Unchanged on the provenance build | the audit's §10.3 | — |
+| OpenShell: **OPTIONAL BACKEND** (§8.6) | v0.1.7 is still the newest release; no gateway-free library mode was found | the audit's §11 (SUB-AGENT) | Unchanged |
+
+**The decisions in §1 stand.** The audit narrows how to make DeluluLang faster and safer for agents. It is the engine,
+the process and the edit path that change, never the checker. Its first priority is the seven defects its §12 lists, before
+any machine-first input is widened.
 
 ---
 
