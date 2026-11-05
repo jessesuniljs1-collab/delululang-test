@@ -193,6 +193,9 @@ Every `--json` command emits one object:
   the `egress` record —
   goes to the file named by `--report-out <path>`, written by the runtime in every outcome and
   refused inside any `fs.write` grant; never trust a `sandbox` object read from a program's stdout.
+  **One exception today:** a run you stop with a signal (SIGTERM, SIGINT) exits 143 or 130 and
+  writes no report (`docs/REMAINING_WORK.md` row 6.68), so read a missing report after a kill as
+  "stopped from outside", not as a crash of the program.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
   diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
   parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of
@@ -298,6 +301,10 @@ delulu edit <file> --expect-hash <blake3> --node <Atlas id> --with '<one item>' 
   `required_grants`, `foreign_calls`), and `edit.authority.widened` lists what the edit **adds**.
   A non-empty `widened` is the same signal as `authority_widening: true` on a repair: a person
   decides it, not a loop. It is `null` when either side does not check.
+- **In a package, `edit` checks the edited file alone.** A module that imports another never checks
+  alone, so `before` and `widened` are `null` for every edit of it, and `--if-checks` can write an
+  edit the package refuses. After editing a package, run `delulu check <package-dir> --json` and
+  `delulu authority <package-dir> --json` yourself (`docs/REMAINING_WORK.md` row 6.69).
 - A file stored in a surface morph is refused: offsets and Atlas ids refer to the canonical text.
 - The answer is described by `delulu schema edit` (a closed `anyOf` of the applied and the refused
   shape).
@@ -415,7 +422,10 @@ nothing: whoever holds the authority decides, and `grants diff` tells them what 
 --json` files the proposal with the broker as that node's request — `filed.id` is its `pp_` id. Nothing is granted until an
 operator answers: `grants approve pp_ID --parent g_THEIRS` delegates, under THEIR node, your node's authority joined with
 the ask, and hands you a new lease token — re-run under it; your old node is never widened, and approving under your own
-node is refused (DL0802). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
+node is refused (DL0802). An approval is a boundary only when the approving node is out of your reach. On one OS
+account, a process that can reach the broker can name any node's id, its parent's included, and approve a proposal under
+it. A separate OS account for the operator (`docs/DEPLOYMENT.md` Tier 2), or strict anchored roots with the anchor key held
+elsewhere, makes the answer the operator's (the same-user residual, DISC-1; `docs/REMAINING_WORK.md` row 4.91). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
 `approved.node`) or `rejected` (with the operator's `reason` — propose narrower, or not at all). An operator may approve
 within a standing node automatically (`grants auto-approve --parent g_B`, D-V2-126): what your approval would mint must be
 within that node, and guarded authority (declassify, native code) is never approved that way — a person approves it.

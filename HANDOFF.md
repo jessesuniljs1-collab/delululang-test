@@ -762,6 +762,12 @@ wins, and you should update the memory to match.
   `D:\nelan\DeluluLang-agent-transcripts\` (local only: a transcript holds reasoning), and pushes a filtered snapshot
   to `autosave/dogfood` (no keys, tokens, owner code or test secret; never merged; no CI). Write every brief to a file
   at launch, and tell each agent to write findings to disk the moment they are confirmed.
+- **The owner may be told to change any rule** (owner, 2026-11-05, during the AI-first pipeline audit: *"I allow u to
+  suggest any changes that is against current constitution.md, license or any other .md file rules and regulations.
+  Do full research based prompt .md file I attached earlier, No restrictions"*). A recommendation may cross the
+  Constitution, the licence or any document's rule; it names the rule it crosses and its cost. It is a suggestion, not
+  an edit: entrenched files still change only by the recorded route (`AGENTS.md`), and the prompt's own limits stay
+  (that audit's: no code, test or configuration change). The suggestions that audit made are its report's §14.
 
 ### 11.2 Working rules the project has paid for
 
@@ -790,6 +796,31 @@ wins, and you should update the memory to match.
 - **What the owner runs is not what CI runs.** On 2026-11-02 the laptop's `delulu` on `PATH` and its VS Code extension
   were three months old while every test used a fresh build (RW 6.53). At a laptop session's start, compare
   `which delulu` and its date with the tree's; reinstall only on the owner's word.
+- **A minimal failing case names its shape, not its class** (Claude's cloud review, 2026-11-05). The review wrote that
+  *"any user-defined higher-order function"* failed on WASM from one witness, a non-generic `fn apply(f: fn(Int) -> Int,
+  x: Int)`. Before that became a work row, the generic `fn apply[T, U]` was tried, and it compiles
+  (`named_fn_parity.rs` had said so all along). RW 3.25 names the shape that fails. Try the neighbouring spellings
+  (generic, wrapped in a block, a lambda) before a claim says *any*.
+- **Witness a denial on the far side too** (Claude's cloud review, 2026-11-05). An exit code and a DL code say what the
+  host decided; they do not show that nothing left. The review put a logging HTTPS server behind the egress client and a
+  frame-logging tee in front of the device process. The server saw exactly the granted requests, and the device saw only
+  the in-envelope commands, none from a tampered driver. Where a refusal is the claim, read what the other side received.
+
+- **Measure each stage before proposing to remove it** (the AI-first pipeline audit, 2026-11-05). "Skip the parser
+  for AI authors" sounded like a saving. In-process timing showed lexing and parsing to be 17% of the front end at
+  16,002 lines, and the existing machine form (DIR) 28× larger than the text and slower to verify than the whole text
+  front end. The real costs were elsewhere: Cranelift's compile on every WASM run, and 1.1–2.0 ms of `libpython` on
+  every command. Time each stage separately, in a scratch harness that links the crates by path
+  (`docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md` Appendix A.2), before an architecture
+  recommendation names one.
+- **Attack the second input as hard as the first** (same audit, RW 4.93, 4.94, 6.67). Two review passes probed text
+  input hard and never attacked DIR, the checked program as data. A Sonnet 5.5 sub-agent then found three things:
+  - colliding node ids let a DIR pass `dir::verify` where its text is DL1604;
+  - a DIR name skips the lexer's DL0107;
+  - `why` reads a DIR without verifying it.
+
+  Every rule the text path applies (lexer bans, parser caps, unique ids, package checks) must be re-applied to every
+  other way a program can arrive, and every review surface must read through the same verifier as the loader.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 
@@ -2098,6 +2129,20 @@ Added in V2 (2026-09-17 → 2026-09-28):
   could be missed; `prim::HTTP_REQUESTS` is now the one every place reads.
 
 - **A new `.delulu` file is also the formatter's corpus** (FMT-CTOR-1, 2026-11-01). `delulu-syntax`'s `laws_hold_over_the_repository_corpus` formats every `.delulu` file in the repository and requires the same program back. A change that adds a conformance program runs `cargo test -p delulu-syntax --lib`, not only the checker's and the CLI's tests. #112 skipped it, and its first run was red on Ubuntu and macOS. The law had found a real defect: `fmt` printed `foo()` as `foo`, a binding.
+- **What reads `delulu`'s output can change the exit code you record** (Claude's cloud review, 2026-11-05, RW 6.58).
+  Into `| head -2`, a run with a static error exited 2 instead of 1, because `delulu` treats the closed pipe as a usage
+  error. And in bash, `echo "$(basename "$f") exit=$?"` prints `basename`'s status, not the run's. Capture `$?` on
+  the line right after the command, and never measure through a pipe.
+- **Two spellings cost a check cycle each when writing DeluluLang** (RW 2.43). `}` and `else` belong on one line
+  (`} else {`): `else` on the next line is DL0202. `cap` is reserved (DL0106), so do not use it as a parameter name.
+- **A local HTTPS server can see what the egress client sends, on Linux** (Claude's cloud review, 2026-11-05). A
+  self-signed leaf is refused. A test CA plus a leaf it signed, with `SSL_CERT_FILE` pointing at the CA, made a
+  release build trust the server, so it logged every request that reached it. That is how §11.2's far-side witness
+  was read. Windows and macOS read their own trust stores, so on those this is not established (compare §11.5's
+  D-V2-208 lesson, which found the platform store refusing a test certificate).
+- **Inside `crates/delulu`, the Survey's module-level `impact` is the same number for every module** (106 for each of
+  13 queried, 2026-11-04; RW 6.63). Plan a removal there from `cargo` references and the tests that name the module,
+  never from that number. The crate-level numbers are sound.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
