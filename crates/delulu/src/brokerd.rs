@@ -688,14 +688,14 @@ mod hearing_tests {
 }
 
 /// P8-04 step 5: fire every dead-man past its deadline — each revokes its node as itself, the cause in the
-/// record — then free the chain, as a request does (RW 4.48), and say so in `broker.log`.
+/// record — then free the chain, as a request does (RW 4.48), and say so in `broker.log`. Returns the nodes it fired.
 fn fire_deadmen(
     broker: &mut Broker,
     state_dir: &Path,
     audit_lock: &RefCell<ChainLock>,
     failed: &Rc<Cell<bool>>,
     as_of: std::time::Instant,
-) {
+) -> Vec<String> {
     failed.set(false);
     let fired = broker.fire_expired_deadmen(as_of);
     if !fired.is_empty() {
@@ -710,6 +710,133 @@ fn fire_deadmen(
         eprintln!(
             "delulu broker: WARNING (RW 4.58) — a dead-man's revocation is in force but its audit record could not be written"
         );
+    }
+    fired.iter().map(|f| f.node.as_str().to_string()).collect()
+}
+
+/// A reader's own delay worth naming: the shortest dead-man period, so a delay that could have cost a beat its dead-man is
+/// in `broker.log` (RW 4.98).
+const READER_NOTED: std::time::Duration = delulu_broker::deadman::MIN_PERIOD;
+
+/// RW 4.98's timing, from a reader: how long a request took to be stamped after its connection was accepted (its read),
+/// and how long its reader then held it before the handler could see it (its hand-over). A beat is judged by its stamp, and
+/// a stamped beat the handler cannot yet see does not count, so each delay is named once it reaches [`READER_NOTED`].
+/// Neither covers a connection's wait to be accepted: the monitor's own beat times say when it sent.
+fn reader_delays(kind: &str, read: std::time::Duration, hand_over: std::time::Duration) -> Option<String> {
+    let (read_ms, hand_ms) = (read.as_millis(), hand_over.as_millis());
+    match (read >= READER_NOTED, hand_over >= READER_NOTED) {
+        (false, false) => None,
+        (true, false) => Some(format!(
+            "delulu broker: a {kind} request was stamped {read_ms} ms after its connection was accepted (RW 4.98)"
+        )),
+        (false, true) => Some(format!(
+            "delulu broker: a {kind} request's reader held it {hand_ms} ms between stamping it and handing it to the handler (RW 4.98)"
+        )),
+        (true, true) => Some(format!(
+            "delulu broker: a {kind} request was stamped {read_ms} ms after its connection was accepted, and its reader held it \
+             {hand_ms} ms more before handing it to the handler (RW 4.98)"
+        )),
+    }
+}
+
+/// One beat as the serve loop saw it: stamped by its reader, taken by the loop, answered, and refused (with its code) or
+/// kept.
+#[derive(Clone, Debug)]
+struct BeatTime {
+    stamped: std::time::Instant,
+    taken: std::time::Instant,
+    answered: std::time::Instant,
+    refused: Option<String>,
+}
+
+/// How many of a node's beats a firing names.
+const BEATS_NAMED: usize = 4;
+
+/// RW 4.98's timing, from the serve loop: each dead-man node's last [`BEATS_NAMED`] beats. Named in `broker.log` when its
+/// dead-man fires, with what was waiting then, and forgotten when it fires, is armed again or is disarmed.
+#[derive(Default)]
+struct BeatTimes(std::collections::HashMap<String, std::collections::VecDeque<BeatTime>>);
+
+impl BeatTimes {
+    fn record(&mut self, node: &str, beat: BeatTime) {
+        let beats = self.0.entry(node.to_string()).or_default();
+        if beats.len() == BEATS_NAMED {
+            beats.pop_front();
+        }
+        beats.push_back(beat);
+    }
+
+    fn forget(&mut self, node: &str) {
+        self.0.remove(node);
+    }
+
+    /// The line naming a fired dead-man's last beats, every time in milliseconds since `serving` (when the loop began), and
+    /// what was waiting at `judged`: requests already handed over to the loop, and connections a reader still held — being
+    /// read, or read and not yet handed over. Forgets the node's beats.
+    fn judged(&mut self, node: &str, serving: std::time::Instant, judged: std::time::Instant, handed_over: usize, readers: usize) -> String {
+        let at = |t: std::time::Instant| t.saturating_duration_since(serving).as_millis();
+        let beats = self.0.remove(node).unwrap_or_default();
+        let named = if beats.is_empty() {
+            "none since it was armed".to_string()
+        } else {
+            beats
+                .iter()
+                .map(|b| {
+                    let outcome = b.refused.as_deref().map_or_else(|| "kept".to_string(), |code| format!("refused {code}"));
+                    format!("stamped +{}, taken +{}, answered +{} ({outcome})", at(b.stamped), at(b.taken), at(b.answered))
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        format!(
+            "delulu broker: the dead-man on `{}` was judged at +{} ms; its last beats, in ms since this daemon began serving: \
+             {named}; then {handed_over} request(s) were handed over and waiting, and {readers} connection(s) were being read \
+             or handed over (RW 4.98)",
+            delulu_diag::terminal_line(node),
+            at(judged)
+        )
+    }
+}
+
+/// RW 4.98's witness: hold a beat between its reader's stamp and its hand-over to the serve loop — the window in which a
+/// beat that arrived in time is not yet counted. For one state directory at a time, so tests running beside it are not
+/// held. Test builds only: the daemon a user runs has no such hook.
+#[cfg(test)]
+mod handover_seam {
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::mpsc::{Receiver, Sender};
+    use std::sync::{Mutex, OnceLock};
+
+    struct Hold {
+        stamped: Sender<()>,
+        release: Receiver<()>,
+    }
+
+    fn holds() -> &'static Mutex<HashMap<PathBuf, Hold>> {
+        static HOLDS: OnceLock<Mutex<HashMap<PathBuf, Hold>>> = OnceLock::new();
+        HOLDS.get_or_init(Default::default)
+    }
+
+    /// Hold the next beat the daemon on `state` reads: the first channel hears when its reader has stamped it; sending on
+    /// the second lets the reader hand it over.
+    pub(super) fn hold_next_beat(state: &Path) -> (Receiver<()>, Sender<()>) {
+        let (stamped_tx, stamped_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        holds().lock().unwrap().insert(state.to_path_buf(), Hold { stamped: stamped_tx, release: release_rx });
+        (stamped_rx, release_tx)
+    }
+
+    /// Called by a reader after it stamped `req` and before it hands it over.
+    pub(super) fn before_hand_over(state: &Path, req: &super::Request) {
+        if !matches!(req.body, super::ReqBody::Beat { .. }) {
+            return;
+        }
+        let hold = holds().lock().unwrap().remove(state);
+        if let Some(hold) = hold {
+            let _ = hold.stamped.send(());
+            let _ = hold.release.recv();
+        }
     }
 }
 
@@ -1808,9 +1935,13 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     let (whole, requests) = std::sync::mpsc::sync_channel::<Option<Whole>>(MAX_READERS);
     let (revocation, revocations) = std::sync::mpsc::sync_channel::<Whole>(MAX_READERS);
     let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // The readers reading or handing over a request: the loop names how many when a dead-man fires (RW 4.98).
+    let reading = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    #[cfg(test)]
+    let seam_dir = state_dir.to_path_buf();
     {
         let stopping = stopping.clone();
-        let reading = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let reading = reading.clone();
         let clock = clock.clone();
         std::thread::spawn(move || loop {
             let mut conn = match listener.accept() {
@@ -1824,6 +1955,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                     continue;
                 }
             };
+            let accepted = std::time::Instant::now();
             if stopping.load(std::sync::atomic::Ordering::SeqCst) {
                 return;
             }
@@ -1833,6 +1965,8 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                 continue;
             }
             let (whole, revocation, reading, clock) = (whole.clone(), revocation.clone(), reading.clone(), clock.clone());
+            #[cfg(test)]
+            let seam_dir = seam_dir.clone();
             std::thread::spawn(move || {
                 let read: Result<Request, String> = (|| {
                     // If a bound cannot be set, drop the connection rather than risk an unbounded read.
@@ -1847,12 +1981,28 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                     // ESTOP-QUEUE-1: into its own line, then a wake for a handler waiting on an empty one. A full line
                     // needs no wake — the handler is not waiting, and reads the revocation before its next request.
                     Ok(req) if req.body.is_revocation() => {
-                        if revocation.send((conn, req, std::time::Instant::now(), clock.now())).is_ok() {
+                        let kind = req.body.kind();
+                        let stamped = std::time::Instant::now();
+                        if revocation.send((conn, req, stamped, clock.now())).is_ok() {
                             let _ = whole.try_send(None);
+                        }
+                        if let Some(line) = reader_delays(kind, stamped.saturating_duration_since(accepted), stamped.elapsed()) {
+                            eprintln!("{line}");
                         }
                     }
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
-                    Ok(req) => drop(whole.send(Some((conn, req, std::time::Instant::now(), clock.now())))),
+                    Ok(req) => {
+                        let kind = req.body.kind();
+                        let stamped_request = (conn, req, std::time::Instant::now(), clock.now());
+                        let stamped = stamped_request.2;
+                        // RW 4.98's witness holds a beat here, stamped and not yet handed over. Test builds only.
+                        #[cfg(test)]
+                        handover_seam::before_hand_over(&seam_dir, &stamped_request.1);
+                        drop(whole.send(Some(stamped_request)));
+                        if let Some(line) = reader_delays(kind, stamped.saturating_duration_since(accepted), stamped.elapsed()) {
+                            eprintln!("{line}");
+                        }
+                    }
                     Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
                 }
                 // Counted until its request is handed over, not only while it reads: a reader waiting on a busy
@@ -1867,6 +2017,10 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // ESTOP-QUEUE-1: the requests already handed over, in the order they were, so that the dead-men are judged as of the
     // earliest of them while a revocation goes first. Bounded as the line is: what does not fit waits in `requests`.
     let mut waiting: std::collections::VecDeque<Whole> = std::collections::VecDeque::new();
+    // RW 4.98's timing: each dead-man's last beats as this loop saw them, named in `broker.log` when it fires, on one time
+    // line — milliseconds since the daemon began serving.
+    let mut beat_times = BeatTimes::default();
+    let serving = std::time::Instant::now();
     loop {
         // P8-04 step 5 (D-V2-106): wait for the next whole request — or, while a dead-man is armed, no longer
         // than its deadline. Dead-men are fired BEFORE the next request is handled, whichever woke the loop, so
@@ -1903,10 +2057,35 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // arrived after its deadline, so a stream of requests cannot hold one off. All on the hearing clock: a daemon woken
         // from a stop judges nothing by the time it was stopped (DEADMAN-DEAF-1).
         let as_of = urgent.iter().chain(waiting.iter()).map(|(_, _, _, heard)| *heard).min().unwrap_or_else(|| clock.now());
-        fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of);
+        for node in fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of) {
+            let handed_over = waiting.len() + usize::from(urgent.is_some());
+            let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
+            eprintln!("{}", beat_times.judged(&node, serving, taken, handed_over, readers));
+        }
         let Some((mut conn, req, arrived, heard)) = urgent.or_else(|| waiting.pop_front()) else { continue };
         let kind = req.body.kind();
+        let beat_of = match &req.body {
+            ReqBody::Beat { node, .. } => Some(node.clone()),
+            ReqBody::DisarmDeadman { node, .. } | ReqBody::ArmDeadman { node, .. } => {
+                beat_times.forget(node);
+                None
+            }
+            _ => None,
+        };
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, heard, &clock);
+        if let Some(node) = beat_of {
+            let (refused, fired_it) = match &resp {
+                Response::Ok => (None, false),
+                Response::Error { code, message, .. } => (Some(code.clone()), message.contains("fired: no beat within")),
+                other => (Some(format!("{other:?}")), false),
+            };
+            beat_times.record(&node, BeatTime { stamped: arrived, taken, answered: std::time::Instant::now(), refused });
+            // A beat that came after its deadline fired the dead-man itself: name the beats before it as well.
+            if fired_it {
+                let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
+                eprintln!("{}", beat_times.judged(&node, serving, taken, waiting.len(), readers));
+            }
+        }
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
@@ -3101,6 +3280,107 @@ mod tests {
         assert!(matches!(beat, Ok(Response::Ok)), "the beat kept it: {beat:?}");
         assert!(matches!(&after, Ok(Response::NodeState { state, .. }) if state == "live"), "{after:?}");
         let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **RW 4.98 (the witness, red until it is fixed): a beat stamped in time and handed over late is not counted.** A
+    /// reader stamps a beat and only then hands it to the serve loop, and the loop judges each dead-man as of the earliest
+    /// request already handed over, or as of now. Here the beat is stamped at once, well inside a 2 s period, and its reader
+    /// is held (by the test-only seam) until past the deadline: the loop, seeing nothing handed over, judges as of now and
+    /// fires, and the beat that arrived in time is answered with the revocation (DL1403). A runner that starves one reader
+    /// thread does the same without a seam — RW 7.25's flaky monitor test may be that, or not (its cause is not known).
+    /// Ignored so that CI stays green until RW 4.98 is fixed; run it with `--ignored` to see it red.
+    #[test]
+    #[ignore = "RW 4.98: red until a beat stamped in time counts at the dead-man's judgment"]
+    fn a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man() {
+        let state = temp_state("handover");
+        let handle = start_daemon(&state);
+        let watched = issue(&state);
+        let key = arm(&state, &watched, 2000);
+        let armed = std::time::Instant::now();
+        let (stamped, release) = handover_seam::hold_next_beat(&state);
+        let beat = {
+            let (state, node) = (state.clone(), watched.clone());
+            std::thread::spawn(move || request(&state, ReqBody::Beat { node, key }))
+        };
+        stamped.recv_timeout(std::time::Duration::from_secs(10)).expect("the beat's reader stamped it");
+        let stamped_at = armed.elapsed();
+        // Held past the deadline, then a little more: an unbeaten dead-man fires within its period and a little more.
+        std::thread::sleep((armed + std::time::Duration::from_millis(2800)).saturating_duration_since(std::time::Instant::now()));
+        let fired_while_held = deadman_revocations(&state, &watched);
+        release.send(()).expect("the reader still waits");
+        let beat = beat.join().unwrap();
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        assert!(
+            stamped_at < std::time::Duration::from_millis(1500),
+            "inconclusive, not red: the beat was stamped {stamped_at:?} into its 2 s period, too near the deadline to judge"
+        );
+        assert!(
+            fired_while_held.is_empty(),
+            "the dead-man fired while a beat its reader had stamped {stamped_at:?} into a 2 s period waited to be handed over: \
+             {fired_while_held:?}\nthe beat: {beat:?}"
+        );
+        assert!(matches!(beat, Ok(Response::Ok)), "a beat stamped in time keeps its dead-man: {beat:?}");
+    }
+
+    /// The witness's control: the seam holds only a beat, only on its own daemon's state directory, and only once — a
+    /// beat it does not hold is answered at once, and the dead-man it beat stays live.
+    #[test]
+    fn the_hand_over_seam_holds_one_beat_of_one_daemon() {
+        let (state, other) = (temp_state("seamone"), temp_state("seamother"));
+        let handle = start_daemon(&state);
+        let watched = issue(&state);
+        let key = arm(&state, &watched, 2000);
+        // A hold registered for another daemon's state directory holds nothing here.
+        let (other_stamped, _other_release) = handover_seam::hold_next_beat(&other);
+        let beat = request(&state, ReqBody::Beat { node: watched.clone(), key: key.clone() });
+        assert!(matches!(beat, Ok(Response::Ok)), "{beat:?}");
+        assert!(other_stamped.try_recv().is_err(), "another daemon's hold caught this daemon's beat");
+        // A held beat, released at once, is kept; the next is not held.
+        let (stamped, release) = handover_seam::hold_next_beat(&state);
+        let held = {
+            let (state, node, key) = (state.clone(), watched.clone(), key.clone());
+            std::thread::spawn(move || request(&state, ReqBody::Beat { node, key }))
+        };
+        stamped.recv_timeout(std::time::Duration::from_secs(10)).expect("held");
+        release.send(()).unwrap();
+        assert!(matches!(held.join().unwrap(), Ok(Response::Ok)));
+        assert!(matches!(request(&state, ReqBody::Beat { node: watched.clone(), key }), Ok(Response::Ok)));
+        assert!(deadman_revocations(&state, &watched).is_empty());
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.98's timing lines: a reader's delays are named from the shortest dead-man period up, each on its own or both
+    /// together, and a firing names the node's last beats on one time line with what was waiting.
+    #[test]
+    fn a_readers_delays_and_a_firings_beats_are_named() {
+        let ms = std::time::Duration::from_millis;
+        assert_eq!(reader_delays("Beat", ms(99), ms(99)), None, "below the shortest period: ordinary scheduling");
+        let read = reader_delays("Beat", ms(100), ms(0)).unwrap();
+        assert!(read.contains("stamped 100 ms after its connection was accepted") && read.contains("RW 4.98"), "{read}");
+        let held = reader_delays("Beat", ms(0), ms(640)).unwrap();
+        assert!(held.contains("held it 640 ms between stamping it and handing it to the handler"), "{held}");
+        let both = reader_delays("Revoke", ms(150), ms(300)).unwrap();
+        assert!(both.contains("a Revoke request was stamped 150 ms") && both.contains("held it 300 ms more"), "{both}");
+
+        let serving = std::time::Instant::now();
+        let at = |n: u64| serving + ms(n);
+        let mut times = BeatTimes::default();
+        assert!(times.judged("g_none", serving, at(500), 0, 0).contains("none since it was armed"));
+        for i in 0..6u64 {
+            times.record("g_m", BeatTime { stamped: at(10 * i), taken: at(10 * i + 1), answered: at(10 * i + 2), refused: None });
+        }
+        times.record("g_m", BeatTime { stamped: at(70), taken: at(900), answered: at(901), refused: Some("DL1403".into()) });
+        let line = times.judged("g_m", serving, at(905), 2, 3);
+        assert!(line.contains("judged at +905 ms"), "{line}");
+        assert!(!line.contains("stamped +20,") && line.contains("stamped +30, taken +31, answered +32 (kept)"), "the last four only: {line}");
+        assert!(line.contains("stamped +70, taken +900, answered +901 (refused DL1403)"), "{line}");
+        assert!(line.contains("2 request(s) were handed over and waiting, and 3 connection(s)"), "{line}");
+        assert!(times.judged("g_m", serving, at(906), 0, 0).contains("none since it was armed"), "a firing forgets its beats");
+        times.record("g_x", BeatTime { stamped: at(1), taken: at(1), answered: at(1), refused: None });
+        times.forget("g_x");
+        assert!(times.judged("g_x", serving, at(2), 0, 0).contains("none since it was armed"), "an arming or disarming forgets");
     }
 
     /// RW 4.58's rest: a device command the run's envelope refused is recorded as a `deny` citing the `allow` it overrides

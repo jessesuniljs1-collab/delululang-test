@@ -46,6 +46,55 @@ use serde_json::json;
 
 use crate::broker_ipc::{ReqBody, Response};
 
+/// One beat this monitor sent (RW 4.98's timing): when, in time since its dead-man was armed; how long its answer took;
+/// who sent it (the watch, or the beater that beats while the watch waits on the broker); and whether it was kept.
+#[derive(Clone, Debug)]
+struct SentBeat {
+    sent: Duration,
+    answered_in: Duration,
+    by_beater: bool,
+    kept: bool,
+}
+
+/// How many of its last beats a monitor names when its watch ends on an error.
+const SENT_BEATS_NAMED: usize = 6;
+
+/// The line a monitor whose watch ended on an error writes about its own progress: its last beats and its longest turn of
+/// the watch (one pass of its loop, its sleep left out). With the daemon's own line about the same dead-man, it says
+/// whether the beats were sent and when — the half of RW 7.25's evidence a daemon cannot see.
+fn progress_line(beats: &VecDeque<SentBeat>, longest_turn: Duration) -> String {
+    let named = if beats.is_empty() {
+        "none".to_string()
+    } else {
+        beats
+            .iter()
+            .map(|b| {
+                format!(
+                    "sent +{} by the {} (answered in {} ms, {})",
+                    b.sent.as_millis(),
+                    if b.by_beater { "beater" } else { "watch" },
+                    b.answered_in.as_millis(),
+                    if b.kept { "kept" } else { "refused or unanswered" }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    format!(
+        "monitor: its last beats, in ms since its dead-man was armed: {named}; its longest turn of the watch took {} ms (RW 4.98)",
+        longest_turn.as_millis()
+    )
+}
+
+/// Note a sent beat, keeping the last [`SENT_BEATS_NAMED`].
+fn note_beat(beats: &std::sync::Mutex<VecDeque<SentBeat>>, beat: SentBeat) {
+    let mut beats = beats.lock().unwrap_or_else(|p| p.into_inner());
+    if beats.len() == SENT_BEATS_NAMED {
+        beats.pop_front();
+    }
+    beats.push_back(beat);
+}
+
 /// One declarative rule.
 #[derive(Clone, Debug, PartialEq)]
 enum Rule {
@@ -311,6 +360,9 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // P8-04 step 5: the dead-man, armed BEFORE the watch begins, so a monitor killed the moment it says
     // "watching" is already one whose death quarantines.
     let mut deadman: Option<(String, u64, Duration)> = None; // (key, armed_seq, period)
+    // RW 4.98's timing: when the dead-man was armed, and the beats sent since (the watch's and the beater's).
+    let mut armed_at: Option<Instant> = None;
+    let sent_beats = std::sync::Arc::new(std::sync::Mutex::new(VecDeque::<SentBeat>::new()));
     if o.on_death == OnDeath::Quarantine {
         // D-V2-106 item 2: the key that lets a beat through is about to live in this process's memory, so no
         // other process of the same user may read it — non-dumpable, as a serving host is (HOST-DUMPABLE-1):
@@ -334,6 +386,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
                     delulu_diag::terminal_line(&o.node)
                 );
                 deadman = Some((key, seq, period));
+                armed_at = Some(Instant::now());
             }
             Ok(Response::Error { code, message, .. }) => {
                 eprintln!("error[{code}]: the broker refused the monitor's dead-man: {}", delulu_diag::terminal_line(&message));
@@ -347,7 +400,18 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // the node was revoked by someone else (the operator's way to end a watch).
     let beat = || -> Result<(), (bool, String)> {
         let Some((key, _, period)) = &deadman else { return Ok(()) };
-        match ask(ReqBody::Beat { node: o.node.clone(), key: key.clone() }) {
+        let sent = Instant::now();
+        let answer = ask(ReqBody::Beat { node: o.node.clone(), key: key.clone() });
+        note_beat(
+            &sent_beats,
+            SentBeat {
+                sent: sent.saturating_duration_since(armed_at.unwrap_or(sent)),
+                answered_in: sent.elapsed(),
+                by_beater: false,
+                kept: matches!(answer, Ok(Response::Ok)),
+            },
+        );
+        match answer {
             Ok(Response::Ok) => Ok(()),
             // Revoked or expired: whose doing it was is read from the chain, below — never from the words.
             Ok(Response::Error { code, .. }) if code == "DL1403" || code == "DL1402" => {
@@ -380,13 +444,23 @@ fn cmd_watch(rest: &[String]) -> i32 {
     let beater_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let beater = deadman.as_ref().map(|(key, _, period)| {
         let (state_dir, node, key) = (state_dir.clone(), o.node.clone(), key.clone());
-        let (waiting, stop) = (waiting.clone(), beater_stop.clone());
+        let (waiting, stop, sent_beats) = (waiting.clone(), beater_stop.clone(), sent_beats.clone());
         let every = (*period / 4).max(Duration::from_millis(10));
         std::thread::spawn(move || {
             while !stop.load(std::sync::atomic::Ordering::SeqCst) {
                 std::thread::sleep(every);
                 if waiting.load(std::sync::atomic::Ordering::SeqCst) && !stop.load(std::sync::atomic::Ordering::SeqCst) {
-                    let _ = crate::brokerd::request(&state_dir, ReqBody::Beat { node: node.clone(), key: key.clone() });
+                    let sent = Instant::now();
+                    let answer = crate::brokerd::request(&state_dir, ReqBody::Beat { node: node.clone(), key: key.clone() });
+                    note_beat(
+                        &sent_beats,
+                        SentBeat {
+                            sent: sent.saturating_duration_since(armed_at.unwrap_or(sent)),
+                            answered_in: sent.elapsed(),
+                            by_beater: true,
+                            kept: matches!(answer, Ok(Response::Ok)),
+                        },
+                    );
                 }
             }
         })
@@ -409,7 +483,11 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // Whether the watch ended as it was asked to (`--for`, or its node revoked by someone else) — a clean
     // end, after which the dead-man is disarmed or already gone — rather than on an error.
     let mut clean_end = false;
+    // RW 4.98's timing: the longest pass of the loop below, its sleep left out — the watch's own progress.
+    let mut longest_turn = Duration::ZERO;
+    let mut turn: Instant;
     loop {
+        turn = Instant::now();
         let state = match state_of_node() {
             Ok(s) => s,
             Err(e) => {
@@ -607,12 +685,17 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 break;
             }
         }
+        longest_turn = longest_turn.max(turn.elapsed());
         std::thread::sleep(o.poll);
     }
+    longest_turn = longest_turn.max(turn.elapsed());
     eprintln!("monitor: ended — {}", delulu_diag::terminal_line(&ended));
     beater_stop.store(true, std::sync::atomic::Ordering::SeqCst);
     if let Some(b) = beater {
         let _ = b.join();
+    }
+    if deadman.is_some() && !clean_end {
+        eprintln!("{}", progress_line(&sent_beats.lock().unwrap_or_else(|p| p.into_inner()), longest_turn));
     }
     // The dead-man: disarmed on a clean end while the node lives (its revocation already ended it otherwise);
     // left armed on an error — this monitor has stopped watching, and the operator asked for that to quarantine.
@@ -698,6 +781,25 @@ fn now_millis() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 4.98's timing, the monitor's half: it keeps its last beats in order, names who sent each and how it was
+    /// answered, and its longest turn.
+    #[test]
+    fn a_monitor_names_its_last_beats_and_its_longest_turn() {
+        let ms = Duration::from_millis;
+        assert!(progress_line(&VecDeque::new(), ms(3)).contains("last beats, in ms since its dead-man was armed: none"));
+        let beats = std::sync::Mutex::new(VecDeque::new());
+        for i in 0..8u64 {
+            note_beat(&beats, SentBeat { sent: ms(25 * i), answered_in: ms(2), by_beater: i == 6, kept: i != 7 });
+        }
+        let beats = beats.into_inner().unwrap();
+        assert_eq!(beats.len(), SENT_BEATS_NAMED, "the last six only");
+        let line = progress_line(&beats, ms(740));
+        assert!(!line.contains("sent +25 ") && line.contains("sent +50 by the watch (answered in 2 ms, kept)"), "{line}");
+        assert!(line.contains("sent +150 by the beater"), "{line}");
+        assert!(line.contains("sent +175 by the watch (answered in 2 ms, refused or unanswered)"), "{line}");
+        assert!(line.contains("its longest turn of the watch took 740 ms (RW 4.98)"), "{line}");
+    }
 
     /// D-V2-113: `special-use` fires on a special-use refusal by the egress client and on nothing else — not on its
     /// other refusals (a userinfo URL), not on an envelope's, not on an `allow`'s action, not on a record whose words
