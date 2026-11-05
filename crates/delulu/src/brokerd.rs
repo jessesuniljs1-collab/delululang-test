@@ -3289,21 +3289,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&state);
     }
 
-    /// **RW 4.98 (the witness, red until it is fixed): a beat stamped in time and handed over late is not counted.** A
-    /// reader stamps a beat and only then hands it to the serve loop, and the loop judges each dead-man as of the earliest
-    /// request already handed over, or as of now. Here the beat is stamped at once, well inside a 2 s period, and its reader
-    /// is held (by the test-only seam) until past the deadline: the loop, seeing nothing handed over, judges as of now and
-    /// fires, and the beat that arrived in time is answered with the revocation (DL1403). A runner that starves one reader
-    /// thread does the same without a seam — RW 7.25's flaky monitor test may be that, or not (its cause is not known).
-    /// Ignored so that CI stays green until RW 4.98 is fixed; run it with `--ignored` to see it red.
-    #[test]
-    #[ignore = "RW 4.98: red until a beat stamped in time counts at the dead-man's judgment"]
-    fn a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man() {
-        let state = temp_state("handover");
+    /// RW 4.98's shape, shared by its witness and its twin. A dead-man armed with a 2 s period is beaten once, about 1.5 s in:
+    /// a beat that extends it to about 3.5 s. Its reader is held (`hold`) or not past the first deadline, 2 s, and the chain is
+    /// read at 2.4 s — after that deadline, before the one the beat set. Returns when the beat was stamped, the dead-man's
+    /// revocations read at 2.4 s, and the beat's answer.
+    fn beat_late_in_its_period(
+        name: &str,
+        hold: bool,
+    ) -> (std::time::Duration, Vec<delulu_broker::audit::AuditRecord>, io::Result<Response>) {
+        let ms = std::time::Duration::from_millis;
+        let state = temp_state(name);
         let handle = start_daemon(&state);
         let watched = issue(&state);
         let key = arm(&state, &watched, 2000);
         let armed = std::time::Instant::now();
+        std::thread::sleep((armed + ms(1500)).saturating_duration_since(std::time::Instant::now()));
         let (stamped, release) = handover_seam::hold_next_beat(&state);
         let beat = {
             let (state, node) = (state.clone(), watched.clone());
@@ -3311,23 +3311,56 @@ mod tests {
         };
         stamped.recv_timeout(std::time::Duration::from_secs(10)).expect("the beat's reader stamped it");
         let stamped_at = armed.elapsed();
-        // Held past the deadline, then a little more: an unbeaten dead-man fires within its period and a little more.
-        std::thread::sleep((armed + std::time::Duration::from_millis(2800)).saturating_duration_since(std::time::Instant::now()));
-        let fired_while_held = deadman_revocations(&state, &watched);
-        release.send(()).expect("the reader still waits");
+        if !hold {
+            release.send(()).expect("the reader waits to be let go");
+        }
+        std::thread::sleep((armed + ms(2400)).saturating_duration_since(std::time::Instant::now()));
+        let fired = deadman_revocations(&state, &watched);
+        if hold {
+            release.send(()).expect("the reader still waits");
+        }
         let beat = beat.join().unwrap();
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
+        // The shape holds only if the beat was stamped after the first second and well before the first deadline.
         assert!(
-            stamped_at < std::time::Duration::from_millis(1500),
-            "inconclusive, not red: the beat was stamped {stamped_at:?} into its 2 s period, too near the deadline to judge"
+            (ms(1300)..ms(1900)).contains(&stamped_at),
+            "inconclusive, not red: the beat was stamped {stamped_at:?} into its 2 s period, outside 1.3 s to 1.9 s"
         );
+        (stamped_at, fired, beat)
+    }
+
+    /// **RW 4.98 (the witness, red until it is fixed): a beat stamped in time and handed over late is not counted.** A
+    /// reader stamps a beat and only then hands it to the serve loop, and the loop judges each dead-man as of the earliest
+    /// request already handed over, or as of now. The beat here is stamped about 1.5 s into a 2 s period, and its reader is
+    /// held (by the test-only seam) past the first deadline: the loop, seeing nothing handed over, judges as of now and
+    /// fires, and the beat that arrived in time is answered with the revocation (DL1403). Its twin below, the same beat
+    /// handed over at once, keeps the dead-man past that deadline — so the hold alone is the difference. A runner that
+    /// starves one reader thread does the same without a seam — RW 7.25's flaky monitor test may be that, or not (its cause
+    /// is not known). Ignored so that CI stays green until RW 4.98 is fixed; run it with `--ignored` to see it red.
+    #[test]
+    #[ignore = "RW 4.98: red until a beat stamped in time counts at the dead-man's judgment"]
+    fn a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man() {
+        let (stamped_at, fired_while_held, beat) = beat_late_in_its_period("handover", true);
         assert!(
             fired_while_held.is_empty(),
             "the dead-man fired while a beat its reader had stamped {stamped_at:?} into a 2 s period waited to be handed over: \
              {fired_while_held:?}\nthe beat: {beat:?}"
         );
         assert!(matches!(beat, Ok(Response::Ok)), "a beat stamped in time keeps its dead-man: {beat:?}");
+    }
+
+    /// **RW 4.98's twin, green today: the same beat, handed over at once, keeps its dead-man past the first deadline.** It
+    /// proves the witness asks only what a beat handed over in time already gets — so the witness can pass, and its red is
+    /// the hold's doing, not its timing's.
+    #[test]
+    fn a_beat_late_in_its_period_handed_over_at_once_keeps_its_dead_man_past_the_first_deadline() {
+        let (stamped_at, fired, beat) = beat_late_in_its_period("handtwin", false);
+        assert!(
+            fired.is_empty(),
+            "a beat stamped {stamped_at:?} in and handed over at once lost its dead-man: {fired:?}\n{beat:?}"
+        );
+        assert!(matches!(beat, Ok(Response::Ok)), "{beat:?}");
     }
 
     /// The witness's control: the seam holds only a beat, only on its own daemon's state directory, and only once — a

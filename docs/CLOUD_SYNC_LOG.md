@@ -8115,8 +8115,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **What changed:**
   - `crates/delulu/src/brokerd.rs`:
     - the reader's stamp-to-hand-over window behind a test-only seam (`handover_seam`, `#[cfg(test)]`);
-    - the witness `a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man`, red 10 of 10 and `#[ignore]`d until
-      the fix;
+    - the witness `a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man` (a beat stamped about 1.5 s into a
+      2 s period, held past the first deadline), red 10 of 10 and `#[ignore]`d until the fix;
+    - its twin `a_beat_late_in_its_period_handed_over_at_once_keeps_its_dead_man_past_the_first_deadline`, the same beat
+      handed over at once, green 6 of 6: the witness can pass. Its first form (0.7 ms in, read at 2.8 s) could not, and
+      was corrected before it landed;
     - its control `the_hand_over_seam_holds_one_beat_of_one_daemon`;
     - `broker.log` lines: a fired dead-man's last beats and what was waiting (`BeatTimes`), and a reader slow to stamp or
       hand over (`reader_delays`);

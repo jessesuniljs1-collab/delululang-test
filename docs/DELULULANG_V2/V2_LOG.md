@@ -12107,8 +12107,15 @@ witness and timing (this); then coordinating complete, authenticated beats with 
 in-process daemon the other dead-man tests use:
 - a test-only seam (`handover_seam`, `#[cfg(test)]`, so the daemon a user runs has none) holds a beat's reader between
   its stamp and its hand-over, for one state directory and once;
-- the beat is stamped about 0.7 ms into a 2 s period, and held until 2.8 s;
-- the serve loop, with nothing handed over, judges as of now: the dead-man fires, and the beat is answered DL1403.
+- the beat is stamped about 1.5 s into a 2 s period, so it extends the dead-man to about 3.5 s, and is held past the
+  first deadline; the chain is read at 2.4 s;
+- the serve loop, with nothing handed over, judges as of now: the dead-man fires, and the beat is answered DL1403;
+- its twin, the same beat handed over at once, keeps the dead-man past the first deadline (green 6 of 6), so the
+  witness can pass and only the hold reddens it.
+
+**The witness's first form was wrong, and was corrected before it landed.** It stamped the beat 0.7 ms in and read the
+chain at 2.8 s. A beat that early extends the dead-man only to about 2 s, so a correct daemon fires there too, and the
+witness could never have gone green. A witness needs a twin that passes: the same shape without the defect.
 
 It was red 10 of 10 at its dead-man assertion with `--ignored`. It lands `#[ignore]`d, its reason naming RW 4.98, so CI
 stays green until the fix. A guard makes a beat stamped too near the deadline read as inconclusive, never as red. Its
