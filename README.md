@@ -11,6 +11,12 @@
 > `PluginErr`. What is still refused, and says so: a grant carrying `Declassify` or `ForeignCall` (their
 > enforcement lives in custody, which a plugin's own interpreter cannot share), and the `Contained`
 > class on Windows. See `delulu explain E-PLUGIN`.
+>
+> **And one exception, found 2026-11-05 and still open — the most serious open finding:** a program can take a
+> plugin's export at a *narrower* effect row than the export's own. `p.get` does not yet compare the type the
+> program asks for with the export's (rule R-Get; [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 4.95, HIGH). Until it
+> is fixed, a function's row, `delulu authority` and a package's ceiling can understate what a program that loads a
+> plugin does. The run's grants still bound it, and the Guard still enforces them.
 
 DeluluLang (`.delulu`) is a programming language where every function, module, and plugin
 carries its **authority and effects in its type**, so the compiler can answer — mechanically —
@@ -175,8 +181,10 @@ delulu explain DL0501                # long-form docs for any diagnostic code
 delulu fmt <path>                    # one canonical style, zero options
 ```
 
-Add `--json` to any of them for the machine-readable envelope. `delulu --help` is the complete
-reference and is kept in sync with the code by a build gate.
+Add `--json` to any of them for the machine-readable envelope. (`run` is the exception: its standard
+output is the program's, and its envelope goes to the file `--report-out` names — see
+[`docs/for-agents.md`](docs/for-agents.md).) `delulu --help` is the complete reference and is kept in sync
+with the code by a build gate.
 
 ## In your editor
 
@@ -186,6 +194,11 @@ compiler's: same codes, same spans, same typed repairs as `delulu check --json`.
 Kate, Emacs and JetBrains need three lines of config; VS Code has a packaged extension in
 [`editors/vscode`](editors/vscode). It launches the `delulu` on your `PATH` unless the setting
 `delulu.serverPath` names another, so the editor is only as current as that binary.
+
+**One exception, open since 2026-11-05:** the server checks each open file on its own, so in a multi-module
+package a module that imports another shows false `DL0301 unknown name` errors that `delulu check <package>`
+does not (the shipped `examples/greeter` shows two; [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 6.72). Inside a
+package, trust `delulu check <package-dir>` until it is fixed.
 
 You get diagnostics, hover carrying the effect row, completion, signature help, definition,
 references, rename, document and workspace symbols, semantic tokens, inlay hints showing *inferred*
@@ -222,6 +235,7 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | Install → first program → real programs. Start here. |
 | [`docs/book/THE_DELULULANG_BOOK.md`](docs/book/THE_DELULULANG_BOOK.md) | The complete guide, 20 chapters. Read Ch. 6 if you review AI-written code. |
 | [`docs/for-agents.md`](docs/for-agents.md) | The one page an agent harness should pin. |
+| [`docs/review/`](docs/review/) | **Independent reviews by AI sessions** (2026-11-04/05): Codex's strategic review, and Claude Code's independent verification, AI-first compiler-pipeline audit and hidden-complexity audit — each with the evidence it ran. A finding there becomes work only as a `REMAINING_WORK.md` row re-run against the binary; the most serious open one is 4.95 (above). |
 | [`docs/QUESTIONS.md`](docs/QUESTIONS.md) | **Hard questions, answered with evidence** — can authority be bypassed, how it compares to a sandbox, what the maths does and does not prove, whether several agents can share one machine, and the things this project cannot claim. Start here if you are evaluating it. |
 | [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) | **Everything that is specified, described, or implied and is not built** — in one place, each row checked against the current binary rather than inherited from prose. What the microVM layer does not have yet, the mechanization that covers one fragment, the backend that does not exist, and more. Read it before planning work, or before believing a feature exists. |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | **What a deployment protects, and what you must do to get it.** Three tiers with the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is *not* protected, and why strict anchored-root mode is not yet the default. Read this before running anything you did not write. |
@@ -271,7 +285,7 @@ grants the ability to learn one chosen bit per call without a declassify capabil
 without declaring the effect. Mechanism and witness:
 [`docs/design/PROOF_CAMPAIGN.md`](docs/design/PROOF_CAMPAIGN.md) §IF-1.
 
-Five more things worth knowing before you evaluate it:
+Six more things worth knowing before you evaluate it:
 
 - **Performance is measured, never promised.** DeluluLang is **not competitive with C** on the measured
   workloads — whole processes, 8.9×–489.5× slower on the interpreter and 9.8×–15.7× on the WASM engine, which
@@ -293,6 +307,11 @@ Five more things worth knowing before you evaluate it:
   same host-side client. It does `GET`, `POST`, `PUT`, `PATCH` and `DELETE`, each
   judged by its method at every check (D-V2-183, D-V2-208), and a redirect never carries a method other than `GET`
   to another origin.
+- **Independent reviews (2026-11-04/05) found open defects, each re-run and recorded.** Besides the plugin row
+  above (4.95): the editor's fast path is package-blind (6.72); `run` refuses a missing grant only when the program
+  reaches it, after earlier effects (6.73); `build --target wasm` accepts a `main` its own host cannot call (3.28);
+  MCP cannot cancel a call (6.74). None is a containment escape. They are in [`docs/review/`](docs/review/) and
+  [`REMAINING_WORK.md`](docs/REMAINING_WORK.md).
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught by this, and nothing here claims
   otherwise.

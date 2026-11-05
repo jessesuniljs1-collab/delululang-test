@@ -49,7 +49,8 @@ Four rules that will save you time:
    `examples/greeter/src/main.delulu` does). For a package, `delulu check <package-dir> --json` is the answer to trust.
 
 5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
-   the same compiler, so its answers cannot drift from `delulu check --json`. Four of them are worth
+   the same compiler, so its answers cannot drift from `delulu check --json` on a loose file (inside a
+   package, see the exception above). Four of them are worth
    knowing about specifically:
 
    - `workspace/executeCommand` with `delulu.authority` returns the §10.5 authority report as JSON —

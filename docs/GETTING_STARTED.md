@@ -532,6 +532,9 @@ it. It is refused if two keywords share an alias (DL1710), if an alias is anothe
 DeluluLang ships **one** language server — `delulu lsp`, LSP 3.17 over stdio — and every editor
 consumes the same one. There are no editor-specific features by rule, so the diagnostics you see
 while typing are the compiler's own: same codes, same spans, same repairs as `delulu check --json`.
+**One exception, open:** the server checks each open file alone, so in a multi-module package a module that
+imports another shows false `DL0301 unknown name` errors; trust `delulu check <package-dir>` there
+(`docs/REMAINING_WORK.md` row 6.72).
 
 Any LSP-capable editor needs three lines:
 
