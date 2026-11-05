@@ -859,18 +859,55 @@ mod beat_times_seam {
     use std::path::{Path, PathBuf};
     use std::sync::{Mutex, OnceLock};
 
-    fn views() -> &'static Mutex<HashMap<PathBuf, super::BeatTimes>> {
-        static VIEWS: OnceLock<Mutex<HashMap<PathBuf, super::BeatTimes>>> = OnceLock::new();
+    /// Per state directory: the table after the loop's last recorded beat, and every node it ever kept.
+    type View = (super::BeatTimes, std::collections::BTreeSet<String>);
+
+    fn views() -> &'static Mutex<HashMap<PathBuf, View>> {
+        static VIEWS: OnceLock<Mutex<HashMap<PathBuf, View>>> = OnceLock::new();
         VIEWS.get_or_init(Default::default)
     }
 
     pub(super) fn observe(state: &Path, times: &super::BeatTimes) {
-        views().lock().unwrap().insert(state.to_path_buf(), times.clone());
+        let mut views = views().lock().unwrap();
+        let view = views.entry(state.to_path_buf()).or_default();
+        view.1.extend(times.0.keys().cloned());
+        view.0 = times.clone();
     }
 
-    /// The loop's table as it stood after its last recorded beat, if it recorded any.
-    pub(super) fn view(state: &Path) -> Option<super::BeatTimes> {
+    /// The loop's table as it stood after its last recorded beat, and every node it ever kept, if it recorded any.
+    pub(super) fn view(state: &Path) -> Option<View> {
         views().lock().unwrap().get(state).cloned()
+    }
+}
+
+/// The independent review's finding 3: delay the answer to the next beat, before it is written, for one state directory —
+/// so a test can tell a beat's write time from its handling time. Test builds only.
+#[cfg(test)]
+mod answer_seam {
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
+
+    fn holds() -> &'static Mutex<HashMap<PathBuf, Duration>> {
+        static HOLDS: OnceLock<Mutex<HashMap<PathBuf, Duration>>> = OnceLock::new();
+        HOLDS.get_or_init(Default::default)
+    }
+
+    /// Delay the answer to the next beat the daemon on `state` handles by `by`.
+    pub(super) fn hold_next_beat_answer(state: &Path, by: Duration) {
+        holds().lock().unwrap().insert(state.to_path_buf(), by);
+    }
+
+    /// Called by the serve loop before it writes an answer to a request of `kind`.
+    pub(super) fn before_write(state: &Path, kind: &str) {
+        if kind != "Beat" {
+            return;
+        }
+        let hold = holds().lock().unwrap().remove(state);
+        if let Some(by) = hold {
+            std::thread::sleep(by);
+        }
     }
 }
 
@@ -2186,6 +2223,9 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
+        // A test may hold a beat's answer here, so that a write timed before the write shows. Test builds only.
+        #[cfg(test)]
+        answer_seam::before_write(state_dir, kind);
         let written = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp);
         if let Err(e) = &written {
             match e.get_ref().and_then(|i| i.downcast_ref::<crate::broker_ipc::FrameTooLarge>()) {
@@ -3295,6 +3335,37 @@ mod tests {
         assert!(at < std::time::Duration::from_millis(1500), "it fired only {at:?} in, with wrong-key beats still coming");
     }
 
+    /// **The independent review's third finding: a beat's answer is timed when it is written, not when it was handled.**
+    /// The test-only seam holds the answer 300 ms between handling and writing it; what the loop keeps of the beat must
+    /// show that gap. A write time taken before the write would show none.
+    #[test]
+    fn a_beats_answer_is_timed_when_it_is_written() {
+        let state = temp_state("dmwrite");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let key = arm(&state, &node, 60_000);
+        answer_seam::hold_next_beat_answer(&state, std::time::Duration::from_millis(300));
+        assert!(matches!(request(&state, ReqBody::Beat { node: node.clone(), key }), Ok(Response::Ok)));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let view = loop {
+            match beat_times_seam::view(&state) {
+                Some(v) if v.0 .0.contains_key(&node) => break Some(v),
+                _ if std::time::Instant::now() > deadline => break None,
+                _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        };
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        let (table, _) = view.expect("the loop recorded the beat");
+        let beat = table.0[&node].back().expect("its beat").clone();
+        let written = *beat.written.as_ref().expect("the answer was written");
+        let gap = written.saturating_duration_since(beat.handled);
+        assert!(
+            gap >= std::time::Duration::from_millis(250),
+            "handled and written {gap:?} apart, where the answer was held 300 ms"
+        );
+    }
+
     /// **The independent review's first finding: beats naming no armed dead-man leave no timing behind.** The serve loop
     /// keeps each dead-man's last beats for `broker.log`, and kept them for every node a beat named, real or not: a peer that
     /// can reach the socket, with no key, grew that table by one node per beat for as long as the daemon ran. Here 300 beats
@@ -3315,17 +3386,18 @@ mod tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let view = loop {
             match beat_times_seam::view(&state) {
-                Some(v) if v.0.contains_key(&node) => break Some(v),
+                Some(v) if v.0 .0.contains_key(&node) => break Some(v),
                 _ if std::time::Instant::now() > deadline => break beat_times_seam::view(&state),
                 _ => std::thread::sleep(std::time::Duration::from_millis(10)),
             }
         };
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
-        let view = view.expect("the loop recorded the real beat");
-        let nodes: Vec<&String> = view.0.keys().collect();
-        assert_eq!(nodes, vec![&node], "the loop kept timing for {} node(s), not only the armed one", view.0.len());
-        let beat = view.0[&node].back().expect("its beat").clone();
+        let (table, ever) = view.expect("the loop recorded the real beat");
+        let nodes: Vec<&String> = table.0.keys().collect();
+        assert_eq!(nodes, vec![&node], "the loop kept timing for {} node(s), not only the armed one", table.0.len());
+        assert_eq!(ever.len(), 1, "the loop kept timing, for a while, for {} node(s) that have no dead-man", ever.len() - 1);
+        let beat = table.0[&node].back().expect("its beat").clone();
         let written = beat.written.as_ref().expect("the answer was written");
         assert!(*written >= beat.handled && beat.handled >= beat.taken, "handled, then written: {beat:?}");
     }

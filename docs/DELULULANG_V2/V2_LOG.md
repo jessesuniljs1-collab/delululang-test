@@ -12199,3 +12199,85 @@ they might have taken, and does not say they took it.
 - Survey and `doctor`: in the commit message.
 
 The counters: D-V2-209, M1085, 157 codes, 366 anchors.
+
+## 2026-11-05 — the laptop: the independent review of #131 and #132 — four findings confirmed and fixed (D-V2-209 amended)
+
+**Why.** The owner pasted an independent review of #131 (RW 4.98's witness and timing) and #132 (D-V2-209). It found
+four issues by reading the source and modelling them in memory; it ran nothing and changed nothing. Each was confirmed
+in the source here before it was fixed. The review also re-read the six CI results (14 jobs and 2 skipped each), and
+noted that the broker's slow Miri check has not yet run on `ab10583`.
+
+**The findings, and what was done:**
+1. **[P1] The loop's beat timing had no global bound.** It kept the last beats of every node a beat named, so beats
+   naming made-up nodes grew the table by one node each, with no key needed.
+   - Fix: only an armed dead-man's beats are kept, or the beat that fired one. The nodes no longer armed are dropped
+     whenever a new one is kept, and never more than 256 nodes are kept (`BEAT_NODES_KEPT`).
+   - Witness `beats_naming_no_armed_dead_man_leave_no_timing_behind`, through a test-only view of the loop's table
+     (`beat_times_seam`): red before, 301 nodes kept.
+   - Its first form read only the table's end state, which the pruning made look right, and mutant M1087 (keep every
+     node) survived it. The view now records every node the table ever held, and M1087 is red: *"kept timing, for a
+     while, for 300 node(s) that have no dead-man"*.
+2. **[P2] A beat of another protocol version kept a dead-man alive.** Readers noted a beat before the handler's version
+   gate (DL1406), so a refused beat with the right key still extended its dead-man.
+   - Fix: a reader notes only a `Beat` of `WIRE_VERSION`.
+   - Witness `beats_of_another_protocol_version_do_not_hold_a_silent_dead_man_off`: red before, *"92 beats refused
+     DL1406, each with the arming key, held a 300 ms dead-man off for 2 s"*.
+3. **[P2] A beat's *answered* time was taken before its reply was written.** `BeatTime` now has `handled` and `written`
+   (an instant, or why the write failed), and a beat is recorded once its answer is written. The line reads
+   *"handled +1857, written +1862"*, or *"not written: …"*.
+4. **[P2] The monitor could lose its timing at the next failure.** It noted a beat only once its answer returned, and
+   printed its progress after joining a beater that can wait out a 15 s request, longer than the test's 5 s collector.
+   It now notes each beat when sent (*"no answer yet"* until its answer comes) and prints its progress before the join.
+
+**Mutants, each red:**
+- M1086: a beat of any version noted;
+- M1087: every node's beats kept;
+- M1088: the 256-node bound removed;
+- M1089: the pruning removed;
+- M1090: a monitor's answers never recorded.
+
+**Not witnessed by a test, said so:**
+- that the write is timed after the write (equal instants pass `>=`);
+- that the monitor's progress comes before the join. A process-level test cannot hold the beater's request open on cue:
+  it starts within a beat interval of the watch's own, at a moment the test does not control.
+
+**Verified on the laptop (Windows):**
+- `cargo test -p delulu --bin delulu`: 206 passed;
+- `delulu-broker`: 256 passed;
+- `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8: all passed;
+- `scripts/clippy.sh -j 4`: clean;
+- Survey and `doctor`: in the commit message.
+
+The counters: D-V2-209, M1090, 157 codes, 366 anchors.
+
+## 2026-11-06 — the laptop: RW 4.98's two unwitnessed orders witnessed; Miri and the flaky test dispatched on CI
+
+**Why.** The owner: *"continue working, Finish this thing completely and verify. Run monitor to check on CI runs."* What
+#133 had left open: the broker's Miri on the dead-man code, and two orders it named but no test held.
+
+**The two orders, now witnessed:**
+- **A beat's answer is timed when it is written.** A test-only seam (`answer_seam`, `#[cfg(test)]`) holds the answer to
+  the next beat 300 ms before the serve loop writes it. `a_beats_answer_is_timed_when_it_is_written` requires the loop's
+  record to show that gap between `handled` and `written`. M1091, the write timed at handling, is red: *"handled and
+  written 0ns apart, where the answer was held 300 ms"*.
+- **A watch says its progress before it waits for its beater.** The end of a watch is now one function, `end_the_watch`:
+  say the progress, stop the beater, join it. `a_watch_says_its_progress_before_it_waits_for_a_stuck_beater` blocks a
+  beater as a request waiting out its 15 s deadline would, and requires the progress while it still blocks. M1092, the
+  join first, is red: *"the progress waited behind a beater that was still blocked"*.
+
+**Dispatched on CI, on `master` `31b1692`:**
+- `ci.yml` `jobs=miri-slow`, run `42093191962`: the broker's Miri over the dead-man code, which the nightly has not yet
+  run;
+- `witness.yml` with `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor` (RW 7.25's test), three runs on
+  `windows-latest` (`42093261520`, `42093278446`, `42093295263`) and three on `macos-latest` (`42093310306`,
+  `42093323509`, `42093337696`), to look for a red with the new timing in place.
+
+Their results are in the next entry, once read.
+
+**Verified on the laptop (Windows):**
+- `cargo test -p delulu --bin delulu`: 208 passed;
+- `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8: all passed;
+- `scripts/clippy.sh -j 4`: clean;
+- Survey and `doctor`: in the commit message.
+
+The counters: D-V2-209, M1092, 157 codes, 366 anchors.

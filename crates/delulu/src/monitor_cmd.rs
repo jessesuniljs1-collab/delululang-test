@@ -89,6 +89,21 @@ fn answered_beat(beats: &std::sync::Mutex<SentBeats>, seq: u64, answered_in: Dur
     }
 }
 
+/// The end of a watch, in its order (the independent review's finding 4): say how far it got FIRST, then stop the beater
+/// and join it. The beater may be inside a request that waits out the broker's whole deadline (15 s), longer than whoever
+/// reads the monitor waits, so its progress must not wait behind that join.
+fn end_the_watch(
+    say_progress: impl FnOnce(),
+    beater_stop: &std::sync::atomic::AtomicBool,
+    beater: Option<std::thread::JoinHandle<()>>,
+) {
+    say_progress();
+    beater_stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Some(b) = beater {
+        let _ = b.join();
+    }
+}
+
 /// The line a monitor whose watch ended on an error writes about its own progress: its last beats, answered or still
 /// waiting, and its longest turn of the watch (one pass of its loop, its sleep left out). With the daemon's own line about
 /// the same dead-man, it says whether the beats were sent and when — the half of RW 7.25's evidence a daemon cannot see.
@@ -701,13 +716,15 @@ fn cmd_watch(rest: &[String]) -> i32 {
     }
     longest_turn = longest_turn.max(turn.elapsed());
     eprintln!("monitor: ended — {}", delulu_diag::terminal_line(&ended));
-    beater_stop.store(true, std::sync::atomic::Ordering::SeqCst);
-    if let Some(b) = beater {
-        let _ = b.join();
-    }
-    if deadman.is_some() && !clean_end {
-        eprintln!("{}", progress_line(&sent_beats.lock().unwrap_or_else(|p| p.into_inner()), longest_turn));
-    }
+    end_the_watch(
+        || {
+            if deadman.is_some() && !clean_end {
+                eprintln!("{}", progress_line(&sent_beats.lock().unwrap_or_else(|p| p.into_inner()), longest_turn));
+            }
+        },
+        &beater_stop,
+        beater,
+    );
     // The dead-man: disarmed on a clean end while the node lives (its revocation already ended it otherwise);
     // left armed on an error — this monitor has stopped watching, and the operator asked for that to quarantine.
     let mut disarmed_seq: Option<u64> = None;
@@ -793,22 +810,54 @@ fn now_millis() -> i64 {
 mod tests {
     use super::*;
 
+    /// **The independent review's finding 4: a watch says how far it got before it waits for its beater.** Here the beater
+    /// is a thread blocked as one inside a 15 s request is; the progress must be said while it still blocks, and the end
+    /// then waits for it.
+    #[test]
+    fn a_watch_says_its_progress_before_it_waits_for_a_stuck_beater() {
+        let (release, blocked) = std::sync::mpsc::channel::<()>();
+        let beater = std::thread::spawn(move || {
+            let _ = blocked.recv();
+        });
+        let (said_tx, said) = std::sync::mpsc::channel::<()>();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ending = {
+            let stop = stop.clone();
+            std::thread::spawn(move || end_the_watch(move || said_tx.send(()).unwrap(), &stop, Some(beater)))
+        };
+        let said_in_time = said.recv_timeout(Duration::from_secs(5)).is_ok();
+        let ended_early = ending.is_finished();
+        release.send(()).unwrap();
+        ending.join().unwrap();
+        assert!(said_in_time, "the progress waited behind a beater that was still blocked");
+        assert!(!ended_early, "the end did not wait for the beater");
+        assert!(stop.load(std::sync::atomic::Ordering::SeqCst), "the beater was told to stop");
+    }
+
     /// RW 4.98's timing, the monitor's half: it keeps its last beats in order, names who sent each and how it was
-    /// answered, and its longest turn.
+    /// answered, and its longest turn. A beat is noted when it is sent, so one whose answer has not come is named as
+    /// waiting (the independent review's finding 4), and an answer for a beat no longer named changes nothing.
     #[test]
     fn a_monitor_names_its_last_beats_and_its_longest_turn() {
         let ms = Duration::from_millis;
-        assert!(progress_line(&VecDeque::new(), ms(3)).contains("last beats, in ms since its dead-man was armed: none"));
-        let beats = std::sync::Mutex::new(VecDeque::new());
-        for i in 0..8u64 {
-            note_beat(&beats, SentBeat { sent: ms(25 * i), answered_in: ms(2), by_beater: i == 6, kept: i != 7 });
+        assert!(progress_line(&SentBeats::default(), ms(3)).contains("last beats, in ms since its dead-man was armed: none"));
+        let beats = std::sync::Mutex::new(SentBeats::default());
+        let first = sending_beat(&beats, ms(0), false);
+        for i in 1..8u64 {
+            let seq = sending_beat(&beats, ms(25 * i), i == 6);
+            if i != 5 {
+                answered_beat(&beats, seq, ms(2), i != 7);
+            }
         }
+        answered_beat(&beats, first, ms(1), true);
         let beats = beats.into_inner().unwrap();
-        assert_eq!(beats.len(), SENT_BEATS_NAMED, "the last six only");
+        assert_eq!(beats.beats.len(), SENT_BEATS_NAMED, "the last six only");
         let line = progress_line(&beats, ms(740));
         assert!(!line.contains("sent +25 ") && line.contains("sent +50 by the watch (answered in 2 ms, kept)"), "{line}");
-        assert!(line.contains("sent +150 by the beater"), "{line}");
+        assert!(line.contains("sent +125 by the watch (no answer yet)"), "a beat still waiting is named: {line}");
+        assert!(line.contains("sent +150 by the beater (answered in 2 ms, kept)"), "{line}");
         assert!(line.contains("sent +175 by the watch (answered in 2 ms, refused or unanswered)"), "{line}");
+        assert!(!line.contains("sent +0 "), "a beat no longer named is not brought back by its answer: {line}");
         assert!(line.contains("its longest turn of the watch took 740 ms (RW 4.98)"), "{line}");
     }
 

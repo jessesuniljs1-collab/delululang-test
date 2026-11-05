@@ -5872,3 +5872,25 @@ Also `the_beats_noted_between_judgments_are_bounded`. Mutants, each red:
 - M1083, the notes taken and not applied: the witness;
 - M1084, a note buying two periods: the unit test;
 - M1085, a late note counted: the unit test.
+
+**Amended 2026-11-05 (the same day), after an independent review of #131 and #132.** Four findings, each confirmed in
+the source before it was fixed:
+1. **A beat of another protocol version was noted.** A reader noted it before the version gate, so beats refused DL1406
+   that carried the arming key kept a dead-man alive: 92 of them held a 300 ms dead-man off for 2 s in
+   `beats_of_another_protocol_version_do_not_hold_a_silent_dead_man_off`, red before. Now a reader notes only a `Beat`
+   of `WIRE_VERSION`. Item 1 of the decision above reads so.
+2. **The serve loop's beat timing (#131) was unbounded:** it kept timing for every node a beat named. Now it keeps an
+   armed dead-man's beats only (or the one that fired it), drops the nodes no longer armed whenever it keeps a new one,
+   and keeps at most 256 nodes. `beats_naming_no_armed_dead_man_leave_no_timing_behind` was red before, with 301 nodes
+   kept.
+3. **A beat's *answered* time was taken before its reply was written.** Now *handled* and *written* (or *not written*,
+   with why) are timed apart.
+4. **The monitor noted a beat only once its answer returned, and named its progress after joining its beater.** Now it
+   notes each beat when it is sent, and names its progress first.
+
+Mutants M1086–M1090 are red. Two orders had no witness at first, and both have one since (the same day):
+- **The write is timed after the write.** A test-only seam holds a beat's answer 300 ms before it is written
+  (`a_beats_answer_is_timed_when_it_is_written`). M1091, the write timed at handling, is red: *"0ns apart"*.
+- **The progress comes before the join.** The watch's end is one function, `end_the_watch`, and its test blocks a beater
+  as a stuck request would (`a_watch_says_its_progress_before_it_waits_for_a_stuck_beater`). M1092, the join first, is
+  red.
