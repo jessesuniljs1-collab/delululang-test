@@ -12281,3 +12281,33 @@ Their results are in the next entry, once read.
 - Survey and `doctor`: in the commit message.
 
 The counters: D-V2-209, M1092, 157 codes, 366 anchors.
+
+## 2026-11-06 — the laptop: RW 4.98's CI evidence read to its end; RW 7.25's test six of six on Windows and macOS
+
+**Why.** The owner: *"Finish this thing completely and verify. Run monitor to check on CI runs."* The runs dispatched on
+2026-11-05 (the previous entry) were watched by monitors and read to their end.
+
+**What they say:**
+- **The broker's Miri**, `ci.yml` `jobs=miri-slow`, run `42093191962` on `master` `31b1692`: success.
+  - `miri-slow (delulu-broker)` took 1 h 25 min: 222 passed, 0 failed, 2 ignored. Every `deadman::tests` test passed,
+    among them `deadman_heard`'s (`a_beat_heard_in_time_counts_at_the_judgment_and_only_as_far_as_it_bought`).
+  - `delulu-check` took 1 h 36 min, and `delulu-syntax` 16 min.
+  - The daemon's side of D-V2-209 (`brokerd.rs`, in `delulu`) is not under Miri.
+- **RW 7.25's test**, `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor` through `witness.yml` on `master`
+  `31b1692`: six of six green.
+  - Windows: `42093261520`, `42093278446`, `42093295263`.
+  - macOS: `42093310306`, `42093323509`, `42093337696`.
+  - Each log shows the test run (`... ok`, 1 passed) and its measurement: 67,501 to 101,251 records, one whole read 1.10
+    to 1.52 s.
+  - It was not reproduced, so RW 7.25 stays open. Its next red names its path in the job log.
+- **The pull requests and their push runs**, each 14 jobs and 2 skipped:
+  - #133: PR `42083936108`, push `42087864563`;
+  - #134: PR `42094208050`, push `42097929801`.
+
+**Where RW 4.98 and RW 7.25 stand:**
+- RW 4.98 is closed. Everything the owner's sequence and the independent review asked for is built, witnessed red
+  before, mutant-tested (M1076–M1092) and green on CI, Miri included.
+- RW 7.25 is open by its nature. Its cause has not been established, and a green run cannot establish it.
+
+**Changed:** RW 7.25 and RW 4.98's evidence, `AI_ONBOARDING.md` §10, this entry, the sync log and `docs/survey/*`. No
+code.
