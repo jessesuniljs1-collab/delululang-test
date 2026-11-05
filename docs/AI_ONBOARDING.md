@@ -162,6 +162,9 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 ## 8. The memory, digested (the full files are in `docs/assistant-memory/`)
 
 **Owner instructions in force** (newest first):
+- **2026-11-05:** *"I allow u to suggest any changes that is against current constitution.md, license or any other .md
+  file rules and regulations"*. A recommendation may cross any rule; it names the rule and its cost, and stays a
+  suggestion. Entrenched files change only by the recorded route (`HANDOFF.md` §11.1).
 - **2026-11-02:**
   - *"Still cannot write complete program like in java or python"*: "ready" is judged against an ordinary program too,
     not only against gates (RW 1.15, 2.33–2.40). Whether the launch waits for the language basics is his choice,
@@ -272,9 +275,10 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - `docs/REPOSITORY_STRUCTURE.md` lists every file and what it is for.
 - `docs/for-agents.md` is different: it is for agents that *use* DeluluLang, not for developers of it.
 
-## 10. Where the project stands (2026-11-02) — the newest sync-log entry supersedes this
+## 10. Where the project stands (2026-11-05) — the newest sync-log entry supersedes this
 
-- `master` holds #119 to #123 and on-demand routine runs 17 to 19's milestones, each landed on a green run:
+- `master` holds #119 to #123 and on-demand routine runs 17 to 19's milestones, each landed on a green run (the reviews
+  below are #124 to #128, also each landed on a green run):
   - INDEX-TARGET-1 (D-V2-205, RW 2.29): every walk of an assignment skipped its index, so a function the checker called
     pure printed through `xs[noisy(c)] = 9`;
   - DL0414 (D-V2-206, RW 2.30): a new warning for a `let` or `var` binding never read;
@@ -297,14 +301,74 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - **2.0's readiness is in question (the owner, 2026-11-02):** *"Still cannot write complete program like in java or
   python."* A probe of 39 everyday constructs: 14 ran, 25 were refused (RW 1.15; the gaps are RW 2.33–2.40). The head
   chef recommended holding the launch until the language basics land; **the owner's answer is pending.**
-- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short: the owner's answer on the language basics;
-  cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge; RW 6.50–6.52; the language basics
-  (RW §8 item 7), then RW 3.24, a compiled form; the launch, only on the owner's word.
+- **Two independent reviews (2026-11-04/05)**, both in `docs/review/`. Both are research only, and neither took a
+  decision:
+  - **Codex's** (#124), committed as received.
+  - **Claude's**, from a Claude Code cloud session on `master` `0670e0b`. It audited Codex's review and re-ran all 102
+    of its commands on Linux; every one reproduces. It found no containment or authority escape, and recommends:
+    - CLI-first;
+    - the compiler, LSP and VS Code client kept as they are;
+    - OpenShell as an **optional backend**, with the microVM (PS-C) frozen;
+    - the 2.0 launch held behind an *ordinary agent utility* bar.
+  - Its findings are `REMAINING_WORK.md` rows 2.41–2.44, 3.25, 4.88–4.92, 6.54–6.66, 7.27 and 7.28, and RW §8 item 8
+    gives its order. The OpenShell part is `V2_OPENSHELL_STUDY.md` §8.
+  - Its owner decisions (the review's §13) are open: hold 2.0 for that bar; adopt the OpenShell verdict; whether a
+    scope refusal is catchable (RW 2.42); the exit-code mapping; and RFCs or a recorded unfreeze for the core changes.
+- **The AI-first compiler and execution-pipeline audit (2026-11-05)**, the same cloud session, in `docs/review/`:
+  - **Measured each pipeline stage.** Parsing is a sixth of the front end. The existing machine form (DIR) is 28×
+    larger than text. The real costs are Cranelift on every WASM run and `libpython` on every command.
+  - **Recommends:** text stays canonical, with package-aware node edits; `--engine auto`; an authenticated precompiled
+    cache, off by default; Python out of the main binary. It rejects AI-emitted machine code, a graph store and a new
+    backend.
+  - **Found seven defects,** each re-run before it was recorded: RW 4.93, 4.94, 5.7, 6.67–6.70, the first three in the
+    DIR path. The cause of RW 6.58 was found too.
+  - Its §14 holds suggestions that cross current rules, under the owner's permission above. None was acted on.
+- **A third verification pass (2026-11-05)**, the same cloud session, with no sub-agents:
+  - it replayed the audit's 71 probes (all identical) and re-witnessed every defect;
+  - it read the PR's and `master`'s CI (both green, nothing to fix);
+  - it found **RW 4.95 (HIGH)**: `p.get` never checks a plugin export's type against the one the host asks for, so a
+    `! {Load, Read}` program wrote a file through a `! {Write}` export. `check`, `authority` and a package's DL1009
+    ceiling all passed. The grant still bounded the write;
+  - it also found RW 4.96 (programs load only Verified plugins) and RW 6.71 (`plugin verify` miscounts exports).
+- **The hidden-complexity audit (2026-11-05)**, the same cloud session, no sub-agents, in `docs/review/`:
+  - it followed an AI's whole task path, from discovery to outcome, on the same binary;
+  - it disproved several suspected costs: pure tasks open no keys, plugins or audit files; nothing waits on a prompt
+    without a terminal; an incremental query engine is not needed; MCP's process per call is cheap;
+  - it found five new rows, each witnessed:
+    - RW 6.72: the LSP is package-blind (false DL0301 on the shipped greeter);
+    - RW 6.73: grants are refused after earlier effects;
+    - RW 3.28: an unrunnable `.dwx` for `fn main()`;
+    - RW 3.29: DL0905 becomes SIGABRT under an address-space cap;
+    - RW 6.74: MCP ignores cancellation;
+  - it amended RW 3.26, 6.60, 6.62 and 6.69. RW 4.95 still holds.
+  - **its second pass the same day**, with three Sonnet 5.5 sub-agents whose every finding the head chef re-ran:
+    - corrected its own sandbox claim: the `hostile-agent` profile triggers RW 3.29;
+    - corrected its peak-memory figures;
+    - found RW 6.75: a sandboxed fault reaches neither the envelope nor the report;
+    - found fourteen code-review defects, grouped as RW 4.97 (`verify-sig --kye` fails open) and 6.76–6.81;
+    - read `master`'s red Windows run: RW 7.25's flaky monitor test. Its reading there (narrowed to a 1.9 s broker
+      queue) was corrected on the laptop the same evening: the evidence excludes no cause, and neither red's cause is
+      established (RW 7.25);
+    - updated README and the editor, getting-started and questions pages for RW 4.95 and 6.72.
+    - landed as #128, `master` at `be40a92`, on a green run (`42020534572`, 14 of 14). `master`'s Windows job was
+      re-run once and passed, and the scheduled run `42009076387` was 18 of 18 green, its three `miri-slow` jobs included.
+- **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
+  - the owner's answers (the language basics, and the reviews' decisions above);
+  - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
+  - **RW 4.95 first** (enforce R-Get at `p.get`; its two witnesses red first), with RW 4.96;
+  - RW 4.97 with it (a small fix: refuse unknown options in the signing commands);
+  - then the package-blind fast paths, RW 6.72 with 6.69 (one cause), and RW 3.28, 3.29, 6.73 and 6.74 (the audit's §7 order);
+  - then RW 6.75 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
+  - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
+  - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
+  - the OpenShell pin bump (RW 7.28);
+  - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
+  - the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-208;
   - the last mutant is M1075;
   - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #123 was the last opened.
+  - pull requests are numbered on GitHub, and #128 was the last merged.
 
 ## 11. Keep this file true
 

@@ -18,7 +18,11 @@ transport: stdio
 ## What the server gives you
 
 - **Diagnostics that ARE the compiler's** — same codes, spans, messages, and typed
-  repairs as `delulu check --json`. Nothing is re-derived, nothing drifts.
+  repairs as `delulu check --json`. Nothing is re-derived, nothing drifts. **Except, today,
+  inside a multi-module package:** the server checks each open file alone (`lsp.rs`'s
+  `Doc::analyze`), so a module that uses an import shows false `DL0301 unknown name` errors
+  that `delulu check <package-dir>` does not — the shipped `examples/greeter/src/main.delulu`
+  shows two (`docs/REMAINING_WORK.md` row 6.72, found 2026-11-05).
 - **Code actions from typed repairs** — an authority-widening repair is ⚠-titled and
   never preferred; a repair a human must decide is never preferred either, and offers
   its edit when it has one (DL0414's rename to `_x`); `authority_widening`/`requires_human`

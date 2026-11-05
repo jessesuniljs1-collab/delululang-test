@@ -515,6 +515,13 @@ Two classes exist and the difference is visible in the types: a **Verified** plu
 load and keeps per-export rows; a **Contained** plugin is opaque, so every export is typed with the
 plugin's *entire* granted authority (rule R-1). That is the honest price of containment-only trust.
 
+**A hole in that, found 2026-11-05 and open (`REMAINING_WORK.md` 4.95, HIGH):** the host's side of the
+rule — `p.get` succeeds only if the export's row fits inside the row the program asks for (R-Get) — is
+written and unit-tested (`r_get_verified`, `r_get_contained`) but no program path calls it. A program whose
+`main` is `! {Load, Read}` took a Verified export that is `! {Write}` as `! {}` and wrote a file; `check`,
+`authority` and the package's ceiling all passed. The run's grant still bounded the write. Also open: a
+program can load only Verified plugins, so `Plugin[Contained]` checks and is then refused at run time (4.96).
+
 **Limits, stated:** the hardware adapter is an operator-supplied **subprocess**, not a signed
 in-process plugin; unless you pin a key with `--adapter-signer`, there is **no trust policy**; the
 file whose signature is checked is the file started (a bare name is looked up on `PATH` once, by

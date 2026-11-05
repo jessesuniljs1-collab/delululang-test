@@ -44,8 +44,13 @@ Four rules that will save you time:
    If you are running a long edit→check loop, `delulu lsp` pays the process cost once and every
    check after that is the sub-millisecond part.
 
+   **Except inside a multi-module package (until `docs/REMAINING_WORK.md` row 6.72 is closed):** the server checks each
+   open file alone, so a module that uses an import shows false `DL0301 unknown name` errors (the shipped
+   `examples/greeter/src/main.delulu` does). For a package, `delulu check <package-dir> --json` is the answer to trust.
+
 5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
-   the same compiler, so its answers cannot drift from `delulu check --json`. Four of them are worth
+   the same compiler, so its answers cannot drift from `delulu check --json` on a loose file (inside a
+   package, see the exception above). Four of them are worth
    knowing about specifically:
 
    - `workspace/executeCommand` with `delulu.authority` returns the §10.5 authority report as JSON —
@@ -193,6 +198,11 @@ Every `--json` command emits one object:
   the `egress` record —
   goes to the file named by `--report-out <path>`, written by the runtime in every outcome and
   refused inside any `fs.write` grant; never trust a `sandbox` object read from a program's stdout.
+  **One exception today:** a run you stop with a signal (SIGTERM, SIGINT) exits 143 or 130 and
+  writes no report (`docs/REMAINING_WORK.md` row 6.68), so read a missing report after a kill as
+  "stopped from outside", not as a crash of the program.
+  A run stopped by its **budget** (`--limits`) exits 1 with **nothing** on standard output, even under `--json`;
+  the report's `outcome.stopped_by` says which budget (row 6.60). Read the report, not standard output, for the outcome.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
   diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
   parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of
@@ -298,6 +308,10 @@ delulu edit <file> --expect-hash <blake3> --node <Atlas id> --with '<one item>' 
   `required_grants`, `foreign_calls`), and `edit.authority.widened` lists what the edit **adds**.
   A non-empty `widened` is the same signal as `authority_widening: true` on a repair: a person
   decides it, not a loop. It is `null` when either side does not check.
+- **In a package, `edit` checks the edited file alone.** A module that imports another never checks
+  alone, so `before` and `widened` are `null` for every edit of it, and `--if-checks` can write an
+  edit the package refuses. After editing a package, run `delulu check <package-dir> --json` and
+  `delulu authority <package-dir> --json` yourself (`docs/REMAINING_WORK.md` row 6.69).
 - A file stored in a surface morph is refused: offsets and Atlas ids refer to the canonical text.
 - The answer is described by `delulu schema edit` (a closed `anyOf` of the applied and the refused
   shape).
@@ -415,7 +429,10 @@ nothing: whoever holds the authority decides, and `grants diff` tells them what 
 --json` files the proposal with the broker as that node's request — `filed.id` is its `pp_` id. Nothing is granted until an
 operator answers: `grants approve pp_ID --parent g_THEIRS` delegates, under THEIR node, your node's authority joined with
 the ask, and hands you a new lease token — re-run under it; your old node is never widened, and approving under your own
-node is refused (DL0802). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
+node is refused (DL0802). An approval is a boundary only when the approving node is out of your reach. On one OS
+account, a process that can reach the broker can name any node's id, its parent's included, and approve a proposal under
+it. A separate OS account for the operator (`docs/DEPLOYMENT.md` Tier 2), or strict anchored roots with the anchor key held
+elsewhere, makes the answer the operator's (the same-user residual, DISC-1; `docs/REMAINING_WORK.md` row 4.91). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
 `approved.node`) or `rejected` (with the operator's `reason` — propose narrower, or not at all). An operator may approve
 within a standing node automatically (`grants auto-approve --parent g_B`, D-V2-126): what your approval would mint must be
 within that node, and guarded authority (declassify, native code) is never approved that way — a person approves it.
@@ -427,6 +444,13 @@ There are **ten** core effects: `Read`, `Write`, `Net`, `Clock`, `Rand`, `Declas
 sends — an effect only; there is no futures runtime and no `await`), and `Actuate` (commanding a
 physical device). A module may declare more with `effect Name`; those are user effects and are
 reported by name.
+
+**Until `REMAINING_WORK.md` RW 4.95 is fixed, annotate a plugin's export with its real type.**
+`let f: fn(…) -> T ! {…} = p.get("name")?` is not checked against the export at run time. An export taken at a
+narrower row runs anyway, and then your function's row, `authority`'s `effects` and a package's ceiling under-report
+what the program does; the run's grants still bound it. Read the real signature with `delulu plugin inspect
+<file.dpx> --json` (`exports`) and copy it. `authority`'s `plugins:` section shows each loaded plugin's
+`grant.effects`. A program can load only **Verified** plugins today (RW 4.96).
 
 `Async` asks for no grant, so **no lease or grant can refuse an actor program**: a lease bounds what a run
 can reach, and spawning an actor reaches nothing outside the run. What bounds how much it computes, actors
@@ -490,6 +514,9 @@ fs_read = ["./fixtures"]
 Inside a package, bare `delulu test` targets the package; outside one it refuses rather than guess a
 directory.
 
+**Zero tests is exit 0.** A file or package with no `test` block passes with `summary.passed: 0` and
+`failed: 0`; read `passed` if "no test ran" must not count as success.
+
 ## [agents.sandbox] Running code you did not write
 
 ```
@@ -509,6 +536,12 @@ The guest also reports what it applied to itself — as its first request to the
 program runs, accepted only in the host's own words for those layers — so the report counts them
 (since 2026-09-25); on a host that cannot apply them it says so instead. Read the report rather than
 assuming the list above.
+
+**Two gaps in a sandboxed run's answer, open (`docs/REMAINING_WORK.md` rows 6.75 and 3.29):** a fault in the guest
+reaches the host's envelope and report with `diagnostics: []`. Only the guest's stderr names its code (DL0902, DL0905).
+Under `hostile-agent`, or a `--limits mem` up to 768 MiB, a deep recursion aborts the guest rather than raising DL0905,
+and the report says only `{exit 1, ran: true}`. Read a sandboxed exit 1 with an empty `diagnostics` as "the guest
+failed", with the reason on stderr.
 
 **Three isolation levels**, and the report's `level` says which one you got: **L1** `--sandbox` (a
 jailed process, all three systems); **L2** `--isolation microvm` (its own kernel under Firecracker —
@@ -602,6 +635,10 @@ with `-` is refused, so nothing can be passed through as an option. A command th
 `summary.errors` in the answer — and a refused argument is `isError: true` with the reason. To run a
 program, use the CLI: granting authority stays a person's decision.
 
+**It does not honour `notifications/cancelled` yet** (`docs/REMAINING_WORK.md` row 6.74): it answers one request at a
+time, a cancelled call still answers, and a request sent behind a long call waits for it. Set your own timeout and
+restart the server rather than counting on a cancel. A command's whole output comes back in one reply (row 6.62).
+
 ## [agents.registry] Registry
 
 ```
@@ -637,7 +674,7 @@ collect the results and print them in an order the program decides.
 | Variable | Effect |
 |---|---|
 | `DELULU_NO_FIRST_RUN=1` | Suppress the first-run picker and welcome. **Set this in CI.** |
-| `DELULU_HOME` | State directory (keys, credentials, locales). Isolate it per job. |
+| `DELULU_HOME` | State directory (keys, credentials). Isolate it per job. **It does not hold the human-facing settings:** the theme, the locale choice and installed locale catalogs are read from `$HOME/.delulu` (or `DELULU_THEME_FILE`, `DELULU_CONFIG_FILE`, `DELULU_LOCALES_DIR`), so set `HOME` per job too if those must not leak in. They change human text only; JSON never changes. |
 | `DELULU_COLOR=never` / `NO_COLOR` | No ANSI. `--json` is never colored regardless. |
 | `DELULU_BROKER` | `embedded` or `daemon`. |
 | `DELULU_MORPH_PATH` | Where to find surface morphs, searched after `./morphs`. |

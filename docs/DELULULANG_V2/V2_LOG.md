@@ -11768,3 +11768,331 @@ Found:
 
 **Open, the owner's to answer:** hold the 2.0 launch until the language basics land (recommended), or launch and add
 them in 2.x. No code changed. The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — a Claude Code cloud session: an independent review of Codex's review, and its findings made rows
+
+**Why.** The owner commissioned a research-only cloud session
+(`docs/prompt/DeluluLang_Claude_Code_Cloud_Strategic_Verification_Prompt.md`), which asked for four things:
+- an independent audit of Codex's review (`docs/review/DeluluLang_Codex_Strategic_Review.md`);
+- an architecture verdict;
+- an OpenShell verdict;
+- the smallest defensible 2.0.
+
+Then he asked for everything to be verified a second time, and finally for the other documents to be updated from the
+report. The report is `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`, on branch
+`claude/dazzling-goodall-iaapyw`.
+
+**What was run.** Everything ran on a release build of `master` `0670e0b` on Linux x86-64 (Ubuntu 24.04, 4 vCPU, no
+KVM), with state kept in scratch:
+- **Codex's evidence.** Its 35 Appendix A sources were rebuilt and matched their recorded SHA-256. All 102 Appendix B
+  commands were re-run with their fixture states: 101 of 101 comparable exit codes are equal, and the differences
+  are platform, CRLF offsets, build profile or timing. Its 26 source links resolve.
+- **Hostile probes, every one held:** paths and links outside a grant, a memory bomb, a tampered plugin and a tampered
+  driver, and lying, silent and swapped L3 launchers.
+- **Boundaries no review had run:**
+  - the broker killed mid-run fails closed (DL1401);
+  - strict anchored roots (DL1421) and the Guard seal (DL1413);
+  - P9-03's propose → approve → re-run loop;
+  - HTTPS egress against a local server that logged what reached it: no refused request did;
+  - a signed Verified driver behind a frame-logging device process: a refused command never reached it;
+  - multi-package locking (DL1010).
+- **Benchmarks** of 31 fresh runs each (check 7.4 ms; L1 sandbox 53.7 ms; agent loop 34.3 ms). One LSP process took
+  1,000 edits (p50 0.16 ms, memory flat) and one MCP process 200 calls (0 wrong).
+
+**Found.** No containment or authority escape. What is wrong is proportion and the answers agents read:
+- the answer contracts: `test` succeeds when nothing ran (RW 6.51), `fix` exits 0 with errors left (6.55), grant
+  hints that are not the program's (6.54), two shapes on `run --json`'s standard output (6.60), a guest's death leaves
+  no reason in the run report (6.59), and a closed pipe gives exit 2 (6.58);
+- the null device answers `Ok` (4.88);
+- three documented constructs refused on WASM (3.25);
+- no JSON (2.41);
+- the OpenShell pin five releases stale (7.28);
+- package metadata naming a GitHub account nobody owns (7.27);
+- smaller rows: 2.42–2.44, 4.89–4.92, 6.56–6.57 and 6.61–6.66.
+
+**Corrected before the rows were written** (the third pass): the WASM higher-order gap is the non-generic spelling
+only (the generic `apply[T, U]` compiles, `named_fn_parity.rs`), and README never carried the "production ready" box
+the report named (that box is `HANDOFF.md`'s, already qualified on 2026-11-02). Both are corrected in the report.
+
+**Recommended, not decided:**
+- CLI-first: the compiler, LSP and VS Code client kept as they are, and `cli.rs` split into services that the CLI,
+  MCP and LSP share;
+- OpenShell as an **optional backend** (`V2_OPENSHELL_STUDY.md` §8), with PS-C frozen;
+- 2.0 held behind an *ordinary agent utility* bar (RW §8 item 8).
+
+Most of that bar changes the frozen core, so it needs RFCs with 14-day comment periods (`CONTRIBUTING.md` §5) or a
+recorded unfreeze. No `D-V2-nn` was taken, and the review's §13 owner decisions stay open.
+
+**Changed.** Documents only. The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors. The Survey and
+`doctor` readings are in `docs/CLOUD_SYNC_LOG.md`'s 2026-11-05 cloud entry.
+
+## 2026-11-05 — a Claude Code cloud session: the AI-first compiler and execution-pipeline audit
+
+**Why.** The owner's prompt `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Prompt.md` asked for
+three things:
+- which stages of the program-to-execution pipeline exist mainly for human programmers;
+- whether an AI-first path could replace, optimise or remove them;
+- a documentation PR, merged only on green checks and an independent review.
+
+During the session he added: *"I allow u to suggest any changes that is against current constitution.md, license or
+any other .md file rules and regulations."*
+
+**What was run.** All of it ran on a provenance build of `master` `0670e0b` (`DELULU_BUILD_COMMIT` injected, SHA-256
+`751c6458…`), on Linux x86-64:
+- **A scratch stage harness** linking the crates by path. It timed, in-process: lex, parse, resolve, check, DIR
+  serialize/decode/verify, WASM codegen, Cranelift, Winch and Pulley compiles, precompile and deserialize, and the
+  interpreter and WASM runs. The programs ran from 2 to 16,002 lines.
+- **Fresh-process timings,** 21 runs each, with real peak memory, against CPython and `rustc -O`.
+- **Functional probes:** the agent loop, packages, plugins, budgets, simulations, delegation with a mid-run revocation,
+  and cancellation by signal.
+- **Two Sonnet 5.5 sub-agents,** whose model was read from their own system prompts: one for primary-source research
+  and one for adversarial code reading. Every consequential claim was re-run by the head chef.
+
+**Found** (`REMAINING_WORK.md`):
+- DIR node-id collisions pass `dir::verify` where the same text is DL1604 (4.93);
+- DIR names skip DL0107 (4.94);
+- the DIR fuzz target never runs `verify` (5.7);
+- `why` reads DIR without verifying it (6.67);
+- a run stopped by a signal writes no report (6.68);
+- `edit` is blind to packages (6.69);
+- morph skins are read from the working directory, unpinned (6.70);
+- `libpython` costs 1.1–2.0 ms on every command (3.26);
+- the Verified shipped-WASM cache is dead in production (3.27);
+- RW 6.58's cause is a panic on a broken pipe.
+
+Every earlier finding re-tested was still open. No code has changed since `0670e0b`.
+
+**Measured** (the report's §10):
+- **Parsing:** 17% of the front end at 16,002 lines.
+- **DIR:** 28× the size of the text, and 1.9× slower to verify than the whole text front end.
+- **Cranelift:** 1.6–652 ms per WASM run, where a precompiled module loads in 35 µs–5.7 ms.
+- **Winch:** documented as incompatible with the epoch interruption the limits engine uses.
+- **Pulley:** 11× slower than Cranelift.
+- **A 5M-iteration loop:** interpreter 910 ms, WASM 34 ms, CPython 246 ms, Rust 10 ms.
+
+**Recommended, not decided:**
+- text canonical, with package-aware, content-addressed node edits;
+- one service layer;
+- `--engine auto`;
+- an authenticated, version-bound precompiled cache, off by default;
+- Python out of the main binary.
+
+Rejected: AI-emitted machine code, a graph store, a native backend now, Winch for the limits engine, and WAMR on the
+desktop. The report's §14 holds the suggestions that cross current rules, B1–B8. No `D-V2-nn` was taken.
+
+**Changed.** Documents only:
+- the report;
+- §18 of the earlier review;
+- the prompt;
+- `REMAINING_WORK.md`, `for-agents.md` (the signal exception, the package caveat on `edit`) and `INSTALL.md` (the
+  portable build's start-up);
+- `HANDOFF.md` §11.1 and §11.2, and two assistant-memory notes;
+- the phase status, onboarding and the structure table;
+- the sync log and the map.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — a Claude Code cloud session: the third verification pass; R-Get found unenforced
+
+**Why.** The owner asked: *"Double Verify And Research About Everything Once Again … Test Everything. No need to run
+agents this time … Check CI run in master and current branch and make fixes."* So this pass used no sub-agents.
+
+**CI.** The PR run `41983232404` on `3d6c881` and `master`'s push run `41983782231` on `6397a98` were both read to the
+end: success, 14 jobs each, 2 skipped by design. There was nothing to fix. Both are recorded on PR #125.
+
+**Re-run** on the provenance build of `0670e0b`, whose code `master` carries unchanged:
+- the audit's 71 probes: 71 identical;
+- RW 4.93, 4.94, 6.58, 6.67, 6.68, 6.69 and 6.70: each still holds. RW 4.93 was driven through `plugin verify`, the
+  loader's step 5;
+- every cited source line was re-read;
+- the libpython cost (1.3–1.4 ms, plus 4.1 MiB of peak RSS) and MCP's 5.8 ms per call.
+
+**Found:**
+- **RW 4.95 (HIGH).** R-Get (*"`p.get[F]` succeeds only if `row(export) ⊆ row(F)`"*) exists as `r_get_verified` and
+  `r_get_contained`, but the interpreter's `p.get` never calls them. A `! {Load, Read}` program wrote a file through a
+  Verified plugin's `! {Write}` export taken as `! {}`. `check`, `authority` and a package's DL1009 ceiling all passed.
+  A pure function read a file. The run's grant still bounded the write.
+- **RW 4.96.** A program can load only Verified plugins.
+- **RW 6.71.** `plugin verify` counts private functions as exports.
+
+**Corrected in the reports:** five figures and two citations (the audit's §19.4; the review's §19). No recommendation
+moved, except that RW 4.95 is now first among the fixes.
+
+**Web:**
+- Wasmtime 48.0.8, the pin, carries the fixes for every advisory found: RUSTSEC-2026-0379 (critical, aarch64) and
+  RUSTSEC-2026-0378, both fixed in 48.0.7, and GHSA-6fr9-xmw9-5352, fixed in 48.0.8.
+- OpenShell v0.1.7 is still the newest; Zerolang v0.3.4 likewise.
+- MoonBit was added as a comparator.
+
+**Not done:** the fixes. RW 4.95's touches the checker, the runtime and DIR, so it needs its own witnessed change.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — a Claude Code cloud session: the hidden-complexity audit of an AI's whole task path
+
+**Why.** The owner's prompt `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`
+(placed byte for byte) asked where human-centric assumptions and avoidable costs hide in what an AI does to finish a
+task, and for every hypothesis to be tested, falsified where it was wrong, and double-verified. He also asked: *"Check
+CI run in master and current branch and make fixes"*.
+
+**CI.** `master`'s push run `41990062363` and the branch's PR run `41988110890` (both on `35f1a2d`) were read: success.
+There was nothing to fix.
+
+**How.**
+- No sub-agents.
+- Every probe ran on the release build of `0670e0b` with its commit injected (SHA-256 `751c6458…`). `master` carries
+  that code unchanged. A no-Python build of the same tree was the comparison.
+- Seven experiments, each with medians, p10/p90 and peak memory, all in scratch:
+  - fresh process against the warm LSP and MCP;
+  - a 13-module package;
+  - a complete CSV utility with every outcome;
+  - the engines;
+  - authority probes;
+  - edge conditions;
+  - MCP under stress.
+
+**Found (each witnessed, then recorded):**
+- **RW 6.72:** the LSP checks each file alone, giving false DL0301 on the shipped greeter.
+- **RW 6.73:** grants are refused at first use, after earlier effects.
+- **RW 3.28:** `build --target wasm` exits 0 on a `fn main()` the host can never call.
+- **RW 3.29:** under `ulimit -v`, DL0905 becomes SIGABRT with no report.
+- **RW 6.74:** MCP ignores `notifications/cancelled`, and a long call holds up the next.
+
+**Amended:**
+- RW 3.26: 1.35 ms per command; `LD_BIND_NOW` is not the cause.
+- RW 6.60: four stdout shapes; a budget stop prints nothing.
+- RW 6.62: a 5 ms poll; a 3.4 MB reply.
+- RW 6.69: also refuses correct edits.
+- RW 4.95 still holds.
+
+**Disproved:**
+- pure tasks touching keys, plugins or audit files;
+- a prompt blocking a non-terminal agent;
+- the need for an incremental query engine (0.21 ms per warm change; 31 ms for a 1,482-line package);
+- MCP's process per call being its main cost.
+
+**Web:**
+- MCP `2026-07-28`: stateless, `server/discover`, cancellation SHOULD stop work;
+- Wasmtime's `deserialize` trust rules;
+- Salsa 0.28.5, not used directly in rustc;
+- Deno's hash-keyed check cache.
+
+**Changed:**
+- the audit, `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`;
+- §20 amendments in both earlier reviews;
+- `docs/for-agents.md`: the LSP's package caveat; `DELULU_HOME` does not isolate theme, locale or catalogs; a budget
+  stop's empty stdout; zero tests exit 0; MCP has no cancel;
+- REMAINING_WORK;
+- HANDOFF §11.2 (*a fast path must see what the slow path sees*), with a memory note;
+- AI_ONBOARDING §10, REPOSITORY_STRUCTURE, CLOUD_SYNC_LOG, `docs/survey/*`.
+
+**Not done:** the fixes. Each is a separately witnessed change; the audit's §7 orders them.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — a Claude Code cloud session: the hidden-complexity audit's second pass (double verification, code review, research)
+
+**Why.** The owner asked for everything to be double-verified: the three reviews and every prompt in `docs/prompt/`.
+He also asked for README and the other documents to be updated, CI on `master` and the branch to be checked and fixed,
+the repository's code to be checked, and the web researched, with Sonnet 5.5 sub-agents allowed.
+
+**Sub-agents.** Three Sonnet 5.5 (`claude-sonnet-5-5`, each naming itself): a verifier, a code reviewer and a
+researcher. The head chef re-ran every finding before it was written.
+
+**CI.** `master`'s push run `42015437785` on `5fb865c` was red in `test (windows-latest)`: RW 7.25's
+`a_long_chain_does_not_kill_a_healthy_monitor`. The same commit's PR run was green, and the commit is documents only.
+- The failure's evidence was read. The monitor was alive and the daemon was hearing, but a `ListPage` waited 1,879 ms
+  behind the requests ahead of it when the 500 ms dead-man fired. RW 7.25 records it.
+- The failed job was re-run once: queued at 11:27 UTC, attempt 2; its result is recorded on this pass's pull request and in the next sync-log entry.
+- The scheduled run `42009076387` on `35f1a2d`: 16 of 18 jobs green, `heavy-gates` among them; the two `miri-slow`
+  jobs were still running when read.
+
+**Corrected (the audit's §11.4):**
+- **RW 3.29 is worse than recorded.** The `hostile-agent` profile (256 MiB), or `--sandbox --limits mem` up to 768 MiB,
+  aborts the guest on a deep recursion, with no code in the report. The first reading took an exit 1 for DL0905.
+- **Every peak-memory figure was corrected.** A Python launcher's `ru_maxrss` includes its own high-water mark. libpython
+  is +4.2 MiB per command, not +0.4.
+- **MCP `2026-07-28` is final.**
+
+**New rows:**
+- RW 6.75: a sandboxed fault reaches neither the envelope nor the report.
+- RW 4.97: `verify-sig --kye` drops a key pin and answers valid; `sign`/`keygen` ignore unknown options.
+- RW 6.76–6.81: MCP, `run --report-out`, option validation, `schema validate`, `edit` and LSP rename/framing each
+  answer outside their contracts. These are the code reviewer's fourteen findings.
+
+**Re-witnessed on the same binary:** RW 4.93, 4.94, 4.95, 6.67, 6.69 and 6.70. The pipeline audit's 71-probe ledger
+replayed with 65 identical; the 6 differences come from scratch state or the harness.
+
+**Measured:**
+- 20 files in one `check`: 13 ms, against 121 ms in 20 processes;
+- the daemon broker: about 2 ms per brokered effect, nothing on a run that brokers none;
+- the Survey's `diff` and `path`, and the Atlas, exercised; they overlap nowhere.
+
+**Documents:**
+- README states RW 4.95 under its opening sentence, and RW 6.72 in its editor section. It points to `docs/review/` and
+  names the open review findings.
+- GETTING_STARTED, editors.md, the VS Code README, QUESTIONS §3.2 and for-agents carry the same caveats.
+- for-agents also names the sandbox's answer gaps.
+
+**Not done:** the fixes; a full local test suite, because a debug build of the tests filled the disk allowance at 22 GB.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — the same Claude Code cloud session: #128 landed; the CI it waited on, read
+
+**Why.** The owner asked for the Survey and `doctor` to be run, CI to be checked, and the records to say where the work
+stands and what comes next.
+
+**CI read:**
+- **#128** (`be40a92`), run `42020534572`: 14 of 14 jobs green. `heavy-gates` and `miri-slow` were skipped, as on every
+  pull request. It was fast-forwarded to `master` (`5fb865c` → `be40a92`) after checking that `master` had not moved.
+- **`master`'s push run `42015437785`** (`5fb865c`): the failed `test (windows-latest)` job was re-run once. Attempt 2
+  (job `127217198088`) passed. RW 7.25 now says it was red twice and green on the next run each time; its cause is
+  still not known.
+- **The scheduled run `42009076387`** (`35f1a2d`): 18 of 18 green, `heavy-gates` and the three `miri-slow` jobs included
+  (`delulu-check` 1 h 34 min, `delulu-broker` 1 h 14 min, `delulu-syntax` 16 min).
+
+**Checked:** `origin/autosave/laptop`'s newest snapshot (10:07 UTC) adds only the two prompts in `docs/prompt/`, each
+byte-identical to `master`'s, so there is nothing to recover. No other pull request is open.
+
+**Changed:** RW 7.25's status, `AI_ONBOARDING.md` §10, this entry and the sync log. No code changed.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — the laptop: RW 7.25's reading corrected; neither red's cause is established
+
+**Why.** The owner pasted an independent, read-only analysis of RW 7.25 (another AI's reading of the source and CI) and
+asked the head chef to go through it. He then asked for the records to be corrected first and a deterministic witness
+built next. Each claim was checked against `brokerd.rs`, `monitor_cmd.rs`, `monitor_cli.rs` and the failed Windows
+job's log (`127204705719`, push run `42015437785` on `5fb865c`).
+
+**What the earlier reading claimed, and why it does not hold:**
+- *"The monitor was still running"*: its exit status `None` was read after the monitor had printed *"ended"*. The
+  whole-chain read a revocation sets off comes before that line, and what kept the process alive after it is
+  unmeasured. It does not exclude an earlier pause of the monitor.
+- *"The daemon was running and hearing"*: no deaf interval was logged while the dead-man was armed, so the hearing
+  thread looked. That says nothing about the reader threads or the handler.
+- *"Narrowed to a 1.9 s broker queue"*: the `ListPage` was the test's own `grants list` at its 2 s check. Its 1,879 ms is
+  the time from its reader's stamp to the handler taking it, which holds the reader's hand-over and any stall of the
+  handler together. It is not queue occupancy or a cause, and it is not ordered against the firing.
+- *"Five beats"* is a count, not a time. The head chef's own first reading turned it into one, and withdrew it.
+
+**What holds.** A broker-side path exists in the source. A reader thread stamps a beat and only then hands it to the
+handler (`whole.send`), and the serve loop judges each dead-man as of the earliest request already handed over, or as of
+now. A beat stamped in time and handed over after a judgment is not counted. RW 4.87 named this window as uncovered and
+assumed it lasted microseconds. A monitor-side delay remains possible too: its beater beats only while the watch waits on
+the broker.
+
+**A proposed fix, withdrawn.** Waiting at expiry while any reader is active would let overlapping incomplete
+connections, which need no key, hold a dead-man off indefinitely. A reader's 5 s read bound does not bound the time
+before the reader runs, or the time it is blocked on a full line, and a connection still waiting to be accepted has no
+reader. The order now:
+1. this correction;
+2. a deterministic witness of the stamp-to-hand-over window, and timing for each beat;
+3. coordinating complete, authenticated beats with the expiry decision, keeping delays before receipt a separate problem;
+4. counter-tests that incomplete connections, invalid keys and unrelated traffic cannot keep a silent monitor alive.
+
+**Changed:** RW 7.25; `AI_ONBOARDING.md` §10; the hidden-complexity audit (a dated correction beside §11.1 and a note at
+its top); this entry and the sync log. No code changed.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

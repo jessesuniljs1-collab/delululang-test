@@ -5,7 +5,8 @@
 currently we are working on"*). **Written before anything in §4–§6 was built; built since, slice by slice** —
 each section's *Built* paragraph says what, where and under which decision (PS-E-01 to PS-E-04 and PS-E-06, and
 PS-E-05 (a) and (b), by routine runs 2–10). Every item carries the phase slice that builds it and the witness that proves it. The decisions are D-V2-52 to D-V2-55
-(`V2_DECISION_LOG.md`). Where this file says what OpenShell does, it reports OpenShell's own
+(`V2_DECISION_LOG.md`). **Revisited 2026-11-05 at OpenShell v0.1.7** (§8: what changed upstream, and an independent
+review's recommendation, which is not a decision). Where this file says what OpenShell does, it reports OpenShell's own
 documentation and source at the version named in §0 — it is not a claim DeluluLang has measured.
 
 ---
@@ -586,3 +587,73 @@ and source at `36b0386` / v0.1.2. OpenShell is at 0.1.x and its 0.1.0 upgrade wa
 pins the version it tests and says so, and an interop test that breaks on an OpenShell release is
 recorded as that, not as a DeluluLang regression. The hypotheses in §4.3 are hypotheses. Sentry is
 hardware DeluluLang does not have; P8-04 borrows its shape, not its guarantees.
+
+## 8. Revisited 2026-11-05: upstream at v0.1.7, and an independent recommendation
+
+**Source.** `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md` §8, written by a Claude Code cloud
+session at the owner's request. It read OpenShell's releases, documentation and support matrix on 2026-11-04 (its
+§8.1). OpenShell was **not installed or run** (its installer is `curl | sh`, which that session's brief forbade). What
+follows is what that review found and recommends. **No `D-V2-nn` records it**: the decision stays open, as the review's
+§13 says.
+
+**What changed upstream since §0.**
+- **Releases:** seven 0.1.x releases, about one a week: v0.1.1 (2026-09-26) to v0.1.7 (2026-11-03).
+- **Breaking changes:** 0.1.3 (a CLI fix), 0.1.5 (OCSF files renamed `.jsonl`, Kubernetes labels allowlisted, the Go
+  SDK's `Create()` changed), 0.1.6 (the gateway refuses to start without authentication) and 0.1.7 (native OCSF only,
+  settings deprecated, a microVM sandbox runs as the image's `sandbox` account).
+- **Platforms:** Linux (Debian, Ubuntu; x86_64 and aarch64) supported; macOS on Apple Silicon through Docker Desktop;
+  Windows only as WSL 2, experimental; native Windows on a branch.
+- **Requirements:** Docker 28 or later (or Podman 5, or Kubernetes 1.29); Landlock ABI 3 or later, so Linux 6.2 or later.
+- **Policy:** the filesystem and process layers are fixed at creation, while network and credential policy can change
+  on a running sandbox. The additional filesystem policy defaults to `best_effort`, which may skip paths;
+  DeluluLang's export already pins `hard_requirement` (`crates/delulu/src/openshell.rs`).
+
+**What that means here.**
+- **The integration is five releases stale:** `openshell.yml` still pins v0.1.2. Its live runtime witness last ran
+  2026-10-04 (`37234907676`), and its prover job last ran 2026-11-02 (`41394552103`). `REMAINING_WORK.md` row 7.28.
+- **§2 still decides.** OpenShell governs binaries it cannot read, so it sees `delulu` open a socket, never which
+  capability, lease or grant the program used. The Guard, the broker, leases and the guest/host channel cannot be
+  handed to it.
+- **The boundary held** at the L3 seam that PS-E-05 uses (the review's §6.7):
+  - a lying launcher, a silent one and a swapped one were each refused before the program was sent;
+  - attestation was enforced;
+  - under the default profile, an honest launcher's run proceeds with `granted: none` (row 4.89).
+
+**The recommendation: OPTIONAL BACKEND.** This is today's shape: OpenShell as a tested L3 launcher and a policy
+target, beside the native L1 sandbox on all three operating systems.
+- **First, bump the pin** to v0.1.7 and re-run both witnesses.
+- **Freeze PS-C (the Firecracker microVM)** at its tested state, its CI job kept on. It is the one real overlap, and
+  its image cannot be distributed anyway (D-NE-27). VM-grade isolation goes behind L3, with OpenShell's VM driver among
+  the options.
+- **What would justify PREFERRED HYBRID** on Linux servers:
+  - an OpenShell stability policy (1.0, or documented stable interfaces for exec, ssh and policy);
+  - the proof of concept below green on two consecutive releases;
+  - a median overhead of 100 ms or less over L1;
+  - the TLS question of §4.5 answered.
+- **What would justify reconsidering REPLACE:** native, non-experimental Windows and macOS support without Docker
+  Desktop, **and** a library or embedded mode with no gateway daemon. Neither exists.
+
+**The proof of concept, designed and not run** (the review's §8.5). It runs on `ubuntu-24.04` at the pinned tag and
+extends `openshell.yml` with nine checks:
+1. a granted and an ungranted run give the same outcomes as at L1;
+2. OpenShell denies a `curl` from inside the sandbox to an unlisted host, and its log line is read;
+3. a granted HTTPS `GET` through DeluluLang's egress client works, or fails with a named reason;
+4. the gateway killed mid-run ends the guest, the report says why, and nothing is performed after;
+5. a lease revoked mid-run is refused at the next effect (DL1403);
+6. with OpenShell absent, the run exits 2 and nothing runs;
+7. the prover's `within`/`exceeds` on the export (this one exists);
+8. overhead: 31 fresh runs, median and p95 against L1;
+9. the same suite on the previous tag, so a break is attributed to upstream.
+
+To roll back, drop the backend flag; L1 is untouched.
+
+**The invariants any integration keeps** (the review's §8.4, in this file's terms):
+- The guest performs no effect.
+- The program is sent only after this generation's boundary is confirmed.
+- Unavailable containment is a refusal, never a downgrade.
+- `inconclusive` never becomes a grant, and a proposal is not a grant until it is approved under `⊑`.
+- Revocation is checked at use.
+- An export is never wider than the program's authority.
+- A launcher's guarantees are reported as the launcher's.
+- Secret bytes never enter the guest.
+- Device envelopes stay in DeluluLang's device broker.

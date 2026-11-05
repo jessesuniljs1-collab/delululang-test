@@ -7755,3 +7755,352 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Open / next:**
   - The 2026-11-05 list above, unchanged.
   - This prompt waits for the owner to start that cloud session. A routine run does not take it up.
+
+### 2026-11-05 — a Claude Code cloud session: Claude's independent review of Codex's review; the documents updated from it
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`   Model: Claude Opus 5.5 (configured and last
+  served, read from the session record; no fallback notice). One page-fetch helper read seven public pages during the
+  second pass; nothing else was delegated.
+- Branch: `claude/dazzling-goodall-iaapyw`   Pull request: none, because the owner did not ask for one.
+  `ci.yml` does not run on a push to this branch, so the branch has no CI run yet.
+- Base: `master` `0670e0b`. Nothing came in on `origin` during the session: `git fetch origin` at the start, at the
+  second pass and before this entry. The scheduled routines were read and not changed; both are disabled.
+- **What changed**, in three commits:
+  - `a7f3515`: the owner's research prompt answered with the report
+    `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md` and nothing else;
+  - `43d66f5`: the second pass, on his word (*"Double Verify And Research About Everything Once Again"*):
+    - Codex's 102 commands re-run;
+    - new boundary tests;
+    - findings F12–F18;
+  - this commit, on his word (*"Update other .md files based on"* the report): the report's findings made
+    `REMAINING_WORK.md` rows, and the records brought up to date. Two of the report's claims were corrected first,
+    both noted at its top:
+    - the WASM higher-order gap is the non-generic spelling only;
+    - the "production ready" box is HANDOFF's, not README's.
+- **The records:**
+  - RW: rows 2.41–2.44, 3.25, 4.88–4.92, 6.54–6.66, 7.27 and 7.28 are new; 2.36 and 6.50–6.53 gained re-runs; the
+    header note and §8 item 8 are new;
+  - `V2_LOG.md`: an entry;
+  - `V2_PHASE_STATUS.md`: row 17;
+  - `V2_OPENSHELL_STUDY.md`: §8, upstream at v0.1.7 and the recommendation, which is not a decision;
+  - `HANDOFF.md`: two §11.2 rules and four §11.5 traps;
+  - `AI_ONBOARDING.md`: §10;
+  - `REPOSITORY_STRUCTURE.md`: the `docs/review/` row;
+  - `for-agents.md`: P9-03's approval is a boundary only across OS accounts;
+  - `CONTRIBUTING.md`: the Survey example's 134 → 244, recounted.
+- Files and folders (`git diff --name-status 0670e0b..HEAD`):
+  - A `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`.
+  - M `CONTRIBUTING.md`, `HANDOFF.md` (§11.2, §11.5), `docs/AI_ONBOARDING.md` (§10), `docs/CLOUD_SYNC_LOG.md`,
+    `docs/REMAINING_WORK.md`, `docs/REPOSITORY_STRUCTURE.md` (§5.2's `docs/review/` row), `docs/for-agents.md`
+    (P9-03), `docs/DELULULANG_V2/V2_LOG.md`, `V2_OPENSHELL_STUDY.md` (§8), `V2_PHASE_STATUS.md` (row 17) and
+    `docs/survey/*`.
+  - Deleted, renamed: nothing. No source, test, configuration, entrenched file or Codex's review changed.
+- Survey and doctor:
+  - at the start (clean tree): `survey check` ok (1618 nodes, 18863 edges); `findings` 0 errors, 7 warnings;
+    `doctor --check` 28 checks passed;
+  - after the last edit: in this commit's message.
+- **Verified:** every new row was run on a release build of `0670e0b` on Linux x86-64, and the three WASM refusals of
+  RW 3.25 were re-run once more before the row was written. Windows and macOS were not run, so each row is expected
+  the same there but not observed. No CI run was dispatched.
+- For the laptop's memory: `HANDOFF.md` §11.2's two new rules and §11.5's four new traps.
+- **Open / next, in order** (the 2026-11-05 laptop list, plus the review):
+  1. **Land this branch:** open a pull request into `master`, read its CI, and merge on green. The branch is records
+     and a generated map only.
+  2. **The owner's answers.** The 2026-11-02 question (hold 2.0 for the language basics) is still unanswered. Both
+     reviews now recommend holding, behind the *ordinary agent utility* bar (RW §8 item 8). The review's §13 adds
+     four more:
+     - adopt the OpenShell verdict (an optional backend, with PS-C frozen);
+     - whether a scope refusal is catchable (RW 2.42);
+     - the exit-code mapping;
+     - RFCs or a recorded unfreeze for the core changes.
+  3. The answer contracts, each witnessed red first: RW 6.50–6.52, 6.54–6.60 and 4.88.
+  4. RW 7.28: bump the OpenShell pin to v0.1.7 and dispatch `openshell.yml` with its runtime witness.
+  5. Cite `launch/2.0.0` `728a582`'s `everything` `41416143488` and release dry run `41416147296` in CHECKLIST-2.0 at the
+     next merge (unchanged); RW 7.27 before the launch.
+  6. The language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form.
+  7. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension (RW 6.53). The launch, only
+     on the owner's word.
+
+### 2026-11-05 — the same Claude Code cloud session: the AI-first compiler and execution-pipeline audit; a documentation PR
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5, configured and last
+  served, read from the session record. Two sub-agents ran, each Sonnet 5.5 (`claude-sonnet-5-5`, read from their own
+  system prompts): one did primary-source research, one an adversarial code read. Both were read-only on the
+  repository.
+- Branch: `claude/dazzling-goodall-iaapyw`. Base: `master` `0670e0b`, unmoved through the session; the branch also
+  carries this session's earlier commits `a7f3515`, `43d66f5` and `dfb5b62`.
+- Pull request: opened into `master` with this commit, at the owner's request (the prompt above). Its number, its CI
+  run and any merge are recorded in the PR itself, not here.
+- **Why:** the owner's prompt `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Prompt.md` (placed
+  byte for byte, SHA-256 `3dbe437e…`; the upload's `fb63892e-` prefix dropped), and during the session: *"I allow u
+  to suggest any changes that is against current constitution.md, license or any other .md file rules and
+  regulations."*
+- **What changed:** documents and the map only. No `.rs`, test, configuration, manifest, workflow, editor or
+  entrenched file. In detail:
+  - A `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md`, the report;
+  - A the prompt;
+  - A `docs/assistant-memory/owner-may-suggest-rule-changes-2026-11-05.md` and
+    `measure-the-stage-before-removing-it.md`;
+  - M `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`: a header note and §18, old claim → new
+    observation;
+  - M `docs/REMAINING_WORK.md`: rows 3.26, 3.27, 4.93, 4.94, 5.7 and 6.67–6.70 new; 3.3, 3.25 and 6.58 updated; a
+    header note;
+  - M `docs/for-agents.md`: the signal exception to *"in every outcome"*, and the package caveat on `edit`;
+  - M `INSTALL.md`: the portable build's measured start-up;
+  - M `HANDOFF.md`: §11.1 for the owner's instruction, §11.2 for two lessons;
+  - M `docs/assistant-memory/MEMORY.md`, `docs/AI_ONBOARDING.md` (§8, §10),
+    `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md` (row 17), `docs/REPOSITORY_STRUCTURE.md` (the
+    `docs/prompt/` and `docs/review/` rows), `docs/CLOUD_SYNC_LOG.md` and `docs/survey/*`;
+  - deleted, renamed: nothing.
+- **Verified** (the report's §10 and §12):
+  - the provenance build's identity;
+  - the stage harness, the CLI timings and the peak memory;
+  - every earlier finding, re-tested and still open;
+  - seven new defects, each re-run by the head chef;
+  - three probes of mine that were wrong, re-run and recorded as my errors (§17).
+- **CI:** `41929573373` on `0670e0b` read green (14 success, 2 skipped by design). This branch's PR run is recorded in
+  the PR.
+- **For the laptop's memory:** `HANDOFF.md` §11.1 (the owner's instruction) and §11.2 (two lessons), and the two
+  memory notes above.
+- **Redo on the laptop:** `origin/autosave/laptop` `ea8a903` (2026-11-05 06:27 UTC) shows this audit's prompt
+  **untracked** in the laptop's checkout, byte-identical to the committed copy (SHA-256 `3dbe437e…`). Before
+  fast-forwarding `master` there, move that untracked file aside or delete it; otherwise `git pull --ff-only` refuses to
+  overwrite it. It is the same file, so nothing is lost.
+- **Survey and doctor:** at the start, `survey check` ok (1619 nodes, 19143 edges), `findings` 0 errors and 6
+  warnings, `doctor --check` 26 passed. After the last edit: in the commit message.
+- **Open / next, in order:**
+  1. **The PR:** read its CI for the exact head SHA. It lands only after an independent review (`CONTRIBUTING.md` §4
+     rule 3), then by fast-forward (`AI_ONBOARDING.md` §3), never by a merge commit.
+  2. **The owner's answers:**
+     - hold 2.0 for the basics (asked 2026-11-02);
+     - the earlier review's §13 decisions;
+     - the audit's §14 suggestions B1–B8, each a rule change only on his word or a recorded `D-V2-nn`.
+  3. RW 4.93, 4.94, 5.7, 6.67: the DIR and review-surface defects, each witnessed red first.
+  4. RW 6.68, 6.69, 6.58, and the answer contracts (RW 6.50–6.52, 6.54–6.60, 4.88).
+  5. RW 7.28: bump the OpenShell pin. RW 3.26: move Python out of the main binary.
+  6. The language basics (RW §8 items 7 and 8), then RW 3.24 and RW 3.3 (`--engine auto`).
+  7. On the laptop, only on the owner's word: reinstall `delulu` and the VS Code extension (RW 6.53). The launch, only
+     on the owner's word.
+
+### 2026-11-05 — the same Claude Code cloud session: the third verification pass; R-Get found unenforced (RW 4.95)
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5. **No sub-agents** (the
+  owner: *"No need to run agents this time"*).
+- Branch: `claude/dazzling-goodall-iaapyw`, fast-forwarded to `master` `6397a98` (the owner's merge of PR #125), then
+  this commit. A pull request into `master` carries it. The owner, this session: *"u can merge, No need to wait for my
+  approval"*. So it lands on a green run of its own head, by fast-forward where the proxy allows. The PR records how.
+- **Why:** the owner's request to *"Double Verify And Research About Everything Once Again"*, against both prompts in
+  `docs/prompt/` and the reports made from them, and to *"Check CI run in master and current branch and make fixes"*.
+- **CI read:**
+  - PR run `41983232404` (`3d6c881`) and `master` push run `41983782231` (`6397a98`): success, 14 jobs each, 2 skipped
+    by design. Recorded on PR #125.
+  - **No red job, so no CI fix was needed.**
+- **What changed** (documents and the map only; no `.rs`, test, configuration, manifest, workflow, editor or entrenched
+  file):
+  - A `docs/assistant-memory/a-rule-is-enforced-where-it-is-called.md`;
+  - M `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md`: §19, the third pass; header and §1 notes;
+    the §12 rows; priority 0 in §15; §17's DIR row; five figures and a citation corrected in place, listed in §19.4;
+  - M `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md`: §19, old claim → new observation; a header
+    note; the first item under §1 action 2; C15's citation;
+  - M `docs/REMAINING_WORK.md`: rows 4.95, 4.96 and 6.71 new; 4.93 driven end to end; a header note;
+  - M `docs/for-agents.md`: annotate a plugin export with its real type until RW 4.95 is fixed;
+  - M `HANDOFF.md` §11.2: *"A rule written as a function is enforced only where something calls it"*;
+  - M `docs/AI_ONBOARDING.md` §10, `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`, this file and
+    `docs/survey/*`;
+  - deleted, renamed: nothing.
+- **Verified:**
+  - the audit's 71 probes replayed: 71 identical;
+  - the seven defects re-witnessed, RW 4.93 through `plugin verify`;
+  - every cited source line re-read;
+  - RW 4.95, 4.96 and 6.71 each run twice: the escape, then its control or the honest form.
+- **For the laptop's memory:** `HANDOFF.md` §11.2's new lesson and the memory note above.
+- **Open / next, in order:**
+  1. **RW 4.95:** enforce R-Get at `p.get`. The checker hands each site's `F` to the runtime, and `plugin_get` calls
+     `r_get_verified`/`r_get_contained`. Its two witnesses go red first, then mutants. RW 4.96 rides with it.
+  2. RW 4.93, 4.94, 5.7 and 6.67 (DIR and review surfaces), then 6.68, 6.69 and 6.71.
+  3. As before: the owner's answers; the answer contracts; RW 7.28; RW 3.26; the language basics; the launch only on his
+     word.
+
+### 2026-11-05 — the same Claude Code cloud session: the hidden-complexity audit (RW 3.28, 3.29, 6.72–6.74)
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5. **No sub-agents.**
+- Branch: `claude/dazzling-goodall-iaapyw`, at `master` `35f1a2d` (PR #126's fast-forward), then this commit. A pull
+  request into `master` carries it. The owner, this session: *"u can merge, No need to wait for my approval"*. It
+  lands on a green run of its own head, by fast-forward. The PR records how.
+- **Why:** the owner's prompt
+  `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`, added here byte for byte. It
+  asks for hidden human-centric complexity and avoidable costs on an AI's task path, measured and double-verified.
+  Also: *"Check CI run in master and current branch and make fixes"*.
+- **CI read:** `master` push run `41990062363` and PR run `41988110890`, both on `35f1a2d`: success. **No red job, so
+  no CI fix was needed.**
+- **What changed** (documents and the map only; no `.rs`, test, configuration, manifest, workflow, editor or entrenched
+  file):
+  - A `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`;
+  - A `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`;
+  - A `docs/assistant-memory/a-fast-path-must-see-what-the-slow-path-sees.md`;
+  - M `docs/REMAINING_WORK.md`: rows 3.28, 3.29, 6.72, 6.73 and 6.74 new; 3.26, 6.60, 6.62 and 6.69 amended; a header
+    note;
+  - M `docs/for-agents.md`: the LSP's package caveat; the `DELULU_HOME` row corrected (theme, locale and catalogs come
+    from `$HOME/.delulu`); a budget stop's empty stdout; zero tests exit 0; MCP does not honour cancellation;
+  - M `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md` §20 and
+    `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md` §20: dated amendments;
+  - M `HANDOFF.md` §11.2: *"A fast path must see what the slow path sees"*;
+  - M `docs/AI_ONBOARDING.md` §10, `docs/REPOSITORY_STRUCTURE.md` (`docs/prompt/`, `docs/review/`),
+    `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`, this file and `docs/survey/*`;
+  - deleted, renamed: nothing.
+- **Verified:**
+  - every new row witnessed on the binary named in it, with a control where one applies;
+  - RW 4.95 and 6.69 re-run;
+  - every cited source line re-read;
+  - after the last edit:
+    - survey build: 1627 nodes, 19439 edges, 0 errors, 6 warnings (the six standing ones);
+    - survey check: ok;
+    - doctor --check: ok, 28 checks passed;
+    - the nine document-gate targets: 64 passed, 0 failed;
+    - delulu-survey's suite: 74 passed, 0 failed.
+- **For the laptop's memory:** `HANDOFF.md` §11.2's new lesson and the memory note above.
+- **Open / next, in order:**
+  1. **RW 4.95:** R-Get at `p.get`, unchanged (it still holds), with RW 4.96.
+  2. **RW 6.72 with 6.69:** the package-blind fast paths (one cause); then RW 3.28, 3.29, 6.73 and 6.74, each red
+     first. The audit's §7 gives each its proof and stop condition.
+  3. RW 4.93, 4.94, 5.7 and 6.67, then 6.68 and 6.71.
+  4. As before: the owner's answers (the audit's §9 adds five); the answer contracts; RW 7.28; RW 3.26 and 3.27 (the
+     audit's P2); the language basics; the launch only on his word.
+
+### 2026-11-05 — the same Claude Code cloud session: the hidden-complexity audit's second pass (RW 4.97, 6.75–6.81)
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5.
+- **Sub-agents:** three Sonnet 5.5 (`claude-sonnet-5-5`): a verifier, a code reviewer and a researcher. Every finding was
+  re-run by the head chef before it was written.
+- Branch: `claude/dazzling-goodall-iaapyw`, from `master` `5fb865c` (PR #127's fast-forward):
+  - `f439c6f`: README and the user-facing pages, pushed first because a stop hook asked for the working changes to be
+    committed;
+  - then this commit.
+
+  A pull request carries both. The owner, this session: *"u can merge, No need to wait for my approval"*. They land by
+  fast-forward on a green run.
+- **Why:** the owner asked for a double verification of the three reviews and every prompt in `docs/prompt/`. He also
+  asked for README and the other documents, CI on `master` and the branch with fixes, a check of the repository's code,
+  and web research.
+- **CI read:**
+  - `master` push run `42015437785` on `5fb865c`: **red**, in `test (windows-latest)`, `monitor_cli`'s
+    `a_long_chain_does_not_kill_a_healthy_monitor` (RW 7.25). The same commit's PR run `42012298873` was green, and the
+    commit is documents only.
+  - Read: the monitor was alive and the daemon hearing; a `ListPage` waited 1,879 ms in the broker's queue when the
+    500 ms dead-man fired. RW 7.25 now records that.
+  - The failed job, re-run once: queued at 11:27 UTC, attempt 2; its result is recorded on this pass's pull request and in the next sync-log entry.
+  - Scheduled run `42009076387` on `35f1a2d`: 16 of 18 jobs green (`heavy-gates` included); `miri-slow` (check, broker)
+    still running when read.
+- **What changed** (documents and the map only; no `.rs`, test, configuration, manifest, workflow or entrenched file):
+  - M `README.md`: RW 4.95 under the opening sentence; RW 6.72 in "In your editor"; `run --json`'s envelope; a
+    `docs/review/` row; a sixth "worth knowing" item;
+  - M `docs/GETTING_STARTED.md` §12, `docs/editors.md`, `editors/vscode/README.md`: RW 6.72;
+  - M `docs/QUESTIONS.md` §3.2: RW 4.95 and 4.96;
+  - M `docs/for-agents.md`: "cannot drift" scoped to a loose file; the sandbox's answer gaps (RW 6.75, 3.29);
+  - M `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`: §11 (second pass) and the in-place
+    corrections in §11.4;
+  - M `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md` §20 and
+    `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md` §20: dated addenda;
+  - M `docs/REMAINING_WORK.md`:
+    - new: 4.97, 6.75, 6.76–6.81;
+    - 3.29 corrected and raised; 3.26's memory corrected;
+    - 7.25: the Windows red's evidence;
+    - a header note;
+  - M `HANDOFF.md` §11.3: three environment facts (child RSS from C; the 22 GB test build; the broker socket path);
+  - A `docs/assistant-memory/measure-child-memory-from-c.md`, M `docs/assistant-memory/MEMORY.md`;
+  - M `docs/AI_ONBOARDING.md` §10, `docs/DELULULANG_V2/V2_LOG.md`, this file, `docs/survey/*`;
+  - deleted, renamed: nothing. Scratch build caches (22 GB, 1.3 GB) were deleted from scratch, not from the repository.
+- **Verified:**
+  - RW 4.93, 4.94, 4.95, 6.67, 6.69 and 6.70 re-witnessed;
+  - 71-probe ledger: 65 identical, 6 explained;
+  - every sub-agent finding re-run (F12 and part of F10 in source);
+  - the MCP spec's status and the Wasmtime and Rust versions read from primary sources;
+  - after the last edit: survey build 1629 nodes, 19499 edges, 0 errors, 6 warnings (the standing six); survey check ok; doctor --check ok, 28 checks passed; the nine document-gate targets 64 passed, 0 failed; delulu-survey's suite 74 passed, 0 failed.
+- **For the laptop's memory:** `HANDOFF.md` §11.3's three facts and the memory note above.
+- **Open / next, in order:**
+  1. **RW 4.95** (R-Get), with RW 4.96; and **RW 4.97**, a small fix that refuses unknown options in the signing
+     commands.
+  2. RW 6.72 with 6.69 (package-blind fast paths); RW 3.29 (now under `hostile-agent`), 6.75 and 6.77 (outcome
+     contracts); RW 3.28, 6.73, 6.74 and 6.76.
+  3. RW 7.25: say whether a monitor's beat can wait behind a slow request, then fix or widen the witness.
+  4. RW 6.78–6.81, then 4.93, 4.94, 5.7, 6.67, 6.68, 6.71.
+  5. As before: the owner's answers (the audit's §9); RW 7.28; RW 3.26 and 3.27; the language basics; consider moving
+     the Rust pin (1.96.1) towards 1.99.1 in its own change; the launch only on his word.
+
+### 2026-11-05 — the same Claude Code cloud session: #128 landed; the CI it waited on, read
+
+- Session: https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9   Model: Claude Opus 5.5
+- Branch: `claude/dazzling-goodall-iaapyw`   Pull request: the one that carries this entry   Merged: by fast-forward on
+  a green run, under the owner's word (*"u can merge, No need to wait for my approval"*)
+- Base: `be40a92` (`master`, after #128)
+- Commits: one records commit (this entry).
+- **#128 landed:** its run `42020534572` was read to its end, 14 of 14 jobs green (`heavy-gates` and `miri-slow`
+  skipped, as on every pull request). `master` was fast-forwarded `5fb865c` → `be40a92`, after checking that it had not
+  moved. The merge record is on #128.
+- **CI read:**
+  - `master`'s push run `42015437785` (`5fb865c`): the red `test (windows-latest)` job (RW 7.25) was re-run once.
+    **Attempt 2 (job `127217198088`) passed**, 11:27–11:47 UTC. RW 7.25 says so: red twice, green on the next run each
+    time, cause still not known.
+  - The scheduled run `42009076387` (`35f1a2d`): **18 of 18 green**, `heavy-gates` and the three `miri-slow` jobs
+    included (`delulu-check` 1 h 34 min, `delulu-broker` 1 h 14 min, `delulu-syntax` 16 min).
+- **The laptop's autosave:** `origin/autosave/laptop`'s newest snapshot (`6ad586a`, 10:07 UTC) adds only
+  `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Prompt.md` and
+  `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`, each byte-identical to
+  `master`'s. There is nothing to recover. No other pull request is open.
+- Files and folders (`git diff --name-status be40a92..HEAD`):
+  M `docs/REMAINING_WORK.md` (RW 7.25's status and its re-run)
+  M `docs/AI_ONBOARDING.md` (§10: #128 landed; the counters' last pull request)
+  M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*` (regenerated)
+  Nothing added, deleted or renamed; no code, test, configuration, workflow or entrenched file.
+- Survey and doctor (after the last edit): `survey check` ok; `survey findings` 0 errors, 6 warnings (the standing
+  six); `doctor --check` ok, 28 checks passed. The nine document-gate targets were run as well.
+- Verified: the CI runs above, read; the Survey and `doctor` on `be40a92` before the fast-forward (check ok, 1629 nodes,
+  19499 edges; findings 0 errors, 6 warnings, 37 notes; `doctor --check` ok, 28 checks passed).
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: unchanged from the previous entry. RW 4.95 comes first, with 4.96 and 4.97 (the security fixes). Then
+  RW 6.72 with 6.69 (package-blind fast paths), then 3.28, 3.29, 6.73–6.77 (outcome contracts), then 7.25, 6.78–6.81 and
+  the rest of that list. The owner's answers are still open (the language basics; the reviews' decisions), and the
+  launch waits for his word.
+
+### 2026-11-05 — the laptop: synced after the cloud session; its reviews re-run on Windows; RW 7.25's reading corrected
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-7-25-records`   Base: `master` `1414a58`. Nothing came in on `origin` after it; no other AI's commit
+  landed while this one worked.
+- **The sync:** `master` fast-forwarded `0670e0b` → `1414a58` (PRs #125–#129, the cloud session's three reviews and the
+  records made from them, documents and the map only). Every PR and push run of theirs was read green, and so was the
+  scheduled run `42009076387` (18 of 18). The owner's two prompts, untracked here, were byte-identical to `master`'s and
+  were moved aside, not deleted, before the fast-forward. Survey check ok (1629 nodes, 19505 edges); `doctor --check` 29
+  passed.
+- **The reviews' rows, re-run on Windows** (the owner: *"Verify and learn more"*), on a release build of `1414a58` with its
+  commit injected, and the same day's debug build. The rows had said Windows was not observed. Not recorded in the rows
+  yet:
+  - **Reproduced:** 4.95, 4.97, 3.28, 3.25, 6.73, 6.75, 6.77, 6.58 (*"The pipe is being closed (os error 232)"*), 6.60,
+    6.51, 6.78, 6.79, 6.72, 6.81, 6.74, 6.76, 6.69, 6.80 (a CRLF file left with mixed line endings), 4.88, 6.55, 2.42,
+    2.37, 4.96, 6.71, 6.50, 6.57, 6.53.
+  - **Not reproduced: RW 3.29.** On the release build, `--sandbox-profile hostile-agent` and `--sandbox --limits mem`
+    down to 256 MiB give DL0905. Windows' job limit counts committed memory, and the 781 MiB stack is only reserved. The
+    debug build's guest did overflow its stack, its report saying `stopped_by: memory`.
+  - **Wider than recorded:** RW 6.70. Two skins do ship (`scripts/package-toolchain.sh` puts `morphs/` beside `bin/`),
+    and `./morphs` is searched first, so a file in the working directory shadows a shipped skin. A `compact-ai` program
+    printed `tick` once in one directory and three times in another, under a skin that swapped the aliases of `if` and
+    `while`; no report names the skin used.
+  - **Smaller:** RW 6.54's hint names the program's device; its `DIM=LO..HI` shape omits `heartbeat_ms`. RW 4.96: a grant
+    with limits is refused first, in words naming a Verified plugin. `delulu lsp` ignores its arguments (`mcp` refuses
+    them); a fix should still accept `--stdio`.
+- **RW 7.25 corrected** (the owner pasted an independent analysis, then: *"Correct the records first, then build the
+  deterministic witness"*). Its Windows reading had said the monitor was still running, the daemon was hearing, and the
+  cause narrowed to a broker queue. None of these follows: the exit status was read after the monitor printed *"ended"*;
+  no deaf interval says only that the hearing thread looked; the 1,879 ms `ListPage` was the test's own listing, timed
+  from its reader's stamp to the handler, and not ordered against the firing. Five accepted beats are a count, not a
+  time. The historical cause of neither red is established. One broker-side path is known from source (a beat stamped
+  and not yet handed over is not counted), and a fix that waits on active readers was withdrawn: overlapping incomplete
+  connections could hold a dead-man off for ever.
+- Files and folders (`git diff --name-status 1414a58..HEAD`): M `docs/REMAINING_WORK.md` (RW 7.25), `docs/AI_ONBOARDING.md`
+  (§10), `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md` (a dated correction beside §11.1 and a
+  note at its top), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry) and `docs/survey/*`. Nothing
+  added, deleted or renamed; no code.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. The deterministic witness of RW 7.25's stamp-to-hand-over window, and timing for each beat, on its own branch.
+  2. Then coordinate complete, authenticated beats with the expiry decision, with counter-tests: incomplete connections,
+     invalid keys and unrelated traffic must not keep a silent monitor alive.
+  3. Record the Windows re-runs above in their rows.
+  4. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
+     word.
