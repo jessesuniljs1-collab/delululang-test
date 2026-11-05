@@ -8152,3 +8152,42 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. Record the Windows re-runs of the reviews' rows (the entry before this one).
   4. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
      word.
+
+### 2026-11-05 — the laptop: RW 4.98 closed (D-V2-209), with counter-tests
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-4-98-fix`, stacked on `laptop/rw-7-25-witness` (#131). Base `master` `7dc9162` (#130 landed);
+  nothing else came in on `origin`.
+- **Why:** the owner's sequence for RW 7.25, steps 3 and 4: coordinate complete, authenticated beats with the judgment;
+  counter-tests for incomplete connections, invalid keys and unrelated traffic.
+- **What changed:**
+  - `crates/delulu-broker/src/deadman.rs`: `Broker::deadman_heard` and its unit test.
+  - `crates/delulu/src/brokerd.rs`:
+    - a beat read whole is stamped and noted under one lock (`HeardBeats`, `note_beat`, bounded at 1,024);
+    - the loop fixes `as_of` and takes the notes under it, then applies them;
+    - the witness is un-ignored;
+    - the two counter-tests and the bound's test.
+  - Records:
+    - `V2_DECISION_LOG.md` D-V2-209;
+    - RW 4.98 closed, and RW 7.25 notes it, its own cause still unknown;
+    - `CHANGELOG.md`;
+    - `AI_ONBOARDING.md` §10 (D-V2-209, M1085);
+    - `V2_LOG.md`, this entry, `docs/survey/*`.
+- Files and folders (`git diff --name-status 126fc4e..HEAD`): M `crates/delulu-broker/src/deadman.rs`,
+  `crates/delulu/src/brokerd.rs`, `CHANGELOG.md`, `docs/AI_ONBOARDING.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Nothing added, deleted or renamed; no entrenched file.
+- **Verified on the laptop (Windows):**
+  - the `delulu` binary's tests: 204 passed, 0 ignored;
+  - `delulu-broker`: 256 passed;
+  - `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8;
+  - mutants M1081–M1085 each red (M1081 is the withdrawn reader-count fix, caught by the incomplete-connections test);
+  - `scripts/clippy.sh -j 4` clean.
+
+  CI runs the whole suite, and `miri-slow` runs `delulu-broker`'s Miri nightly.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. Land #131 (the witness and timing), then this branch, each on a green run.
+  2. Record the Windows re-runs of the reviews' rows (the 2026-11-05 laptop sync entry).
+  3. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
+     word.

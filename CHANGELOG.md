@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a beat that arrived in time keeps its dead-man however late its hand-over, 2026-11-05
+
+- **Fixed (RW 4.98, D-V2-209): the broker daemon could revoke a monitor that had beaten in time.** It stamps each request
+  as its reader finishes reading it, then hands it to the loop that judges dead-men. A beat stamped before a judgment
+  and handed over after it was not counted, so a starved reader thread could fire a healthy monitor's dead-man and revoke
+  every run under it. Now a beat read whole is noted, under the lock the judgment is made under, and counted from when it
+  was heard. Only a beat its key proves counts, and it buys one period, as a handled beat does. Incomplete connections,
+  wrong keys and other traffic still cannot hold a silent monitor's dead-man off: each is tested.
+
 ## Unreleased — a fired dead-man names its last beats, and a monitor its own, 2026-11-05
 
 - **Added, to `broker.log` (RW 4.98, RW 7.25): when a dead-man fires, the daemon names its last four beats.** For each:

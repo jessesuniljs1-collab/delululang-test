@@ -12153,3 +12153,49 @@ kept, and only one beat is held (M1080).
 - Survey and `doctor`: in the commit message.
 
 The counters: D-V2-208, M1080, 157 codes, 366 anchors.
+
+## 2026-11-05 — the laptop: RW 4.98 closed (D-V2-209): a beat read whole and stamped before a judgment counts; counter-tests
+
+**Why.** The owner's order for RW 7.25 continues: after the records and the witness, *"Coordinate complete, authenticated
+heartbeat publication with expiry decisions. Treat delays before receipt as a separate problem"*, and *"Require
+counter-tests showing that incomplete connections, invalid keys, and continuous unrelated traffic cannot prevent a
+genuinely silent monitor's revocation."*
+
+**What changed** (D-V2-209):
+- **`brokerd.rs`, the readers:** a reader that has read a `Beat` whole stamps it and notes its node, key and
+  hearing-clock time under one lock (`HeardBeats`, `note_beat`), then hands it over as before. Nothing else is noted: an
+  incomplete connection notes nothing. The notes are bounded at 1,024 between two judgments.
+- **`brokerd.rs`, the serve loop:** under that lock it fixes the judgment's time (`as_of`, as before) and takes the
+  notes. A beat stamped before is among them; one stamped after is late by its own stamp. Then it applies them through
+  `Broker::deadman_heard` and judges.
+- **`delulu-broker` `deadman_heard`:** counts a note only if its key matches and it was heard before the deadline. It
+  moves the deadline to one period after the beat was heard, never shortens it, and is not a beat (`beats` unchanged).
+- **The witness is green** and no longer ignored. Its twin stays.
+
+**Counter-tests** (a 300 ms dead-man must fire while the traffic still comes):
+- `incomplete_connections_do_not_hold_a_silent_dead_man_off`: a new connection every 100 ms for 2 s, each two bytes of a
+  frame;
+- `beats_with_a_wrong_key_do_not_hold_a_silent_dead_man_off`;
+- the existing `a_busy_daemon_still_fires_an_unbeaten_dead_man` (unrelated traffic);
+- and `the_beats_noted_between_judgments_are_bounded`.
+
+**Mutants, each red:**
+- M1081: the withdrawn fix itself, no judgment while any reader is active. The incomplete-connections test failed:
+  *"20 incomplete connections held a 300 ms dead-man off for 2 s"*.
+- M1082: a note counted without its key. The wrong-key test (84 beats held it off) and the unit test failed.
+- M1083: the notes taken and not applied. The witness failed.
+- M1084: two periods bought. The unit test failed.
+- M1085: a late note counted. The unit test failed.
+
+**Not covered, on purpose:** a beat the daemon has not yet read whole (a connection waiting to be accepted, a reader not
+yet run). The monitor's own timing shows that side. RW 7.25's two reds have no established cause; this closes one path
+they might have taken, and does not say they took it.
+
+**Verified on the laptop (Windows):**
+- `cargo test -p delulu --bin delulu`: 204 passed, 0 ignored;
+- `delulu-broker`: 256 passed;
+- `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8: all passed;
+- `scripts/clippy.sh -j 4`: clean;
+- Survey and `doctor`: in the commit message.
+
+The counters: D-V2-209, M1085, 157 codes, 366 anchors.

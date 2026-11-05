@@ -357,9 +357,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
   - **RW 4.95 first** (enforce R-Get at `p.get`; its two witnesses red first), with RW 4.96;
   - RW 4.97 with it (a small fix: refuse unknown options in the signing commands);
-  - RW 4.98: a beat stamped in time and handed over late loses its dead-man. Its witness is red and `#[ignore]`d;
-    the fix coordinates complete, authenticated beats with the judgment, never "wait while any reader is active",
-    with counter-tests. RW 7.25's next red names its path in the job log (both sides' beat timing);
+  - RW 4.98 is closed (D-V2-209): a beat read whole and stamped before a judgment counts, by its key, for the period it
+    bought; counter-tests for incomplete connections, wrong keys and other traffic. RW 7.25's cause is still not known;
+    its next red names its path in the job log (both sides' beat timing);
   - then the package-blind fast paths, RW 6.72 with 6.69 (one cause), and RW 3.28, 3.29, 6.73 and 6.74 (the audit's §7 order);
   - then RW 6.75 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
@@ -368,8 +368,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-208;
-  - the last mutant is M1080;
+  - the last decision is D-V2-209;
+  - the last mutant is M1085;
   - there are 157 DL codes and 366 reference anchors;
   - pull requests are numbered on GitHub, and #128 was the last merged.
 

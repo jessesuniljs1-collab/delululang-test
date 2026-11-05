@@ -46,36 +46,70 @@ use serde_json::json;
 
 use crate::broker_ipc::{ReqBody, Response};
 
-/// One beat this monitor sent (RW 4.98's timing): when, in time since its dead-man was armed; how long its answer took;
-/// who sent it (the watch, or the beater that beats while the watch waits on the broker); and whether it was kept.
+/// One beat this monitor sent (RW 4.98's timing): when, in time since its dead-man was armed; who sent it (the watch, or the
+/// beater that beats while the watch waits on the broker); and, once its answer came back, how long that took and whether
+/// it was kept. Noted when it is SENT, before its request can block, so a beat still waiting is named too (the independent
+/// review's finding 4).
 #[derive(Clone, Debug)]
 struct SentBeat {
+    seq: u64,
     sent: Duration,
-    answered_in: Duration,
     by_beater: bool,
-    kept: bool,
+    answer: Option<(Duration, bool)>,
 }
 
 /// How many of its last beats a monitor names when its watch ends on an error.
 const SENT_BEATS_NAMED: usize = 6;
 
-/// The line a monitor whose watch ended on an error writes about its own progress: its last beats and its longest turn of
-/// the watch (one pass of its loop, its sleep left out). With the daemon's own line about the same dead-man, it says
-/// whether the beats were sent and when — the half of RW 7.25's evidence a daemon cannot see.
-fn progress_line(beats: &VecDeque<SentBeat>, longest_turn: Duration) -> String {
-    let named = if beats.is_empty() {
+/// The beats a monitor has sent, the last [`SENT_BEATS_NAMED`] of them.
+#[derive(Debug, Default)]
+struct SentBeats {
+    next: u64,
+    beats: VecDeque<SentBeat>,
+}
+
+/// Note a beat as it is sent; returns its number, for [`answered_beat`].
+fn sending_beat(beats: &std::sync::Mutex<SentBeats>, sent: Duration, by_beater: bool) -> u64 {
+    let mut b = beats.lock().unwrap_or_else(|p| p.into_inner());
+    let seq = b.next;
+    b.next += 1;
+    if b.beats.len() == SENT_BEATS_NAMED {
+        b.beats.pop_front();
+    }
+    b.beats.push_back(SentBeat { seq, sent, by_beater, answer: None });
+    seq
+}
+
+/// Note a sent beat's answer: how long it took, and whether the beat was kept. A beat no longer among the last ones named
+/// is left alone.
+fn answered_beat(beats: &std::sync::Mutex<SentBeats>, seq: u64, answered_in: Duration, kept: bool) {
+    let mut b = beats.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(beat) = b.beats.iter_mut().find(|beat| beat.seq == seq) {
+        beat.answer = Some((answered_in, kept));
+    }
+}
+
+/// The line a monitor whose watch ended on an error writes about its own progress: its last beats, answered or still
+/// waiting, and its longest turn of the watch (one pass of its loop, its sleep left out). With the daemon's own line about
+/// the same dead-man, it says whether the beats were sent and when — the half of RW 7.25's evidence a daemon cannot see.
+fn progress_line(beats: &SentBeats, longest_turn: Duration) -> String {
+    let named = if beats.beats.is_empty() {
         "none".to_string()
     } else {
         beats
+            .beats
             .iter()
             .map(|b| {
-                format!(
-                    "sent +{} by the {} (answered in {} ms, {})",
-                    b.sent.as_millis(),
-                    if b.by_beater { "beater" } else { "watch" },
-                    b.answered_in.as_millis(),
-                    if b.kept { "kept" } else { "refused or unanswered" }
-                )
+                let by = if b.by_beater { "beater" } else { "watch" };
+                match b.answer {
+                    Some((took, kept)) => format!(
+                        "sent +{} by the {by} (answered in {} ms, {})",
+                        b.sent.as_millis(),
+                        took.as_millis(),
+                        if kept { "kept" } else { "refused or unanswered" }
+                    ),
+                    None => format!("sent +{} by the {by} (no answer yet)", b.sent.as_millis()),
+                }
             })
             .collect::<Vec<_>>()
             .join("; ")
@@ -84,15 +118,6 @@ fn progress_line(beats: &VecDeque<SentBeat>, longest_turn: Duration) -> String {
         "monitor: its last beats, in ms since its dead-man was armed: {named}; its longest turn of the watch took {} ms (RW 4.98)",
         longest_turn.as_millis()
     )
-}
-
-/// Note a sent beat, keeping the last [`SENT_BEATS_NAMED`].
-fn note_beat(beats: &std::sync::Mutex<VecDeque<SentBeat>>, beat: SentBeat) {
-    let mut beats = beats.lock().unwrap_or_else(|p| p.into_inner());
-    if beats.len() == SENT_BEATS_NAMED {
-        beats.pop_front();
-    }
-    beats.push_back(beat);
 }
 
 /// One declarative rule.
@@ -362,7 +387,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
     let mut deadman: Option<(String, u64, Duration)> = None; // (key, armed_seq, period)
                                                              // RW 4.98's timing: when the dead-man was armed, and the beats sent since (the watch's and the beater's).
     let mut armed_at: Option<Instant> = None;
-    let sent_beats = std::sync::Arc::new(std::sync::Mutex::new(VecDeque::<SentBeat>::new()));
+    let sent_beats = std::sync::Arc::new(std::sync::Mutex::new(SentBeats::default()));
     if o.on_death == OnDeath::Quarantine {
         // D-V2-106 item 2: the key that lets a beat through is about to live in this process's memory, so no
         // other process of the same user may read it — non-dumpable, as a serving host is (HOST-DUMPABLE-1):
@@ -401,16 +426,9 @@ fn cmd_watch(rest: &[String]) -> i32 {
     let beat = || -> Result<(), (bool, String)> {
         let Some((key, _, period)) = &deadman else { return Ok(()) };
         let sent = Instant::now();
+        let seq = sending_beat(&sent_beats, sent.saturating_duration_since(armed_at.unwrap_or(sent)), false);
         let answer = ask(ReqBody::Beat { node: o.node.clone(), key: key.clone() });
-        note_beat(
-            &sent_beats,
-            SentBeat {
-                sent: sent.saturating_duration_since(armed_at.unwrap_or(sent)),
-                answered_in: sent.elapsed(),
-                by_beater: false,
-                kept: matches!(answer, Ok(Response::Ok)),
-            },
-        );
+        answered_beat(&sent_beats, seq, sent.elapsed(), matches!(answer, Ok(Response::Ok)));
         match answer {
             Ok(Response::Ok) => Ok(()),
             // Revoked or expired: whose doing it was is read from the chain, below — never from the words.
@@ -451,16 +469,9 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 std::thread::sleep(every);
                 if waiting.load(std::sync::atomic::Ordering::SeqCst) && !stop.load(std::sync::atomic::Ordering::SeqCst) {
                     let sent = Instant::now();
+                    let seq = sending_beat(&sent_beats, sent.saturating_duration_since(armed_at.unwrap_or(sent)), true);
                     let answer = crate::brokerd::request(&state_dir, ReqBody::Beat { node: node.clone(), key: key.clone() });
-                    note_beat(
-                        &sent_beats,
-                        SentBeat {
-                            sent: sent.saturating_duration_since(armed_at.unwrap_or(sent)),
-                            answered_in: sent.elapsed(),
-                            by_beater: true,
-                            kept: matches!(answer, Ok(Response::Ok)),
-                        },
-                    );
+                    answered_beat(&sent_beats, seq, sent.elapsed(), matches!(answer, Ok(Response::Ok)));
                 }
             }
         })
