@@ -920,6 +920,14 @@ wins, and you should update the memory to match.
 - **Disk cleanups have a written discipline** (`docs/archive/v1/maintenance/`): never delete a `.md`, confirm at
   a gate before permanent deletion, keep the build caches, and verify WSL content by hash against
   `D:` HEAD before removing anything there.
+- **Measure a child's peak memory from C, not from Python** (the hidden-complexity audit's second pass, 2026-11-05).
+  `ru_maxrss` from `os.wait4` in a Python parent includes the parent's own high-water mark, because `exec` carries it
+  over. So every `delulu` command read 9–15 MiB, and libpython's +4.2 MiB looked like +0.4 MiB. Use a C fork-and-exec
+  launcher (the audit's `rss.c`), or read the child's `VmHWM`.
+- **A cloud session's disk allowance does not fit a debug build of the workspace's tests**: it reached 22 GB and
+  filled the volume on 2026-11-05. Run the full suite on CI (`ci.yml`, `witness.yml`), not in the cloud VM.
+- **A broker started under the cloud scratch path is refused**: its socket path is 116 bytes, and Linux allows 107.
+  Give `DELULU_STATE_DIR` a short path.
 
 ### 11.4 Findings that must never be quietly re-softened
 

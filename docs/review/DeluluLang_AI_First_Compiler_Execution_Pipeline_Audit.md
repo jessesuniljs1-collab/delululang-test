@@ -892,6 +892,12 @@ section records what it re-measured or corrected:
   - RW 6.73: grants refused late, after earlier effects;
   - RW 6.74: MCP ignores cancellation.
 - **RW 4.95 re-run:** it still holds.
+- **Its second pass** (the hidden-complexity audit's §11, same binary):
+  - re-witnessed RW 4.93, 4.94, 6.67 and 6.70 here;
+  - replayed this audit's 71-probe ledger: 65 identical, and the 6 differences come from scratch state or the harness;
+  - confirmed this audit's peak-memory figures, which came from a C launcher. The hidden-complexity audit's own had come
+    from a Python launcher and were corrected.
+  - It adds RW 4.97 and 6.75–6.81, and raises RW 3.29: the sandbox's own memory ceiling triggers it.
 
 ## Appendix A. Reproducibility
 

@@ -11989,3 +11989,51 @@ There was nothing to fix.
 **Not done:** the fixes. Each is a separately witnessed change; the audit's §7 orders them.
 
 The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — a Claude Code cloud session: the hidden-complexity audit's second pass (double verification, code review, research)
+
+**Why.** The owner asked for everything to be double-verified: the three reviews and every prompt in `docs/prompt/`.
+He also asked for README and the other documents to be updated, CI on `master` and the branch to be checked and fixed,
+the repository's code to be checked, and the web researched, with Sonnet 5.5 sub-agents allowed.
+
+**Sub-agents.** Three Sonnet 5.5 (`claude-sonnet-5-5`, each naming itself): a verifier, a code reviewer and a
+researcher. The head chef re-ran every finding before it was written.
+
+**CI.** `master`'s push run `42015437785` on `5fb865c` was red in `test (windows-latest)`: RW 7.25's
+`a_long_chain_does_not_kill_a_healthy_monitor`. The same commit's PR run was green, and the commit is documents only.
+- The failure's evidence was read. The monitor was alive and the daemon was hearing, but a `ListPage` waited 1,879 ms
+  behind the requests ahead of it when the 500 ms dead-man fired. RW 7.25 records it.
+- The failed job was re-run once: queued at 11:27 UTC, attempt 2; its result is recorded on this pass's pull request and in the next sync-log entry.
+- The scheduled run `42009076387` on `35f1a2d`: 16 of 18 jobs green, `heavy-gates` among them; the two `miri-slow`
+  jobs were still running when read.
+
+**Corrected (the audit's §11.4):**
+- **RW 3.29 is worse than recorded.** The `hostile-agent` profile (256 MiB), or `--sandbox --limits mem` up to 768 MiB,
+  aborts the guest on a deep recursion, with no code in the report. The first reading took an exit 1 for DL0905.
+- **Every peak-memory figure was corrected.** A Python launcher's `ru_maxrss` includes its own high-water mark. libpython
+  is +4.2 MiB per command, not +0.4.
+- **MCP `2026-07-28` is final.**
+
+**New rows:**
+- RW 6.75: a sandboxed fault reaches neither the envelope nor the report.
+- RW 4.97: `verify-sig --kye` drops a key pin and answers valid; `sign`/`keygen` ignore unknown options.
+- RW 6.76–6.81: MCP, `run --report-out`, option validation, `schema validate`, `edit` and LSP rename/framing each
+  answer outside their contracts. These are the code reviewer's fourteen findings.
+
+**Re-witnessed on the same binary:** RW 4.93, 4.94, 4.95, 6.67, 6.69 and 6.70. The pipeline audit's 71-probe ledger
+replayed with 65 identical; the 6 differences come from scratch state or the harness.
+
+**Measured:**
+- 20 files in one `check`: 13 ms, against 121 ms in 20 processes;
+- the daemon broker: about 2 ms per brokered effect, nothing on a run that brokers none;
+- the Survey's `diff` and `path`, and the Atlas, exercised; they overlap nowhere.
+
+**Documents:**
+- README states RW 4.95 under its opening sentence, and RW 6.72 in its editor section. It points to `docs/review/` and
+  names the open review findings.
+- GETTING_STARTED, editors.md, the VS Code README, QUESTIONS §3.2 and for-agents carry the same caveats.
+- for-agents also names the sandbox's answer gaps.
+
+**Not done:** the fixes; a full local test suite, because a debug build of the tests filled the disk allowance at 22 GB.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

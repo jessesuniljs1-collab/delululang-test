@@ -1019,6 +1019,8 @@ then new observation:
 | `run` outcome shapes (C16, RW 6.60) | Four shapes: a budget stop leaves standard output empty; a signal leaves no report | RW 6.60 amended |
 | MCP "works" (C18, RW 6.62) | Works, but cannot be cancelled and holds the next request (RW 6.74); one call returned 3.4 MB | RW 6.62 amended, 6.74 new |
 | — | `build --target wasm` writes an unrunnable `.dwx` for `fn main()` (RW 3.28); DL0905 becomes SIGABRT under `ulimit -v` (RW 3.29); grants refused after earlier effects (RW 6.73) | New rows |
+| §6.3's sandbox advice (`hostile-agent` for untrusted code) | Still right for confinement; but under it a deep recursion aborts the guest with no code in the report (RW 3.29, corrected by the audit's §11), and no sandboxed fault reaches the report (RW 6.75) | Read a sandboxed exit 1 with stderr |
+| — | The audit's second pass (§11): the signing commands ignore unknown options, so `verify-sig --kye` fails open (RW 4.97); MCP, `run`, `edit`, `schema validate` and the LSP answer outside their contracts (RW 6.76–6.81) | New rows |
 
 ## Appendix A. Programs written for this session (complete sources)
 

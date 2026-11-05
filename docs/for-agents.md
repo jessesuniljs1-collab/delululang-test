@@ -537,6 +537,12 @@ program runs, accepted only in the host's own words for those layers — so the 
 (since 2026-09-25); on a host that cannot apply them it says so instead. Read the report rather than
 assuming the list above.
 
+**Two gaps in a sandboxed run's answer, open (`docs/REMAINING_WORK.md` rows 6.75 and 3.29):** a fault in the guest
+reaches the host's envelope and report with `diagnostics: []`. Only the guest's stderr names its code (DL0902, DL0905).
+Under `hostile-agent`, or a `--limits mem` up to 768 MiB, a deep recursion aborts the guest rather than raising DL0905,
+and the report says only `{exit 1, ran: true}`. Read a sandboxed exit 1 with an empty `diagnostics` as "the guest
+failed", with the reason on stderr.
+
 **Three isolation levels**, and the report's `level` says which one you got: **L1** `--sandbox` (a
 jailed process, all three systems); **L2** `--isolation microvm` (its own kernel under Firecracker —
 Linux x86_64 with KVM and an image built from source; elsewhere `DL1408`, never something weaker);

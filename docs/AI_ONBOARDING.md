@@ -340,11 +340,20 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     - RW 3.29: DL0905 becomes SIGABRT under an address-space cap;
     - RW 6.74: MCP ignores cancellation;
   - it amended RW 3.26, 6.60, 6.62 and 6.69. RW 4.95 still holds.
+  - **its second pass the same day**, with three Sonnet 5.5 sub-agents whose every finding the head chef re-ran:
+    - corrected its own sandbox claim: the `hostile-agent` profile triggers RW 3.29;
+    - corrected its peak-memory figures;
+    - found RW 6.75: a sandboxed fault reaches neither the envelope nor the report;
+    - found fourteen code-review defects, grouped as RW 4.97 (`verify-sig --kye` fails open) and 6.76–6.81;
+    - read `master`'s red Windows run: RW 7.25's flaky monitor test, now narrowed to a 1.9 s broker queue;
+    - updated README and the editor, getting-started and questions pages for RW 4.95 and 6.72.
 - **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
   - the owner's answers (the language basics, and the reviews' decisions above);
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
   - **RW 4.95 first** (enforce R-Get at `p.get`; its two witnesses red first), with RW 4.96;
+  - RW 4.97 with it (a small fix: refuse unknown options in the signing commands);
   - then the package-blind fast paths, RW 6.72 with 6.69 (one cause), and RW 3.28, 3.29, 6.73 and 6.74 (the audit's §7 order);
+  - then RW 6.75 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);

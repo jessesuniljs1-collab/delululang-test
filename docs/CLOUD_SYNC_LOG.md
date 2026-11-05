@@ -7962,3 +7962,62 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. RW 4.93, 4.94, 5.7 and 6.67, then 6.68 and 6.71.
   4. As before: the owner's answers (the audit's §9 adds five); the answer contracts; RW 7.28; RW 3.26 and 3.27 (the
      audit's P2); the language basics; the launch only on his word.
+
+### 2026-11-05 — the same Claude Code cloud session: the hidden-complexity audit's second pass (RW 4.97, 6.75–6.81)
+- Session: `https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9`. Model: Claude Opus 5.5.
+- **Sub-agents:** three Sonnet 5.5 (`claude-sonnet-5-5`): a verifier, a code reviewer and a researcher. Every finding was
+  re-run by the head chef before it was written.
+- Branch: `claude/dazzling-goodall-iaapyw`, from `master` `5fb865c` (PR #127's fast-forward):
+  - `f439c6f`: README and the user-facing pages, pushed first because a stop hook asked for the working changes to be
+    committed;
+  - then this commit.
+
+  A pull request carries both. The owner, this session: *"u can merge, No need to wait for my approval"*. They land by
+  fast-forward on a green run.
+- **Why:** the owner asked for a double verification of the three reviews and every prompt in `docs/prompt/`. He also
+  asked for README and the other documents, CI on `master` and the branch with fixes, a check of the repository's code,
+  and web research.
+- **CI read:**
+  - `master` push run `42015437785` on `5fb865c`: **red**, in `test (windows-latest)`, `monitor_cli`'s
+    `a_long_chain_does_not_kill_a_healthy_monitor` (RW 7.25). The same commit's PR run `42012298873` was green, and the
+    commit is documents only.
+  - Read: the monitor was alive and the daemon hearing; a `ListPage` waited 1,879 ms in the broker's queue when the
+    500 ms dead-man fired. RW 7.25 now records that.
+  - The failed job, re-run once: queued at 11:27 UTC, attempt 2; its result is recorded on this pass's pull request and in the next sync-log entry.
+  - Scheduled run `42009076387` on `35f1a2d`: 16 of 18 jobs green (`heavy-gates` included); `miri-slow` (check, broker)
+    still running when read.
+- **What changed** (documents and the map only; no `.rs`, test, configuration, manifest, workflow or entrenched file):
+  - M `README.md`: RW 4.95 under the opening sentence; RW 6.72 in "In your editor"; `run --json`'s envelope; a
+    `docs/review/` row; a sixth "worth knowing" item;
+  - M `docs/GETTING_STARTED.md` §12, `docs/editors.md`, `editors/vscode/README.md`: RW 6.72;
+  - M `docs/QUESTIONS.md` §3.2: RW 4.95 and 4.96;
+  - M `docs/for-agents.md`: "cannot drift" scoped to a loose file; the sandbox's answer gaps (RW 6.75, 3.29);
+  - M `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md`: §11 (second pass) and the in-place
+    corrections in §11.4;
+  - M `docs/review/DeluluLang_AI_First_Compiler_Execution_Pipeline_Audit.md` §20 and
+    `docs/review/DeluluLang_Claude_Independent_Strategic_Verification.md` §20: dated addenda;
+  - M `docs/REMAINING_WORK.md`:
+    - new: 4.97, 6.75, 6.76–6.81;
+    - 3.29 corrected and raised; 3.26's memory corrected;
+    - 7.25: the Windows red's evidence;
+    - a header note;
+  - M `HANDOFF.md` §11.3: three environment facts (child RSS from C; the 22 GB test build; the broker socket path);
+  - A `docs/assistant-memory/measure-child-memory-from-c.md`, M `docs/assistant-memory/MEMORY.md`;
+  - M `docs/AI_ONBOARDING.md` §10, `docs/DELULULANG_V2/V2_LOG.md`, this file, `docs/survey/*`;
+  - deleted, renamed: nothing. Scratch build caches (22 GB, 1.3 GB) were deleted from scratch, not from the repository.
+- **Verified:**
+  - RW 4.93, 4.94, 4.95, 6.67, 6.69 and 6.70 re-witnessed;
+  - 71-probe ledger: 65 identical, 6 explained;
+  - every sub-agent finding re-run (F12 and part of F10 in source);
+  - the MCP spec's status and the Wasmtime and Rust versions read from primary sources;
+  - after the last edit: survey build 1629 nodes, 19499 edges, 0 errors, 6 warnings (the standing six); survey check ok; doctor --check ok, 28 checks passed; the nine document-gate targets 64 passed, 0 failed; delulu-survey's suite 74 passed, 0 failed.
+- **For the laptop's memory:** `HANDOFF.md` §11.3's three facts and the memory note above.
+- **Open / next, in order:**
+  1. **RW 4.95** (R-Get), with RW 4.96; and **RW 4.97**, a small fix that refuses unknown options in the signing
+     commands.
+  2. RW 6.72 with 6.69 (package-blind fast paths); RW 3.29 (now under `hostile-agent`), 6.75 and 6.77 (outcome
+     contracts); RW 3.28, 6.73, 6.74 and 6.76.
+  3. RW 7.25: say whether a monitor's beat can wait behind a slow request, then fix or widen the witness.
+  4. RW 6.78–6.81, then 4.93, 4.94, 5.7, 6.67, 6.68, 6.71.
+  5. As before: the owner's answers (the audit's §9); RW 7.28; RW 3.26 and 3.27; the language basics; consider moving
+     the Rust pin (1.96.1) towards 1.99.1 in its own change; the launch only on his word.

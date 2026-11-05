@@ -310,7 +310,9 @@ Six more things worth knowing before you evaluate it:
 - **Independent reviews (2026-11-04/05) found open defects, each re-run and recorded.** Besides the plugin row
   above (4.95): the editor's fast path is package-blind (6.72); `run` refuses a missing grant only when the program
   reaches it, after earlier effects (6.73); `build --target wasm` accepts a `main` its own host cannot call (3.28);
-  MCP cannot cancel a call (6.74). None is a containment escape. They are in [`docs/review/`](docs/review/) and
+  MCP cannot cancel a call (6.74); under `--sandbox` a guest's fault code reaches neither the envelope nor the report
+  (6.75), and under `hostile-agent` a deep recursion aborts the guest instead of raising `DL0905` (3.29);
+  `verify-sig` ignores a mistyped option, so `--kye` drops a key pin and answers *valid* (4.97). None is a containment escape. They are in [`docs/review/`](docs/review/) and
   [`REMAINING_WORK.md`](docs/REMAINING_WORK.md).
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught by this, and nothing here claims
