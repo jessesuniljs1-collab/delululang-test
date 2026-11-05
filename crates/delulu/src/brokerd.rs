@@ -760,26 +760,42 @@ fn reader_delays(kind: &str, read: std::time::Duration, hand_over: std::time::Du
     }
 }
 
-/// One beat as the serve loop saw it: stamped by its reader, taken by the loop, answered, and refused (with its code) or
-/// kept.
+/// One beat as the serve loop saw it: stamped by its reader, taken by the loop, handled, and its answer written (or not,
+/// with why), refused (with its code) or kept. Handling and writing are apart because a reply can be slow or fail after the
+/// handler is done (the independent review's finding 3).
 #[derive(Clone, Debug)]
 struct BeatTime {
     stamped: std::time::Instant,
     taken: std::time::Instant,
-    answered: std::time::Instant,
+    handled: std::time::Instant,
+    written: Result<std::time::Instant, String>,
     refused: Option<String>,
 }
 
 /// How many of a node's beats a firing names.
 const BEATS_NAMED: usize = 4;
 
-/// RW 4.98's timing, from the serve loop: each dead-man node's last [`BEATS_NAMED`] beats. Named in `broker.log` when its
-/// dead-man fires, with what was waiting then, and forgotten when it fires, is armed again or is disarmed.
-#[derive(Default)]
+/// How many nodes' beats the loop keeps at most. Only armed dead-men's beats are kept, so this is a bound, not a working
+/// size: past it a new node's beat is not kept (the independent review's finding 1).
+const BEAT_NODES_KEPT: usize = 256;
+
+/// RW 4.98's timing, from the serve loop: the last [`BEATS_NAMED`] beats of each node with an armed dead-man. Named in
+/// `broker.log` when its dead-man fires, with what was waiting then, and forgotten when it fires, is armed again or is
+/// disarmed. Bounded: a beat is kept only for a node whose dead-man is armed (or that the beat itself fired), the nodes
+/// no longer armed are dropped whenever a new one is kept, and never more than [`BEAT_NODES_KEPT`] nodes.
+#[derive(Clone, Default)]
 struct BeatTimes(std::collections::HashMap<String, std::collections::VecDeque<BeatTime>>);
 
 impl BeatTimes {
-    fn record(&mut self, node: &str, beat: BeatTime) {
+    /// Keep `beat` for `node`, which the caller has found armed (or fired by this beat). `armed` says, for any other node
+    /// kept, whether its dead-man is still armed: a new node's first beat drops every one that is not.
+    fn record(&mut self, node: &str, beat: BeatTime, armed: impl Fn(&str) -> bool) {
+        if !self.0.contains_key(node) {
+            self.0.retain(|kept, _| armed(kept));
+            if self.0.len() >= BEAT_NODES_KEPT {
+                return;
+            }
+        }
         let beats = self.0.entry(node.to_string()).or_default();
         if beats.len() == BEATS_NAMED {
             beats.pop_front();
@@ -811,7 +827,16 @@ impl BeatTimes {
                 .iter()
                 .map(|b| {
                     let outcome = b.refused.as_deref().map_or_else(|| "kept".to_string(), |code| format!("refused {code}"));
-                    format!("stamped +{}, taken +{}, answered +{} ({outcome})", at(b.stamped), at(b.taken), at(b.answered))
+                    let written = match &b.written {
+                        Ok(t) => format!("written +{}", at(*t)),
+                        Err(why) => format!("not written: {}", delulu_diag::terminal_line(why)),
+                    };
+                    format!(
+                        "stamped +{}, taken +{}, handled +{}, {written} ({outcome})",
+                        at(b.stamped),
+                        at(b.taken),
+                        at(b.handled)
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("; ")
@@ -823,6 +848,35 @@ impl BeatTimes {
             delulu_diag::terminal_line(node),
             at(judged)
         )
+    }
+}
+
+/// The independent review's findings 1 and 3: a copy of the serve loop's [`BeatTimes`] after each beat it records, per state
+/// directory, so a test can read what the loop keeps — how many nodes, and each node's last beats. Test builds only.
+#[cfg(test)]
+mod beat_times_seam {
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, OnceLock};
+
+    /// Per state directory: the table after the loop's last recorded beat, and every node it ever kept.
+    type View = (super::BeatTimes, std::collections::BTreeSet<String>);
+
+    fn views() -> &'static Mutex<HashMap<PathBuf, View>> {
+        static VIEWS: OnceLock<Mutex<HashMap<PathBuf, View>>> = OnceLock::new();
+        VIEWS.get_or_init(Default::default)
+    }
+
+    pub(super) fn observe(state: &Path, times: &super::BeatTimes) {
+        let mut views = views().lock().unwrap();
+        let view = views.entry(state.to_path_buf()).or_default();
+        view.1.extend(times.0.keys().cloned());
+        view.0 = times.clone();
+    }
+
+    /// The loop's table as it stood after its last recorded beat, and every node it ever kept, if it recorded any.
+    pub(super) fn view(state: &Path) -> Option<View> {
+        views().lock().unwrap().get(state).cloned()
     }
 }
 
@@ -2027,8 +2081,12 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                         let kind = req.body.kind();
                         // RW 4.98 (D-V2-209): a beat read whole is stamped and noted under one lock, the one the loop
                         // judges under, so a beat stamped before a judgment is counted by it however late its hand-over.
+                        // Only a beat the handler will act on: one of another protocol version is refused DL1406
+                        // and acts on nothing, so it is never noted either (the independent review's finding 2).
                         let (stamped, heard) = match &req.body {
-                            ReqBody::Beat { node, key } => note_beat(&heard_beats, node, key, &clock),
+                            ReqBody::Beat { node, key } if req.version == WIRE_VERSION => {
+                                note_beat(&heard_beats, node, key, &clock)
+                            }
                             _ => (std::time::Instant::now(), clock.now()),
                         };
                         let stamped_request = (conn, req, stamped, heard);
@@ -2121,19 +2179,16 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             _ => None,
         };
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, heard, &clock);
-        if let Some(node) = beat_of {
+        let handled = std::time::Instant::now();
+        // A beat's outcome, for its timing below, once its answer has been written.
+        let beat_outcome = beat_of.map(|node| {
             let (refused, fired_it) = match &resp {
                 Response::Ok => (None, false),
                 Response::Error { code, message, .. } => (Some(code.clone()), message.contains("fired: no beat within")),
                 other => (Some(format!("{other:?}")), false),
             };
-            beat_times.record(&node, BeatTime { stamped: arrived, taken, answered: std::time::Instant::now(), refused });
-            // A beat that came after its deadline fired the dead-man itself: name the beats before it as well.
-            if fired_it {
-                let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
-                eprintln!("{}", beat_times.judged(&node, serving, taken, waiting.len(), readers));
-            }
-        }
+            (node, refused, fired_it)
+        });
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
@@ -2162,6 +2217,27 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             }
         }
         drop(conn);
+        // RW 4.98's timing, kept only for a node whose dead-man is armed, or that this beat fired (the independent review's
+        // finding 1): a beat naming any other node leaves nothing behind. Its answer's writing is timed apart from its
+        // handling, and a reply that failed says so (finding 3).
+        if let Some((node, refused, fired_it)) = beat_outcome {
+            let id = GrantId::from_trusted(node.clone());
+            if fired_it || broker.deadman_armed(&id) {
+                let written = match &written {
+                    Ok(()) => Ok(std::time::Instant::now()),
+                    Err(e) => Err(e.to_string()),
+                };
+                let beat = BeatTime { stamped: arrived, taken, handled, written, refused };
+                beat_times.record(&node, beat, |kept| broker.deadman_armed(&GrantId::from_trusted(kept.to_string())));
+                #[cfg(test)]
+                beat_times_seam::observe(state_dir, &beat_times);
+                // A beat that came after its deadline fired the dead-man itself: name the beats before it as well.
+                if fired_it {
+                    let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
+                    eprintln!("{}", beat_times.judged(&node, serving, taken, waiting.len(), readers));
+                }
+            }
+        }
         // An answer that was not written already has its line above.
         let late = arrived.elapsed();
         if written.is_ok() && late >= SLOW_ANSWER {
@@ -3225,6 +3301,71 @@ mod tests {
         assert!(at < std::time::Duration::from_millis(1500), "it fired only {at:?} in, with wrong-key beats still coming");
     }
 
+    /// **The independent review's first finding: beats naming no armed dead-man leave no timing behind.** The serve loop
+    /// keeps each dead-man's last beats for `broker.log`, and kept them for every node a beat named, real or not: a peer that
+    /// can reach the socket, with no key, grew that table by one node per beat for as long as the daemon ran. Here 300 beats
+    /// name nodes that do not exist, and one more beats a real dead-man: the table holds that one node, and what it holds of
+    /// its beat says when the answer was written (the review's third finding).
+    #[test]
+    fn beats_naming_no_armed_dead_man_leave_no_timing_behind() {
+        let state = temp_state("dmtable");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let key = arm(&state, &node, 60_000);
+        for i in 0..300 {
+            let made_up = ReqBody::Beat { node: format!("g_made_up_{i:04}"), key: format!("{i:032}") };
+            assert!(matches!(request(&state, made_up), Ok(Response::Error { .. })), "a beat naming no node is refused");
+        }
+        assert!(matches!(request(&state, ReqBody::Beat { node: node.clone(), key }), Ok(Response::Ok)));
+        // The loop records a beat once its answer is written, so the client can read the answer first: wait for it.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let view = loop {
+            match beat_times_seam::view(&state) {
+                Some(v) if v.0 .0.contains_key(&node) => break Some(v),
+                _ if std::time::Instant::now() > deadline => break beat_times_seam::view(&state),
+                _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        };
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        let (table, ever) = view.expect("the loop recorded the real beat");
+        let nodes: Vec<&String> = table.0.keys().collect();
+        assert_eq!(nodes, vec![&node], "the loop kept timing for {} node(s), not only the armed one", table.0.len());
+        assert_eq!(ever.len(), 1, "the loop kept timing, for a while, for {} node(s) that have no dead-man", ever.len() - 1);
+        let beat = table.0[&node].back().expect("its beat").clone();
+        let written = beat.written.as_ref().expect("the answer was written");
+        assert!(*written >= beat.handled && beat.handled >= beat.taken, "handled, then written: {beat:?}");
+    }
+
+    /// **RW 4.98's counter-test (the independent review's second finding): a beat in another protocol version cannot hold a
+    /// silent dead-man off, even with the right key.** The handler refuses such a request DL1406 and acts on nothing in it
+    /// (spec §8); a reader that noted it before that gate let the refused beat extend the dead-man. These carry the arming
+    /// key under `broker/0`, are each answered DL1406, and the dead-man (300 ms) fires while they keep coming.
+    #[test]
+    fn beats_of_another_protocol_version_do_not_hold_a_silent_dead_man_off() {
+        let state = temp_state("dmversion");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let key = arm(&state, &node, 300);
+        let mut codes = Vec::new();
+        let fired = fired_during(&state, &node, std::time::Duration::from_millis(2000), || {
+            let Ok(mut conn) = broker_transport::connect(&state) else { return };
+            let beat = Request { version: "broker/0".to_string(), body: ReqBody::Beat { node: node.clone(), key: key.clone() } };
+            if write_frame(&mut conn, &beat).is_ok() {
+                if let Ok(Response::Error { code, .. }) = read_frame::<_, Response>(&mut conn) {
+                    codes.push(code);
+                }
+            }
+        });
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+        assert!(codes.iter().any(|c| c == "DL1406"), "the baseline — beats of another version were sent and refused: {codes:?}");
+        let at = fired.unwrap_or_else(|| {
+            panic!("{} beats refused DL1406, each with the arming key, held a 300 ms dead-man off for 2 s", codes.len())
+        });
+        assert!(at < std::time::Duration::from_millis(1500), "it fired only {at:?} in, with refused beats still coming");
+    }
+
     /// RW 4.98 (D-V2-209): the notes between two judgments are bounded; past the bound a beat goes un-noted (and is judged
     /// when it is handled, as before), and its stamp is still taken.
     #[test]
@@ -3538,23 +3679,48 @@ mod tests {
         let serving = std::time::Instant::now();
         let at = |n: u64| serving + ms(n);
         let mut times = BeatTimes::default();
+        let all = |_: &str| true;
+        let beat = |s: u64, t: u64, h: u64, w: Result<u64, &str>, refused: Option<&str>| BeatTime {
+            stamped: at(s),
+            taken: at(t),
+            handled: at(h),
+            written: w.map(at).map_err(str::to_string),
+            refused: refused.map(str::to_string),
+        };
         assert!(times.judged("g_none", serving, at(500), 0, 0).contains("none since it was armed"));
         for i in 0..6u64 {
-            times.record("g_m", BeatTime { stamped: at(10 * i), taken: at(10 * i + 1), answered: at(10 * i + 2), refused: None });
+            times.record("g_m", beat(10 * i, 10 * i + 1, 10 * i + 2, Ok(10 * i + 3), None), all);
         }
-        times.record("g_m", BeatTime { stamped: at(70), taken: at(900), answered: at(901), refused: Some("DL1403".into()) });
+        times.record("g_m", beat(70, 900, 901, Err("Broken pipe (os error 32)"), Some("DL1403")), all);
         let line = times.judged("g_m", serving, at(905), 2, 3);
         assert!(line.contains("judged at +905 ms"), "{line}");
         assert!(
-            !line.contains("stamped +20,") && line.contains("stamped +30, taken +31, answered +32 (kept)"),
-            "the last four only: {line}"
+            !line.contains("stamped +20,") && line.contains("stamped +30, taken +31, handled +32, written +33 (kept)"),
+            "the last four only, handled and written apart: {line}"
         );
-        assert!(line.contains("stamped +70, taken +900, answered +901 (refused DL1403)"), "{line}");
+        assert!(
+            line.contains("stamped +70, taken +900, handled +901, not written: Broken pipe (os error 32) (refused DL1403)"),
+            "a reply that failed says so: {line}"
+        );
         assert!(line.contains("2 request(s) were handed over and waiting, and 3 connection(s)"), "{line}");
         assert!(times.judged("g_m", serving, at(906), 0, 0).contains("none since it was armed"), "a firing forgets its beats");
-        times.record("g_x", BeatTime { stamped: at(1), taken: at(1), answered: at(1), refused: None });
+        times.record("g_x", beat(1, 1, 1, Ok(1), None), all);
         times.forget("g_x");
         assert!(times.judged("g_x", serving, at(2), 0, 0).contains("none since it was armed"), "an arming or disarming forgets");
+
+        // The independent review's finding 1: bounded. A new node's first beat drops every node no longer armed...
+        let mut times = BeatTimes::default();
+        times.record("g_gone", beat(1, 1, 1, Ok(1), None), all);
+        times.record("g_live", beat(2, 2, 2, Ok(2), None), |kept| kept != "g_gone");
+        assert_eq!(times.0.len(), 1, "a node no longer armed is dropped when another is kept");
+        assert!(times.0.contains_key("g_live"));
+        // ...and never more than BEAT_NODES_KEPT nodes, even all armed; an armed node already kept still records.
+        for i in 0..BEAT_NODES_KEPT * 2 {
+            times.record(&format!("g_{i:04}"), beat(3, 3, 3, Ok(3), None), all);
+        }
+        assert_eq!(times.0.len(), BEAT_NODES_KEPT, "bounded");
+        times.record("g_live", beat(9, 9, 9, Ok(9), None), all);
+        assert_eq!(times.0["g_live"].len(), 2, "a node already kept still records at the bound");
     }
 
     /// RW 4.58's rest: a device command the run's envelope refused is recorded as a `deny` citing the `allow` it overrides

@@ -17,19 +17,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   as its reader finishes reading it, then hands it to the loop that judges dead-men. A beat stamped before a judgment
   and handed over after it was not counted, so a starved reader thread could fire a healthy monitor's dead-man and revoke
   every run under it. Now a beat read whole is noted, under the lock the judgment is made under, and counted from when it
-  was heard. Only a beat its key proves counts, and it buys one period, as a handled beat does. Incomplete connections,
-  wrong keys and other traffic still cannot hold a silent monitor's dead-man off: each is tested.
+  was heard. Only a beat of this protocol version whose key proves it counts, and it buys one period, as a handled beat
+  does. Incomplete connections, wrong keys, beats of another version (refused DL1406) and other traffic still cannot hold
+  a silent monitor's dead-man off: each is tested.
 
 ## Unreleased — a fired dead-man names its last beats, and a monitor its own, 2026-11-05
 
 - **Added, to `broker.log` (RW 4.98, RW 7.25): when a dead-man fires, the daemon names its last four beats.** For each:
-  when its reader stamped it, when the serve loop took it, and when it was answered, each in milliseconds since the daemon
-  began serving. It also says how many requests were waiting and how many connections a reader still held. A reader that
+  when its reader stamped it, when the serve loop took it, when it was handled, and when its answer was written (or that
+  it was not, and why), each in milliseconds since the daemon began serving. It also says how many requests were waiting
+  and how many connections a reader still held. Only armed dead-men's beats are kept, for at most 256 nodes. A reader that
   takes 100 ms or more after its connection was accepted to stamp a request, or that holds a stamped request that long
   before handing it to the serve loop, is named too. Nothing a program or a grant sees changes.
 - **Added, to `delulu monitor watch`'s standard error:** a watch that ends on an error, with a dead-man armed, names its
-  last six beats (when each was sent, by the watch or the beater, how long its answer took, and whether it was kept), and
-  its longest turn of the watch. The two lines together say whether a revoked monitor's beats were sent, and when the
+  last six beats (when each was sent, by the watch or the beater, how long its answer took and whether it was kept, or
+  that it is still waiting for one), and its longest turn of the watch. It says so before it waits for its beater. The two lines together say whether a revoked monitor's beats were sent, and when the
   daemon saw them.
 
 ## Unreleased — PUT, PATCH and DELETE requests, each judged by its method, 2026-11-02

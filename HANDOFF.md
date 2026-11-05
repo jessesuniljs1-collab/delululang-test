@@ -852,6 +852,11 @@ wins, and you should update the memory to match.
     counter-tests: incomplete connections, a wrong key and unrelated traffic must not keep a silent holder alive.
   - **When a flaky test's cause cannot be read from its failure, make the next failure readable.** Both sides now log
     their last beats, so the next red names its own path.
+  - **A witness of a bound checks every state, not only the last** (the independent review of #131 and #132). The
+    beat-timing table was found to grow by one node per made-up beat. Its first witness read the table only at the
+    end, and pruning made that end look right: mutant M1087 (keep every node's beats) survived. It went red once the
+    test seam recorded every node the table ever held. The same review found a refused request (DL1406) acted on
+    before its refusal. Apply every gate the handler applies before anything acts on a request early.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

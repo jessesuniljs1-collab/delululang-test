@@ -8191,3 +8191,49 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   2. Record the Windows re-runs of the reviews' rows (the 2026-11-05 laptop sync entry).
   3. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
      word.
+
+### 2026-11-05 — the laptop: the independent review of #131 and #132 — four findings fixed (D-V2-209 amended)
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-4-98-review`   Base: `master` `ab10583` (#132 landed). Nothing else came in on `origin`.
+- **Why:** the owner pasted an independent review (source reading and in-memory models; it ran nothing). It made four
+  findings, and each was confirmed in the source before it was fixed:
+  1. the loop's beat timing was unbounded (P1);
+  2. a beat refused DL1406 for its protocol version was noted, and kept a dead-man alive (P2);
+  3. *answered* was timed before the reply was written (P2);
+  4. the monitor could lose its timing behind a stuck beater (P2).
+- **What changed:**
+  - `crates/delulu/src/brokerd.rs`:
+    - the version gate before noting;
+    - `BeatTime` with `handled` and `written`;
+    - `BeatTimes` keeps armed dead-men's beats only, prunes, and is bounded at 256 nodes;
+    - a beat is recorded after its answer is written;
+    - a test-only view of the loop's table (`beat_times_seam`);
+    - two red-before witnesses, and the unit test extended.
+  - `crates/delulu/src/monitor_cmd.rs`: `SentBeats`, beats noted when sent, progress printed before the beater is joined;
+    its unit test extended.
+  - Records:
+    - RW 4.98 amended, and D-V2-209 amended;
+    - `CHANGELOG.md`;
+    - `HANDOFF.md` §11.2 (*"A witness of a bound checks every state, not only the last"*);
+    - `AI_ONBOARDING.md` §10 (M1090);
+    - `V2_LOG.md`, this entry, `docs/survey/*`.
+- Files and folders (`git diff --name-status ab10583..HEAD`): M `crates/delulu/src/brokerd.rs`,
+  `crates/delulu/src/monitor_cmd.rs`, `CHANGELOG.md`, `HANDOFF.md`, `docs/AI_ONBOARDING.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Nothing added, deleted or renamed; no entrenched file.
+- **Verified on the laptop (Windows):**
+  - the witnesses for findings 1 and 2 red before the fix and green after;
+  - mutants M1086–M1090 each red. M1087 survived the first form of finding 1's witness, which was then strengthened;
+  - `delulu` binary 206 passed; `delulu-broker` 256; `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8;
+  - `scripts/clippy.sh -j 4` clean.
+
+  Not witnessed by a test, as the V2_LOG entry explains: the write timed after the write, and the progress printed
+  before the join.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. Land this branch on a green run.
+  2. Read the next scheduled run's `miri-slow` for `delulu-broker` on the dead-man code (not yet run on `ab10583`).
+  3. RW 7.25 stays open. Its next red names its path in the job log.
+  4. Then as before: the Windows re-runs of the reviews' rows into their rows; RW 4.95 first with 4.96 and 4.97; the
+     owner's answers; the launch only on his word.
