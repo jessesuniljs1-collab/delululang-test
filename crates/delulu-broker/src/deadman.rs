@@ -207,6 +207,30 @@ impl Broker {
         Ok(d.period)
     }
 
+    /// RW 4.98 (D-V2-209): a beat a reader has read whole and stamped at `heard`, and not yet handed to the handler, counted
+    /// at the next judgment as a handled beat is — the dead-man waits at least one period from `heard`. DEADMAN-BUSY-1 judges
+    /// a beat by when it arrived; without this, a beat stamped before a judgment and handed over after it was not counted.
+    ///
+    /// Only a beat its key proves, and only one that arrived in time (`heard` before the deadline), extends anything: a
+    /// wrong key, an unarmed node and a late beat change nothing here — the beat is judged as ever when it is handled, a
+    /// late one firing its dead-man then. It never shortens a deadline, does not count as a beat (`beats`), and extends one
+    /// period from `heard` at most, so a beat never handed over cannot hold a dead-man off past the period it really bought.
+    /// Returns whether it extended the deadline. Only the daemon calls this, for the beats its readers stamped before it
+    /// judges.
+    pub fn deadman_heard(&mut self, node: &GrantId, key: &str, heard: Instant) -> bool {
+        let Some(d) = self.deadmen.get_mut(node) else { return false };
+        if blake3::hash(key.as_bytes()) != d.key_hash || heard >= d.deadline {
+            return false;
+        }
+        match heard.checked_add(d.period) {
+            Some(at) if at > d.deadline => {
+                d.deadline = at;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Disarm the dead-man on `node` — its holder ending cleanly. Recorded (`deadman-disarm`): from here
     /// the runs below outlive their monitor, and the chain says when that began. Past its deadline the
     /// dead-man has already lapsed, and fires instead.
@@ -345,6 +369,32 @@ mod tests {
         assert!(live(&b, &root), "never upward: the operator's root lives");
         assert!(!b.deadman_armed(&m) && b.next_deadman_deadline().is_none(), "a dead-man fires once");
         assert!(b.fire_expired_deadmen(t0 + P * 10).is_empty());
+    }
+
+    /// **RW 4.98 (D-V2-209): a beat heard in time and not yet handled counts at the judgment — one period from when it was
+    /// heard, proved by its key, and never more.**
+    #[test]
+    fn a_beat_heard_in_time_counts_at_the_judgment_and_only_as_far_as_it_bought() {
+        let ms = Duration::from_millis;
+        let (mut b, _root, m, run) = broker();
+        let t0 = Instant::now();
+        let (_, key) = b.arm_deadman(&m, P, t0).unwrap();
+        // A wrong key, an unarmed node and a beat heard at or after the deadline change nothing.
+        assert!(!b.deadman_heard(&m, "not-the-key", t0 + ms(300)));
+        assert!(!b.deadman_heard(&run, &key, t0 + ms(300)), "a node with no dead-man");
+        assert!(!b.deadman_heard(&m, &key, t0 + P), "heard at the deadline is late");
+        assert_eq!(b.next_deadman_deadline(), Some(t0 + P));
+        // Heard in time: the dead-man waits a period from when it was heard — the judgment at the old deadline fires nothing.
+        assert!(b.deadman_heard(&m, &key, t0 + ms(400)));
+        assert_eq!(b.next_deadman_deadline(), Some(t0 + ms(400) + P));
+        assert!(b.fire_expired_deadmen(t0 + P).is_empty() && live(&b, &m) && live(&b, &run));
+        // Never shortened by an earlier one, and never past the period the beat bought: then it fires.
+        assert!(!b.deadman_heard(&m, &key, t0 + ms(100)), "an earlier beat does not move it back");
+        assert_eq!(b.next_deadman_deadline(), Some(t0 + ms(400) + P));
+        assert!(b.fire_expired_deadmen(t0 + ms(400) + P - ms(1)).is_empty());
+        let fired = b.fire_expired_deadmen(t0 + ms(400) + P);
+        assert_eq!(fired.len(), 1, "a beat never handled buys one period, no more: {fired:?}");
+        assert_eq!(fired[0].beats, 0, "a beat heard is not a beat handled");
     }
 
     /// **Each beat buys one more period from the beat, not from the arming.**

@@ -834,6 +834,24 @@ wins, and you should update the memory to match.
   passes. `edit --if-checks` both writes a `Net` widening and refuses a correct edit. `build --target wasm` exits 0 on
   a `fn main()` its own host can never call. When a path is offered as the fast or machine way to do what another
   command does, keep one witness that compares the two on a package and on every `main` shape the checker accepts.
+- **A stamp is not a hand-over, and a flaky red's reading is not its cause** (the laptop, 2026-11-05; RW 4.98, RW 7.25).
+  The daemon judges a beat by the stamp its reader puts on it, but the judgment sees only what has been handed over. A
+  beat stamped in time and handed over late is not counted, and RW 4.87 had called that window microseconds. A test-only
+  seam that holds the reader past the deadline makes it red every time. Four things were learned on the way:
+  - **A witness must be able to pass: give it a twin.** The first form stamped its beat 0.7 ms into a 2 s period and
+    looked at 2.8 s. A correct daemon fires there too, because so early a beat extends the dead-man only to about 2 s,
+    so that witness could never have gone green. The twin, the same shape with the beat handed over at once, must be
+    green today. Then the only difference between them is the defect.
+  - **The first reading of the red Windows run claimed more than its evidence held**, and an independent read caught it.
+    An exit status was read after the line that says the watch ended. A beat count is not a time. A request's delay
+    measured from its stamp is not queue occupancy, and it has no order relative to the firing. Write what a log shows,
+    and what it does not, before naming a cause.
+  - **A fix that defers the judgment "while any reader is active" lets unauthenticated traffic disarm the watchdog.**
+    Two overlapping slow connections, no key needed, keep that condition true for ever. A per-connection timeout does
+    not bound the collective delay. Coordinate only complete, authenticated beats with the judgment, and keep
+    counter-tests: incomplete connections, a wrong key and unrelated traffic must not keep a silent holder alive.
+  - **When a flaky test's cause cannot be read from its failure, make the next failure readable.** Both sides now log
+    their last beats, so the next red names its own path.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

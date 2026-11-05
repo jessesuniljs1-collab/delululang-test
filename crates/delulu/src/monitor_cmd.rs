@@ -360,7 +360,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // P8-04 step 5: the dead-man, armed BEFORE the watch begins, so a monitor killed the moment it says
     // "watching" is already one whose death quarantines.
     let mut deadman: Option<(String, u64, Duration)> = None; // (key, armed_seq, period)
-    // RW 4.98's timing: when the dead-man was armed, and the beats sent since (the watch's and the beater's).
+                                                             // RW 4.98's timing: when the dead-man was armed, and the beats sent since (the watch's and the beater's).
     let mut armed_at: Option<Instant> = None;
     let sent_beats = std::sync::Arc::new(std::sync::Mutex::new(VecDeque::<SentBeat>::new()));
     if o.on_death == OnDeath::Quarantine {

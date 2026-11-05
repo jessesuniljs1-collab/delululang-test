@@ -8104,3 +8104,51 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. Record the Windows re-runs above in their rows.
   4. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
      word.
+
+### 2026-11-05 — the laptop: RW 4.98 witnessed; a dead-man's firing and a monitor's end now name their beats
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-7-25-witness`, stacked on `laptop/rw-7-25-records` (#130, the records correction), which lands first.
+  Base `master` `1414a58`; nothing came in on `origin` meanwhile.
+- **Why:** the owner's order: *"Correct the records first, then build the deterministic witness. Do not implement the
+  proposed reader-count fix as written."*
+- **What changed:**
+  - `crates/delulu/src/brokerd.rs`:
+    - the reader's stamp-to-hand-over window behind a test-only seam (`handover_seam`, `#[cfg(test)]`);
+    - the witness `a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man` (a beat stamped about 1.5 s into a
+      2 s period, held past the first deadline), red 10 of 10 and `#[ignore]`d until the fix;
+    - its twin `a_beat_late_in_its_period_handed_over_at_once_keeps_its_dead_man_past_the_first_deadline`, the same beat
+      handed over at once, green 6 of 6: the witness can pass. Its first form (0.7 ms in, read at 2.8 s) could not, and
+      was corrected before it landed;
+    - its control `the_hand_over_seam_holds_one_beat_of_one_daemon`;
+    - `broker.log` lines: a fired dead-man's last beats and what was waiting (`BeatTimes`), and a reader slow to stamp or
+      hand over (`reader_delays`);
+    - their unit test `a_readers_delays_and_a_firings_beats_are_named`;
+    - `fire_deadmen` now returns the nodes it fired.
+  - `crates/delulu/src/monitor_cmd.rs`: a watch ending on an error with a dead-man armed names its last beats and its
+    longest turn (`SentBeat`, `progress_line`); unit test `a_monitor_names_its_last_beats_and_its_longest_turn`.
+  - `crates/delulu/tests/monitor_cli.rs`: `a_watch_held_outside_the_daemon_lets_its_dead_man_fire` now requires both
+    lines, and prints them.
+  - Records: RW 4.98 (new) and RW 7.25 (its next step), `CHANGELOG.md`, `HANDOFF.md` §11.2 (*"A stamp is not a hand-over,
+    and a flaky red's reading is not its cause"*), `AI_ONBOARDING.md` §10 (M1080; RW 4.98 in the order), `V2_LOG.md`,
+    this entry and `docs/survey/*`.
+- Files and folders (`git diff --name-status 7dc9162..HEAD`): M `crates/delulu/src/brokerd.rs`,
+  `crates/delulu/src/monitor_cmd.rs`, `crates/delulu/tests/monitor_cli.rs`, `CHANGELOG.md`, `HANDOFF.md`,
+  `docs/AI_ONBOARDING.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Nothing added, deleted or renamed. No entrenched file.
+- **Verified on the laptop (Windows):**
+  - `cargo test -p delulu --bin delulu`: 199 passed, 1 ignored;
+  - `monitor_cli` 23, `broker_cli` 20, `estop_cli` 8, all passed;
+  - mutants M1076–M1080 each red;
+  - `scripts/clippy.sh -j 4` clean.
+
+  The whole suite is CI's.
+- Survey and doctor (after the last edit): in the commit message.
+- **For the laptop's memory:** `HANDOFF.md` §11.2's new lesson.
+- **Open / next:**
+  1. Land #130, then this branch, each on a green run.
+  2. RW 4.98's fix: coordinate complete, authenticated beats with the judgment (never "while any reader is active"),
+     with counter-tests for incomplete connections, a wrong key and unrelated traffic; un-ignore the witness.
+  3. Record the Windows re-runs of the reviews' rows (the entry before this one).
+  4. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
+     word.
