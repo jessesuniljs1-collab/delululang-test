@@ -277,7 +277,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 
 ## 10. Where the project stands (2026-11-05) — the newest sync-log entry supersedes this
 
-- `master` holds #119 to #123 and on-demand routine runs 17 to 19's milestones, each landed on a green run:
+- `master` holds #119 to #123 and on-demand routine runs 17 to 19's milestones, each landed on a green run (the reviews
+  below are #124 to #128, also each landed on a green run):
   - INDEX-TARGET-1 (D-V2-205, RW 2.29): every walk of an assignment skipped its index, so a function the checker called
     pure printed through `xs[noisy(c)] = 9`;
   - DL0414 (D-V2-206, RW 2.30): a new warning for a `let` or `var` binding never read;
@@ -347,6 +348,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     - found fourteen code-review defects, grouped as RW 4.97 (`verify-sig --kye` fails open) and 6.76–6.81;
     - read `master`'s red Windows run: RW 7.25's flaky monitor test, now narrowed to a 1.9 s broker queue;
     - updated README and the editor, getting-started and questions pages for RW 4.95 and 6.72.
+    - landed as #128, `master` at `be40a92`, on a green run (`42020534572`, 14 of 14). `master`'s Windows job was
+      re-run once and passed, and the scheduled run `42009076387` was 18 of 18 green, its three `miri-slow` jobs included.
 - **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
   - the owner's answers (the language basics, and the reviews' decisions above);
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
@@ -363,7 +366,7 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the last decision is D-V2-208;
   - the last mutant is M1075;
   - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #124 was the last opened.
+  - pull requests are numbered on GitHub, and #128 was the last merged.
 
 ## 11. Keep this file true
 

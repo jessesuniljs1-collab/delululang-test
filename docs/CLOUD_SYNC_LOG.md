@@ -8021,3 +8021,39 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. RW 6.78–6.81, then 4.93, 4.94, 5.7, 6.67, 6.68, 6.71.
   5. As before: the owner's answers (the audit's §9); RW 7.28; RW 3.26 and 3.27; the language basics; consider moving
      the Rust pin (1.96.1) towards 1.99.1 in its own change; the launch only on his word.
+
+### 2026-11-05 — the same Claude Code cloud session: #128 landed; the CI it waited on, read
+
+- Session: https://claude.ai/code/session_01Deh6W9bJdfxAeMARtXU9R9   Model: Claude Opus 5.5
+- Branch: `claude/dazzling-goodall-iaapyw`   Pull request: the one that carries this entry   Merged: by fast-forward on
+  a green run, under the owner's word (*"u can merge, No need to wait for my approval"*)
+- Base: `be40a92` (`master`, after #128)
+- Commits: one records commit (this entry).
+- **#128 landed:** its run `42020534572` was read to its end, 14 of 14 jobs green (`heavy-gates` and `miri-slow`
+  skipped, as on every pull request). `master` was fast-forwarded `5fb865c` → `be40a92`, after checking that it had not
+  moved. The merge record is on #128.
+- **CI read:**
+  - `master`'s push run `42015437785` (`5fb865c`): the red `test (windows-latest)` job (RW 7.25) was re-run once.
+    **Attempt 2 (job `127217198088`) passed**, 11:27–11:47 UTC. RW 7.25 says so: red twice, green on the next run each
+    time, cause still not known.
+  - The scheduled run `42009076387` (`35f1a2d`): **18 of 18 green**, `heavy-gates` and the three `miri-slow` jobs
+    included (`delulu-check` 1 h 34 min, `delulu-broker` 1 h 14 min, `delulu-syntax` 16 min).
+- **The laptop's autosave:** `origin/autosave/laptop`'s newest snapshot (`6ad586a`, 10:07 UTC) adds only
+  `docs/prompt/DeluluLang_Claude_Cloud_AI_First_Compiler_Pipeline_Audit_Prompt.md` and
+  `docs/prompt/DeluluLang_Claude_Code_Hidden_Human_Centric_Complexity_Audit_Prompt.md`, each byte-identical to
+  `master`'s. There is nothing to recover. No other pull request is open.
+- Files and folders (`git diff --name-status be40a92..HEAD`):
+  M `docs/REMAINING_WORK.md` (RW 7.25's status and its re-run)
+  M `docs/AI_ONBOARDING.md` (§10: #128 landed; the counters' last pull request)
+  M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*` (regenerated)
+  Nothing added, deleted or renamed; no code, test, configuration, workflow or entrenched file.
+- Survey and doctor (after the last edit): `survey check` ok; `survey findings` 0 errors, 6 warnings (the standing
+  six); `doctor --check` ok, 28 checks passed. The nine document-gate targets were run as well.
+- Verified: the CI runs above, read; the Survey and `doctor` on `be40a92` before the fast-forward (check ok, 1629 nodes,
+  19499 edges; findings 0 errors, 6 warnings, 37 notes; `doctor --check` ok, 28 checks passed).
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: unchanged from the previous entry. RW 4.95 comes first, with 4.96 and 4.97 (the security fixes). Then
+  RW 6.72 with 6.69 (package-blind fast paths), then 3.28, 3.29, 6.73–6.77 (outcome contracts), then 7.25, 6.78–6.81 and
+  the rest of that list. The owner's answers are still open (the language basics; the reviews' decisions), and the
+  launch waits for his word.

@@ -12037,3 +12037,24 @@ replayed with 65 identical; the 6 differences come from scratch state or the har
 **Not done:** the fixes; a full local test suite, because a debug build of the tests filled the disk allowance at 22 GB.
 
 The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — the same Claude Code cloud session: #128 landed; the CI it waited on, read
+
+**Why.** The owner asked for the Survey and `doctor` to be run, CI to be checked, and the records to say where the work
+stands and what comes next.
+
+**CI read:**
+- **#128** (`be40a92`), run `42020534572`: 14 of 14 jobs green. `heavy-gates` and `miri-slow` were skipped, as on every
+  pull request. It was fast-forwarded to `master` (`5fb865c` → `be40a92`) after checking that `master` had not moved.
+- **`master`'s push run `42015437785`** (`5fb865c`): the failed `test (windows-latest)` job was re-run once. Attempt 2
+  (job `127217198088`) passed. RW 7.25 now says it was red twice and green on the next run each time; its cause is
+  still not known.
+- **The scheduled run `42009076387`** (`35f1a2d`): 18 of 18 green, `heavy-gates` and the three `miri-slow` jobs included
+  (`delulu-check` 1 h 34 min, `delulu-broker` 1 h 14 min, `delulu-syntax` 16 min).
+
+**Checked:** `origin/autosave/laptop`'s newest snapshot (10:07 UTC) adds only the two prompts in `docs/prompt/`, each
+byte-identical to `master`'s, so there is nothing to recover. No other pull request is open.
+
+**Changed:** RW 7.25's status, `AI_ONBOARDING.md` §10, this entry and the sync log. No code changed.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
