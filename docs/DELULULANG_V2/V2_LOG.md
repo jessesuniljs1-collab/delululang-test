@@ -12058,3 +12058,41 @@ byte-identical to `master`'s, so there is nothing to recover. No other pull requ
 **Changed:** RW 7.25's status, `AI_ONBOARDING.md` §10, this entry and the sync log. No code changed.
 
 The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — the laptop: RW 7.25's reading corrected; neither red's cause is established
+
+**Why.** The owner pasted an independent, read-only analysis of RW 7.25 (another AI's reading of the source and CI) and
+asked the head chef to go through it. He then asked for the records to be corrected first and a deterministic witness
+built next. Each claim was checked against `brokerd.rs`, `monitor_cmd.rs`, `monitor_cli.rs` and the failed Windows
+job's log (`127204705719`, push run `42015437785` on `5fb865c`).
+
+**What the earlier reading claimed, and why it does not hold:**
+- *"The monitor was still running"*: its exit status `None` was read after the monitor had printed *"ended"*. The
+  whole-chain read a revocation sets off comes before that line, and what kept the process alive after it is
+  unmeasured. It does not exclude an earlier pause of the monitor.
+- *"The daemon was running and hearing"*: no deaf interval was logged while the dead-man was armed, so the hearing
+  thread looked. That says nothing about the reader threads or the handler.
+- *"Narrowed to a 1.9 s broker queue"*: the `ListPage` was the test's own `grants list` at its 2 s check. Its 1,879 ms is
+  the time from its reader's stamp to the handler taking it, which holds the reader's hand-over and any stall of the
+  handler together. It is not queue occupancy or a cause, and it is not ordered against the firing.
+- *"Five beats"* is a count, not a time. The head chef's own first reading turned it into one, and withdrew it.
+
+**What holds.** A broker-side path exists in the source. A reader thread stamps a beat and only then hands it to the
+handler (`whole.send`), and the serve loop judges each dead-man as of the earliest request already handed over, or as of
+now. A beat stamped in time and handed over after a judgment is not counted. RW 4.87 named this window as uncovered and
+assumed it lasted microseconds. A monitor-side delay remains possible too: its beater beats only while the watch waits on
+the broker.
+
+**A proposed fix, withdrawn.** Waiting at expiry while any reader is active would let overlapping incomplete
+connections, which need no key, hold a dead-man off indefinitely. A reader's 5 s read bound does not bound the time
+before the reader runs, or the time it is blocked on a full line, and a connection still waiting to be accepted has no
+reader. The order now:
+1. this correction;
+2. a deterministic witness of the stamp-to-hand-over window, and timing for each beat;
+3. coordinating complete, authenticated beats with the expiry decision, keeping delays before receipt a separate problem;
+4. counter-tests that incomplete connections, invalid keys and unrelated traffic cannot keep a silent monitor alive.
+
+**Changed:** RW 7.25; `AI_ONBOARDING.md` §10; the hidden-complexity audit (a dated correction beside §11.1 and a note at
+its top); this entry and the sync log. No code changed.
+
+The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.

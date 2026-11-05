@@ -21,6 +21,10 @@ file. The corrections below were made in place and are each listed in §11.4:
 - the package run ratio;
 - the Deno cache's key.
 
+**A later correction (2026-11-05, the laptop, on the owner's request).** §11.1's reading of `master`'s red Windows run
+(RW 7.25) went further than its evidence. It is corrected beside the claim, and RW 7.25 states what that run does and
+does not show.
+
 **How to read it:**
 - **OBSERVED** means it ran here, with the command in §5 or Appendix A.
 - **SOURCE** means it was read in the code at the cited line.
@@ -623,6 +627,11 @@ fixed, the repository's code to be checked, and sub-agents to be used where they
   - but the broker had answered a `ListPage` 1,879 ms late, *"waiting for the requests ahead of it"*, when the 500 ms
     dead-man fired.
 - RW 7.25 now carries that evidence;
+- **corrected 2026-11-05 (the laptop, later the same day):** the three readings above overreach, and RW 7.25 now says
+  so. The exit status `None` was read after the monitor had printed *"ended"*, so it does not exclude an earlier pause
+  of the monitor. *"Hearing"* rests on the absence of a deaf-interval line, which says the hearing thread looked, not that
+  the readers ran. The `ListPage` was the test's own `grants list` at that check; its 1,879 ms is stamp-to-handler time,
+  not queue occupancy, and its order relative to the firing is unknown. Neither red's cause is established;
 - the failed job was re-run once to confirm the failure is not the commit's; the re-run's result is recorded in the pull
   request and `docs/CLOUD_SYNC_LOG.md`.
 

@@ -8057,3 +8057,50 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   RW 6.72 with 6.69 (package-blind fast paths), then 3.28, 3.29, 6.73–6.77 (outcome contracts), then 7.25, 6.78–6.81 and
   the rest of that list. The owner's answers are still open (the language basics; the reviews' decisions), and the
   launch waits for his word.
+
+### 2026-11-05 — the laptop: synced after the cloud session; its reviews re-run on Windows; RW 7.25's reading corrected
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-7-25-records`   Base: `master` `1414a58`. Nothing came in on `origin` after it; no other AI's commit
+  landed while this one worked.
+- **The sync:** `master` fast-forwarded `0670e0b` → `1414a58` (PRs #125–#129, the cloud session's three reviews and the
+  records made from them, documents and the map only). Every PR and push run of theirs was read green, and so was the
+  scheduled run `42009076387` (18 of 18). The owner's two prompts, untracked here, were byte-identical to `master`'s and
+  were moved aside, not deleted, before the fast-forward. Survey check ok (1629 nodes, 19505 edges); `doctor --check` 29
+  passed.
+- **The reviews' rows, re-run on Windows** (the owner: *"Verify and learn more"*), on a release build of `1414a58` with its
+  commit injected, and the same day's debug build. The rows had said Windows was not observed. Not recorded in the rows
+  yet:
+  - **Reproduced:** 4.95, 4.97, 3.28, 3.25, 6.73, 6.75, 6.77, 6.58 (*"The pipe is being closed (os error 232)"*), 6.60,
+    6.51, 6.78, 6.79, 6.72, 6.81, 6.74, 6.76, 6.69, 6.80 (a CRLF file left with mixed line endings), 4.88, 6.55, 2.42,
+    2.37, 4.96, 6.71, 6.50, 6.57, 6.53.
+  - **Not reproduced: RW 3.29.** On the release build, `--sandbox-profile hostile-agent` and `--sandbox --limits mem`
+    down to 256 MiB give DL0905. Windows' job limit counts committed memory, and the 781 MiB stack is only reserved. The
+    debug build's guest did overflow its stack, its report saying `stopped_by: memory`.
+  - **Wider than recorded:** RW 6.70. Two skins do ship (`scripts/package-toolchain.sh` puts `morphs/` beside `bin/`),
+    and `./morphs` is searched first, so a file in the working directory shadows a shipped skin. A `compact-ai` program
+    printed `tick` once in one directory and three times in another, under a skin that swapped the aliases of `if` and
+    `while`; no report names the skin used.
+  - **Smaller:** RW 6.54's hint names the program's device; its `DIM=LO..HI` shape omits `heartbeat_ms`. RW 4.96: a grant
+    with limits is refused first, in words naming a Verified plugin. `delulu lsp` ignores its arguments (`mcp` refuses
+    them); a fix should still accept `--stdio`.
+- **RW 7.25 corrected** (the owner pasted an independent analysis, then: *"Correct the records first, then build the
+  deterministic witness"*). Its Windows reading had said the monitor was still running, the daemon was hearing, and the
+  cause narrowed to a broker queue. None of these follows: the exit status was read after the monitor printed *"ended"*;
+  no deaf interval says only that the hearing thread looked; the 1,879 ms `ListPage` was the test's own listing, timed
+  from its reader's stamp to the handler, and not ordered against the firing. Five accepted beats are a count, not a
+  time. The historical cause of neither red is established. One broker-side path is known from source (a beat stamped
+  and not yet handed over is not counted), and a fix that waits on active readers was withdrawn: overlapping incomplete
+  connections could hold a dead-man off for ever.
+- Files and folders (`git diff --name-status 1414a58..HEAD`): M `docs/REMAINING_WORK.md` (RW 7.25), `docs/AI_ONBOARDING.md`
+  (§10), `docs/review/DeluluLang_Hidden_Complexity_AI_First_Experience_Audit.md` (a dated correction beside §11.1 and a
+  note at its top), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry) and `docs/survey/*`. Nothing
+  added, deleted or renamed; no code.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. The deterministic witness of RW 7.25's stamp-to-hand-over window, and timing for each beat, on its own branch.
+  2. Then coordinate complete, authenticated beats with the expiry decision, with counter-tests: incomplete connections,
+     invalid keys and unrelated traffic must not keep a silent monitor alive.
+  3. Record the Windows re-runs above in their rows.
+  4. Otherwise the 2026-11-05 list stands: RW 4.95 first, with 4.96 and 4.97; the owner's answers; the launch only on his
+     word.

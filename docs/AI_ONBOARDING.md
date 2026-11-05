@@ -346,7 +346,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     - corrected its peak-memory figures;
     - found RW 6.75: a sandboxed fault reaches neither the envelope nor the report;
     - found fourteen code-review defects, grouped as RW 4.97 (`verify-sig --kye` fails open) and 6.76–6.81;
-    - read `master`'s red Windows run: RW 7.25's flaky monitor test, now narrowed to a 1.9 s broker queue;
+    - read `master`'s red Windows run: RW 7.25's flaky monitor test. Its reading there (narrowed to a 1.9 s broker
+      queue) was corrected on the laptop the same evening: the evidence excludes no cause, and neither red's cause is
+      established (RW 7.25);
     - updated README and the editor, getting-started and questions pages for RW 4.95 and 6.72.
     - landed as #128, `master` at `be40a92`, on a green run (`42020534572`, 14 of 14). `master`'s Windows job was
       re-run once and passed, and the scheduled run `42009076387` was 18 of 18 green, its three `miri-slow` jobs included.
