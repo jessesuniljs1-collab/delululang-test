@@ -1698,7 +1698,28 @@ fn a_watch_held_outside_the_daemon_lets_its_dead_man_fire() {
         "the monitor says its own dead-man ended it: {report:#}\n{seen:?}"
     );
     assert_eq!(inspect_state(&f, &m), "revoked", "{report:#}");
-    eprintln!("measured: one read of a {bytes}-byte record took {took:?} here (period {PERIOD_MS} ms)");
+    // RW 4.98's timing, both halves, so the next red of RW 7.25 names its path. The monitor names its last beats and its
+    // longest turn, which held the read: no shorter than the period its dead-man fired on.
+    let progress = seen
+        .iter()
+        .find(|l| l.contains("its last beats, in ms since its dead-man was armed"))
+        .unwrap_or_else(|| panic!("the monitor did not name its beats and turns: {seen:?}"));
+    let longest: u64 = progress
+        .split("its longest turn of the watch took ")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("no longest turn in: {progress}"));
+    assert!(longest >= PERIOD_MS, "the turn that held the read was not counted: {longest} ms against {PERIOD_MS} ms\n{progress}");
+    assert!(progress.contains("by the watch") && progress.contains("kept"), "{progress}");
+    // The daemon names the same dead-man's last beats when it judges it, with what was waiting.
+    let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_default();
+    let judged = log
+        .lines()
+        .find(|l| l.contains(&format!("the dead-man on `{m}` was judged at +")))
+        .unwrap_or_else(|| panic!("broker.log did not name the fired dead-man's beats:\n{log}"));
+    assert!(judged.contains("(kept)") && judged.contains("connection(s) were being read or handed over"), "{judged}");
+    eprintln!("measured: one read of a {bytes}-byte record took {took:?} here (period {PERIOD_MS} ms)\n{progress}\n{judged}");
     drop(guard);
     let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
 }

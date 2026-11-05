@@ -12096,3 +12096,53 @@ reader. The order now:
 its top); this entry and the sync log. No code changed.
 
 The counters are unchanged: D-V2-208, M1075, 157 codes, 366 anchors.
+
+## 2026-11-05 — the laptop: RW 4.98 witnessed (a beat stamped in time and handed over late), and both sides of a dead-man timed
+
+**Why.** The owner, after the records correction: *"Correct the records first, then build the deterministic witness. Do
+not implement the proposed reader-count fix as written."* The order he set: the records (done, `7dc9162`); the
+witness and timing (this); then coordinating complete, authenticated beats with the judgment, with counter-tests.
+
+**The witness.** `brokerd.rs` `a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man`, against the
+in-process daemon the other dead-man tests use:
+- a test-only seam (`handover_seam`, `#[cfg(test)]`, so the daemon a user runs has none) holds a beat's reader between
+  its stamp and its hand-over, for one state directory and once;
+- the beat is stamped about 0.7 ms into a 2 s period, and held until 2.8 s;
+- the serve loop, with nothing handed over, judges as of now: the dead-man fires, and the beat is answered DL1403.
+
+It was red 10 of 10 at its dead-man assertion with `--ignored`. It lands `#[ignore]`d, its reason naming RW 4.98, so CI
+stays green until the fix. A guard makes a beat stamped too near the deadline read as inconclusive, never as red. Its
+control, `the_hand_over_seam_holds_one_beat_of_one_daemon`: another daemon's hold catches nothing, a released beat is
+kept, and only one beat is held (M1080).
+
+**The timing**, so that RW 7.25's next red names its own path:
+- **`broker.log`, when a dead-man fires:** the node's last four beats (stamped, taken, answered, in ms since the daemon
+  began serving), how many requests were handed over and waiting, and how many connections a reader still held. A beat
+  that fires its own dead-man by arriving late is named the same way. A reader that takes 100 ms or more to stamp a
+  request after its connection was accepted, or holds one that long before handing it over, is named too.
+- **The monitor's standard error, when a watch with a dead-man ends on an error:** its last six beats (sent, by the watch
+  or the beater, answered in, kept or not) and its longest turn of the watch.
+- **Witnessed end to end** in `monitor_cli` `a_watch_held_outside_the_daemon_lets_its_dead_man_fire`, on Windows. The
+  monitor's last kept beat went at +1852 ms, its longest turn took 1,567 ms (the held read), and the daemon stamped its
+  last beat at +1923 ms and judged at +2126 ms with nothing waiting.
+- **Mutants, each red:**
+  - M1076: the final turn not counted;
+  - M1077: the daemon's line not written;
+  - M1078: a reader's threshold `>` for `>=`;
+  - M1079: every beat kept rather than the last four;
+  - M1080: the seam holding any daemon's beat.
+
+**Not done, on purpose.** The fix (RW 4.98's last column):
+- It coordinates only complete, authenticated beats with the judgment.
+- It never defers the judgment while any reader is active: overlapping incomplete connections would hold a dead-man off.
+- It comes with counter-tests: incomplete connections, a wrong key and unrelated traffic must not keep a silent monitor's
+  dead-man from firing.
+- Delays before a beat is received (a connection waiting to be accepted) are a separate problem.
+
+**Verified on the laptop (Windows):**
+- `cargo test -p delulu --bin delulu`: 199 passed, 1 ignored (the witness);
+- `monitor_cli` 23 passed; `broker_cli` 20; `estop_cli` 8;
+- `scripts/clippy.sh -j 4`: clean, stamped;
+- Survey and `doctor`: in the commit message.
+
+The counters: D-V2-208, M1080, 157 codes, 366 anchors.
