@@ -1472,3 +1472,424 @@ fn a_local_holding_an_export_is_called_never_a_module_function_of_its_name() {
     assert_eq!(String::from_utf8_lossy(&o.stdout), "hello!\n", "the export answers, not the module's `shout`: {}", out(&o));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ===== RW 4.95 — rule R-Get at `p.get`: an export is handed out only at a type that covers it =====
+//
+// Before on-demand routine run 20 the interpreter's `get` checked only that the name existed: the annotation
+// that pins `F` never reached the run. So a host could type a `! {Write}` export `! {}` and call it — `check` was
+// clean, `authority` named the function's row without `Write` (or the function pure), a package's ceiling
+// passed, and the run wrote a file. Each witness below pairs the refusal with the honest typing that runs, so a
+// `get` that refused everything would not pass them.
+
+/// The `putter` plugin: `put` writes through the capability it is handed, `peek` reads through one. Its
+/// ceiling holds both effects, so a host may grant them: what a host must not do is call them under a row
+/// that leaves them out.
+fn build_putter(dir: &Path) -> PathBuf {
+    let pkg = dir.join("putter-src");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"putter\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+         [plugin]\napi = 1\nclass = \"verified\"\n\n\
+         [plugin.authority]\neffects  = [\"Write\", \"Read\"]\nrequires = []\n\n\
+         [plugin.exports]\n\
+         put = \"fn(Cap[FsWrite], Str) -> Int ! {Write}\"\n\
+         peek = \"fn(Cap[FsRead], Str) -> Str ! {Read}\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("lib.delulu"),
+        r#"module putter
+
+pub fn put(fs: Cap[FsWrite], s: Str) -> Int ! {Write} {
+    match fs.write_text("written-by-plugin.txt", s) {
+        Ok(u) => 1,
+        Err(e) => 0
+    }
+}
+
+pub fn peek(fs: Cap[FsRead], name: Str) -> Str ! {Read} {
+    match fs.read_text(name) {
+        Ok(t) => t,
+        Err(e) => "unreadable"
+    }
+}
+"#,
+    )
+    .unwrap();
+    let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
+    let dpx = dir.join("putter.dpx");
+    std::fs::copy(pkg.join("putter.dpx"), &dpx).unwrap();
+    dpx
+}
+
+/// A refusal's variant and message, or what the program printed — the line R-Get's witnesses read.
+const SAY_PLUGIN_ERR: &str = "NotGranted(m) => out.println(\"NotGranted: \" + m)
+            VerifyFailed(m) => out.println(\"VerifyFailed: \" + m)
+            BadArtifact(m) => out.println(\"BadArtifact: \" + m)
+            Revoked(n) => out.println(\"Revoked\")
+            LimitExceeded(m) => out.println(\"LimitExceeded: \" + m)
+            ApiMismatch(m) => out.println(\"ApiMismatch: \" + m)";
+
+/// A host that takes `put` at the type `f` inside a function whose row is `row`, and calls it.
+fn put_host(f: &str, row: &str) -> String {
+    r#"module host
+
+fn go(h: Cap[PluginHost], fs: Cap[FsWrite]) -> Result[Int, PluginErr] ! {@ROW@} {
+    let g = Grant {
+        effects: ["Write"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let p = load(h, "putter.dpx", g)?
+    let put: @F@ = p.get("put")?
+    Ok(put(fs, "the host chose this text"))
+}
+
+fn main(root: Root) ! {Load, Read, Write} {
+    let out = root.console()
+    match go(root.plugin_host(), root.fs_write("./out")) {
+        Ok(n) => out.println("RAN " + str(n))
+        Err(e) => match e {
+            @SAY@
+        }
+    }
+}
+"#
+    .replace("@ROW@", row)
+    .replace("@F@", f)
+    .replace("@SAY@", SAY_PLUGIN_ERR)
+}
+
+fn run_in(dir: &Path, program: &str, grants: &[&str]) -> String {
+    let mut args = vec!["run", program, "--no-prompt"];
+    for g in grants {
+        args.push("--grant");
+        args.push(g);
+    }
+    out(&delulu_in(dir, &args))
+}
+
+/// **R-Get refuses an export typed with a narrower row than its own (RW 4.95, HIGH).** `go` is `! {Load, Read}`
+/// and takes the `! {Write}` export `put` as `! {}`: `check` is clean, and before the fix the run wrote
+/// `out/written-by-plugin.txt`. Now the `get` answers `VerifyFailed`, naming the effect the requested type leaves
+/// out, and nothing is written. The control: the same program typing the export honestly — `! {Write}`, in a
+/// function that declares it — runs and writes.
+#[test]
+fn r_get_refuses_an_export_typed_with_a_narrower_row_and_nothing_is_written() {
+    let dir = tmp("rget-row");
+    build_putter(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let written = dir.join("out").join("written-by-plugin.txt");
+    let grants = ["console", "plugin=.", "fs.write=./out"];
+
+    std::fs::write(dir.join("narrow.delulu"), put_host("fn(Cap[FsWrite], Str) -> Int ! {}", "Load, Read")).unwrap();
+    let check = delulu_in(&dir, &["check", "narrow.delulu"]);
+    assert_eq!(check.status.code(), Some(0), "the static half was never the hole — the program checks: {}", out(&check));
+    let text = run_in(&dir, "narrow.delulu", &grants);
+    assert!(
+        text.contains("VerifyFailed: export `put` performs `Write`, which the requested type"),
+        "a `get` at a row without `Write` must be refused, naming the effect: {text}"
+    );
+    assert!(!text.contains("RAN"), "the export must not have been handed out: {text}");
+    assert!(!written.exists(), "nothing may be written through an export taken at a narrower row: {text}");
+
+    std::fs::write(dir.join("honest.delulu"), put_host("fn(Cap[FsWrite], Str) -> Int ! {Write}", "Load, Read, Write")).unwrap();
+    let text = run_in(&dir, "honest.delulu", &grants);
+    assert!(text.contains("RAN 1"), "the honest typing must run: {text}");
+    assert_eq!(std::fs::read_to_string(&written).ok().as_deref(), Some("the host chose this text"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A function `authority` calls pure cannot read through an export typed pure (RW 4.95).** `reveal` declares
+/// no row, and is handed `peek` — a `! {Read}` export — taken as `! {}`. Before the fix it returned the file's
+/// contents. Now the `get` is refused and the secret never prints. The control types `peek` `! {Read}`, which
+/// makes `reveal` declare `Read`, and reads.
+#[test]
+fn r_get_refuses_a_pure_typing_of_a_reading_export_so_a_pure_function_reads_nothing() {
+    let dir = tmp("rget-pure");
+    build_putter(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    // The marker is joined at run time, so a refusal that quotes this source can never be read as the read.
+    std::fs::write(dir.join("data").join("secret.txt"), ["the file's", "contents"].join(" ")).unwrap();
+    let program = |row: &str| {
+        r#"module host
+
+fn reveal(peek: fn(Cap[FsRead], Str) -> Str ! {@ROW@}, fs: Cap[FsRead]) -> Str @FNROW@ {
+    peek(fs, "secret.txt")
+}
+
+fn go(h: Cap[PluginHost], fs: Cap[FsRead]) -> Result[Str, PluginErr] ! {Load, Read} {
+    let g = Grant {
+        effects: ["Read"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let p = load(h, "putter.dpx", g)?
+    let peek: fn(Cap[FsRead], Str) -> Str ! {@ROW@} = p.get("peek")?
+    Ok(reveal(peek, fs))
+}
+
+fn main(root: Root) ! {Load, Read, Write} {
+    let out = root.console()
+    match go(root.plugin_host(), root.fs_read("./data")) {
+        Ok(s) => out.println("READ " + s)
+        Err(e) => match e {
+            @SAY@
+        }
+    }
+}
+"#
+        .replace("@FNROW@", if row.is_empty() { "" } else { "! {Read}" })
+        .replace("@ROW@", row)
+        .replace("@SAY@", SAY_PLUGIN_ERR)
+    };
+    let grants = ["console", "plugin=.", "fs.read=./data"];
+
+    std::fs::write(dir.join("pure.delulu"), program("")).unwrap();
+    let report = out(&delulu_in(&dir, &["authority", "pure.delulu"]));
+    let pure_line = report.lines().find(|l| l.trim_start().starts_with("pure fns:")).unwrap_or_default();
+    assert!(pure_line.contains("reveal"), "the witness needs `reveal` to be what `authority` calls pure: {report}");
+    let text = run_in(&dir, "pure.delulu", &grants);
+    assert!(text.contains("VerifyFailed: export `peek` performs `Read`"), "{text}");
+    assert!(!text.contains("contents"), "a pure function must not have read the file: {text}");
+
+    std::fs::write(dir.join("honest.delulu"), program("Read")).unwrap();
+    let text = run_in(&dir, "honest.delulu", &grants);
+    assert!(text.contains("READ the file's contents"), "the honest typing must read: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **An export asked for at the wrong parameter types is refused at the `get`, not faulted inside the plugin
+/// (RW 4.95).** `shout` is `fn(Str) -> Str`; taken as `fn(Int) -> Int`, the call used to fault in the plugin's own
+/// code (DL0907, *"unbound name"*). Now the `get` answers `VerifyFailed` naming both types, and the plugin's code
+/// never runs. The honest typing is `a_program_loads_a_plugin_and_calls_its_export`.
+#[test]
+fn r_get_refuses_an_export_asked_for_at_other_parameter_types() {
+    let dir = tmp("rget-params");
+    let dpx = build_shout(&dir);
+    std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
+    let program = host_program("shout.dpx")
+        .replace("let f: fn(Str) -> Str ! {} = p.get(\"shout\")?", "let f: fn(Int) -> Int ! {} = p.get(\"shout\")?")
+        .replace("Ok(f(\"hello\"))", "Ok(str(f(41)))");
+    assert!(program.contains("fn(Int) -> Int"), "the witness's edit must apply");
+    std::fs::write(dir.join("host.delulu"), program).unwrap();
+    let o = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
+    let text = out(&o);
+    assert!(
+        text.contains("VerifyFailed: export `shout` has type `fn(Str) -> Str`, which does not match the requested"),
+        "{text}"
+    );
+    assert!(!text.contains("DL0907"), "the plugin's code must not have run: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A package's ceiling holds through a plugin (RW 4.95).** The package's `[authority] effects` are `Load` and
+/// `Read`, `check .` says the authority is within the manifest, and before the fix its run wrote a file through
+/// an export taken at `! {}`. Now nothing is written. The control is the same package whose ceiling and row
+/// declare `Write` and type the export honestly.
+#[test]
+fn r_get_holds_a_packages_ceiling_through_a_plugin_export() {
+    let dir = tmp("rget-pkg");
+    build_putter(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    let written = dir.join("out").join("written-by-plugin.txt");
+    let package = |effects: &str, row: &str| {
+        std::fs::write(
+            dir.join("delulu.toml"),
+            format!(
+                "[package]\nname = \"app\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects  = [{effects}]\n\
+                 fs.read  = []\nfs.write = []\nnet      = []\nsecrets  = []\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("src").join("main.delulu"),
+            r#"module main
+
+fn go(h: Cap[PluginHost], fs: Cap[FsWrite]) -> Result[Int, PluginErr] ! {Load, Read@W@} {
+    let g = Grant {
+        effects: ["Write"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let p = load(h, "putter.dpx", g)?
+    let put: fn(Cap[FsWrite], Str) -> Int ! {@ROW@} = p.get("put")?
+    Ok(put(fs, "the package chose this text"))
+}
+
+fn main(root: Root) ! {Load, Read@W@} {
+    let _r = go(root.plugin_host(), root.fs_write("./out"))
+}
+"#
+            .replace("@W@", if row.is_empty() { "" } else { ", Write" })
+            .replace("@ROW@", row),
+        )
+        .unwrap();
+    };
+
+    package("\"Load\", \"Read\"", "");
+    let check = delulu_in(&dir, &["check", "."]);
+    assert!(out(&check).contains("authority within manifest and pins"), "the witness needs the ceiling to pass: {}", out(&check));
+    let text = run_in(&dir, ".", &["plugin=.", "fs.write=./out"]);
+    assert!(!written.exists(), "a package whose ceiling has no `Write` must write nothing through a plugin: {text}");
+
+    package("\"Load\", \"Read\", \"Write\"", "Write");
+    let text = run_in(&dir, ".", &["plugin=.", "fs.write=./out"]);
+    assert_eq!(std::fs::read_to_string(&written).ok().as_deref(), Some("the package chose this text"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **R-Get holds inside a plugin, at the plugin's own `get` (RW 4.95).** A host hands `relay` a loaded `putter`;
+/// `relay` takes `put` at `! {}` in its pure export — its code checks, its build verifies, and its grant and
+/// ceiling are empty — and before the fix its call wrote the file. The export's interpreter now checks the
+/// plugin's own sites against the replay of the plugin's code: `relay` gets the refusal and writes nothing.
+/// The control, `relay` typing `put` `! {Write}` under a ceiling and grant that hold `Write`, writes — so the
+/// nested interpreter has the table, rather than refusing every `get`.
+#[test]
+fn r_get_holds_inside_a_plugin_at_its_own_get_of_a_plugin_it_is_handed() {
+    let dir = tmp("rget-nested");
+    build_putter(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let written = dir.join("out").join("written-by-plugin.txt");
+    let relay = |row: &str| {
+        let pkg = dir.join("relay-src");
+        std::fs::create_dir_all(pkg.join("src")).unwrap();
+        let (effects, sig_row) = if row.is_empty() { ("", String::new()) } else { ("\"Write\"", format!(" ! {{{row}}}")) };
+        std::fs::write(
+            pkg.join("delulu.toml"),
+            format!(
+                "[package]\nname = \"relay\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+                 [plugin]\napi = 1\nclass = \"verified\"\n\n\
+                 [plugin.authority]\neffects  = [{effects}]\nrequires = []\n\n\
+                 [plugin.exports]\nuse_it = \"fn(Plugin[Verified], Cap[FsWrite]) -> Int{sig_row}\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            pkg.join("src").join("lib.delulu"),
+            r#"module relay
+
+pub fn use_it(q: Plugin[Verified], fs: Cap[FsWrite]) -> Int @SIGROW@ {
+    match q.get("put") {
+        Ok(f) => call(f, fs),
+        Err(e) => 0 - 1
+    }
+}
+
+fn call(put: fn(Cap[FsWrite], Str) -> Int ! {@ROW@}, fs: Cap[FsWrite]) -> Int @SIGROW@ {
+    put(fs, "the relay chose this text")
+}
+"#
+            .replace("@SIGROW@", &sig_row)
+            .replace("@ROW@", row),
+        )
+        .unwrap();
+        let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(0), "relay must build: {}", out(&o));
+        std::fs::copy(pkg.join("relay.dpx"), dir.join("relay.dpx")).unwrap();
+        let effects = if row.is_empty() { "" } else { "\"Write\"" };
+        let host = r#"module host
+
+fn go(h: Cap[PluginHost], fs: Cap[FsWrite]) -> Result[Int, PluginErr] ! {Load, Read@W@} {
+    let w = Grant {
+        effects: ["Write"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let r_grant = Grant {
+        effects: [@EFFECTS@], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let q = load(h, "putter.dpx", w)?
+    let r = load(h, "relay.dpx", r_grant)?
+    let use_it: fn(Plugin[Verified], Cap[FsWrite]) -> Int ! {@ROW@} = r.get("use_it")?
+    Ok(use_it(q, fs))
+}
+
+fn main(root: Root) ! {Load, Read, Write} {
+    let out = root.console()
+    match go(root.plugin_host(), root.fs_write("./out")) {
+        Ok(n) => out.println("RAN " + str(n))
+        Err(e) => match e {
+            @SAY@
+        }
+    }
+}
+"#
+        .replace("@W@", if row.is_empty() { "" } else { ", Write" })
+        .replace("@EFFECTS@", effects)
+        .replace("@ROW@", row)
+        .replace("@SAY@", SAY_PLUGIN_ERR);
+        std::fs::write(dir.join("host.delulu"), host).unwrap();
+        run_in(&dir, "host.delulu", &["console", "plugin=.", "fs.write=./out"])
+    };
+
+    let text = relay("");
+    assert!(text.contains("RAN -1"), "relay's own `get` at `! {{}}` must be refused inside the plugin: {text}");
+    assert!(!written.exists(), "a pure export must write nothing through a plugin it is handed: {text}");
+
+    let text = relay("Write");
+    assert!(text.contains("RAN 1"), "relay's honest `get` must be handed the export: {text}");
+    assert_eq!(std::fs::read_to_string(&written).ok().as_deref(), Some("the relay chose this text"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **The class a program asks for reaches `load` (RW 4.96).** A program loads only Verified plugins in this
+/// build. Before on-demand routine run 20 the runtime requested Verified whatever the program wrote: a
+/// `Plugin[Contained]` request of a Verified artifact RAN, its `get` sites typed under rules (R-1, R-6a) the
+/// handle never met; and of a Contained artifact it was refused for a request never made (*"the host
+/// requested `Plugin[verified]`"*). Now both are refused as what they are, before a byte is read, and the same
+/// program asking `Plugin[Verified]` of the Verified artifact runs.
+#[test]
+fn a_request_for_a_contained_plugin_is_refused_as_one() {
+    let dir = tmp("contained-ask");
+    let build = |name: &str, class: &str| {
+        let pkg = dir.join(format!("{name}-src"));
+        std::fs::create_dir_all(pkg.join("src")).unwrap();
+        std::fs::write(
+            pkg.join("delulu.toml"),
+            format!(
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+                 [plugin]\napi = 1\nclass = \"{class}\"\n\n\
+                 [plugin.authority]\neffects  = []\nrequires = []\n\n\
+                 [plugin.exports]\nshout = \"fn(Str) -> Str\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            pkg.join("src").join("lib.delulu"),
+            format!("module {name}\n\npub fn shout(s: Str) -> Str {{ s + \"!\" }}\n"),
+        )
+        .unwrap();
+        let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
+        std::fs::copy(pkg.join(format!("{name}.dpx")), dir.join(format!("{name}.dpx"))).unwrap();
+    };
+    build("cshout", "contained");
+    build("vshout", "verified");
+    let ask = |class: &str, artifact: &str| {
+        let program = host_program(artifact).replace("let p = load(", &format!("let p: Plugin[{class}] = load("));
+        assert!(program.contains(&format!("let p: Plugin[{class}] = load(")), "the witness's edit must apply");
+        std::fs::write(dir.join("host.delulu"), program).unwrap();
+        let check = delulu_in(&dir, &["check", "host.delulu"]);
+        assert_eq!(check.status.code(), Some(0), "{}", out(&check));
+        out(&delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]))
+    };
+    let refusal = "as a Contained plugin (`Plugin[Contained]`), and in this build a program can load only Verified plugins";
+
+    let text = ask("Contained", "vshout.dpx");
+    assert!(text.contains(&format!("NotGranted: this program asks for `vshout.dpx` {refusal}")), "{text}");
+    assert!(!text.contains("hello!"), "a Verified plugin must not run under a Contained request: {text}");
+
+    let text = ask("Contained", "cshout.dpx");
+    assert!(text.contains(&format!("NotGranted: this program asks for `cshout.dpx` {refusal}")), "{text}");
+    assert!(!text.contains("requested `Plugin[verified]`"), "the refusal must name the request the program made: {text}");
+
+    let text = ask("Verified", "vshout.dpx");
+    assert!(text.contains("hello!"), "the same program asking `Plugin[Verified]` must run: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

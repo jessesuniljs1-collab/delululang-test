@@ -1076,6 +1076,29 @@ fn refuse_undocumented_shared_flags(cmd: &str, rest: &[String]) -> Option<i32> {
     Some(2)
 }
 
+/// The commands that read their options themselves (`signing.rs`), never through [`parse_opts`] (RW 4.97).
+const OWN_OPTION_PARSERS: &[&str] = &["keygen", "sign", "verify-sig", "publish", "add", "login"];
+
+/// Refuse, for a command with its own option parser, every `--option` (or `--option=value`) its usage does not
+/// document (RW 4.97). An option nobody understood is refused, never ignored: a mistyped key pin must not turn
+/// a verification into one with no pin.
+fn refuse_undocumented_own_options(cmd: &str, rest: &[String]) -> Option<i32> {
+    let documented = documented_flags(cmd);
+    let mut refused: Vec<String> = Vec::new();
+    for word in rest {
+        let Some(body) = word.strip_prefix("--") else { continue };
+        let name = format!("--{}", body.split('=').next().unwrap_or_default());
+        if !documented.contains(&name) && !refused.contains(&name) {
+            refused.push(name);
+        }
+    }
+    if refused.is_empty() {
+        return None;
+    }
+    print_option_refusal(cmd, &refused);
+    Some(2)
+}
+
 fn print_option_refusal(cmd: &str, refused: &[String]) {
     eprintln!(
         "error: `{cmd}` does not know {}: {}",
@@ -1198,6 +1221,15 @@ fn run_inner(args: &[String]) -> i32 {
     // at such a flag, so `keygen --grants` minted a key and exited 0 having ignored it.
     if SUBCOMMANDS.contains(&cmd.as_str()) {
         if let Some(code) = refuse_undocumented_shared_flags(cmd, own_words(rest)) {
+            return code;
+        }
+    }
+    // RW 4.97: a command that parses its own options never meets the shared parser, so the guard above saw
+    // only the flags that parser knows: `verify-sig art.dwx --kye K` dropped the key pin and said *valid*,
+    // `sign --name second` signed with the default key, and `keygen --bogus` minted a key. Each such command
+    // refuses every option its usage does not document, before it runs.
+    if OWN_OPTION_PARSERS.contains(&cmd.as_str()) {
+        if let Some(code) = refuse_undocumented_own_options(cmd, own_words(rest)) {
             return code;
         }
     }
@@ -1609,12 +1641,12 @@ fn usage() -> &'static str {
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list [--json]   (catalog plugins: verified-class, ZERO authority, prose only)\n\
      \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical) [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (surface keyword skins: human languages or AI-compact profiles; the program is unchanged)\n\
-     \x20 delulu keygen    [--name N] [--json]                 (mint an ed25519 signing key in ~/.delulu/keys)\n\
-     \x20 delulu sign      <artifact> [--hybrid] [--unstable] [--json]\n\
+     \x20 delulu keygen    [--name N] [--dangerously-allow-insecure-perms] [--json]   (mint an ed25519 signing key in ~/.delulu/keys)\n\
+     \x20 delulu sign      <artifact> [--key-name N] [--hybrid] [--unstable] [--json]   (--key-name: the name a key was minted under)\n\
      \x20 delulu verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable] [--json]\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; a hybrid .sig and --require-hybrid touch post-quantum\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ML-DSA-65 and need --unstable — unaudited, pre-KAT, refused as DL1910 without it)\n\
-     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR] [--json]   (validate manifest + semver-authority + signature; no upload)\n\
+     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR] [--registry URL] [--json]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu add       --path <dir> [--accept-authority] [--json]   (declare a dependency on the package\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is\n\

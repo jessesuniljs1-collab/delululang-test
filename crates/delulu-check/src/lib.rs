@@ -30,7 +30,7 @@ pub mod ty;
 pub mod unify;
 
 pub use authority::{authority_report, ScopeInfo};
-pub use check::{CheckResult, FnFacts};
+pub use check::{CheckResult, FnFacts, PluginGet};
 pub use deps::{
     check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, supply_chain_gate, PackageAuthority,
     ResolvedPackage, Workspace,

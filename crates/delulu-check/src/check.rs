@@ -139,6 +139,29 @@ pub struct CheckResult {
     /// Send/spawn argument nodes that are statically-proven iso MOVES (Stage 7 phase 7i):
     /// what the runtime's `--debug-rcaps` verifies unaliased at each actor boundary.
     pub iso_moves: HashSet<NodeId>,
+    /// Every `p.get(name)` call site, keyed by its `Expr::Method` node id: the function type `F` the
+    /// program asked for, settled, and the class it asked it of (RW 4.95). Rule R-Get's runtime half —
+    /// `row(export) ⊆ row(F)` with exact parameter and return types — needs `F`, and before this table
+    /// the annotation never reached the run: the interpreter handed out any export by name, so a host
+    /// typed a `! {Write}` export `! {}` and wrote a file from a function `authority` called pure.
+    pub plugin_gets: HashMap<NodeId, PluginGet>,
+    /// Every `load(host, path, grant)` call site, keyed by its `Expr::Call` node id: the class the program
+    /// asked for, settled — `Type::Verified`, `Type::Contained`, or a variable no annotation pinned (RW 4.96).
+    /// The runtime used to request Verified whatever the program wrote, so a `Plugin[Contained]` request
+    /// either ran a Verified plugin under the other class's rules or was refused for a request never made.
+    pub plugin_loads: HashMap<NodeId, Type>,
+}
+
+/// One `p.get(name)` site as inference settled it (RW 4.95): what the interpreter checks the loaded
+/// export against before it hands out the callable — the `root.foreign` bind-site pattern.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PluginGet {
+    /// The function type the program asked for — the annotation that pins `F` (deviation 4), through
+    /// the final substitution. Anything still unresolved in it is refused at run time, never guessed.
+    pub f: Type,
+    /// The receiver's class marker, settled: `Type::Verified`, `Type::Contained`, or a variable no
+    /// annotation pinned.
+    pub class: Type,
 }
 
 /// Effect-row accumulator: concrete effects plus any polymorphic tails still in play.
@@ -195,6 +218,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
+        pending_loads: Vec::new(),
         cyclic_aliases: std::collections::HashSet::new(),
         poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
@@ -257,7 +281,17 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // body's own variable is never unified with the caller's argument. Without this, a closure
     // launders into an opaque module through a generic helper and R-6a never fires (DL1509).
     let pending_gets = std::mem::take(&mut checker.pending_gets);
-    for (span, f_var, class_ty) in pending_gets {
+    // RW 4.95: each site's settled `F` and class, for the interpreter's R-Get — recorded for every site,
+    // whatever its class, before the R-6a loop below skips the Verified ones.
+    let plugin_gets: HashMap<NodeId, PluginGet> = pending_gets
+        .iter()
+        .map(|(id, _, f_var, class_ty)| {
+            (*id, PluginGet { f: checker.cx.apply_type(&Type::Var(*f_var)), class: checker.cx.apply_type(class_ty) })
+        })
+        .collect();
+    let plugin_loads: HashMap<NodeId, Type> =
+        checker.pending_loads.iter().map(|(id, class)| (*id, checker.cx.apply_type(class))).collect();
+    for (_, span, f_var, class_ty) in pending_gets {
         if !matches!(checker.cx.apply_type(&class_ty), Type::Contained) {
             continue;
         }
@@ -370,6 +404,8 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         main_present,
         fn_types: checker.fn_types,
         foreign_binds,
+        plugin_gets,
+        plugin_loads,
         node_types,
         type_names: table.types.iter().map(|t| t.name.clone()).collect(),
         node_rows,
@@ -412,6 +448,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
+        pending_loads: Vec::new(),
         // A plugin-manifest signature is lowered against the HOST's already-validated decl table, so
         // no alias in scope here can be cyclic — `check_module` refused any that were. Empty is the
         // correct value, not a shortcut.
@@ -442,10 +479,14 @@ struct Checker<'a> {
     /// `root.foreign(load)` call sites and the fresh handle var each produced, resolved to a
     /// concrete lib name after all functions are checked (see `check_module`).
     pending_foreign_binds: Vec<(NodeId, crate::ty::TypeVar)>,
-    /// `p.get(name)` call sites (Stage 6): the site's span, the fresh `F` variable the annotation
-    /// will pin, and the receiver's class marker. R-6a/DL0803 is decided once inference settles
-    /// (see `check_module`), because neither `F` nor the class is known when the method is checked.
-    pending_gets: Vec<(Span, crate::ty::TypeVar, Type)>,
+    /// `p.get(name)` call sites (Stage 6): the site's node id (RW 4.95 — the interpreter's key), its
+    /// span, the fresh `F` variable the annotation will pin, and the receiver's class marker. R-6a/DL0803
+    /// is decided once inference settles (see `check_module`), because neither `F` nor the class is known
+    /// when the method is checked; and the settled `F` is what the run's R-Get checks the export against.
+    pending_gets: Vec<(NodeId, Span, crate::ty::TypeVar, Type)>,
+    /// `load(..)` call sites (RW 4.96): the call's node id and the fresh class variable its `Plugin[C]` carries,
+    /// settled in `check_module` for the interpreter's `load`.
+    pending_loads: Vec<(NodeId, Type)>,
     /// DIR §2.3 side tables, recorded raw (pre-substitution) during checking and resolved once at
     /// the end of `check_module`. `node_types_raw` holds each node's assigned type (possibly with
     /// inference variables); `node_row_accs` holds each node's raw effect accumulator.
@@ -1702,7 +1743,7 @@ impl<'a> Checker<'a> {
             Expr::Var { path, span, .. } => (self.check_var(path, *span, ctx), RowAcc::default()),
             Expr::List { items, span, .. } => self.check_list(items, *span, ctx),
             Expr::Record { path, fields, span, .. } => self.check_record(path, fields, *span, ctx),
-            Expr::Call { callee, args, span, .. } => self.check_call(callee, args, *span, ctx),
+            Expr::Call { callee, args, span, id } => self.check_call(callee, args, *span, *id, ctx),
             Expr::Method { recv, name, args, span, id } => self.check_method(recv, name, args, *span, *id, ctx),
             Expr::Field { recv, name, .. } => {
                 let (rt, rr) = self.check_expr(recv, ctx);
@@ -1872,12 +1913,12 @@ impl<'a> Checker<'a> {
         (Type::Record(id, args), acc)
     }
 
-    fn check_call(&mut self, callee: &Expr, args: &[Expr], span: Span, ctx: &mut FnCtx) -> (Type, RowAcc) {
+    fn check_call(&mut self, callee: &Expr, args: &[Expr], span: Span, node_id: NodeId, ctx: &mut FnCtx) -> (Type, RowAcc) {
         // Builtins and value constructors when the callee is a bare, unshadowed name.
         if let Expr::Var { path, .. } = callee {
             if path.segs.len() == 1 && ctx.lookup(&path.segs[0].name).is_none() {
                 let name = path.segs[0].name.as_str();
-                if let Some(res) = self.check_builtin_call(name, args, span, ctx) {
+                if let Some(res) = self.check_builtin_call(name, args, span, node_id, ctx) {
                     return res;
                 }
                 // A user/prelude variant constructor with fields (`Say(x)`, `Other(m)`, …).
@@ -1954,7 +1995,14 @@ impl<'a> Checker<'a> {
     ///
     /// Every name here is intercepted at the CALL site before user scope is consulted, which is
     /// why `PRELUDE_BUILTINS` exists and why redefining one is refused at the declaration.
-    fn check_builtin_call(&mut self, name: &str, args: &[Expr], span: Span, ctx: &mut FnCtx) -> Option<(Type, RowAcc)> {
+    fn check_builtin_call(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        span: Span,
+        node_id: NodeId,
+        ctx: &mut FnCtx,
+    ) -> Option<(Type, RowAcc)> {
         let mut acc = RowAcc::default();
         let check_args = |slf: &mut Self, ctx: &mut FnCtx, acc: &mut RowAcc| -> Vec<Type> {
             args.iter()
@@ -2026,6 +2074,8 @@ impl<'a> Checker<'a> {
                 acc.add_effect(Effect::Read);
                 ctx.facts.cap_kinds.insert(ResourceKind::PluginHost);
                 let class = self.cx.fresh_type();
+                // RW 4.96: the class this call asks for, settled once inference is, reaches the run's `load`.
+                self.pending_loads.push((node_id, class.clone()));
                 let err = Type::Sum(self.table.type_ix["PluginErr"], vec![]);
                 Some((Type::result(Type::Plugin(Box::new(class)), err), acc))
             }
@@ -2362,6 +2412,18 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            // T-Get's hook (Stage 6; RW 4.95): this `p.get(name)` site, its fresh `F` and the receiver's
+            // class, so `check_module` decides R-6a once inference settles and hands the interpreter the
+            // settled `F` for R-Get. `ret` is `Result[F, PluginErr]`.
+            if let Type::Plugin(class) = &rt {
+                if name.name == "get" {
+                    if let Type::Result(inner, _) = &ret {
+                        if let Type::Var(tv) = **inner {
+                            self.pending_gets.push((node_id, span, tv, (**class).clone()));
+                        }
+                    }
+                }
+            }
             return (ret, acc);
         }
 
@@ -2628,13 +2690,11 @@ impl<'a> Checker<'a> {
             //   export type are runtime values. The compile-time half is automatic and needs no
             //   rule: `F`'s row flows into the caller's row through T-Call, so a host calling a
             //   `!{Read, Net}` export must already declare `Net` — the design paying off.
-            Type::Plugin(class) => match method {
+            Type::Plugin(_) => match method {
                 "get" => {
                     self.expect_arg(args, 0, &Type::Str, span);
+                    // `F` is recorded in `check_method`, which knows this call's node id (RW 4.95).
                     let f = self.cx.fresh_type();
-                    if let Type::Var(tv) = f {
-                        self.pending_gets.push((span, tv, (**class).clone()));
-                    }
                     let err = Type::Sum(self.table.type_ix["PluginErr"], vec![]);
                     Some((Type::result(f, err), None, None))
                 }
