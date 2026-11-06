@@ -135,7 +135,9 @@ fn chain_payload() -> Value {
             ("resource_class", nullable("string")),
             ("resources", strs()),
         ],
-        &[],
+        // The authority report's own (A8), which the chain copies with each capability: a minting site of this kind
+        // computes its scope. Undescribed here until 2026-11-06 (RW 6.74's `outputSchema` test found it).
+        &[("requested_computed", t("boolean"))],
     );
     let links: Vec<(&str, Value)> = vec![
         (
@@ -769,6 +771,8 @@ pub fn document(name: &str) -> Option<Value> {
                     // A sandboxed run's custody: the broker's node when one decided every use.
                     ("custody", obj(&[("mode", t("string")), ("node", nullable("string"))], &[])),
                     ("audit", obj(&[("required_grants", arr(t("string"))), ("unsupported_surface", nullable("string"))], &[])),
+                    // RW 6.73: a run stopped for a grant — every grant the program's text asks for that the run lacked.
+                    ("missing_grants", arr(t("string"))),
                 ],
             )
         }

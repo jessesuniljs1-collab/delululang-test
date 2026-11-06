@@ -6032,3 +6032,195 @@ which the checker already refuses (DL0401, DL0403) — is refused by the code ge
 unchecked path. No change to the host, the `.dwx` format or any artifact already built in the host's shape.
 
 **Evidence.** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop.
+
+## D-V2-216 — RW 3.29: the interpreter's stack walks a ladder, and every bound fits the stack the host granted — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.6, and its second pass): the CLI runs on a thread reserving
+`INTERPRETER_STACK_BYTES` (10,000 × 80 KiB + 256 KiB, about 781 MiB), so that the depth bound fires before the stack
+runs out. When the reservation was refused, it fell back to the main stack (8 MiB on Linux) and kept the full bound of
+10,000. Under `ulimit -v 300000` a recursion 100,000 deep, DL0905 with a report without the cap, ended *"thread 'main'
+has overflowed its stack"*, exit 134, with no report. The second pass found the same failure under `--sandbox
+--sandbox-profile hostile-agent` (256 MiB), the profile `docs/for-agents.md` recommends for code you did not write. The
+guest printed *"has overflowed its stack"* and the host reported `{exit 1, ran: true}` with no diagnostic. Re-run on
+the laptop before the fix: Windows' hostile-agent guest also overflowed (*"guest: thread 'delulu-main' has overflowed
+its stack"*). There the reservation is granted, and the Job Object's `ProcessMemoryLimit` counts the stack pages the
+recursion commits.
+
+**Decision.** Of the row's two remedies, run with a bound sized to the stack actually available or refuse with a
+reason, the first. A refusal would stop programs that run correctly within a smaller bound.
+- **The CLI's thread walks a ladder.** `delulu_runtime::on_laddered_thread` tries the rungs of
+  `INTERPRETER_STACK_LADDER` (about 781 MiB, then 256, 64, 16 and 8 MiB), largest first. It runs the CLI on the first
+  rung the host grants, and records that stack before the CLI starts. When the host grants none, the CLI runs on the
+  calling thread with `MAIN_THREAD_STACK_ASSUMED` (1 MiB, the smallest main stack a supported host gives) recorded.
+- **One process-wide bound.** Every interpreter built without a bound of its own takes `process_max_depth()`, the
+  bound `max_depth_for_stack` gives for the recorded stack. This covers the interpreters of `run`, the guest, a plugin,
+  `test` and the REPL. It is process-wide, not thread-local, because those interpreters all run on that one thread, and
+  a setting one constructor forgot would be the crash (§11, *a thread-local setting reaches one thread*). Actor workers
+  keep their own ladder and bound (D67), and a sandbox guest refuses actor programs.
+- **A guest's stack is capped by its ceiling.** `ceiling::own_memory_ceiling` reads the ceiling the OS enforces on the
+  process: a Windows Job Object's per-process or per-job memory limit (the smaller when both are set), or Linux's
+  `RLIMIT_DATA`. macOS has none the OS can name, since its ceiling is the host's sampler. A sandbox guest lowers the
+  recorded stack, and never raises it, to half that ceiling (`cap_process_stack_bytes`); the heap keeps the rest.
+- **A bound the host lowered says so.** The fault reads *"recursion depth exceeded (the bound is N here: the stack this
+  process may use — what the host would reserve, or what its memory ceiling leaves — is smaller than the full bound of
+  10000 needs)"*. The same program can recurse fine on one machine and be DL0905 on another, so the fault explains
+  why. A plugin's own depth limit (`Limits`) keeps the plain words, because it is not the host's stack.
+- **What does not change.** The code (DL0905) stays the same; no code is new. With the full reservation granted, the
+  bound is still 10,000 and the words are unchanged.
+
+**Evidence.**
+- `crates/delulu/tests/sandbox_run_cli.rs` `a_deep_recursion_under_the_hostile_agent_ceiling_is_dl0905_not_an_overflow`
+  runs everywhere but macOS, which refuses `hostile-agent` (D-V2-59).
+  - On the old code it was red on Windows (*"guest: thread 'delulu-main' has overflowed its stack"*, the laptop) and on
+    Linux (`witness.yml` run `42225562026`, ubuntu-24.04: *"guest: thread 'main' has overflowed its stack"*).
+  - It is green with the fix on the laptop.
+- `crates/delulu/tests/cli_contract.rs` `under_a_capped_address_space_deep_recursion_is_dl0905_with_a_report` runs on
+  Linux under `ulimit -v 600000`, and asserts DL0905 naming its bound, exit 1, and that the report is written.
+  - On the old code it was red (run `42225556840`: *"thread 'main' has overflowed its stack"*).
+- The unit test `the_ladder_runs_on_the_largest_stack_granted_and_records_it` (interp.rs) uses its own recorder, so
+  no other test's bound moves.
+- Mutants M1141–M1147 were all red, and the control green. The mutants:
+  - the rung's record skipped;
+  - the guest's cap removed;
+  - the cap able to raise the stack;
+  - no ceiling read;
+  - the default bound kept;
+  - the bound's words dropped;
+  - the main-thread record skipped.
+- Not run: the row's own `ulimit -v 300000` (the witness uses 600,000 KiB). The Linux witnesses with the fix are the
+  pull request's CI.
+- A neighbour read while closing this, and not measured: an actor program's workers under a capped address space
+  (RW 3.30).
+
+## D-V2-217 — RW 6.73: a refusal for one grant names every grant the run lacks, and `run --preflight` refuses before anything runs — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.3, P1-3, §9 question 1): `authority` lists every grant the program's text
+asks for (`required_grants`), but `run` decides each grant at its use. `partial.delulu` writes `out/step1.txt` and then
+prints. Run with `--grant fs.write=./out` alone, it wrote the file and then stopped with DL0703 for `console`. Run with
+no grant, it named only `fs.write`. An agent that had not asked `authority` first paid one run per missing grant and
+could leave partial effects. The audit asks for two things, with a question for the owner:
+- an additive fix now: name every statically known missing grant in the refusal;
+- the question: should `run` refuse before the first effect when one is missing? *For:* no partial effects, one round
+  trip. *Against:* a branch that never runs would now need its grant. The audit's recommendation is an opt-in flag now,
+  and to consider making it the default for `--sandbox` runs.
+
+**Decision.**
+- **(1) Every refusal for a grant names what the text shows the run lacks.**
+  - When a run stops with DL0703 (the interpreter, or `--engine wasm`), `cli::lacking_grants` asks the program's text
+    against the run's own final grants: the flags, a manifest's and a lease's included. It uses `authority --within`'s
+    own requirement list and decision, so the two cannot disagree. On `--engine wasm` the run report now records the
+    fault too, as the interpreter's report did.
+  - Its *exceeds* findings are attached in three ways: as `missing_grants` (the `--grant` lines, the reached one
+    included when the text shows it) on the `--json` envelope and in the run report; as a secondary span at each other call; and as one line of
+    flags after the human rendering. That line is left out when it would repeat the message.
+  - This is additive. The code, the exit code and the message of the refusal are unchanged. The envelope is open beyond
+    its five fields, and the run report's closed schema gains `missing_grants` as an optional field.
+- **(2) Refusing before the first effect is opt-in: `run --preflight`.**
+  - The same decision, made after the grants are final and before an engine or a guest exists. On the ordinary run and
+    under `--sandbox` alike, a lacking grant is DL0703 at its call, naming every one. Nothing runs, and the report says
+    `outcome.ran: false`.
+  - **Not the default.** A run's meaning stays *"decided at each use"*, so a branch that never runs never needs its
+    grant. Making it the default, for `--sandbox` runs or for all, changes what a run means: it would be its own
+    decision, with its *Breaking* clause.
+  - **A scope the program computes stays lazy, as the row says.** It is *inconclusive* against a grant of its kind, so
+    it runs and is decided at its call. Against no grant of its kind every value is outside, so it is refused up front,
+    by its placeholder (`fs.write=PATH`).
+  - **A `.dwx` refuses the flag by name** (`APPLIED_TO_A_DWX`). It carries a manifest, not the calls a decision names.
+- **No new code.** A lacking grant is DL0703, what the run would have said at the call.
+
+**Evidence.**
+- `crates/delulu/tests/cli_contract.rs` `a_refusal_for_one_grant_names_every_grant_the_text_shows_the_run_lacks`.
+  - With no grant: one envelope, `missing_grants: ["fs.write=./out", "console"]`, the report the same, and the `console`
+    call placed at line 6.
+  - On `--engine wasm`: the same list, and its report records the DL0703.
+  - With one grant: the file is still written, because the default is lazy, and no second line is printed.
+  - With both: exit 0.
+- `preflight_refuses_before_any_effect_naming_every_missing_grant`.
+  - No file is written; the report has `outcome.ran: false` and `missing_grants: ["console"]`.
+  - Under `--sandbox`, with no grant: both are named and no file is written.
+  - Everything granted: it runs.
+  - A computed scope runs inside `fs.write=./out`, and is refused up front with `fs.write=PATH` when given nothing.
+- Both tests were red on the old code: `missing_grants` absent, and `--preflight` refused as an unknown option (exit 2).
+- Mutants M1148–M1155 were all red, and the control green. The mutants:
+  - no secondary span;
+  - no report field;
+  - the interpreter's refusal not asked;
+  - *inconclusive* counted as lacking;
+  - the ordinary run's `--preflight` skipped;
+  - the sandboxed run's `--preflight` skipped;
+  - the second line always printed;
+  - the run's grants ignored.
+- These targets are green on the laptop: `delulu`'s unit tests, `cli_contract`, `json_contract`, `completions_cli`,
+  `sandbox_modes_cli`, `message_spacing`, `cli`, `examples_run`, `package_run`, `grants_cli` and `plugin_load_cli`.
+
+**Left.**
+- Under `--sandbox`, a refusal mid-run reaches neither the envelope nor the report, and neither does its list. That is
+  RW 6.75, the next item in the order.
+- A sandboxed run refused before its guest starts writes no report (RW 6.83, found while closing this).
+- What a run did before its refusal is still not in the report.
+
+## D-V2-218 — RW 6.74: MCP tool calls run beside the reader, a cancelled call is killed and not answered, and each tool declares its `outputSchema` — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.7, P1-6) found three gaps in the MCP server:
+- **One message at a time.** `delulu mcp` read and answered one line at a time.
+- **Cancellation ignored.** It dropped every notification, `notifications/cancelled` included. A `check` cancelled
+  50 ms into its 0.5 s still answered, and a `ping` sent behind it waited for it. The specification says a server
+  SHOULD stop a cancelled request and not answer it. That holds in the `2025-06-18` revision this server speaks first,
+  and in `2026-07-28`.
+- **No `outputSchema`.** No tool declared one, though `delulu schema` holds each command's closed schema.
+
+Re-run on the laptop before the fix: the `ping` came after the slow call's answer.
+
+**Decision.**
+- **Calls run on a pool, beside the reader.**
+  - A pool of four workers, started with a session's first call, so a slow call no longer holds up the session. It is
+    bounded because each `Cli` call is a child process; a call past the bound waits in the queue.
+  - The reader answers `ping`, `initialize`, `tools/list` and every error itself, at once. Replies may now come in a
+    different order from their requests, which JSON-RPC allows: match them by `id`.
+  - A `tools/call` without an id (a notification) is still run on the reader and never answered, as before.
+- **A cancelled call stops and is not answered.**
+  - Each queued call carries a flag that `notifications/cancelled` with its `requestId` sets. A worker skips a call
+    cancelled before it starts. For a running one, the poll that already enforced the deadline kills the child
+    (`run_self_until`). Neither is answered.
+  - A Survey tool answers in-process, so it cannot be stopped midway: it runs to its end, and its answer is not sent.
+  - A cancel for an id no call holds (never sent, or already answered) is ignored, as the specification says.
+  - A second call reusing an id already in flight is refused (-32600), because one id names one request.
+- **At the input's end** every call still queued or running is answered before the server exits, as when calls ran
+  one at a time; a cancelled call is not.
+- **The process per call stays.** It is what makes a cancellation a `kill` rather than a request to stop.
+- **`outputSchema` is the CLI's own schema, not a second description of it.**
+  - A `Cli` tool's `structuredContent` is its command's `--json` envelope. So its schema is the `delulu schema envelope`
+    document, self-contained with its `$defs`, open beyond its five fields.
+  - Where the command carries a payload with a closed schema, the payload is named as an optional property (a program
+    that does not check gets the envelope without it). This covers `authority`, `atlas`, `atlas_chain` (`chain`),
+    `sandbox_policy` (`policy`) and `toolchain`.
+  - A Survey tool answers with the Survey's own JSON, which no document describes, so it declares none.
+- **Found and fixed with it.**
+  - The `chain` schema did not describe `capabilities[].requested_computed`, which the chain has copied from the
+    authority report since A8. So `atlas chain --json` of any program holding a capability failed
+    `schema validate chain`.
+  - No test validated the chain payload. Declaring it as an `outputSchema` would have made the server state a schema
+    its own answers broke.
+  - The field is now optional in a chain capability, as it is in the authority report's, and `schema_cli` validates
+    the chain of every corpus program.
+
+**Evidence.**
+- **`crates/delulu/tests/mcp_cli.rs` `a_cancelled_call_is_not_answered_and_a_ping_behind_a_call_is_answered_first`.**
+  - A `check` of a generated 16,000-function program (3.2 s on the laptop's debug build).
+  - The control: the ping is answered first and the call's answer comes after it.
+  - Cancelled: no reply for the call, the ping answered, and the session over in under half the control's time.
+  - A cancel for an unknown id changes nothing.
+- **`each_tools_output_schema_is_the_clis_own_and_its_answer_conforms`.**
+  - Every CLI tool declares the envelope document, and the Survey tools declare none.
+  - The `authority`, `toolchain`, `check` and `atlas_chain` answers are each valid by `delulu schema validate`,
+    envelope and payload.
+- **Red first.** Both tests were red on the old server: the ping waited behind the call, and there was no
+  `outputSchema`. `schema_cli`'s chain check was red before the schema fix.
+- **Mutants M1156–M1161** were all red, and the control green. The mutants:
+  - no kill: red by the timing alone, the cancelled session 3.19 s against the control's 3.22 s;
+  - a cancelled call answered;
+  - the cancel ignored;
+  - calls run on the reader;
+  - no `outputSchema`;
+  - no payload property.
+- `mcp_cli`, `schema_cli` and `atlas_chain` are green on the laptop.

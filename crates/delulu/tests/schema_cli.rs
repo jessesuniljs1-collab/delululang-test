@@ -78,6 +78,12 @@ fn the_authority_report_and_the_atlas_match_their_schemas() {
         let o = delulu(&dir, &["atlas", &file, "--json"]);
         let v = json_of(&o);
         assert_valid(&dir, "atlas", &format!("{name}-atlas"), &v["atlas"]);
+
+        // The chain too (found 2026-11-06 by RW 6.74's `outputSchema` test): its capabilities carried
+        // `requested_computed` (A8), which the closed `chain` schema did not describe, and no test validated it.
+        let o = delulu(&dir, &["atlas", "chain", &file, "--json"]);
+        let v = json_of(&o);
+        assert_valid(&dir, "chain", &format!("{name}-chain"), &v["chain"]);
     }
     // The optional shapes really occurred, or this test would pass on a corpus that exercised none.
     let seen = |name: &str| -> serde_json::Value {

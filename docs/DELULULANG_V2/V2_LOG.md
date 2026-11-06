@@ -12527,3 +12527,82 @@ unchecked path.
 
 **Evidence.** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop. `scripts/clippy.sh -j 2` clean. The full suite runs on GitHub, as for #137: the laptop's
 memory could not hold it earlier today.
+
+## 2026-11-06 — the laptop: PR #138 landed; RW 3.29 closed — a deep recursion is DL0905 under a capped address space and under `hostile-agent` (D-V2-216)
+
+**PR #138 (RW 3.28), read to its end.** Run `42223778436` on `5c69eed` was green: 14 jobs success, `miri-slow` and
+`heavy-gates` skipped as on every pull request. It landed on `master` by fast-forward.
+
+**What.** RW 3.29 (the hidden-complexity audit §5.6 and its second pass): a recursion 100,000 deep is DL0905 with a
+report without a cap. It aborted the process (*"has overflowed its stack"*) under a `ulimit -v` and inside a
+`hostile-agent` guest. The causes:
+- **Linux:** the ~781 MiB reservation is refused, and the CLI fell back to the 8 MiB main stack with the full bound.
+- **Windows** (found on the laptop before the fix): the reservation is granted, and the Job Object's limit counts the
+  pages the recursion commits.
+
+D-V2-216 takes the row's first remedy:
+- the CLI's thread walks a ladder of stacks (`on_laddered_thread`) and records the one granted;
+- every interpreter built without a bound takes the bound that fits it (`process_max_depth`);
+- a sandbox guest lowers that stack to half the memory ceiling the OS enforces on it (`own_memory_ceiling`);
+- a lowered bound names itself in the fault.
+
+**Evidence.**
+- Both witnesses were red on the old code:
+  - the sandbox witness on Windows (the laptop) and on Linux (`witness.yml` `42225562026`);
+  - the `ulimit -v 600000` witness on Linux (`42225556840`). Both runs read *"has overflowed its stack"*.
+- Branch `laptop/stack-ladder-witness`, the tests alone on the old code, is not to be merged and is deleted after use.
+- The sandbox witness and the ladder's unit test are green with the fix on the laptop.
+- Mutants M1141–M1147 were all red, and the control green. A low-memory stop on the laptop killed the first mutant run
+  after M1141. M1142, which it had left applied in `guest.rs`, was restored and checked, and M1142–M1147 were re-run
+  one call at a time.
+- `scripts/clippy.sh -j 2` was clean. The full suite and the Linux witnesses with the fix are the pull request's run.
+
+**Not run:** the row's own `ulimit -v 300000`.
+
+**New, from reading the code while closing it:** RW 3.30. An actor program's workers settle their stack by one probe
+thread and are then spawned with `.expect`. Under a capped address space this may be a panic, not a diagnostic. This
+is INFERENCE and has not been measured.
+
+## 2026-11-06 — the laptop: RW 6.73 closed — a refusal for one grant names every grant the run lacks; `run --preflight` (D-V2-217)
+
+**What.** RW 6.73 (the hidden-complexity audit §5.3, P1-3, §9 question 1). `run` decides each grant at its use. The
+audit's `partial.delulu` wrote `out/step1.txt` and then stopped with DL0703 for `console`, and with no grant it named
+only `fs.write`, so an agent paid one run per missing grant. D-V2-217 takes the audit's recommendation:
+- **The additive half.** On a DL0703 the run asks `authority --within` of its own final grants
+  (`cli::lacking_grants`). It names every grant the text shows it lacks, as `missing_grants` on the envelope and in the
+  report, as a secondary span at each call, and as one line of flags. This covers the interpreter and `--engine wasm`;
+  the WASM report gained its fault too.
+- **An opt-in flag.** `run --preflight` makes that decision before `main` starts, on the ordinary run and under
+  `--sandbox`, so nothing runs. A computed scope stays lazy. The default is unchanged.
+
+**Evidence.**
+- Two new `cli_contract` tests, both red on the old code: `missing_grants` absent, and `--preflight` an unknown option
+  (exit 2).
+- Mutants M1148–M1155 were all red, and the control green.
+- Eleven test targets are green on the laptop.
+
+**Found on the way:** RW 6.83. A `--sandbox` run refused before its guest starts writes no `--report-out` report: a
+check error wrote one without `--sandbox` and none with it. It is deferred to the outcome contracts, with RW 6.75.
+
+## 2026-11-06 — the laptop: RW 6.74 closed — MCP calls run beside the reader, a cancel is honoured, each tool declares its `outputSchema` (D-V2-218)
+
+**What.** RW 6.74 (the hidden-complexity audit §5.7, P1-6). `delulu mcp` answered one line at a time and dropped
+`notifications/cancelled`. D-V2-218:
+- tool calls go to a pool of four workers, and the reader answers `ping`, `initialize` and `tools/list` at once;
+- a cancel sets the call's flag: a queued call is skipped, a running call's child is killed, and neither is answered;
+- each CLI tool declares the `envelope` document as `outputSchema`, naming its closed payload where one exists.
+
+**Found on the way.** The closed `chain` schema missed `capabilities[].requested_computed`, and no test had validated
+the chain payload. The schema is fixed, and `schema_cli` now validates the chain of every corpus program.
+
+**Evidence.**
+- Two new `mcp_cli` tests, red on the old server (the ping waited behind the call; no `outputSchema`).
+- The cancellation test's kill is measured against a control on the same machine: a 16,000-function `check`, 3.2 s on
+  the laptop.
+- The `schema_cli` chain check was red before the schema fix.
+- Mutants M1156–M1161 were all red, the kill mutant by the timing alone (3.19 s against 3.22 s). Control green.
+
+**The owner, meanwhile:** *"are language basics being currently built for DeluluLang"*. Answered: not yet. The 25 of 39
+everyday constructs refused (RW 1.15, 2.33–2.40, §8 items 7 and 8) come after the outcome contracts, the DIR and
+review-surface fixes, the answer contracts and the OpenShell pin bump, in the reviews' order. They can be moved ahead
+at his word, and whether 2.0 waits for them is still his choice.

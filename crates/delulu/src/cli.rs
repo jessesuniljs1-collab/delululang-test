@@ -217,6 +217,8 @@ pub(crate) struct Opts {
     pub(crate) grants: Vec<String>,
     pub(crate) grant_manifest: bool,
     pub(crate) no_prompt: bool,
+    /// `run --preflight` (RW 6.73): refuse before `main` starts when the program's text asks for a grant the run lacks.
+    pub(crate) preflight: bool,
     /// `--locked`: refuse any resolution not already pinned in delulu.lock.
     pub(crate) locked: bool,
     /// `--accept-authority <pkg>`: names packages whose authority widening is explicitly accepted.
@@ -409,6 +411,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         grants: Vec::new(),
         grant_manifest: false,
         no_prompt: false,
+        preflight: false,
         locked: false,
         accept_authority: Vec::new(),
         diff: None,
@@ -468,6 +471,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--json" => opts.json = true,
             "--grant-manifest" => opts.grant_manifest = true,
             "--no-prompt" => opts.no_prompt = true,
+            "--preflight" => opts.preflight = true,
             "--locked" => opts.locked = true,
             "--accept-authority" => {
                 if i + 1 < rest.len() {
@@ -1485,6 +1489,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--grant plugin=PATH]  (P2/D-V2-27: where a program may LOAD a plugin artifact from. Paths go\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 through the containment resolver, so `..`, a symlink or a case difference cannot widen it; a\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 package may narrow it further with `[plugins] allow = [\"<blake3>\"]` in delulu.toml)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--preflight]  (RW 6.73: refuse before `main` starts, nothing done, when the program's text asks for a\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 grant this run lacks, naming every one; a scope the program computes is still decided at its call.\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Without it, a refusal for one grant names every grant the text shows the run lacks, as `missing_grants`)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--sandbox | --sandbox=off] [--sandbox-profile dev|contained|hostile-agent] [--limits mem=N,cpu=S,wall=S]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--break-glass TICKET]  (PS-B-06: on a host whose operator requires the sandbox, a ticket they\n\
@@ -3664,6 +3671,35 @@ fn authority_within(
         print!("{}", crate::within::render_verdict(&v, report["program"].as_str().unwrap_or("?"), map));
     }
     code
+}
+
+/// RW 6.73: the requests in a program's text that a run's own grants do not cover — `authority --within` asked of the
+/// grants the run holds, by the same requirement list and the same decision, so a run and `authority` can never
+/// disagree about what is missing. A refusal for one grant then names every grant the text shows the run lacks,
+/// instead of one run per grant. Only *exceeds*: a request whose scope the program computes, against a grant of its
+/// kind, is decided when it runs, as before (`requested_computed`). `file` is the run's argument: a source file, or a
+/// package directory whose flattened program `checked` is.
+pub(crate) fn lacking_grants(
+    file: &str,
+    is_package: bool,
+    map: &SourceMap,
+    checked: &delulu_check::Checked,
+    granted: &Grants,
+) -> Vec<crate::within::Finding> {
+    let dir = if is_package {
+        std::path::PathBuf::from(file)
+    } else {
+        std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf()
+    };
+    let (_, opts) = parse_opts(&[]);
+    let report = source_authority_report(file, map, checked, scopes_in_dir(&dir), &python_allowlist_in_dir(&dir), &opts);
+    let uses = crate::within::use_sites(&checked.module, &checked.result.node_types);
+    let mut walk = requested_scopes(&[&checked.module]);
+    walk.requests = uses.requests;
+    walk.files = uses.files;
+    let (reqs, unsupported) = requirements(&report, &walk);
+    let v = crate::within::verdict(&reqs, &unsupported, granted);
+    v.findings.into_iter().filter(|f| f.outcome == crate::within::Outcome::Exceeds && !f.grant.is_empty()).collect()
 }
 
 /// The authority report of one checked source file, stamped in the one order `delulu authority`

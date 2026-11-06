@@ -11,6 +11,44 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the MCP server runs calls side by side, honours a cancel, and declares each tool's output, 2026-11-06
+
+- **Fixed (RW 6.74, D-V2-218):** `delulu mcp` answered one request at a time, so a `ping` sent behind a slow call waited
+  for it, and `notifications/cancelled` was ignored: a cancelled call still ran to its end and answered. Now:
+  - up to four tool calls run at once, and `ping`, `initialize` and `tools/list` are answered at once;
+  - a cancelled call is stopped, its child process killed, and not answered, as the protocol asks;
+  - replies may arrive in a different order from the requests, so match them by `id`.
+- **Added (RW 6.74, D-V2-218):** every tool that answers with the CLI's envelope declares `outputSchema`: the
+  `delulu schema envelope` document, naming the command's own payload where a closed schema describes it.
+- **Fixed:** `delulu schema chain` did not describe `capabilities[].requested_computed`, which `atlas chain --json`
+  writes, so `schema validate chain` refused the chain of any program holding a capability. It is described now.
+
+## Unreleased — a refusal for one grant names every grant the run lacks; `run --preflight`, 2026-11-06
+
+- **Added (RW 6.73, D-V2-217):** when `run` stops for a grant (DL0703), the refusal names every grant the program's
+  text asks for that this run does not hold, so an agent pays one run, not one per grant. The list appears:
+  - as `missing_grants` on the `--json` envelope and in the `--report-out` report;
+  - as a pointer at each other call;
+  - as one line of `--grant` flags after the message.
+
+  The list is what `delulu authority FILE --within <the run's grants>` would say. On `--engine wasm` the run report now
+  records the fault, as the interpreter's report did.
+- **Added (RW 6.73, D-V2-217):** `run --preflight` checks the program's text against the run's grants before `main`
+  starts, on an ordinary run and under `--sandbox`. A grant the run lacks is DL0703 naming every one; nothing runs and
+  no partial file is left. Without the flag a run is still decided at each use, as before. A scope the program computes
+  is still decided at its call. A `.dwx` refuses the flag by name.
+
+## Unreleased — a deep recursion is DL0905 under a capped address space and under `hostile-agent`, 2026-11-06
+
+- **Fixed (RW 3.29, D-V2-216):** a recursion deep enough for DL0905 aborted the process instead, with *"has overflowed
+  its stack"*, no diagnostic and no `--report-out` report. This happened under a `ulimit -v` below about 940,000 KiB,
+  and inside a sandbox guest under `--sandbox-profile hostile-agent` or `--limits mem` up to 768 MiB. The guest's case
+  was reported as `{exit 1, ran: true}`. The CLI now runs on the largest stack the host grants, and each interpreter
+  takes the depth bound that fits that stack. A sandbox guest also keeps its stack within half the memory ceiling the
+  OS enforces on it. So the program stops with DL0905, exit 1, and a report. When the host's stack lowered the bound
+  below 10,000, the fault says so: *"recursion depth exceeded (the bound is N here: …)"*. With the full stack granted,
+  nothing changes.
+
 ## Unreleased — every `main` the checker accepts runs on WASM and as a `.dwx`, 2026-11-06
 
 - **Fixed (RW 3.28, D-V2-215):** `build --target wasm` exited 0 for `fn main()`, or a `main` that returns a value, and

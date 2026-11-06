@@ -422,6 +422,20 @@ reach. `deploy plan` decides the same against a profile, whose `secrets` entries
 decided too, by its path against the boundary's `net` entries as the call decides it (D-V2-181): a request outside a
 path-scoped entry *exceeds*, named at the request by the narrowest line that takes it (`net=example.com/admin`).
 
+**A refusal for one grant names every grant the run lacks** (RW 6.73, since 2026-11-06).
+- **What the refusal carries.** A run is decided at each use, so the first DL0703 comes after the effects before it.
+  That refusal now lists, as `missing_grants` on the `--json` envelope and in the `--report-out` report, every grant the
+  program's text asks for that this run does not hold. The list is `authority --within` asked of the run's own grants.
+  Each other missing call is also a secondary span of the diagnostic. Add them all at once instead of paying one run per
+  grant.
+- **Nothing done before a refusal: `run --preflight`.** The program's text is decided against the run's grants before
+  `main` starts. A grant it lacks is DL0703 naming every one, nothing runs (`outcome.ran: false`), and no partial file is
+  left. This holds on the ordinary run and under `--sandbox` alike.
+- **What stays lazy.** A scope the program computes is still decided at its call. Against no grant of its kind it is
+  refused up front, by its placeholder (`fs.write=PATH`).
+- **Not yet.** A `.dwx` refuses `--preflight` by name. A sandboxed run refused before its guest starts writes no report
+  yet (row 6.83), so read the envelope.
+
 **When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the
@@ -641,9 +655,17 @@ with `-` is refused, so nothing can be passed through as an option. A command th
 `summary.errors` in the answer — and a refused argument is `isError: true` with the reason. To run a
 program, use the CLI: granting authority stays a person's decision.
 
-**It does not honour `notifications/cancelled` yet** (`docs/REMAINING_WORK.md` row 6.74): it answers one request at a
-time, a cancelled call still answers, and a request sent behind a long call waits for it. Set your own timeout and
-restart the server rather than counting on a cancel. A command's whole output comes back in one reply (row 6.62).
+**Calls run beside each other, and a cancel is honoured** (row 6.74, since 2026-11-06).
+- **Concurrency.** Up to four tool calls run at once; later ones wait their turn. `ping`, `initialize` and `tools/list`
+  are answered at once, even behind a slow call. Replies may come back in a different order from the requests: match
+  them by `id`.
+- **Cancellation.** `notifications/cancelled` with the call's `requestId` stops the call. Its child process is killed,
+  and no reply is sent for it, as the protocol says a server should. A Survey tool answers in-process and runs to its
+  end, but its answer is still not sent. A cancel for an id already answered is ignored.
+- **`outputSchema`.** Every tool that answers with the CLI's envelope declares it as `outputSchema`: the
+  `delulu schema envelope` document, with the command's own payload named where a closed schema describes it
+  (`authority`, `atlas`, `chain`, `policy`, `toolchain`). The Survey tools declare none.
+- **Size.** A command's whole output still comes back in one reply (row 6.62).
 
 ## [agents.registry] Registry
 

@@ -1055,3 +1055,27 @@ fn a_sandboxed_guests_fault_names_its_place_and_never_the_hosts_directories() {
     assert!(!guest.iter().any(|l| l.contains(&parent)), "no guest line names the host's directory `{parent}`: {err}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 3.29: under `hostile-agent`'s memory ceiling, a recursion 100,000 deep is DL0905, as it is without the sandbox —
+/// never the guest's stack overflowing first. The ceiling counts the stack a recursion commits (a Windows Job Object's
+/// limit) or refuses the full reservation (Linux's `RLIMIT_DATA`); either way the guest used to keep the full bound and
+/// end with *"has overflowed its stack"*. Now its bound fits the stack it may use, and the fault names that bound.
+/// macOS refuses `hostile-agent` before the program is sent (D-V2-59).
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn a_deep_recursion_under_the_hostile_agent_ceiling_is_dl0905_not_an_overflow() {
+    let dir = tmp("deep");
+    let src = dir.join("deep.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn down(n: Int) -> Int {\n  if n < 1 { 0 } else { down(n - 1) + 1 }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n  root.console().println(str(down(100000)))\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&["run", src.to_str().unwrap(), "--grant", "console", "--sandbox", "--sandbox-profile", "hostile-agent"]);
+    let all = out(&o);
+    assert!(!all.contains("overflowed its stack"), "the guest's stack ran out before its bound: {all}");
+    assert!(all.contains("error[DL0905]: recursion depth exceeded (the bound is "), "the bound that fits, named: {all}");
+    assert_eq!(o.status.code(), Some(1), "a fault, not a stopped run: {all}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

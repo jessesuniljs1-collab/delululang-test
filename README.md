@@ -313,10 +313,12 @@ Six more things worth knowing before you evaluate it:
   to another origin.
 - **Independent reviews (2026-11-04/05) found open defects, each re-run and recorded.** Closed since, on
   2026-11-06: the plugin row above (4.95), the signing commands' unknown options (4.97), the package-blind language
-  server and `edit` (6.72, 6.69), and the `.dwx` that could not run a `main` of another shape (3.28). Open: `run`
-  refuses a missing grant only when the program reaches it, after earlier effects (6.73); MCP cannot cancel a call
-  (6.74); under `--sandbox` a guest's fault code reaches neither the envelope nor the report (6.75), and under
-  `hostile-agent` a deep recursion aborts the guest instead of raising `DL0905` (3.29). None is a containment escape.
+  server and `edit` (6.72, 6.69), the `.dwx` that could not run a `main` of another shape (3.28), and the deep
+  recursion that aborted, instead of raising `DL0905`, under `hostile-agent` or a `ulimit -v` (3.29), and the
+  refusal that named one missing grant at a time (6.73: it names every grant the run lacks, and `run --preflight`
+  refuses before anything runs), and the MCP server that could not cancel a call or answer a `ping` behind one (6.74).
+  Open: under `--sandbox` a guest's fault code reaches neither the envelope nor the report (6.75), and a sandboxed run
+  refused before its guest starts writes no report (6.83). None is a containment escape.
   They are in [`docs/review/`](docs/review/) and [`REMAINING_WORK.md`](docs/REMAINING_WORK.md).
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught by this, and nothing here claims
