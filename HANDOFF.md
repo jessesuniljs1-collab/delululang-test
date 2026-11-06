@@ -857,6 +857,12 @@ wins, and you should update the memory to match.
     end, and pruning made that end look right: mutant M1087 (keep every node's beats) survived. It went red once the
     test seam recorded every node the table ever held. The same review found a refused request (DL1406) acted on
     before its refusal. Apply every gate the handler applies before anything acts on a request early.
+  - **Re-run a flaky test the way it failed** (2026-11-06; the owner: *"Why isn't it solved yet"*). Both of RW 7.25's
+    reds came in push runs, where the whole `monitor_cli` target runs its tests side by side, each starting daemons and
+    monitors. The six runs that "confirmed" it on 2026-11-05 ran the one test alone, through a `witness.yml` filter:
+    another experiment, so their green said little. `witness.yml` now takes `repeat` and `stress`. Run the target as the
+    push run does, many times, and count every run. Measure the runner before suspecting it: GitHub's Windows runners
+    run with Defender's real-time scan off. And put the two sides' timing on one clock, so one red is enough.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

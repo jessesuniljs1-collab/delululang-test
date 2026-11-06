@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a fired dead-man's two timing lines on one clock, 2026-11-06
+
+- **Changed, in `broker.log` and in `delulu monitor watch`'s standard error (RW 7.25):** the daemon's line about a fired
+  dead-man names when it began serving on the wall clock (milliseconds since the Unix epoch), and the monitor's line
+  names when its dead-man was armed, so a beat can be followed from its sending to its stamping. The monitor's line also
+  names its longest whole turn step by step, the turn that ended the watch apart from it, and its longest sleep between
+  turns against the poll it asked for. Nothing a program or a grant sees changes.
+- **Added, to the hand-run `witness.yml`:** `repeat` runs a selection many times in one job and counts every run, and
+  `stress` runs busy loops beside it, one CPU each.
+
 ## Unreleased — a beat that arrived in time keeps its dead-man however late its hand-over, 2026-11-05
 
 - **Fixed (RW 4.98, D-V2-209): the broker daemon could revoke a monitor that had beaten in time.** It stamps each request
