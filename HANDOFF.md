@@ -772,6 +772,18 @@ wins, and you should update the memory to match.
   to continue actual development and improvements to DeluluLang also according to the review files also, That's more
   important"*). A rare flake gets its instrument and its record, then waits for its next red. It does not hold up the
   work order that `docs/AI_ONBOARDING.md` §10 takes from the reviews in `docs/review/`, which starts at RW 4.95 (R-Get).
+- **The language basics first, and after each one, programs written, run and fixed** (owner, 2026-11-06: *"Build
+  basics first for DeluluLang. If u are building something big now finish that first and document it properly. Update
+  all docs and claude code routine. After each build, write and run programs and softwares of varying complexities and
+  test and verify and fix it. U can and u should remove, edit, delete, change codes whenever needed, Anyway history of
+  code changes will be github"*; D-V2-220).
+  - **The order.** RW 2.33–2.41 come before the remaining review items, in the order `docs/CLOUD_ROUTINE.md` step 4
+    names. A slice already in progress is finished and recorded first.
+  - **After each basic.** Write a one-liner, an everyday utility and a few-hundred-line program that use it with the
+    basics before it. Run them on both engines, fix what they find (or record it as a row), and keep them as tests or
+    examples.
+  - **Changing code.** Change, remove or rewrite code freely where a basic needs it, because git is the history.
+    *Never delete a `.md` file* still holds: it is about documents.
 
 ### 11.2 Working rules the project has paid for
 

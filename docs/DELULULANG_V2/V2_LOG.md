@@ -12606,3 +12606,33 @@ the chain payload. The schema is fixed, and `schema_cli` now validates the chain
 everyday constructs refused (RW 1.15, 2.33–2.40, §8 items 7 and 8) come after the outcome contracts, the DIR and
 review-surface fixes, the answer contracts and the OpenShell pin bump, in the reviews' order. They can be moved ahead
 at his word, and whether 2.0 waits for them is still his choice.
+
+## 2026-11-06 — the laptop: #139 and #140 landed; RW 6.75 closed — a sandboxed run's fault is in its envelope and its report (D-V2-219); the owner: the language basics first
+
+**#139 (RW 3.29) and #140 (RW 6.73), read and landed.**
+- `42239453176` on `e9a8974` and `42239809792` on `e6d4785`: each 14 jobs success and 2 skipped.
+- Both landed by one fast-forward of `master` to `e6d4785`. Their push run is the next to read.
+- `laptop/stack-ladder-witness` was deleted, never merged.
+
+**What.** RW 6.75 (the hidden-complexity audit's second pass, §11.2). Under `--sandbox` a fault in the guest reached
+the envelope and the report as `diagnostics: []`. D-V2-219:
+- the guest's goodbye carries its fault, as an optional field, so the protocol version is unchanged;
+- the host checks it before a reader sees it: a registered code only, bounded words, a span inside the program, and a
+  label saying it is the guest's report;
+- it is reported in both places, the host's own refusal winning when it is the same event;
+- a sandboxed DL0703 carries `missing_grants` too.
+
+**Split off:** RW 6.84, a guest that ends without a goodbye, which is not witnessable on this binary.
+
+**Evidence.**
+- Two new `sandbox_run_cli` tests, red on the old code.
+- Two unit tests: the host's checks, and the frame's bytes and bounds.
+- Mutants M1162–M1172 were all red, and the controls green.
+- Every sandbox target is green on the laptop.
+
+**The owner, during the work:** *"Build basics first for DeluluLang. If u are building something big now finish that
+first and document it properly. Update all docs and claude code routine. After each build, write and run programs and
+softwares of varying complexities and test and verify and fix it. U can and u should remove, edit, delete, change codes
+whenever needed, Anyway history of code changes will be github."* RW 6.75 was finished first, as he said. From here the
+language basics (RW 2.33–2.41, §8 items 7 and 8) come before the remaining review items. After each one, programs of
+varying size are written, run and fixed (D-V2-220).

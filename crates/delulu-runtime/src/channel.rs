@@ -1734,7 +1734,8 @@ mod tests {
 
     fn done_frame() -> Vec<u8> {
         let mut f = Vec::new();
-        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 7, fault: None } }).unwrap();
+        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 7, fault: None } })
+            .unwrap();
         f
     }
 
@@ -1748,7 +1749,8 @@ mod tests {
         let mut f = Vec::new();
         let body = ReqBody::Done { exit: 1, fault: Some(fault) };
         write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body }).unwrap();
-        let mut io = Drip { bytes: f, at: 0, pause: std::time::Duration::ZERO, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        let mut io =
+            Drip { bytes: f, at: 0, pause: std::time::Duration::ZERO, gap: std::time::Duration::ZERO, answers: Vec::new() };
         let mut host = HostChannel::new(crate::sink::LocalSink);
         assert_eq!(host.serve(&mut io).unwrap(), 1);
         let kept = host.guest_fault().expect("the fault is kept");

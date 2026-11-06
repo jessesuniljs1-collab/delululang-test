@@ -6224,3 +6224,101 @@ Re-run on the laptop before the fix: the `ping` came after the slow call's answe
   - no `outputSchema`;
   - no payload property.
 - `mcp_cli`, `schema_cli` and `atlas_chain` are green on the laptop.
+
+## D-V2-219 — RW 6.75: a sandboxed guest's fault reaches the envelope and the report, carried in its goodbye as the guest's word — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit's second pass (§11.2). `fault.delulu` (`1 / 0` through a function) under
+`--sandbox --json --report-out` gave `diagnostics: []` in the envelope and the report. The envelope said only *"the
+command ran and failed; the human-readable reason is on stderr"*, and the code appeared on the guest's stderr alone.
+The same held for DL0905, and for a sandboxed DL0703: there the host's refusal reached the report (P9-03) but not the
+envelope. Re-run on the laptop before the fix: the same.
+
+**Decision.**
+- **The guest states its fault, in its goodbye.** `ReqBody::Done` gains `fault: Option<GuestFault>` (code, words, and
+  the call's place in the program sent). The field is `serde(default)` and not written when absent, for two reasons:
+  - a goodbye without a fault is byte-for-byte the old frame, so the protocol version (`delulu-sandbox-channel/3`) is
+    unchanged;
+  - a guest of either side of this change reads the other. An external launcher may run an older guest.
+- **It is the guest's word, as its exit status already is, and it is checked before a reader sees it.**
+  - The host bounds and escapes its words as they arrive (`shown`, `MAX_DENIED_CHARS`), as every refusal's are.
+  - It reports the fault only for a failing goodbye, and only under a code the registry has: an unknown word is no
+    diagnostic.
+  - It places the span only inside the program it sent, on character boundaries.
+  - It labels the span *"runtime fault here, as the guest reports it"*.
+- **The host's own refusal wins when it is the same event.** That is the case when the guest's fault names the same
+  code, or when the guest reports none. A guest that handled a refusal and then ended at another fault is reported at
+  that fault, and the refusal stays in `sandbox.denied`, the host's record.
+- **The envelope.** Under `--json` a sandboxed run that ended at a fault prints the envelope an unsandboxed run prints,
+  in place of the bare fallback. A DL0703 in it, and in the report, carries `missing_grants`, decided by the host
+  before the guest exists (RW 6.73's sandboxed half).
+- **Split off: a guest that ends without a goodbye** (a signal, a closed channel) as its own outcome, RW 6.84. No
+  program reaches it on this binary that the laptop found, so it could not be witnessed red.
+
+**Evidence.**
+- `crates/delulu/tests/sandbox_run_cli.rs` `a_guests_own_fault_reaches_the_envelope_and_the_report`: `DL0902` at line 4,
+  in the envelope and in the report, labelled as the guest's.
+- `a_sandboxed_refusal_names_every_grant_the_run_lacked`: DL0703 *"refused by the host"*, with `missing_grants` in both.
+- Both were red on the old code: `diagnostics: []` and the bare fallback.
+- Unit tests:
+  - `guest.rs` `a_guests_fault_is_reported_only_as_a_registered_code_inside_the_program`;
+  - `channel.rs` `a_goodbye_carries_the_guests_fault_bounded_and_without_one_is_unchanged`. Its words are bounded and
+    escaped, a faultless goodbye is byte-identical to the old encoding, and an old goodbye reads back as one without a
+    fault.
+- Mutants M1162–M1172 were all red, and the controls green.
+- Green on the laptop: all twelve `sandbox_*` targets, `guest_cli`, `schema_cli`, and `delulu-runtime`'s unit tests
+  (316).
+
+## D-V2-220 — The language basics come first, each followed by programs of varying size written, run and fixed; built as surface and library over the core, not changes to it — TAKEN (head chef, 2026-11-06, at the owner's word)
+
+**The owner, 2026-11-06:** *"Build basics first for DeluluLang. If u are building something big now finish that first
+and document it properly. Update all docs and claude code routine. After each build, write and run programs and
+softwares of varying complexities and test and verify and fix it. U can and u should remove, edit, delete, change codes
+whenever needed, Anyway history of code changes will be github."*
+
+**Context.**
+- On 2026-11-02, readiness was judged against an ordinary program for the first time, and 25 of 39 constructs a Java
+  or Python programmer reaches for were refused (RW 1.15, 2.33–2.40). Two reviews then added an ordinary agent
+  utility's needs (RW 2.41, JSON; RW §8 item 8).
+- The reviews' order put the answer contracts first and the basics after.
+- `REMAINING_WORK.md` §8 item 8 named the RFCs' 14-day comment periods (`CONTRIBUTING.md` §5) as the critical path,
+  because *"most of the basics change the frozen core"*.
+
+**Decision.**
+1. **The order.** The language basics come before every remaining review item; RW 6.75, in progress at his word, was
+   finished first. The basics, in the order each unblocks the most programs for the least risk:
+   - compound assignment (2.34);
+   - the math library and the checked forms that ask before a fault (2.38);
+   - range syntax (2.36);
+   - strings: interpolation, indexing, search, formatting (2.37);
+   - bitwise and shift operators (2.35);
+   - methods on a program's own types (2.33's first half);
+   - tuples, sets, keyed sorting, comprehensions (2.39);
+   - a program's inputs, exit code and sleep (2.40, whose authority shape is decided with it);
+   - JSON (2.41);
+   - then interfaces (2.33's second half, 2.9), which need a typeclass design.
+
+   The review items return after them, in their recorded order (`docs/CLOUD_ROUTINE.md` step 4).
+2. **After each basic is built, programs of varying size are written, run and fixed.**
+   - **The programs:** a one-liner; an everyday utility; a program of a few hundred lines that leans on the new basic
+     together with the ones before it.
+   - **The two engines:** each is checked and run on the interpreter and, where the construct is supported, on
+     `--engine wasm`.
+   - **What it finds:** each defect it turns up is fixed or recorded as a row.
+   - **Where they live:** the programs are kept in the repository as tests or examples, so the next change runs them
+     too.
+3. **How each basic is built: as surface syntax and prelude over the core, not as a change to it.**
+   - Compound assignment and ranges are rewritten by the parser into the forms the core already has (an assignment, a
+     call to `range`). Interpolation is concatenation with `str`. The math and string functions are prelude
+     primitives, like the ones the language has.
+   - A program that checks today checks the same and means the same, and the core's answers do not move (the
+     core-invariance gate, `CONTRIBUTING.md` §6).
+   - Such a change is not a change to the language core in `CONTRIBUTING.md` §5's sense. The irreducibility analysis
+     §5 asks for is answered the other way: each one **is** a library or a rewrite. So it goes ahead without a 14-day
+     RFC period, recorded here and in its own `D-V2-nn`.
+   - A basic that would change `DELULU_CORE.md` (interfaces most likely, perhaps tuples' typing) gets its own decision
+     at that point, with the entrenchment record the delegation requires.
+4. **Code is changed freely where a basic needs it,** as the owner says: git keeps the history. *Never delete a `.md`
+   file* still holds, since it is about documents. A superseded document moves to `docs/archive/`.
+
+**What does not change.** `launch/2.0.0` stays prepared, not launched. Whether 2.0 waits for the basics is still the
+owner's call. This decision orders the work, and building the basics first is consistent with either answer.

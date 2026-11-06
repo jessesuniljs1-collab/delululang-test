@@ -3027,7 +3027,11 @@ mod tests {
         use delulu_runtime::channel::{GuestFault, Refusal};
         let program = "fn main(root: Root) {\n    let x = 1 / 0\n}\n";
         let at = program.find("1 / 0").unwrap() as u32;
-        let fault = |code: &str, span: Option<(u32, u32, u32)>| GuestFault { code: code.into(), message: "division by zero".into(), at: span };
+        let fault = |code: &str, span: Option<(u32, u32, u32)>| GuestFault {
+            code: code.into(),
+            message: "division by zero".into(),
+            at: span,
+        };
         let refusal = Refusal { code: "DL0703".into(), message: "not granted".into(), file: 0, start: at, end: at + 5 };
         let d = super::run_diagnostics(program, "p.delulu", Some(1), None, Some(&fault("DL0902", Some((0, at, at + 5)))));
         assert_eq!(d[0]["code"], "DL0902", "{d:?}");

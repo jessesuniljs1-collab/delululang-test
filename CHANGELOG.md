@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sandboxed run's fault is in its envelope and its report, 2026-11-06
+
+- **Fixed (RW 6.75, D-V2-219):** under `--sandbox` a fault the program ended at (DL0902, DL0905, …) reached the
+  `--json` envelope and the `--report-out` report as `diagnostics: []`, and the code appeared only on the guest's
+  stderr. Both now carry it, as an unsandboxed run's do: its code, its words, and its call, labelled as the guest's
+  report. A refusal made by the host is reported as the host's own, with `missing_grants` (RW 6.73). The sandbox
+  channel's goodbye gains an optional field; its protocol version is unchanged, and older guests still work.
+
 ## Unreleased — the MCP server runs calls side by side, honours a cancel, and declares each tool's output, 2026-11-06
 
 - **Fixed (RW 6.74, D-V2-218):** `delulu mcp` answered one request at a time, so a `ping` sent behind a slow call waited

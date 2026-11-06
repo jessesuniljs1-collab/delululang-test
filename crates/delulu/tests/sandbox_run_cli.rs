@@ -1138,7 +1138,8 @@ fn a_sandboxed_refusal_names_every_grant_the_run_lacked() {
     )
     .unwrap();
     let report = dir.join("r.json");
-    let o = delulu(&["run", src.to_str().unwrap(), "--no-prompt", "--sandbox", "--json", "--report-out", report.to_str().unwrap()]);
+    let o =
+        delulu(&["run", src.to_str().unwrap(), "--no-prompt", "--sandbox", "--json", "--report-out", report.to_str().unwrap()]);
     let all = out(&o);
     assert_eq!(o.status.code(), Some(1), "{all}");
     let env: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope ({e}): {all}"));

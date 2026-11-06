@@ -263,6 +263,16 @@ impl<'a> Lexer<'a> {
         self.tokens.push(Token { kind, span });
     }
 
+    /// RW 2.34: `op` alone, or its compound assignment `op=` when an `=` follows with nothing between.
+    fn op_or_compound(&mut self, op: TokenKind, compound: TokenKind, start: usize) {
+        if self.peek() == Some('=') {
+            self.bump();
+            self.push(compound, start);
+        } else {
+            self.push(op, start);
+        }
+    }
+
     fn last_kind(&self) -> Option<&TokenKind> {
         self.tokens.last().map(|t| &t.kind)
     }
@@ -378,18 +388,22 @@ impl<'a> Lexer<'a> {
             '@' => self.push(TokenKind::At, start),
             '?' => self.push(TokenKind::Question, start),
             '.' => self.push(TokenKind::Dot, start),
-            '+' => self.push(TokenKind::Plus, start),
-            '*' => self.push(TokenKind::Star, start),
-            '%' => self.push(TokenKind::Percent, start),
-            '/' => self.push(TokenKind::Slash, start), // comments were consumed as trivia
-            '-' => {
-                if self.peek() == Some('>') {
+            // RW 2.34: an operator followed at once by `=` is its compound assignment.
+            '+' => self.op_or_compound(TokenKind::Plus, TokenKind::PlusEq, start),
+            '*' => self.op_or_compound(TokenKind::Star, TokenKind::StarEq, start),
+            '%' => self.op_or_compound(TokenKind::Percent, TokenKind::PercentEq, start),
+            '/' => self.op_or_compound(TokenKind::Slash, TokenKind::SlashEq, start), // comments were consumed as trivia
+            '-' => match self.peek() {
+                Some('>') => {
                     self.bump();
                     self.push(TokenKind::Arrow, start);
-                } else {
-                    self.push(TokenKind::Minus, start);
                 }
-            }
+                Some('=') => {
+                    self.bump();
+                    self.push(TokenKind::MinusEq, start);
+                }
+                _ => self.push(TokenKind::Minus, start),
+            },
             '=' => match self.peek() {
                 Some('=') => {
                     self.bump();

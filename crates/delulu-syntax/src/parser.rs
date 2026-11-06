@@ -1558,6 +1558,9 @@ impl Parser {
             _ => {
                 // Expression statement OR assignment.
                 let expr = self.parse_expr();
+                if let Some(op) = self.compound_op() {
+                    return self.compound_assignment(expr, op);
+                }
                 if self.at(&TokenKind::Eq) {
                     let start = expr.span();
                     self.bump();
@@ -1565,7 +1568,7 @@ impl Parser {
                     let span = start.to(self.prev_span());
                     self.expect_term();
                     match self.expr_to_lvalue(expr) {
-                        Some(target) => Some(Stmt::Assign { target, value, span }),
+                        Some(target) => Some(Stmt::Assign { target, value, span, compound: None }),
                         None => {
                             self.error("DL0207", "invalid assignment target", start, "cannot assign to this expression");
                             None
@@ -1577,6 +1580,83 @@ impl Parser {
                 }
             }
         }
+    }
+
+    /// RW 2.34: the binary operator a compound-assignment token stands for, if the cursor is at one.
+    fn compound_op(&self) -> Option<BinOp> {
+        Some(match self.peek() {
+            TokenKind::PlusEq => BinOp::Add,
+            TokenKind::MinusEq => BinOp::Sub,
+            TokenKind::StarEq => BinOp::Mul,
+            TokenKind::SlashEq => BinOp::Div,
+            TokenKind::PercentEq => BinOp::Rem,
+            _ => return None,
+        })
+    }
+
+    /// RW 2.34: `target op= rhs`, the cursor at `op=`. Rewritten here into the assignment it stands for,
+    /// `target = target op rhs`, so the checker, both engines and every walk of an assignment see an ordinary one — the
+    /// read of the target included — and only the formatter knows it was written short (`Stmt::Assign::compound`).
+    ///
+    /// The target is evaluated twice by that rewrite: read for the value, then walked as the place. That is the same
+    /// result as once only while the place is names, fields, indices, literals and operators — nothing whose second
+    /// evaluation could be seen. An index holding a call (`xs[next()] += 1`, `xs[xs.len() - 1] += 1`) is refused, in words:
+    /// bind it first. Evaluating such an index once is the row's remainder.
+    fn compound_assignment(&mut self, expr: Expr, op: BinOp) -> Option<Stmt> {
+        let start = expr.span();
+        let op_text = self.peek().describe();
+        self.bump();
+        let rhs = self.parse_expr();
+        let span = start.to(self.prev_span());
+        self.expect_term();
+        let read = self.reread(&expr);
+        let Some(target) = self.expr_to_lvalue(expr) else {
+            self.error("DL0207", "invalid assignment target", start, "cannot assign to this expression");
+            return None;
+        };
+        let Some(read) = read else {
+            self.error(
+                "DL0207",
+                &format!(
+                    "a compound assignment ({op_text}) reads its target and then writes it, so a call inside the target would \
+                     run twice — bind the index first (`let i = …`), then assign to `xs[i]`"
+                ),
+                start,
+                "this target holds a call",
+            );
+            return None;
+        };
+        let value_span = start.to(rhs.span());
+        let value = Expr::Binary { op, lhs: Box::new(read), rhs: Box::new(rhs), id: self.node_id(), span: value_span };
+        Some(Stmt::Assign { target, value, span, compound: Some(op) })
+    }
+
+    /// RW 2.34: a compound assignment's target, read as an expression: the same place, every node given a fresh id (an id
+    /// names one node). `None` when the place holds anything but names, fields, indices, literals and operators.
+    fn reread(&mut self, e: &Expr) -> Option<Expr> {
+        Some(match e {
+            Expr::Lit { kind, span, .. } => Expr::Lit { kind: kind.clone(), id: self.node_id(), span: *span },
+            Expr::Var { path, span, .. } => Expr::Var { path: path.clone(), id: self.node_id(), span: *span },
+            Expr::Field { recv, name, span, .. } => {
+                let recv = Box::new(self.reread(recv)?);
+                Expr::Field { recv, name: name.clone(), id: self.node_id(), span: *span }
+            }
+            Expr::Index { recv, index, span, .. } => {
+                let recv = Box::new(self.reread(recv)?);
+                let index = Box::new(self.reread(index)?);
+                Expr::Index { recv, index, id: self.node_id(), span: *span }
+            }
+            Expr::Unary { op, operand, span, .. } => {
+                let operand = Box::new(self.reread(operand)?);
+                Expr::Unary { op: *op, operand, id: self.node_id(), span: *span }
+            }
+            Expr::Binary { op, lhs, rhs, span, .. } => {
+                let lhs = Box::new(self.reread(lhs)?);
+                let rhs = Box::new(self.reread(rhs)?);
+                Expr::Binary { op: *op, lhs, rhs, id: self.node_id(), span: *span }
+            }
+            _ => return None,
+        })
     }
 
     fn expr_to_lvalue(&self, e: Expr) -> Option<LValue> {

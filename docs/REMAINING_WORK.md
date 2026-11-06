@@ -513,7 +513,9 @@ order by importance):
    built and audited under R-4 — actually worth having.
 6. ~~**Restate Progress as progress-or-fault** (5.2).~~ Done in `DELULU_CORE.md` v0.3 (2026-09-28,
    D-V2-49), with the higher-order primitive (5.3): the mechanization (5.1) now has the right target.
-7. **The language basics (2.33–2.40). Added 2026-11-02, and now first by value.** Nearly all are additive: a new
+7. **The language basics (2.33–2.40). Added 2026-11-02, and now first by value — and FIRST in the work order since
+   2026-11-06, at the owner's word (D-V2-220): built as surface syntax and prelude over the core, each followed by
+   programs of varying size written, run and fixed (`docs/CLOUD_ROUTINE.md` step 4).** Nearly all are additive: a new
    operator, prelude function or method breaks no program that checks today, so any 2.x can carry them. But a public
    release is judged by the absence of `x += 1` and `abs`. Methods on one's own types come before interfaces, which
    need a typeclass design and an RFC (2.9); then the interpreter's compiled form (3.24).

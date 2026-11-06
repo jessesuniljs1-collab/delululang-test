@@ -8630,3 +8630,50 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      their next red.
   4. Still the owner's: holding 2.0 for the language basics, and the reviews' open decisions (`--preflight` as the
      default for `--sandbox` among them). `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-06 — the laptop: #139 and #140 landed; RW 6.75 closed (D-V2-219); the owner: the language basics first (D-V2-220)
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef).
+- **The owner, during the work:** *"Build basics first for DeluluLang. If u are building something big now finish that
+  first and document it properly. Update all docs and claude code routine. After each build, write and run programs
+  and softwares of varying complexities and test and verify and fix it. U can and u should remove, edit, delete, change
+  codes whenever needed, Anyway history of code changes will be github."* RW 6.75 was finished and recorded first.
+  Then the order was rewritten everywhere it is kept: `docs/CLOUD_ROUTINE.md` step 4, `docs/AI_ONBOARDING.md` §10,
+  `HANDOFF.md` §11.1, `docs/REMAINING_WORK.md` §8 item 7 and `README.md`, recorded as D-V2-220. The language basics now
+  come first, each followed by programs of varying size written, run on both engines and fixed.
+- **PRs #139 (RW 3.29) and #140 (RW 6.73), read and landed:**
+  - `42239453176` on `e9a8974` and `42239809792` on `e6d4785`: each 14 jobs success and 2 skipped;
+  - one fast-forward of `master`, `5c69eed..e6d4785`;
+  - `laptop/stack-ladder-witness` deleted, never merged;
+  - the push run on `e6d4785` is next to read.
+- Branch: `laptop/sandbox-faults` → a pull request into `master`. Base: `4da14d5` (RW 6.74, PR #141, still in CI; this
+  lands after it).
+- **The milestone:** RW 6.75 (D-V2-219).
+  - The guest's goodbye carries its fault: an optional field of `Done`, with the protocol version and a faultless
+    goodbye's bytes unchanged.
+  - The host checks it: a registered code, bounded words, a span inside the program, and the guest's label.
+  - It is reported in the `--json` envelope and the report, and a sandboxed DL0703 carries `missing_grants`.
+- **New:** RW 6.84, a guest that ends without a goodbye.
+- Files and folders (`git diff --name-status 4da14d5..HEAD`): M `CHANGELOG.md`, `HANDOFF.md`, `README.md`,
+  `crates/delulu-runtime/src/channel.rs`, `crates/delulu/src/guest.rs`, `crates/delulu/tests/sandbox_run_cli.rs`,
+  `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md`,
+  `docs/for-agents.md`, `docs/survey/*`. Nothing added, deleted or renamed; no entrenched file.
+- **Verified on the laptop (Windows):**
+  - two new `sandbox_run_cli` tests, red on the old code and green now;
+  - two unit tests (`guest.rs`, `channel.rs`);
+  - mutants M1162–M1172 all red, and the controls green;
+  - all twelve `sandbox_*` targets, `guest_cli`, `schema_cli` and `delulu-runtime`'s 316 unit tests green;
+  - `scripts/clippy.sh -j 2` clean.
+- **The full suite:** the pull request's run.
+- Survey and doctor (after the last edit): in the pull request.
+- **Open / next:**
+  1. PR #141, then this pull request: land each on green by fast-forward, and read the push runs.
+  2. **The language basics, in D-V2-220's order:** compound assignment (RW 2.34) first, then math and the checked forms
+     (2.38), ranges (2.36), strings (2.37), bitwise (2.35), methods (2.33), tuples, sets and comprehensions (2.39),
+     argv and exit code (2.40), JSON (2.41). After each: programs of varying size, written, run and fixed.
+  3. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  4. RW 3.30: measure on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for
+     their next red.
+  5. Still the owner's: whether 2.0 waits for the basics; the reviews' open decisions. `launch/2.0.0` stays prepared,
+     not launched.
