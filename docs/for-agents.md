@@ -557,11 +557,18 @@ program runs, accepted only in the host's own words for those layers — so the 
 (since 2026-09-25); on a host that cannot apply them it says so instead. Read the report rather than
 assuming the list above.
 
-**Two gaps in a sandboxed run's answer, open (`docs/REMAINING_WORK.md` rows 6.75 and 3.29):** a fault in the guest
-reaches the host's envelope and report with `diagnostics: []`. Only the guest's stderr names its code (DL0902, DL0905).
-Under `hostile-agent`, or a `--limits mem` up to 768 MiB, a deep recursion aborts the guest rather than raising DL0905,
-and the report says only `{exit 1, ran: true}`. Read a sandboxed exit 1 with an empty `diagnostics` as "the guest
-failed", with the reason on stderr.
+**A sandboxed run's fault is in its answer** (rows 6.75 and 3.29, closed 2026-11-06).
+- **Where it appears.** A fault the guest's program ends at reaches the `--json` envelope and the report's
+  `diagnostics`, as an unsandboxed run's does: `DL0902`, `DL0905` and the rest, at its call. The span is labelled
+  *"as the guest reports it"*, because it is the guest's word, as its exit status is. The host checks it first: only a
+  registered code, words bounded, and a span placed only inside the program it sent.
+- **A refusal.** A refusal the host made is the host's own diagnostic, *"refused by the host here"*, with the
+  `missing_grants` list (row 6.73).
+- **Deep recursion.** Under `hostile-agent` it is now DL0905, not an abort.
+- **Still open.**
+  - A guest that ends without saying goodbye (killed by a signal, or a channel closed) is reported as exit 1 with an
+    empty `diagnostics` and no outcome of its own (row 6.84). Read that as "the guest failed", with the reason on stderr.
+  - A sandboxed run refused before its guest starts writes no report (row 6.83).
 
 **Three isolation levels**, and the report's `level` says which one you got: **L1** `--sandbox` (a
 jailed process, all three systems); **L2** `--isolation microvm` (its own kernel under Firecracker —

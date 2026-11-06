@@ -1738,6 +1738,41 @@ mod tests {
         f
     }
 
+    /// RW 6.75: a goodbye carries the guest's fault, which the host keeps with its words bounded and escaped as they
+    /// arrive, as every refusal's are — a guest cannot make the report hold megabytes or break a line. A goodbye without
+    /// one is the same bytes as before the field existed, so either side of this protocol version reads the other.
+    #[test]
+    fn a_goodbye_carries_the_guests_fault_bounded_and_without_one_is_unchanged() {
+        let long = format!("{}\n\u{1b}[31mforged", "x".repeat(MAX_DENIED_CHARS * 4));
+        let fault = GuestFault { code: "DL0902\nDL0001".into(), message: long, at: Some((0, 3, 9)) };
+        let mut f = Vec::new();
+        let body = ReqBody::Done { exit: 1, fault: Some(fault) };
+        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body }).unwrap();
+        let mut io = Drip { bytes: f, at: 0, pause: std::time::Duration::ZERO, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        assert_eq!(host.serve(&mut io).unwrap(), 1);
+        let kept = host.guest_fault().expect("the fault is kept");
+        assert!(kept.message.chars().count() < MAX_DENIED_CHARS + 32, "bounded: {} chars", kept.message.chars().count());
+        assert!(!kept.message.contains('\n') && !kept.code.contains('\n'), "escaped: {kept:?}");
+        assert_eq!(kept.at, Some((0, 3, 9)));
+        // The old goodbye, byte for byte: a CBOR map of one key.
+        #[derive(Serialize)]
+        enum OldBody {
+            Done { exit: i32 },
+        }
+        #[derive(Serialize)]
+        struct OldRequest {
+            version: String,
+            seq: u64,
+            body: OldBody,
+        }
+        let mut old = Vec::new();
+        write_frame(&mut old, &OldRequest { version: CHANNEL_VERSION.into(), seq: 1, body: OldBody::Done { exit: 7 } }).unwrap();
+        assert_eq!(done_frame(), old, "a goodbye without a fault is the bytes it always was");
+        let back: Request = read_frame(&mut &old[..]).unwrap();
+        assert_eq!(back.body, ReqBody::Done { exit: 7, fault: None }, "and an old guest's goodbye reads as one without a fault");
+    }
+
     /// RW 4.32, FRAME-DRIP-1: the host's deadline was on each READ, so a guest sending one byte just
     /// inside it held a frame — and the host — open for as long as it liked. A frame begun is now owed
     /// whole within the frame deadline; `serve` refuses one that is not, in its own words. (The wall
