@@ -570,7 +570,7 @@
     {"id":"file:.github/workflows/release-build.yml","kind":"other","name":"release-build.yml","path":".github/workflows/release-build.yml","lines":85},
     {"id":"file:.github/workflows/release.yml","kind":"other","name":"release.yml","path":".github/workflows/release.yml","lines":56},
     {"id":"file:.github/workflows/scorecard.yml","kind":"other","name":"scorecard.yml","path":".github/workflows/scorecard.yml","lines":48},
-    {"id":"file:.github/workflows/witness.yml","kind":"other","name":"witness.yml","path":".github/workflows/witness.yml","lines":75},
+    {"id":"file:.github/workflows/witness.yml","kind":"other","name":"witness.yml","path":".github/workflows/witness.yml","lines":121},
     {"id":"file:.gitignore","kind":"other","name":".gitignore","path":".gitignore","lines":29},
     {"id":"file:Cargo.lock","kind":"other","name":"Cargo.lock","path":"Cargo.lock","lines":3504},
     {"id":"file:Cargo.toml","kind":"other","name":"Cargo.toml","path":"Cargo.toml","lines":43},

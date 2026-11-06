@@ -30,6 +30,14 @@ on:
         description: "A test-name filter (empty: every test in the target)"
         type: string
         default: ""
+      repeat:
+        description: "Run the selection this many times in this one job, each run counted (a rare red needs many runs)"
+        type: string
+        default: "1"
+      stress:
+        description: "Busy loops beside the runs, each holding one CPU (0: none) — a starved runner, set rather than guessed"
+        type: string
+        default: "0"
 
 permissions:
   contents: read
@@ -59,6 +67,8 @@ jobs:
           PKG: ${{ inputs.package }}
           TARGET: ${{ inputs.target }}
           FILTER: ${{ inputs.filter }}
+          REPEAT: ${{ inputs.repeat }}
+          STRESS: ${{ inputs.stress }}
         run: |
           # Several targets in one run: a green read must cover every target that exercises the changed
           # code on this OS (routine run 3 read the macOS watcher green on three and missed a fourth).
@@ -71,5 +81,41 @@ jobs:
               *) sel+=(--test "$t") ;;
             esac
           done
-          echo "cargo test -p $PKG ${sel[*]} --no-fail-fast -- $FILTER --nocapture"
-          cargo test -p "$PKG" "${sel[@]}" --no-fail-fast -- "$FILTER" --nocapture
+          case "$REPEAT" in ''|*[!0-9]*|0) echo "repeat must be a positive number, not '$REPEAT'"; exit 2 ;; esac
+          case "$STRESS" in ''|*[!0-9]*) echo "stress must be a number, not '$STRESS'"; exit 2 ;; esac
+          if [ "$REPEAT" -eq 1 ] && [ "$STRESS" -eq 0 ]; then
+            echo "cargo test -p $PKG ${sel[*]} --no-fail-fast -- $FILTER --nocapture"
+            cargo test -p "$PKG" "${sel[@]}" --no-fail-fast -- "$FILTER" --nocapture
+            exit $?
+          fi
+          # RW 7.25: a red seen twice in hundreds of runs is read only by running it many times, as the push run
+          # runs it — the whole target's tests side by side, their output captured — and counting every run.
+          # What the runs share is said first: the CPUs, and on Windows the real-time scanner, which reads a
+          # file another process has just written.
+          echo "CPUs: $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-?}")"
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell -NoProfile -Command \
+              "Get-MpComputerStatus | Select-Object AMRunningMode,RealTimeProtectionEnabled,OnAccessProtectionEnabled | Format-List" \
+              || echo "(the scanner's status could not be read)"
+          fi
+          cargo test -p "$PKG" "${sel[@]}" --no-run
+          hogs=()
+          trap 'for h in "${hogs[@]}"; do kill "$h" 2>/dev/null; done' EXIT
+          for ((h = 0; h < STRESS; h++)); do
+            ( while :; do :; done ) &
+            hogs+=($!)
+          done
+          echo "$STRESS busy loop(s) running; $REPEAT run(s) of: cargo test -p $PKG ${sel[*]} --no-fail-fast -- $FILTER"
+          failed=0
+          for ((i = 1; i <= REPEAT; i++)); do
+            echo "::group::run $i of $REPEAT"
+            if cargo test -p "$PKG" "${sel[@]}" --no-fail-fast -- "$FILTER"; then
+              echo "run $i of $REPEAT: ok"
+            else
+              failed=$((failed + 1))
+              echo "::error::run $i of $REPEAT FAILED"
+            fi
+            echo "::endgroup::"
+          done
+          echo "$failed of $REPEAT run(s) failed ($STRESS busy loop(s) beside them)"
+          [ "$failed" -eq 0 ]
