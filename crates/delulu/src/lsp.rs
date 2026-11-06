@@ -1004,7 +1004,7 @@ impl Server {
         let checked = self.check_package(&root);
         for u in self.uris() {
             let (Some(text), Some(path)) = (self.text(u), uri_to_path(u)) else { continue };
-            if u != uri {
+            if package_of(u).as_deref() != Some(root.as_path()) {
                 continue;
             }
             let (_, shown) = self.shown_in_package(&checked, &path);
