@@ -944,3 +944,52 @@ actor R {
     assert!(e.contains("error[DL1202]") && e.contains("carries no field count") && !e.contains("out of range"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 3.28: every `main` shape the checker accepts runs on the WASM engine, and as a built `.dwx`, as it runs on the
+/// interpreter — which passes `root` only to a `main` that takes it and discards what `main` returns. The host calls
+/// `main` with the root handle and no result; `fn main()` stopped with DL0904 *"expected 0 arguments, got 1"* and
+/// `fn main(root: Root) -> Int` with *"expected 1 results, got 0"*, after `build --target wasm` had exited 0 with an
+/// artifact whose every run was that fault.
+#[test]
+fn every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter() {
+    let dir = std::env::temp_dir().join(format!("delulu_main_shapes_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // The wrapper is the module's last function, so two shapes make the code generator emit its late helpers first: a
+    // list (`__list_new`, `__list_slot`) and a string comparison (`__str_eq`).
+    let shapes: [(&str, &str, &[&str]); 7] = [
+        ("no_root", "module m\n\nfn main() {\n    let x = 1 + 2\n}\n", &[]),
+        ("a_list", "module m\n\nfn main() -> Int {\n    let xs = [1, 2, 3]\n    xs.len()\n}\n", &[]),
+        ("a_str_eq", "module m\n\nfn main() -> Bool {\n    \"a\" == \"b\"\n}\n", &[]),
+        ("an_int", "module m\n\nfn main() -> Int {\n    6 * 7\n}\n", &[]),
+        ("a_str", "module m\n\nfn main() -> Str {\n    \"done\"\n}\n", &[]),
+        (
+            "root_and_an_int",
+            "module m\n\nfn main(root: Root) -> Int ! {Write} {\n    root.console().println(\"hi\")\n    42\n}\n",
+            &["--grant", "console"],
+        ),
+        (
+            "root_and_unit",
+            "module m\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"plain\")\n}\n",
+            &["--grant", "console"],
+        ),
+    ];
+    for (tag, src, grants) in shapes {
+        let file = format!("{tag}.delulu");
+        std::fs::write(dir.join(&file), src).unwrap();
+        let ran = |args: &[&str]| {
+            let o = delulu_in(&dir, &[args, grants].concat());
+            (o.status.code(), stdout(&o), String::from_utf8_lossy(&o.stderr).to_string())
+        };
+        let interp = ran(&["run", &file]);
+        assert_eq!(interp.0, Some(0), "{tag} on the interpreter: {}", interp.2);
+        let wasm = ran(&["run", &file, "--engine", "wasm"]);
+        assert_eq!((wasm.0, &wasm.1), (Some(0), &interp.1), "{tag} on --engine wasm: {}", wasm.2);
+        let dwx = format!("{tag}.dwx");
+        let b = delulu_in(&dir, &["build", &file, "--target", "wasm", "-o", &dwx]);
+        assert!(b.status.success(), "{tag}: build --target wasm: {}", String::from_utf8_lossy(&b.stderr));
+        let art = ran(&["run", &dwx]);
+        assert_eq!((art.0, &art.1), (Some(0), &interp.1), "{tag} as a .dwx: {}", art.2);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — every `main` the checker accepts runs on WASM and as a `.dwx`, 2026-11-06
+
+- **Fixed (RW 3.28, D-V2-215):** `build --target wasm` exited 0 for `fn main()`, or a `main` that returns a value, and
+  wrote a `.dwx` whose every run stopped with DL0904 (*"expected 0 arguments, got 1"*, *"expected 1 results, got 0"*):
+  the WASM host calls `main` with the root and takes no result. Such a `main` is now called through a wrapper in the
+  host's shape — the root passed on only when `main` takes it, and what it returns discarded — exactly as the
+  interpreter runs it, so `run --engine wasm` and the built `.dwx` print what the interpreter prints and exit 0.
+
 ## Unreleased — the language server and `edit` check a module as its package, 2026-11-06
 
 - **Fixed (RW 6.72):** `delulu lsp` checks a file that is a module of a package (under the `src/` of the nearest

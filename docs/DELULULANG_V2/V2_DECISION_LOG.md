@@ -6011,3 +6011,24 @@ as DL0301 under `--if-checks`; and `fn:BOGUSPKG/greeter.main` was accepted, its 
 check contradicted.
 
 **Evidence.** The two CLI witnesses, `lsp_cli` `a_module_of_a_package_is_checked_as_its_package` and `edit_cli` `inside_a_package_an_edit_is_checked_and_attributed_as_the_package`, red on the old code and green now; four unit tests (`package_root_of`, the overlay, the code-action guards, the id's package part). Mutants M1117–M1133 all red (M1122 by the test's timeout: without the republish, the other open module's diagnostics never come); control green. Measured after the fix: hover over an imported name still shows `'t0` (RW 6.82).
+
+## D-V2-215 — RW 3.28: a `main` the WASM host cannot call as written is called through a wrapper in the host's shape — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.4): the WASM host calls `main` with one `i32` (the root handle) and expects
+no result (`host.rs` `run_main`, `run_artifact`, `run_actors_in`). `fn main()` and `fn main() -> Int` check clean and run
+on the interpreter (exit 0); on `--engine wasm` they stopped with DL0904 *"expected 0 arguments, got 1"* (`fn main(root:
+Root) -> Int`: *"expected 1 results, got 0"*) — Wasmtime's words at run time — and `build --target wasm` exited 0 with no
+diagnostic, writing an artifact whose every run was that fault after *"authority verified"*. Re-run on the laptop before
+the fix: the same DL0904.
+
+**Decision.** Of the row's two remedies — refuse such a `main` at build with DL1201, or call it in the shape the host
+expects — the second: a refusal would ship nothing for programs the interpreter runs correctly, and the reviews ask for
+artifacts that run. The interpreter's semantics are the reference: `Interp::run_main` passes `root` to a `main` that
+takes it (`call_fn` binds parameters by `zip`, so `fn main()` ignores it) and `run` maps `Ok(_)` to exit 0, discarding
+what `main` returns. So the code generator, when the module's compiled `main` is not already `(root: Root) -> Unit`,
+leaves its own export out and emits, as the module's last function, a wrapper exported as `main` of type `(i32) -> ()`:
+`local.get 0` when `main` takes the root, the call, one `drop` per result. A `main` taking anything but `root: Root` —
+which the checker already refuses (DL0401, DL0403) — is refused by the code generator too (DL1201, at its name), for the
+unchecked path. No change to the host, the `.dwx` format or any artifact already built in the host's shape.
+
+**Evidence.** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop.
