@@ -8495,3 +8495,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. RW 7.25, 7.29 and 7.30 wait for their next red (`broker.log` and the step timing first).
   4. Still the owner's: holding 2.0 and the reviews' open decisions; `launch/2.0.0` stays prepared, not launched, and
      does not hold D-V2-210 to D-V2-214 (D-V2-214 refuses an `edit` id with another package's name, or none).
+
+### 2026-11-06 — the laptop: PR #137 landed (its CI read); RW 3.28 closed — every `main` the checker accepts runs on WASM and as a `.dwx` (D-V2-215)
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner, meanwhile: *"Did that CI thing fixed and all green now for windows and macos. Have u started
+  developing and improving DeluluLang based on the review .md files"* — answered: `master` green on both; yes, in the
+  reviews' order.
+- Branch: `laptop/wasm-main-shapes` → a pull request into `master`. Base: `39bd4e9`.
+- **PR #137, read to its end:** run `42215257901` on `73be776` red in one test on all four test jobs (`message_spacing`:
+  a flattened continuation in `edit.rs`, written through a heredoc); `39bd4e9` fixed it; run `42217993993` green (14 + 2
+  skipped); landed by fast-forward; push run `42221003168` on `39bd4e9` green (14 + 2 skipped).
+- **The milestone:** RW 3.28 — a wrapper in the WASM host's shape for every `main` the interpreter runs (D-V2-215).
+- Files and folders (`git diff --name-status 39bd4e9..HEAD`): M `CHANGELOG.md`, `HANDOFF.md`, `README.md`,
+  `crates/delulu-wasm/src/codegen.rs`, `crates/delulu/tests/wasm_cli.rs`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md`, `docs/survey/*`. Nothing added, deleted or renamed; no entrenched file. README's list of the
+  reviews' open defects corrected: 4.97 had closed with run 20 and still read as open.
+- **Verified:** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop. `scripts/clippy.sh -j 2` clean. The full suite: this pull request's run.
+- Survey and doctor (after the last edit): in the pull request.
+- **Open / next:**
+  1. **This pull request's CI**, then land it by fast-forward and read the push run.
+  2. The reviews' order: RW 3.29 (a deep recursion under a capped address space aborts instead of DL0905 —
+     `hostile-agent` triggers it), then 6.73 and 6.74; then the outcome contracts (6.75, 6.77, then 6.76, 6.78–6.81).
+  3. RW 6.82 when the language server is next touched; RW 7.25, 7.29 and 7.30 wait for their next red.
+  4. Still the owner's: holding 2.0 and the reviews' open decisions; `launch/2.0.0` stays prepared, not launched.

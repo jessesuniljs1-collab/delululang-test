@@ -841,7 +841,8 @@ wins, and you should update the memory to match.
   **Closed for the first two on 2026-11-06 (D-V2-214) by giving them the slow path itself**, not a lighter copy of it:
   `check_package_overlaid` is `delulu check DIR`'s three lists with unsaved texts read in place of the files, and both
   the server and `edit` call it. A third reader of unsaved text should call it too. The server's other providers
-  still read one file (RW 6.82).
+  still read one file (RW 6.82). **The third the same day (D-V2-215):** the WASM build calls a `main` of any shape the
+  interpreter runs through a wrapper in its host's shape — the interpreter's semantics, not a narrower copy.
 - **A stamp is not a hand-over, and a flaky red's reading is not its cause** (the laptop, 2026-11-05; RW 4.98, RW 7.25).
   The daemon judges a beat by the stamp its reader puts on it, but the judgment sees only what has been handed over. A
   beat stamped in time and handed over late is not counted, and RW 4.87 had called that window microseconds. A test-only

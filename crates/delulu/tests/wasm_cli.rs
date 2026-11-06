@@ -968,7 +968,11 @@ fn every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter() {
             "module m\n\nfn main(root: Root) -> Int ! {Write} {\n    root.console().println(\"hi\")\n    42\n}\n",
             &["--grant", "console"],
         ),
-        ("root_and_unit", "module m\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"plain\")\n}\n", &["--grant", "console"]),
+        (
+            "root_and_unit",
+            "module m\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"plain\")\n}\n",
+            &["--grant", "console"],
+        ),
     ];
     for (tag, src, grants) in shapes {
         let file = format!("{tag}.delulu");

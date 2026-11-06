@@ -12505,3 +12505,25 @@ completion still read the file's own analysis. Recorded as **RW 6.82**, not clai
 **Evidence.** Witnesses red on the old code by stash (`lsp_cli`: the audit's two `DL0301`; `edit_cli`: *written: true*,
 exit 0) and green now; four unit tests; mutants M1117–M1133 all red, M1122 by the test's 900 s timeout (the republish
 removed, the other module's diagnostics never come); control green. `scripts/clippy.sh -j 4` clean. The laptop's full suite (`scripts/suite.sh`) did not run: Claude Code stopped it for low memory while it compiled, before a test ran (one `rustc` had already failed to start, `STATUS_DLL_INIT_FAILED`), and its leftover `cargo`/`rustc` were stopped. By the owner's rule of 2026-10-19 the suite runs on GitHub instead: this pull request's run, read to its end before landing.
+
+## 2026-11-06 — the laptop: PR #137 landed; RW 3.28 closed — every `main` the checker accepts runs on WASM and as a `.dwx` (D-V2-215)
+
+**PR #137 (RW 6.72, 6.69).** Its first run, `42215257901` on `73be776`, was red in one test on all four test jobs
+(Linux, macOS, Windows, arm64): `message_spacing`'s `no_message_carries_a_flattened_continuation` — a refusal string in
+`edit.rs` printed a run of spaces mid-line, because the patch script that wrote it went through a shell heredoc, which
+halved the backslash of a backslash-newline. Every other test target passed on every system. Fixed in `39bd4e9`; its run
+`42217993993` green (14 + 2 skipped); landed by fast-forward; `master`'s push run `42221003168` on `39bd4e9` green, 14 + 2
+skipped, Windows and macOS included. The laptop's memory note on the heredoc trap now says: a backslash or a backtick in
+the text means the Write tool, never a heredoc.
+
+**RW 3.28.** The WASM host calls `main` with the root handle and takes no result, so `fn main()` and a `main` returning a
+value — both of which the interpreter runs, exit 0 — stopped with DL0904 on `--engine wasm` and in every run of the `.dwx`
+that `build --target wasm` had written with exit 0. Re-run on the laptop: `no_root on --engine wasm: error[DL0904]:
+expected 0 arguments, got 1`. D-V2-215 takes the row's second remedy: the code generator exports, as the module's last
+function, a wrapper `main` of type `(i32) -> ()` that passes the root on only when `main` takes it and drops each result —
+the interpreter's semantics (`run_main` binds by `zip`; `run` maps `Ok(_)` to exit 0) — and leaves the program's own
+`main` unexported. A `main` taking anything but `root: Root`, which the checker already refuses, is DL1201 on the
+unchecked path.
+
+**Evidence.** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop. `scripts/clippy.sh -j 2` clean. The full suite runs on GitHub, as for #137: the laptop's
+memory could not hold it earlier today.

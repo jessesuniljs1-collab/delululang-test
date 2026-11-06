@@ -160,6 +160,70 @@ pub const fn max_depth_for_stack(stack_bytes: usize) -> u32 {
     }
 }
 
+/// RW 3.29: the stacks a process's interpreter thread asks for, largest first. A host that caps address space — a
+/// `ulimit -v`, the sandbox's own memory ceiling (`hostile-agent`'s 256 MiB) — refuses the full reservation, and the
+/// thread used to fall back to the main stack (8 MiB on Linux) with the full bound, so a deep recursion aborted the
+/// process (*"has overflowed its stack"*, exit 134, no report) instead of DL0905. Each smaller rung keeps more of a capped
+/// address space for the heap; [`max_depth_for_stack`] gives the bound that fits each.
+pub const INTERPRETER_STACK_LADDER: [usize; 5] =
+    [INTERPRETER_STACK_BYTES, 256 * 1024 * 1024, 64 * 1024 * 1024, 16 * 1024 * 1024, 8 * 1024 * 1024];
+
+/// The stack the main thread of a process is assumed to have when not one rung of [`INTERPRETER_STACK_LADDER`] could be
+/// reserved: the smallest a supported host gives it (Windows' 1 MiB default), so the bound sized for it fits every one.
+pub const MAIN_THREAD_STACK_ASSUMED: usize = 1024 * 1024;
+
+/// The depth bound an interpreter takes when its builder names none: [`DEFAULT_MAX_DEPTH`], unless the process said its
+/// interpreter thread has less stack ([`set_process_stack_bytes`]). Process-wide on purpose: every interpreter the CLI
+/// builds — `run`'s, the guest's, a plugin's, `test`'s, the REPL's — runs on that one thread, and a setting one
+/// constructor forgot would be the crash (§11: a thread-local setting reaches one thread). It only ever lowers the bound;
+/// a thread with its own reservation (an actor worker) sets its own with [`Interp::with_max_depth`].
+static PROCESS_MAX_DEPTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(DEFAULT_MAX_DEPTH);
+
+/// Record the stack the process's interpreter thread was given, so every interpreter built without a bound fits it.
+pub fn set_process_stack_bytes(stack_bytes: usize) {
+    PROCESS_MAX_DEPTH.store(max_depth_for_stack(stack_bytes), std::sync::atomic::Ordering::SeqCst);
+}
+
+/// The bound an interpreter takes when its builder names none (see [`set_process_stack_bytes`]).
+pub fn process_max_depth() -> u32 {
+    PROCESS_MAX_DEPTH.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// RW 3.29: run `f` on the largest rung of [`INTERPRETER_STACK_LADDER`] this host grants, its bound recorded for that
+/// stack before `f` starts; on the calling thread with [`MAIN_THREAD_STACK_ASSUMED`]'s bound when it grants none. The
+/// result is `f`'s, or `None` when its thread panicked (the panic has already been printed).
+pub fn on_laddered_thread<T, F>(f: F) -> Option<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    laddered(f, |bytes, job| std::thread::Builder::new().name("delulu-main".into()).stack_size(bytes).spawn(job).map_err(|_| ()))
+}
+
+/// [`on_laddered_thread`] with the spawner given, so the ladder is testable on a host that grants every rung.
+fn laddered<T, F, S>(f: F, mut spawn: S) -> Option<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+    S: FnMut(usize, Box<dyn FnOnce() -> T + Send>) -> Result<std::thread::JoinHandle<T>, ()>,
+{
+    let job = std::sync::Arc::new(std::sync::Mutex::new(Some(f)));
+    for bytes in INTERPRETER_STACK_LADDER {
+        let job = std::sync::Arc::clone(&job);
+        let run: Box<dyn FnOnce() -> T + Send> = Box::new(move || {
+            set_process_stack_bytes(bytes);
+            let f = job.lock().ok().and_then(|mut j| j.take()).expect("the job runs once");
+            f()
+        });
+        if let Ok(handle) = spawn(bytes, run) {
+            return handle.join().ok();
+        }
+    }
+    set_process_stack_bytes(MAIN_THREAD_STACK_ASSUMED);
+    let f = job.lock().ok().and_then(|mut j| j.take())?;
+    Some(f())
+}
+
 /// Default best-effort step budget for a plugin run when `Limits::fuel == 0` (spec §4/§5.4). A
 /// bound, never "unlimited" — but generous, because the interpreter is a *courtesy* path, not the
 /// enforcement path: a Contained plugin always runs on the WASM engine by construction.
@@ -411,7 +475,7 @@ impl Interp {
             tests,
             consts,
             depth: Cell::new(0),
-            max_depth: DEFAULT_MAX_DEPTH,
+            max_depth: process_max_depth(),
             in_turn: Cell::new(false),
             cycle: std::cell::RefCell::new(crate::cycles::Registry::default()),
             trace: None,
@@ -812,6 +876,19 @@ impl Interp {
     fn enter(&self) -> R<()> {
         let d = self.depth.get() + 1;
         if d > self.max_depth {
+            // RW 3.29: a bound this host's stack lowered says so, so a program that recurses fine on one machine and is
+            // DL0905 on another is explained where it stops. Only that bound: a plugin's own depth limit
+            // (`with_max_depth` from its `Limits`) is not the host's stack.
+            if self.max_depth < DEFAULT_MAX_DEPTH && self.max_depth == process_max_depth() {
+                return Err(Escape::Fault(Fault::new(
+                    "DL0905",
+                    format!(
+                        "recursion depth exceeded (the bound is {} here: this host would not reserve the stack the full \
+                         bound of {DEFAULT_MAX_DEPTH} needs)",
+                        self.max_depth
+                    ),
+                )));
+            }
             return Err(Escape::Fault(Fault::new("DL0905", "recursion depth exceeded")));
         }
         self.depth.set(d);
