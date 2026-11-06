@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 202481 |
+| Rust lines | 203062 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 324 |
-| Markdown lines | 110401 |
+| Markdown lines | 110773 |
 | DeluluLang programs | 258 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1636 / 19845 |
+| Nodes / edges in this map | 1636 / 19917 |
 | Open discrepancies | 43 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 49551 lines
+- **Modules:** 44 files, 49849 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -116,14 +116,14 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fix.rs` | 441 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 513 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 705 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 3102 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/guest.rs` | 3225 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1223 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
 | `src/jail.rs` | 1737 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/launcher.rs` | 184 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
 | `src/locale.rs` | 304 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 2190 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 95 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
-| `src/mcp.rs` | 685 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
+| `src/mcp.rs` | 858 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 1476 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/monitor_cmd.rs` | 1118 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
 | `src/morph_file.rs` | 244 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
@@ -134,7 +134,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/repl.rs` | 161 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 2338 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 689 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
-| `src/schema.rs` | 1059 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
+| `src/schema.rs` | 1061 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 896 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 | `src/toolchain.rs` | 167 | P4-02: `delulu toolchain --json` — what this toolchain IS, as data. |
 | `src/within.rs` | 1635 | P9-01 — `delulu authority FILE --within BOUNDARY` (`V2_OPENSHELL_STUDY.md` §4.8, `V2_P9_DESIGN.md`). |
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 25 files, 25104 lines
+- **Modules:** 25 files, 25184 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -312,7 +312,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/adapter.rs` | 767 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/beneath.rs` | 776 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 851 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 2089 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
+| `src/channel.rs` | 2169 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
 | `src/compute.rs` | 626 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 402 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 288 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |

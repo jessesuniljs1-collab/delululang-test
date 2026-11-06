@@ -346,7 +346,7 @@ fn list_json(in_tree: bool) -> Value {
     let tools: Vec<Value> = offered(in_tree)
         .iter()
         .map(|t| {
-            json!({
+            let mut v = json!({
                 "name": t.name,
                 "description": t.description,
                 "inputSchema": (t.input)(),
@@ -356,15 +356,59 @@ fn list_json(in_tree: bool) -> Value {
                     "idempotentHint": true,
                     "openWorldHint": false,
                 },
-            })
+            });
+            if let Some(s) = output_schema(t) {
+                v["outputSchema"] = s;
+            }
+            v
         })
         .collect();
     json!({ "tools": tools })
 }
 
+/// RW 6.74: what a tool's `structuredContent` is, declared as `outputSchema` — the CLI's own closed schemas
+/// (`delulu schema`), not a second description of them. A `Cli` tool answers with the command's `--json` envelope, so
+/// its schema is the `envelope` document. A tool whose command carries a payload `delulu schema` names (`authority`,
+/// `atlas`, `chain`, `policy`, `toolchain`) also names that payload, as an optional property: a program that does not
+/// check gets the envelope without it. A Survey tool answers with the Survey's own JSON, which no document here
+/// describes, so it declares none. A failed call (`isError`) carries no `structuredContent`.
+fn output_schema(t: &Tool) -> Option<Value> {
+    let Source::Cli(_) = t.source else { return None };
+    let mut doc = crate::schema::document("envelope")?;
+    let payload = match t.name {
+        "authority" => Some(("authority", "authority")),
+        "atlas" => Some(("atlas", "atlas")),
+        "atlas_chain" => Some(("chain", "chain")),
+        "sandbox_policy" => Some(("policy", "policy")),
+        "toolchain" => Some(("toolchain", "toolchain")),
+        _ => None,
+    };
+    if let Some((key, name)) = payload {
+        let mut p = crate::schema::document(name)?;
+        if let Some(o) = p.as_object_mut() {
+            // The payload's references are to the same definitions, which the envelope document carries.
+            for k in ["$schema", "$id", "$defs", "title"] {
+                o.remove(k);
+            }
+        }
+        doc["properties"][key] = p;
+    }
+    Some(doc)
+}
+
 /// Run this binary with `argv`, bounded by `deadline`, and return its standard output as JSON. Shared
 /// with the language server's Guard view (P4-07), which answers with the CLI's own JSON the same way.
 pub(crate) fn run_self(argv: &[String], deadline: std::time::Duration) -> Result<Value, String> {
+    run_self_until(argv, deadline, None)
+}
+
+/// [`run_self`], stopped as soon as `cancel` is set (RW 6.74): the child is killed, so a cancelled call stops working
+/// rather than running on unread, and the call ends with `Err`.
+fn run_self_until(
+    argv: &[String],
+    deadline: std::time::Duration,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Value, String> {
     let exe = std::env::current_exe().map_err(|e| format!("this executable cannot be located: {e}"))?;
     let mut child = std::process::Command::new(exe)
         .args(argv)
@@ -392,6 +436,11 @@ pub(crate) fn run_self(argv: &[String], deadline: std::time::Duration) -> Result
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
+            Ok(None) if cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("`delulu {}` was cancelled", argv.join(" ")));
+            }
             Ok(None) if started.elapsed() > deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -411,13 +460,18 @@ pub(crate) fn run_self(argv: &[String], deadline: std::time::Duration) -> Result
 
 /// Answer one `tools/call`. `Err` is a protocol error (no such tool); a tool that ran and refused, or
 /// whose command reported errors, is an ordinary result with `isError` set.
-fn call(name: &str, args: &Value, tree: Option<&std::path::Path>) -> Result<Value, (i64, String)> {
+fn call(
+    name: &str,
+    args: &Value,
+    tree: Option<&std::path::Path>,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Value, (i64, String)> {
     let Some(tool) = offered(tree.is_some()).into_iter().find(|t| t.name == name) else {
         return Err((-32602, format!("no tool named `{name}`")));
     };
     let args = if args.is_null() { json!({}) } else { args.clone() };
     let answer = match (&tool.source, tree) {
-        (Source::Cli(build), _) => build(&args).and_then(|argv| run_self(&argv, CALL_DEADLINE)),
+        (Source::Cli(build), _) => build(&args).and_then(|argv| run_self_until(&argv, CALL_DEADLINE, cancel)),
         (Source::Survey(answer), Some(root)) => answer(root, &args),
         (Source::Survey(_), None) => Err("this tool answers only inside the DeluluLang source tree".into()),
     };
@@ -458,8 +512,20 @@ pub fn run_mcp(args: &[String]) -> i32 {
         return 2;
     }
     let tree = delulu_survey::find_source_tree();
+    // RW 6.74: one writer, so the calls' threads and this reader never interleave inside a line.
+    let (out, replies) = std::sync::mpsc::channel::<Value>();
+    let writer = std::thread::spawn(move || {
+        let stdout = std::io::stdout();
+        for r in replies {
+            let mut w = stdout.lock();
+            // One message per line: serde_json never writes a raw newline inside a value.
+            if writeln!(w, "{r}").and_then(|()| w.flush()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut calls = Calls::new(tree.clone(), out.clone());
     let stdin = std::io::stdin();
-    let stdout = std::io::stdout();
     let mut input = stdin.lock();
     loop {
         // RW 4.39's rest (routine run 7): a line was read whole whatever its length — a 300 MiB one took
@@ -476,8 +542,7 @@ pub fn run_mcp(args: &[String]) -> i32 {
             }
             let r = json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600,
                 "message": format!("a request line exceeds the {} MiB bound, and was not read", MAX_LINE >> 20) } });
-            let mut out = stdout.lock();
-            if writeln!(out, "{r}").and_then(|()| out.flush()).is_err() {
+            if out.send(r).is_err() {
                 break;
             }
             continue;
@@ -487,21 +552,129 @@ pub fn run_mcp(args: &[String]) -> i32 {
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match serde_json::from_str::<Value>(line) {
+        let msg = match serde_json::from_str::<Value>(line) {
             Err(e) => {
-                Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": format!("not JSON: {e}") } }))
+                let r = json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": format!("not JSON: {e}") } });
+                if out.send(r).is_err() {
+                    break;
+                }
+                continue;
             }
-            Ok(msg) => handle(&msg, tree.as_deref()),
+            Ok(msg) => msg,
         };
-        if let Some(r) = reply {
-            let mut out = stdout.lock();
-            // One message per line: serde_json never writes a raw newline inside a value.
-            if writeln!(out, "{r}").and_then(|()| out.flush()).is_err() {
-                break;
+        // RW 6.74: a tool call runs beside this reader, so a `ping` — or a cancellation — behind a slow call is read and
+        // answered at once instead of waiting for it.
+        match msg["method"].as_str() {
+            Some("tools/call") if msg.get("id").is_some() => calls.start(msg),
+            Some("notifications/cancelled") => calls.cancel(&msg["params"]["requestId"]),
+            _ => {
+                if let Some(r) = handle(&msg, tree.as_deref()) {
+                    if out.send(r).is_err() {
+                        break;
+                    }
+                }
             }
         }
     }
+    // The input ended: every call still queued or running is answered (a cancelled one is not) before the server exits,
+    // as when calls ran one at a time.
+    calls.finish();
+    drop(out);
+    let _ = writer.join();
     0
+}
+
+/// RW 6.74: how many tool calls run at once. Each `Cli` call is a child process of this binary, so this bounds the
+/// children a client can start; a call past it waits its turn in the queue.
+const CALL_WORKERS: usize = 4;
+
+/// RW 6.74: one tool call waiting for, or held by, a worker — its request, and the flag its cancellation sets.
+type Job = (Value, String, std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+/// RW 6.74: the tool calls of one session. A call is queued under its request id with a cancellation flag;
+/// `notifications/cancelled` sets the flag; a worker skips a call cancelled before it starts, kills the child of one
+/// cancelled while it runs ([`run_self_until`]), and sends no reply for either, as the protocol says a server SHOULD
+/// (the `2025-06-18` revision's *Cancellation*). A Survey tool answers in-process and cannot be stopped midway: it runs
+/// to its end, and its answer is not sent.
+struct Calls {
+    tree: Option<std::path::PathBuf>,
+    out: std::sync::mpsc::Sender<Value>,
+    inflight: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>>,
+    queue: Option<std::sync::mpsc::Sender<Job>>,
+    workers: Vec<std::thread::JoinHandle<()>>,
+}
+
+impl Calls {
+    fn new(tree: Option<std::path::PathBuf>, out: std::sync::mpsc::Sender<Value>) -> Calls {
+        Calls { tree, out, inflight: Default::default(), queue: None, workers: Vec::new() }
+    }
+
+    fn inflight(
+        &self,
+    ) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>> {
+        self.inflight.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Queue a `tools/call` (a request: it has an id). The workers start with the session's first call.
+    fn start(&mut self, msg: Value) {
+        let id = msg["id"].clone();
+        let key = id.to_string();
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let mut map = self.inflight();
+            if map.contains_key(&key) {
+                let _ = self.out.send(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32600,
+                    "message": format!("a call with the id {key} is already in flight; a request id names one request") } }));
+                return;
+            }
+            map.insert(key.clone(), flag.clone());
+        }
+        let queue = self.queue.get_or_insert_with(|| {
+            let (tx, rx) = std::sync::mpsc::channel::<Job>();
+            let rx = std::sync::Arc::new(std::sync::Mutex::new(rx));
+            for _ in 0..CALL_WORKERS {
+                let (rx, tree, out, inflight) = (rx.clone(), self.tree.clone(), self.out.clone(), self.inflight.clone());
+                self.workers.push(std::thread::spawn(move || loop {
+                    let job = rx.lock().unwrap_or_else(std::sync::PoisonError::into_inner).recv();
+                    let Ok((msg, key, flag)) = job else { break };
+                    let cancelled = || flag.load(std::sync::atomic::Ordering::SeqCst);
+                    let result = if cancelled() {
+                        None
+                    } else {
+                        let p = &msg["params"];
+                        Some(call(p["name"].as_str().unwrap_or(""), &p["arguments"], tree.as_deref(), Some(&flag)))
+                    };
+                    inflight.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&key);
+                    let (Some(result), false) = (result, cancelled()) else { continue };
+                    let id = msg["id"].clone();
+                    let _ = out.send(match result {
+                        Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
+                        Err((code, message)) => {
+                            json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+                        }
+                    });
+                }));
+            }
+            tx
+        });
+        let _ = queue.send((msg, key, flag));
+    }
+
+    /// `notifications/cancelled`: the call it names stops, and is not answered. A call already answered, or one this
+    /// session never had, is ignored, as the protocol says.
+    fn cancel(&self, request: &Value) {
+        if let Some(flag) = self.inflight().get(&request.to_string()) {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Wait for every queued and running call.
+    fn finish(mut self) {
+        drop(self.queue.take());
+        for w in self.workers.drain(..) {
+            let _ = w.join();
+        }
+    }
 }
 
 /// The longest request line `delulu mcp` reads (RW 4.39's rest).
@@ -535,7 +708,7 @@ fn handle(msg: &Value, tree: Option<&std::path::Path>) -> Option<Value> {
         "initialize" => Ok(initialize(&msg["params"], tree.is_some())),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(list_json(tree.is_some())),
-        "tools/call" => call(msg["params"]["name"].as_str().unwrap_or(""), &msg["params"]["arguments"], tree),
+        "tools/call" => call(msg["params"]["name"].as_str().unwrap_or(""), &msg["params"]["arguments"], tree, None),
         m if m.starts_with("notifications/") => return None,
         "" => Err((-32600, "not a request: no `method`".to_string())),
         other => Err((-32601, format!("`{other}` is not a method this server offers"))),

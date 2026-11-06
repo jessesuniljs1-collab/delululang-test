@@ -557,11 +557,18 @@ program runs, accepted only in the host's own words for those layers — so the 
 (since 2026-09-25); on a host that cannot apply them it says so instead. Read the report rather than
 assuming the list above.
 
-**Two gaps in a sandboxed run's answer, open (`docs/REMAINING_WORK.md` rows 6.75 and 3.29):** a fault in the guest
-reaches the host's envelope and report with `diagnostics: []`. Only the guest's stderr names its code (DL0902, DL0905).
-Under `hostile-agent`, or a `--limits mem` up to 768 MiB, a deep recursion aborts the guest rather than raising DL0905,
-and the report says only `{exit 1, ran: true}`. Read a sandboxed exit 1 with an empty `diagnostics` as "the guest
-failed", with the reason on stderr.
+**A sandboxed run's fault is in its answer** (rows 6.75 and 3.29, closed 2026-11-06).
+- **Where it appears.** A fault the guest's program ends at reaches the `--json` envelope and the report's
+  `diagnostics`, as an unsandboxed run's does: `DL0902`, `DL0905` and the rest, at its call. The span is labelled
+  *"as the guest reports it"*, because it is the guest's word, as its exit status is. The host checks it first: only a
+  registered code, words bounded, and a span placed only inside the program it sent.
+- **A refusal.** A refusal the host made is the host's own diagnostic, *"refused by the host here"*, with the
+  `missing_grants` list (row 6.73).
+- **Deep recursion.** Under `hostile-agent` it is now DL0905, not an abort.
+- **Still open.**
+  - A guest that ends without saying goodbye (killed by a signal, or a channel closed) is reported as exit 1 with an
+    empty `diagnostics` and no outcome of its own (row 6.84). Read that as "the guest failed", with the reason on stderr.
+  - A sandboxed run refused before its guest starts writes no report (row 6.83).
 
 **Three isolation levels**, and the report's `level` says which one you got: **L1** `--sandbox` (a
 jailed process, all three systems); **L2** `--isolation microvm` (its own kernel under Firecracker —
@@ -655,9 +662,17 @@ with `-` is refused, so nothing can be passed through as an option. A command th
 `summary.errors` in the answer — and a refused argument is `isError: true` with the reason. To run a
 program, use the CLI: granting authority stays a person's decision.
 
-**It does not honour `notifications/cancelled` yet** (`docs/REMAINING_WORK.md` row 6.74): it answers one request at a
-time, a cancelled call still answers, and a request sent behind a long call waits for it. Set your own timeout and
-restart the server rather than counting on a cancel. A command's whole output comes back in one reply (row 6.62).
+**Calls run beside each other, and a cancel is honoured** (row 6.74, since 2026-11-06).
+- **Concurrency.** Up to four tool calls run at once; later ones wait their turn. `ping`, `initialize` and `tools/list`
+  are answered at once, even behind a slow call. Replies may come back in a different order from the requests: match
+  them by `id`.
+- **Cancellation.** `notifications/cancelled` with the call's `requestId` stops the call. Its child process is killed,
+  and no reply is sent for it, as the protocol says a server should. A Survey tool answers in-process and runs to its
+  end, but its answer is still not sent. A cancel for an id already answered is ignored.
+- **`outputSchema`.** Every tool that answers with the CLI's envelope declares it as `outputSchema`: the
+  `delulu schema envelope` document, with the command's own payload named where a closed schema describes it
+  (`authority`, `atlas`, `chain`, `policy`, `toolchain`). The Survey tools declare none.
+- **Size.** A command's whole output still comes back in one reply (row 6.62).
 
 ## [agents.registry] Registry
 

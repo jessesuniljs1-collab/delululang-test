@@ -372,19 +372,30 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     providers' half is RW 6.82. ~~RW 3.28~~ closed the same day (D-V2-215: a wrapper calls any `main` the checker
     accepts in the WASM host's shape), and ~~RW 3.29~~ too (D-V2-216: the interpreter's stack walks a ladder and its
     depth bound follows the stack it got, or half a sandbox guest's memory ceiling), and ~~RW 6.73~~ (D-V2-217: a
-    refusal names every grant the run lacks, `missing_grants`; `run --preflight` refuses before anything runs). Next:
-    RW 6.74 (the audit's §7 order);
-  - then RW 6.75, 6.83 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
+    refusal names every grant the run lacks, `missing_grants`; `run --preflight` refuses before anything runs), and
+    ~~RW 6.74~~ (D-V2-218: MCP calls on a pool of four, a cancel kills the call and sends nothing, `outputSchema`
+    from `delulu schema`), and ~~RW 6.75~~ (D-V2-219: a sandboxed guest's fault reaches the envelope and the report,
+    carried in its goodbye as the guest's word; its abnormal-end half is RW 6.84). The audit's §7 P1 items are done
+    except P1-6's answer bound (RW 6.62) and the rest of P1-7 (RW 6.60, 6.68);
+  - **NOW, at the owner's word (2026-11-06, D-V2-220): the language basics first.** *"Build basics first for DeluluLang
+    … After each build, write and run programs and softwares of varying complexities and test and verify and fix it."*
+    - The order: compound assignment (2.34) → math and the checked forms (2.38) → ranges (2.36) → strings (2.37) →
+      bitwise (2.35) → methods on a program's own types (2.33) → tuples, sets, keyed sorting, comprehensions (2.39) →
+      argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.
+    - Each is built as surface syntax and prelude over the core, so no RFC period applies; one that would change
+      `DELULU_CORE.md` gets its own decision.
+    - After each: programs of varying size, run on both engines, and what they find fixed;
+  - then the outcome contracts: RW 6.83, 6.77, 6.84, 6.76 and 6.78–6.81 (the audit's §11.7);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);
-  - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-217;
-  - the last mutant is M1155;
+  - the last decision is D-V2-220;
+  - the last mutant is M1172;
   - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #138 was the last merged (by fast-forward, the laptop, 2026-11-06).
+  - pull requests are numbered on GitHub, and #140 was the last merged (#139 and #140 together, by fast-forward, the
+    laptop, 2026-11-06).
 
 ## 11. Keep this file true
 

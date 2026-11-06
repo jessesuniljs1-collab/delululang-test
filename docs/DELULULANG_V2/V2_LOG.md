@@ -12583,3 +12583,56 @@ only `fs.write`, so an agent paid one run per missing grant. D-V2-217 takes the 
 
 **Found on the way:** RW 6.83. A `--sandbox` run refused before its guest starts writes no `--report-out` report: a
 check error wrote one without `--sandbox` and none with it. It is deferred to the outcome contracts, with RW 6.75.
+
+## 2026-11-06 — the laptop: RW 6.74 closed — MCP calls run beside the reader, a cancel is honoured, each tool declares its `outputSchema` (D-V2-218)
+
+**What.** RW 6.74 (the hidden-complexity audit §5.7, P1-6). `delulu mcp` answered one line at a time and dropped
+`notifications/cancelled`. D-V2-218:
+- tool calls go to a pool of four workers, and the reader answers `ping`, `initialize` and `tools/list` at once;
+- a cancel sets the call's flag: a queued call is skipped, a running call's child is killed, and neither is answered;
+- each CLI tool declares the `envelope` document as `outputSchema`, naming its closed payload where one exists.
+
+**Found on the way.** The closed `chain` schema missed `capabilities[].requested_computed`, and no test had validated
+the chain payload. The schema is fixed, and `schema_cli` now validates the chain of every corpus program.
+
+**Evidence.**
+- Two new `mcp_cli` tests, red on the old server (the ping waited behind the call; no `outputSchema`).
+- The cancellation test's kill is measured against a control on the same machine: a 16,000-function `check`, 3.2 s on
+  the laptop.
+- The `schema_cli` chain check was red before the schema fix.
+- Mutants M1156–M1161 were all red, the kill mutant by the timing alone (3.19 s against 3.22 s). Control green.
+
+**The owner, meanwhile:** *"are language basics being currently built for DeluluLang"*. Answered: not yet. The 25 of 39
+everyday constructs refused (RW 1.15, 2.33–2.40, §8 items 7 and 8) come after the outcome contracts, the DIR and
+review-surface fixes, the answer contracts and the OpenShell pin bump, in the reviews' order. They can be moved ahead
+at his word, and whether 2.0 waits for them is still his choice.
+
+## 2026-11-06 — the laptop: #139 and #140 landed; RW 6.75 closed — a sandboxed run's fault is in its envelope and its report (D-V2-219); the owner: the language basics first
+
+**#139 (RW 3.29) and #140 (RW 6.73), read and landed.**
+- `42239453176` on `e9a8974` and `42239809792` on `e6d4785`: each 14 jobs success and 2 skipped.
+- Both landed by one fast-forward of `master` to `e6d4785`. Their push run is the next to read.
+- `laptop/stack-ladder-witness` was deleted, never merged.
+
+**What.** RW 6.75 (the hidden-complexity audit's second pass, §11.2). Under `--sandbox` a fault in the guest reached
+the envelope and the report as `diagnostics: []`. D-V2-219:
+- the guest's goodbye carries its fault, as an optional field, so the protocol version is unchanged;
+- the host checks it before a reader sees it: a registered code only, bounded words, a span inside the program, and a
+  label saying it is the guest's report;
+- it is reported in both places, the host's own refusal winning when it is the same event;
+- a sandboxed DL0703 carries `missing_grants` too.
+
+**Split off:** RW 6.84, a guest that ends without a goodbye, which is not witnessable on this binary.
+
+**Evidence.**
+- Two new `sandbox_run_cli` tests, red on the old code.
+- Two unit tests: the host's checks, and the frame's bytes and bounds.
+- Mutants M1162–M1172 were all red, and the controls green.
+- Every sandbox target is green on the laptop.
+
+**The owner, during the work:** *"Build basics first for DeluluLang. If u are building something big now finish that
+first and document it properly. Update all docs and claude code routine. After each build, write and run programs and
+softwares of varying complexities and test and verify and fix it. U can and u should remove, edit, delete, change codes
+whenever needed, Anyway history of code changes will be github."* RW 6.75 was finished first, as he said. From here the
+language basics (RW 2.33–2.41, §8 items 7 and 8) come before the remaining review items. After each one, programs of
+varying size are written, run and fixed (D-V2-220).

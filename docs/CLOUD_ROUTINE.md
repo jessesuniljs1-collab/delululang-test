@@ -296,18 +296,29 @@ another OS, and then takes about seven minutes itself (run 5).
      refusals come before effects, not after them. Its artifacts run, and MCP is bounded and cancellable. Text stays
      the canonical form. OpenShell is an optional backend (its pin bumped, RW 7.28), and the PS-C microVM is frozen. The
      verification recommends holding 2.0 behind an ordinary-agent-utility bar: argv and environment, exit outcomes,
-     JSON, math, strings, methods and WASM parity (RW §8 items 7 and 8). The owner has not yet answered on that.
+     JSON, math, strings, methods and WASM parity (RW §8 items 7 and 8). The owner, 2026-11-06: *"Build basics first"*,
+     so the basics now lead the order (D-V2-220). Whether 2.0 waits for them is still his call.
    - **The order:**
      1. ~~RW 4.95 (R-Get enforced at `p.get`, HIGH), with 4.96 and 4.97~~ — done (on-demand routine run 20, D-V2-210 to
         D-V2-212);
      2. the package-blind fast paths: ~~RW 6.72 with 6.69~~ — done (the laptop, 2026-11-06, D-V2-214; the other LSP
         providers are RW 6.82), ~~RW 3.28~~ — done (D-V2-215), ~~RW 3.29~~ — done (D-V2-216), ~~RW 6.73~~ — done
-        (D-V2-217) — then RW 6.74;
-     3. the outcome contracts: RW 6.75, 6.83 and 6.77, then 6.76 and 6.78–6.81;
-     4. the DIR and review-surface defects: RW 4.93, 4.94, 5.7, 6.67 and 6.68;
-     5. the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88;
-     6. RW 7.28;
-     7. the language basics (RW §8 items 7 and 8), then RW 3.24.
+        (D-V2-217), ~~RW 6.74~~ — done (D-V2-218), ~~RW 6.75~~ — done (D-V2-219);
+     3. **the language basics, FIRST from 2026-11-06 at the owner's word** (D-V2-220: *"Build basics first for
+        DeluluLang … After each build, write and run programs and softwares of varying complexities and test and verify
+        and fix it"*):
+        - in this order: compound assignment (RW 2.34); math and the checked forms (2.38); ranges (2.36); strings
+          (2.37); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
+          comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
+          and RW 3.24;
+        - built as surface syntax and prelude over the core, so the core's answers do not move and no RFC period
+          applies; a basic that would change `DELULU_CORE.md` takes its own decision;
+        - after each, programs of varying size are written and run on both engines, and what they find is fixed or
+          recorded: a one-liner, an everyday utility, and a few-hundred-line program using every basic built so far;
+     4. the outcome contracts: RW 6.83 and 6.77, then 6.84, 6.76 and 6.78–6.81;
+     5. the DIR and review-surface defects: RW 4.93, 4.94, 5.7, 6.67 and 6.68;
+     6. the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88;
+     7. RW 7.28.
    - Each is a milestone of its own: witnessed red first, fixed, mutant-tested and recorded. The decisions the reviews
      leave to the owner (holding 2.0, the OpenShell verdict, and the rest in `AI_ONBOARDING.md` §10) wait for his
      answer.
