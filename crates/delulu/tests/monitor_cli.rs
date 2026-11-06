@@ -1699,19 +1699,32 @@ fn a_watch_held_outside_the_daemon_lets_its_dead_man_fire() {
     );
     assert_eq!(inspect_state(&f, &m), "revoked", "{report:#}");
     // RW 4.98's timing, both halves, so the next red of RW 7.25 names its path. The monitor names its last beats and its
-    // longest turn, which held the read: no shorter than the period its dead-man fired on.
+    // turns. The read held the turn that ended the watch — its beat after the read was the refused one — and that turn names
+    // the read as its step, no shorter than the period its dead-man fired on (RW 7.25: the step, not only the turn).
     let progress = seen
         .iter()
         .find(|l| l.contains("its last beats, in ms since its dead-man was armed"))
         .unwrap_or_else(|| panic!("the monitor did not name its beats and turns: {seen:?}"));
-    let longest: u64 = progress
-        .split("its longest turn of the watch took ")
+    let read: u64 = progress
+        .split("its last turn, which ended the watch, took ")
         .nth(1)
+        .and_then(|turn| turn.split("reading what was appended ").nth(1))
         .and_then(|rest| rest.split(' ').next())
         .and_then(|n| n.parse().ok())
-        .unwrap_or_else(|| panic!("no longest turn in: {progress}"));
-    assert!(longest >= PERIOD_MS, "the turn that held the read was not counted: {longest} ms against {PERIOD_MS} ms\n{progress}");
+        .unwrap_or_else(|| panic!("no read step in the turn that ended the watch: {progress}"));
+    assert!(read >= PERIOD_MS, "the step that held the watch was not counted: {read} ms against {PERIOD_MS} ms\n{progress}");
     assert!(progress.contains("by the watch") && progress.contains("kept"), "{progress}");
+    // Its sleeps are measured, not assumed: a sleep lasts at least what was asked.
+    let (slept, asked): (u64, u64) = progress
+        .split("its longest sleep between turns took ")
+        .nth(1)
+        .and_then(|rest| {
+            let slept = rest.split(' ').next()?.parse().ok()?;
+            let asked = rest.split(" of the ").nth(1)?.split(' ').next()?.parse().ok()?;
+            Some((slept, asked))
+        })
+        .unwrap_or_else(|| panic!("no longest sleep in: {progress}"));
+    assert!(asked > 0 && slept >= asked, "a sleep of {slept} ms against {asked} ms asked was not measured: {progress}");
     // The daemon names the same dead-man's last beats when it judges it, with what was waiting.
     let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_default();
     let judged = log
@@ -1719,6 +1732,38 @@ fn a_watch_held_outside_the_daemon_lets_its_dead_man_fire() {
         .find(|l| l.contains(&format!("the dead-man on `{m}` was judged at +")))
         .unwrap_or_else(|| panic!("broker.log did not name the fired dead-man's beats:\n{log}"));
     assert!(judged.contains("(kept)") && judged.contains("connection(s) were being read or handed over"), "{judged}");
+    // RW 7.25: one time line. Each line names its start on the wall clock, so the monitor's last kept beat — sent, then
+    // answered — is one the daemon stamped between the two.
+    let unix = |line: &str, after: &str| -> u128 {
+        line.split(after)
+            .nth(1)
+            .and_then(|rest| rest.split(" ms)").next())
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("no wall-clock time after `{after}` in: {line}"))
+    };
+    let armed = unix(progress, "since its dead-man was armed (unix time ");
+    let serving = unix(judged, "since this daemon began serving (unix time ");
+    let (sent, answered) = progress
+        .split("sent +")
+        .skip(1)
+        .filter_map(|beat| {
+            let sent: u128 = beat.split(' ').next()?.parse().ok()?;
+            let rest = beat.split("(answered in ").nth(1)?;
+            let answered: u128 = rest.split(' ').next()?.parse().ok()?;
+            rest.starts_with(&format!("{answered} ms, kept)")).then_some((sent, answered))
+        })
+        .last()
+        .unwrap_or_else(|| panic!("no kept beat in: {progress}"));
+    let stamped: Vec<u128> = judged.split("stamped +").skip(1).filter_map(|b| b.split(',').next()?.parse().ok()).collect();
+    // Milliseconds are rounded on both sides, and the two clocks are read a moment apart: 50 ms of slack, against the
+    // whole seconds a wrong start would be off by.
+    let (from, to) = (armed + sent, armed + sent + answered);
+    assert!(
+        stamped.iter().any(|s| serving + s + 50 >= from && serving + s <= to + 50),
+        "the monitor's last kept beat, sent at unix {from} ms and answered by {to} ms, is not one the daemon stamped \
+         (its stamps: {:?}):\n{progress}\n{judged}",
+        stamped.iter().map(|s| serving + s).collect::<Vec<_>>()
+    );
     eprintln!("measured: one read of a {bytes}-byte record took {took:?} here (period {PERIOD_MS} ms)\n{progress}\n{judged}");
     drop(guard);
     let _ = std::fs::remove_dir_all(f.state.parent().unwrap());

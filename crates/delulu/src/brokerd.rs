@@ -760,6 +760,23 @@ fn reader_delays(kind: &str, read: std::time::Duration, hand_over: std::time::Du
     }
 }
 
+/// RW 7.25's timing: one moment on both of this host's clocks — the monotonic one every interval here is measured on, and
+/// the wall clock as milliseconds since the Unix epoch. The daemon times its beats from when it began serving and a monitor
+/// times its own from when its dead-man was armed; each names its moment's wall-clock time, so the two lines can be put on
+/// one time line and a beat followed from its sending to its stamping.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Moment {
+    pub(crate) instant: std::time::Instant,
+    pub(crate) unix_ms: u128,
+}
+
+impl Moment {
+    pub(crate) fn now() -> Moment {
+        let unix_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_millis());
+        Moment { instant: std::time::Instant::now(), unix_ms }
+    }
+}
+
 /// One beat as the serve loop saw it: stamped by its reader, taken by the loop, handled, and its answer written (or not,
 /// with why), refused (with its code) or kept. Handling and writing are apart because a reply can be slow or fail after the
 /// handler is done (the independent review's finding 3).
@@ -807,18 +824,11 @@ impl BeatTimes {
         self.0.remove(node);
     }
 
-    /// The line naming a fired dead-man's last beats, every time in milliseconds since `serving` (when the loop began), and
-    /// what was waiting at `judged`: requests already handed over to the loop, and connections a reader still held — being
-    /// read, or read and not yet handed over. Forgets the node's beats.
-    fn judged(
-        &mut self,
-        node: &str,
-        serving: std::time::Instant,
-        judged: std::time::Instant,
-        handed_over: usize,
-        readers: usize,
-    ) -> String {
-        let at = |t: std::time::Instant| t.saturating_duration_since(serving).as_millis();
+    /// The line naming a fired dead-man's last beats, every time in milliseconds since `serving` (when the loop began, named
+    /// on the wall clock too — RW 7.25), and what was waiting at `judged`: requests already handed over to the loop, and
+    /// connections a reader still held — being read, or read and not yet handed over. Forgets the node's beats.
+    fn judged(&mut self, node: &str, serving: Moment, judged: std::time::Instant, handed_over: usize, readers: usize) -> String {
+        let at = |t: std::time::Instant| t.saturating_duration_since(serving.instant).as_millis();
         let beats = self.0.remove(node).unwrap_or_default();
         let named = if beats.is_empty() {
             "none since it was armed".to_string()
@@ -842,11 +852,12 @@ impl BeatTimes {
                 .join("; ")
         };
         format!(
-            "delulu broker: the dead-man on `{}` was judged at +{} ms; its last beats, in ms since this daemon began serving: \
-             {named}; then {handed_over} request(s) were handed over and waiting, and {readers} connection(s) were being read \
-             or handed over (RW 4.98)",
+            "delulu broker: the dead-man on `{}` was judged at +{} ms; its last beats, in ms since this daemon began serving \
+             (unix time {} ms): {named}; then {handed_over} request(s) were handed over and waiting, and {readers} \
+             connection(s) were being read or handed over (RW 4.98, RW 7.25)",
             delulu_diag::terminal_line(node),
-            at(judged)
+            at(judged),
+            serving.unix_ms
         )
     }
 }
@@ -2144,9 +2155,9 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // earliest of them while a revocation goes first. Bounded as the line is: what does not fit waits in `requests`.
     let mut waiting: std::collections::VecDeque<Whole> = std::collections::VecDeque::new();
     // RW 4.98's timing: each dead-man's last beats as this loop saw them, named in `broker.log` when it fires, on one time
-    // line — milliseconds since the daemon began serving.
+    // line — milliseconds since the daemon began serving, a moment named on the wall clock too (RW 7.25).
     let mut beat_times = BeatTimes::default();
-    let serving = std::time::Instant::now();
+    let serving = Moment::now();
     loop {
         // P8-04 step 5 (D-V2-106): wait for the next whole request — or, while a dead-man is armed, no longer
         // than its deadline. Dead-men are fired BEFORE the next request is handled, whichever woke the loop, so
@@ -3741,8 +3752,8 @@ mod tests {
         let both = reader_delays("Revoke", ms(150), ms(300)).unwrap();
         assert!(both.contains("a Revoke request was stamped 150 ms") && both.contains("held it 300 ms more"), "{both}");
 
-        let serving = std::time::Instant::now();
-        let at = |n: u64| serving + ms(n);
+        let serving = Moment { instant: std::time::Instant::now(), unix_ms: 1_762_000_000_000 };
+        let at = |n: u64| serving.instant + ms(n);
         let mut times = BeatTimes::default();
         let all = |_: &str| true;
         let beat = |s: u64, t: u64, h: u64, w: Result<u64, &str>, refused: Option<&str>| BeatTime {
@@ -3759,6 +3770,8 @@ mod tests {
         times.record("g_m", beat(70, 900, 901, Err("Broken pipe (os error 32)"), Some("DL1403")), all);
         let line = times.judged("g_m", serving, at(905), 2, 3);
         assert!(line.contains("judged at +905 ms"), "{line}");
+        // RW 7.25: the time line's start on the wall clock, so a monitor's beats can be put on it.
+        assert!(line.contains("since this daemon began serving (unix time 1762000000000 ms): "), "{line}");
         assert!(
             !line.contains("stamped +20,") && line.contains("stamped +30, taken +31, handled +32, written +33 (kept)"),
             "the last four only, handled and written apart: {line}"
