@@ -12311,3 +12311,66 @@ The counters: D-V2-209, M1092, 157 codes, 366 anchors.
 
 **Changed:** RW 7.25 and RW 4.98's evidence, `AI_ONBOARDING.md` §10, this entry, the sync log and `docs/survey/*`. No
 code.
+
+## 2026-11-06 — the laptop: RW 7.25 re-run as it failed, and reproduced; both timing lines on one clock
+
+**Why.** The owner: *"Push everything to GitHub repo. Why isn't it solved yet"*; then *"Search web about this thing"*; then
+*"Add notes for next sessions and cloud sessions. Update .md files. Finish this thing. We have to continue actual
+development and improvements to DeluluLang also according to the review files also, That's more important"*.
+
+**Pushed.** Every commit was already on `origin`. What was not were the laptop's memory notes written since
+2026-11-05. Six notes, the release-program note and the index are now in `docs/assistant-memory/`.
+
+**Why RW 7.25 was not solved.** It had not been reproduced. Worse, the six green runs of 2026-11-05 ran the one test alone
+through a `witness.yml` filter. Both reds came in push runs, where the whole `monitor_cli` target runs its tests side by
+side, each starting daemons and monitors. A test run alone was a different experiment.
+
+**What was done:**
+- **`witness.yml`** takes `repeat` (runs of a selection in one job, each counted) and `stress` (busy loops, one CPU each).
+  A repeated run first says what the runs share: the CPUs; on Windows the real-time scanner's status; on macOS the
+  low-priority throttle, the step's disk I/O policy and any launchd `ProcessType`.
+- **Round 1, the whole target on `master`'s code: 64 of 64 green.**
+  - Windows: 20 (`42146850780`), and 12 beside three busy loops (`42146857227`).
+  - macOS: 20 (`42146863757`), and 12 beside two (`42146870039`).
+  - The laptop: 15 of 15, and 30 of 30 beside 16 busy loops.
+  - GitHub's Windows runners run with the real-time scanner off (`RealTimeProtectionEnabled: False`).
+- **Round 2, about 1,100 runs. One red: macOS `42148295822`, run 9 of 150, beside two busy loops on a five-CPU runner.**
+  - Read so far: macOS `42148279292`, 150 of 150 green.
+  - The other six are read in the next entry: Windows `42148221551`, `42148230468`, `42148239197`, `42148250027`; macOS
+    `42148266268`, `42148287472`.
+- **What the red shows, from both lines:**
+  - The monitor's last kept beats were sent at +1960, +2004, +2004 and +2092 ms after its dead-man was armed, each
+    answered in 0 ms. Its next was sent at +3944 ms, and refused.
+  - The daemon stamped, took, handled and answered each of those four in the same millisecond, and fired at its
+    deadline.
+  - So the daemon lost and delayed nothing. The monitor sent no beat for 1,852 ms, and its beater, which beats only
+    while the watch waits on the daemon, sent none either. The silence was the monitor's own: a step outside a request
+    (its follower's read, its rules, its sleep), or the whole process not run.
+  - It began about 2.1 s into the watch, when the test's delegation is appended. The macOS red of 2026-10-29 was
+    revoked right after that delegation too.
+- **`d3da12b`: the two lines on one clock, and the monitor's turns step by step.**
+  - The daemon's line names when it began serving, and the monitor's when its dead-man was armed, each in ms since the
+    Unix epoch. On the laptop the monitor's last kept beat was sent at unix …360436 ms, and the daemon stamped it at
+    …360436 ms.
+  - The monitor names its longest whole turn step by step, the turn that ended the watch apart from it, and its longest
+    sleep between turns.
+  - Mutants M1093–M1098 are each red.
+- **Round 3, on `d3da12b`:** macOS `42153802328` and `42153809227` beside two busy loops, `42153816861` beside four;
+  Windows `42153823661` beside three, `42153830411` beside six. A red there names the step.
+- **A lead from the web, to be measured, not claimed:**
+  - launchd throttles the CPU and disk of a job with no `ProcessType`, or a `Background` one; its children inherit
+    the disk policy.
+  - GitLab's runner ran jobs about six times slower under a LaunchAgent until it was given `ProcessType Interactive`
+    (gitlab-runner issue 29089).
+  - A monitor held in a file read while other tests write long chains would look like this red. The repeated
+    witness now prints that policy on macOS.
+
+**Where RW 7.25 stands.** Reproduced under load. The daemon heard every beat at once, and the monitor itself went silent.
+Which step held it is not yet named. A green run says nothing here; a red with `d3da12b`'s lines names the step. The
+owner set the priority: development and the reviews' improvements come first (`HANDOFF.md` §11.1).
+
+**Changed:**
+- code: `crates/delulu/src/brokerd.rs`, `crates/delulu/src/monitor_cmd.rs`, `crates/delulu/tests/monitor_cli.rs`;
+- workflow: `.github/workflows/witness.yml`;
+- records: RW 7.25, `HANDOFF.md` §11.1 and §11.2, `AI_ONBOARDING.md` §10, `CHANGELOG.md`, `docs/assistant-memory/`,
+  this entry, the sync log, `docs/survey/*`.

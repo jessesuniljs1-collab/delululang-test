@@ -98,6 +98,16 @@ jobs:
               "Get-MpComputerStatus | Select-Object AMRunningMode,RealTimeProtectionEnabled,OnAccessProtectionEnabled | Format-List" \
               || echo "(the scanner's status could not be read)"
           fi
+          # On macOS, the policy a background launchd job runs under (RW 7.25): a job started with no ProcessType,
+          # or a Background one, is CPU- and disk-throttled, and its children inherit the disk policy (0 default,
+          # 3 throttle, 4 utility, 5 standard). Measured, not assumed.
+          if [ "$RUNNER_OS" = macOS ]; then
+            echo "lowpri throttle: $(sysctl -n debug.lowpri_throttle_enabled 2>/dev/null || echo '?')"
+            python3 -c "import ctypes; c = ctypes.CDLL(None); print('disk I/O policy of this step: process', c.getiopolicy_np(0, 0), 'thread', c.getiopolicy_np(0, 1))" \
+              || echo "(the disk I/O policy could not be read)"
+            grep -H -A1 ProcessType ~/Library/LaunchAgents/*.plist /Library/LaunchDaemons/*.plist 2>/dev/null \
+              || echo "(no ProcessType in a readable launchd plist)"
+          fi
           cargo test -p "$PKG" "${sel[@]}" --no-run
           hogs=()
           trap 'for h in "${hogs[@]}"; do kill "$h" 2>/dev/null; done' EXIT
