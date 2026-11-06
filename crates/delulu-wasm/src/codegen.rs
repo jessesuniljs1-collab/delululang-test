@@ -1907,6 +1907,16 @@ fn compile_module_typed(
         user_types.push(next_type);
         next_type += 1;
     }
+    // RW 3.28: the host calls `main` with the root handle and takes no result. The interpreter passes `root` only to a
+    // `main` that takes it and discards what `main` returns, so a `main` of any other shape it runs — `fn main()`, or one
+    // that returns a value — is called through a wrapper exported as `main` in the host's shape, and its own export is
+    // left out. One that takes something other than `root: Root` the host has nothing to pass to: refused (DL1201).
+    let main_wrapper = main_wrapper_plan(&env, &fns)?;
+    let main_wrapper_type = next_type;
+    if main_wrapper.is_some() {
+        types.ty().function([ValType::I32], []);
+        next_type += 1;
+    }
     // Stage 7 phase 7h: the subset gate runs EARLY — one out-of-subset actor field or
     // member parameter refuses the WHOLE module (honest DL1201 interpreter fallback)
     // before any function body compiles, so no partial artifact and no late panic path.
@@ -2073,6 +2083,9 @@ fn compile_module_typed(
     if needs_str_eq {
         funcsec.function(concat_type); // __str_eq(a, b) -> Bool
     }
+    if main_wrapper.is_some() {
+        funcsec.function(main_wrapper_type); // RW 3.28: `main` in the host's shape, last
+    }
 
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
@@ -2080,6 +2093,9 @@ fn compile_module_typed(
     // writes the file content + `Result[Str, IoErr]` cells into the guest heap — Phase 3p).
     exports.export("__heap", ExportKind::Global, HEAP_GLOBAL);
     for (i, f) in fns.iter().enumerate() {
+        if main_wrapper.as_ref().is_some_and(|w| w.main == i) {
+            continue; // the wrapper is `main` (RW 3.28)
+        }
         exports.export(&f.name.name, ExportKind::Func, user_base + i as u32);
     }
     // Stage 7 phase 7h: export each actor member under the `actor$<Actor>$<member>` convention, at
@@ -2102,6 +2118,10 @@ fn compile_module_typed(
     }
     if needs_str_eq {
         imp.str_eq = late;
+        late += 1;
+    }
+    if main_wrapper.is_some() {
+        exports.export("main", ExportKind::Func, late);
     }
 
     let mut code = CodeSection::new();
@@ -2162,6 +2182,9 @@ fn compile_module_typed(
     }
     if needs_str_eq {
         code.function(&str_eq_fn());
+    }
+    if let Some(w) = &main_wrapper {
+        code.function(&main_wrapper_fn(w, user_base + w.main as u32));
     }
 
     // The type descriptors the bodies named follow the literals, so the heap starts past both.
@@ -6310,6 +6333,50 @@ fn str_eq_fn() -> Function {
     )
 }
 
+/// RW 3.28: how the host's `main(root)`, which takes no result, reaches a program's `main` of another shape.
+struct MainWrapper {
+    /// The program's `main`, by its index among the compiled functions.
+    main: usize,
+    /// Whether it takes `root`, the one argument the host passes.
+    takes_root: bool,
+    /// How many values it returns: each is dropped, as the interpreter discards what `main` returns.
+    results: usize,
+}
+
+/// The wrapper the module needs, if any: none without a compiled `main`, or with one already in the host's shape
+/// (`fn main(root: Root)` returning `Unit`). A `main` that takes anything but `root: Root` is refused (DL1201): the host
+/// has nothing else to pass, and the interpreter would bind `root` to it.
+fn main_wrapper_plan(env: &EnumEnv, fns: &[&FnDecl]) -> Result<Option<MainWrapper>, CompileError> {
+    let Some(main) = fns.iter().position(|f| f.name.name == "main") else { return Ok(None) };
+    let f = fns[main];
+    let takes_root = match f.params.as_slice() {
+        [] => false,
+        [p] if matches!(wasm_ty(env, &p.ty), Some(Ty::Root)) => true,
+        _ => {
+            return Err(CompileError::Unsupported(
+                "a `main` that takes something other than `root: Root` — the WASM host passes `main` the root alone".into(),
+            )
+            .at(f.name.span))
+        }
+    };
+    let results = ret_ty(env, f).map_or(0, |t| result_valtypes(t).len());
+    Ok((!takes_root || results > 0).then_some(MainWrapper { main, takes_root, results }))
+}
+
+/// The wrapper's body: pass the root on when `main` takes it, call it, drop what it returns.
+fn main_wrapper_fn(w: &MainWrapper, callee: u32) -> Function {
+    let mut f = Function::new([]);
+    if w.takes_root {
+        f.instruction(&Instruction::LocalGet(0));
+    }
+    f.instruction(&Instruction::Call(callee));
+    for _ in 0..w.results {
+        f.instruction(&Instruction::Drop);
+    }
+    f.instruction(&Instruction::End);
+    f
+}
+
 fn str_len_fn() -> Function {
     use Instruction::*;
     build(
@@ -6430,6 +6497,22 @@ mod placed_refusal_tests {
         let s = CompileError::SecretInGuest("a secret".into()).at(outer);
         assert_eq!((s.code(), s.span()), ("DL1205", Some(outer)));
         assert_eq!(CompileError::Unsupported("x".into()).span(), None);
+    }
+
+    /// RW 3.28: a `main` that takes anything but `root: Root` is refused, placed at its name, rather than wrapped — the
+    /// host passes `main` the root alone. The checker refuses such a `main` first (DL0401, DL0403), so this holds the
+    /// unchecked path (`compile_module`).
+    #[test]
+    fn a_main_the_host_cannot_call_is_refused_at_its_name() {
+        for src in ["module m\n\nfn main(x: Int) -> Int {\n    x\n}\n", "module m\n\nfn main(r: Root, n: Int) {\n}\n"] {
+            let (module, diags) = delulu_syntax::parse_file(0, src);
+            assert!(diags.iter().all(|d| !d.is_error()), "{diags:?}");
+            let e = compile_module(&module).expect_err("refused");
+            assert_eq!(e.code(), "DL1201", "{src}: {}", e.message());
+            assert!(e.message().contains("root: Root"), "{}", e.message());
+            let at = src.find("main").unwrap() as u32;
+            assert_eq!(e.span().map(|s| s.start), Some(at), "placed at `main`");
+        }
     }
 }
 

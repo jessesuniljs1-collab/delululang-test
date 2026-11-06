@@ -955,8 +955,12 @@ fn every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter() {
     let dir = std::env::temp_dir().join(format!("delulu_main_shapes_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let shapes: [(&str, &str, &[&str]); 5] = [
+    // The wrapper is the module's last function, so two shapes make the code generator emit its late helpers first: a
+    // list (`__list_new`, `__list_slot`) and a string comparison (`__str_eq`).
+    let shapes: [(&str, &str, &[&str]); 7] = [
         ("no_root", "module m\n\nfn main() {\n    let x = 1 + 2\n}\n", &[]),
+        ("a_list", "module m\n\nfn main() -> Int {\n    let xs = [1, 2, 3]\n    xs.len()\n}\n", &[]),
+        ("a_str_eq", "module m\n\nfn main() -> Bool {\n    \"a\" == \"b\"\n}\n", &[]),
         ("an_int", "module m\n\nfn main() -> Int {\n    6 * 7\n}\n", &[]),
         ("a_str", "module m\n\nfn main() -> Str {\n    \"done\"\n}\n", &[]),
         (
