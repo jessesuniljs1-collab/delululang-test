@@ -297,3 +297,72 @@ fn every_atlas_node_in_the_examples_resolves_and_round_trips_through_its_own_tex
     assert!(witnessed >= 40, "the corpus witnessed only {witnessed} nodes");
     let _ = std::fs::remove_dir_all(&work);
 }
+
+/// A copy of the shipped `examples/greeter` package in a scratch directory: its manifest allows
+/// `Read` and `Write`, and its entry module calls the pure `salutation` its other module exports.
+fn greeter(tag: &str) -> PathBuf {
+    let dir = scratch(tag);
+    let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/greeter");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    for f in ["delulu.toml", "src/main.delulu", "src/greetings.delulu"] {
+        std::fs::copy(from.join(f), dir.join(f)).unwrap();
+    }
+    dir
+}
+
+/// RW 6.69: inside a package, an edit is checked as the package — the check `delulu check DIR` runs
+/// once it is written — and its authority delta is the package's. Checked alone, a module that imports
+/// another never checked: a body adding `Net` and `evil.example.com` to the greeter's `main` answered
+/// `before: null`, `widened: null` and 0 errors under `--if-checks` (so it was written), though
+/// `check .` refuses it (DL1009); a body calling the imported `salutation` was refused as DL0301
+/// though the package checks clean with it; and `fn:BOGUSPKG/greeter.main` was accepted.
+#[test]
+fn inside_a_package_an_edit_is_checked_and_attributed_as_the_package() {
+    let dir = greeter("package");
+    let f = dir.join("src").join("main.delulu");
+    let original = std::fs::read_to_string(&f).unwrap();
+    let atlas: Value = serde_json::from_slice(
+        &Command::new(bin()).args(["atlas", ".", "--json"]).current_dir(&dir).env("DELULU_NO_FIRST_RUN", "1").output().unwrap().stdout,
+    )
+    .unwrap();
+    let ids: Vec<&str> = atlas["atlas"]["nodes"].as_array().unwrap().iter().filter_map(|n| n["id"].as_str()).collect();
+    assert!(ids.contains(&"fn:greeter/greeter.main"), "the Atlas names main by its package: {ids:?}");
+
+    let widening = "fn main(root: Root) ! {Write, Net} {\n    let out = root.console()\n    let client = root.http([\"evil.example.com\"])\n    \
+                    match client.get(\"https://evil.example.com/x\") {\n        Ok(body) => out.println(body)\n        \
+                    Err(e) => out.println(\"no\")\n    }\n}\n";
+    // It calls no import, so checked alone it checks: the shape that was written under --if-checks.
+    std::fs::write(dir.join("widen.txt"), widening).unwrap();
+    let main_id = "fn:greeter/greeter.main";
+    let path = "src/main.delulu";
+
+    // Under --if-checks the widening edit does not check — its manifest refuses `Net` — and is not written.
+    let (code, env) = edit(&dir, &[path, "--expect-hash", &hash(&f), "--node", main_id, "--with", "@widen.txt", "--if-checks"]);
+    assert_eq!(code, 1, "{env:#}");
+    assert_eq!(env["edit"]["written"], false, "{env:#}");
+    let codes: Vec<&str> = env["diagnostics"].as_array().unwrap().iter().filter_map(|d| d["code"].as_str()).collect();
+    assert!(codes.contains(&"DL1009"), "the manifest ceiling is in the answer: {codes:?}");
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), original, "nothing was written");
+    // And the delta is the package's: what main may do before, and what the edit adds.
+    let auth = &env["edit"]["authority"];
+    assert_eq!(auth["before"]["effects"], json!(["Write"]), "{auth:#}");
+    assert_eq!(auth["widened"], json!(["Net", "net=evil.example.com"]), "{auth:#}");
+
+    // A body that calls the imported function checks, as the package does with it, and is written.
+    std::fs::write(dir.join("calls.txt"), "fn main(root: Root) ! {Write} {\n    root.console().println(salutation(\"you\"))\n}\n")
+        .unwrap();
+    let (code, env) = edit(&dir, &[path, "--expect-hash", &hash(&f), "--node", main_id, "--with", "@calls.txt", "--if-checks"]);
+    assert_eq!(code, 0, "{env:#}");
+    assert_eq!((env["edit"]["written"].clone(), env["summary"]["errors"].clone()), (json!(true), json!(0)), "{env:#}");
+    assert_eq!(env["edit"]["authority"]["widened"], json!([]), "{env:#}");
+    let check = Command::new(bin()).args(["check", "."]).current_dir(&dir).env("DELULU_NO_FIRST_RUN", "1").output().unwrap();
+    assert_eq!(check.status.code(), Some(0), "the package checks as the edit said: {}", String::from_utf8_lossy(&check.stderr));
+
+    // An id must name the file's own package.
+    for (bad, says) in [("fn:BOGUSPKG/greeter.main", "names the package `BOGUSPKG`"), ("fn:greeter.main", "names no package")] {
+        let (code, env) = edit(&dir, &[path, "--expect-hash", &hash(&f), "--node", bad, "--with", "@widen.txt", "--dry-run"]);
+        assert_eq!(code, 2, "{bad}: {env:#}");
+        assert!(env["edit"]["refused"].as_str().unwrap_or_default().contains(says), "{bad}: {env:#}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -547,6 +547,12 @@ mod tests {
         assert!(resolve_node(src, "fn:m/m.gone", None).unwrap_err().contains("stale"));
         assert!(resolve_node(src, "fn:other/other.b", None).is_err(), "another module's id");
         assert!(resolve_node(src, "mod:m/m", None).is_err());
+        // RW 6.69: the package part is read, not cut off — a loose file's ids name its module there, a
+        // package's module's ids name its package, and an id with none is not an Atlas id.
+        assert!(resolve_node(src, "fn:BOGUSPKG/m.b", None).unwrap_err().contains("names the package `BOGUSPKG`"));
+        assert!(resolve_node(src, "fn:m.b", None).unwrap_err().contains("names no package"));
+        assert!(resolve_node(src, "fn:app/m.b", Some("app")).is_ok(), "a module of the package `app`");
+        assert!(resolve_node(src, "fn:m/m.b", Some("app")).unwrap_err().contains("a module of the package `app`"));
         let item = canonical_item("fn b()->Int{3}", Kind::Fn).unwrap();
         assert!(item.starts_with("fn b() -> Int {"), "formatted: {item}");
         assert!(canonical_item("fn b() -> Int { 3 }\nfn c() {}", Kind::Fn).is_err(), "two items");

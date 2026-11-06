@@ -1250,6 +1250,53 @@ mod tests {
     }
     const LIB: &str = "[package]\nname=\"p\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\n";
 
+    /// RW 6.69, 6.72: a file is a module of the package whose `src/` holds it — at any depth — and of no
+    /// package when it lies beside a manifest but outside its `src/`, or under no manifest at all.
+    #[test]
+    fn a_file_is_a_module_of_the_package_whose_src_holds_it() {
+        let dir = scratch("package_root_of");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/a.delulu", "module a\n");
+        write(&dir, "src/deep/b.delulu", "module deep.b\n");
+        write(&dir, "tools/c.delulu", "module c\n");
+        let root = Some(crate::package::canonical_file(&dir));
+        assert_eq!(package_root_of(&dir.join("src/a.delulu")), root);
+        assert_eq!(package_root_of(&dir.join("src/deep/b.delulu")), root, "at any depth under src/");
+        assert_eq!(package_root_of(&dir.join("src/unsaved.delulu")), root, "a file not on disk yet");
+        assert_eq!(package_root_of(&dir.join("tools/c.delulu")), None, "beside the manifest, outside src/");
+        let loose = std::env::temp_dir().join("delulu_deps_test_loose_root_of");
+        let _ = fs::remove_dir_all(&loose);
+        write(&loose, "m.delulu", "module m\n");
+        assert_eq!(package_root_of(&loose.join("m.delulu")), None, "under no manifest");
+    }
+
+    /// RW 6.69, 6.72: an overlay's text is checked in place of the file it names, and an overlaid module
+    /// not on disk yet is a module of the package.
+    #[test]
+    fn an_overlay_is_checked_in_place_of_the_disk() {
+        let dir = scratch("overlay");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/a.delulu", "module a\n\npub fn one() -> Int {\n    1\n}\n");
+        write(&dir, "src/b.delulu", "module b\n\nimport a\n\npub fn two() -> Int {\n    one() + 1\n}\n");
+        assert!(check_package_overlaid(&dir, &Overlay::new()).diagnostics.iter().all(|d| !d.is_error()), "clean on disk");
+        let a = crate::package::canonical_file(&dir.join("src/a.delulu"));
+        let renamed: Overlay = [(a, "module a\n\npub fn uno() -> Int {\n    1\n}\n".to_string())].into_iter().collect();
+        let checked = check_package_overlaid(&dir, &renamed);
+        let b = checked.module_of(&dir.join("src/b.delulu")).expect("b is a module").unit.file;
+        assert!(
+            checked.diagnostics.iter().any(|d| d.code == "DL0301" && d.primary_span().map(|s| s.file) == Some(b)),
+            "b reads a's overlaid text: {:?}",
+            checked.diagnostics
+        );
+        assert!(fs::read_to_string(dir.join("src/a.delulu")).unwrap().contains("fn one"), "the disk is untouched");
+        let c = crate::package::canonical_file(&dir.join("src/c.delulu"));
+        let added: Overlay =
+            [(c, "module c\n\nimport a\n\npub fn three() -> Int {\n    zero()\n}\n".to_string())].into_iter().collect();
+        let checked = check_package_overlaid(&dir, &added);
+        assert!(checked.module_of(&dir.join("src/c.delulu")).is_some(), "an unsaved new module is a module");
+        assert!(checked.diagnostics.iter().any(|d| d.code == "DL0301"), "and it is checked: {:?}", checked.diagnostics);
+    }
+
     #[test]
     fn a_new_secret_read_is_seen_as_an_authority_widening() {
         // HARDENING_CAMPAIGN C18, the end-to-end witness. Two versions of the same package that

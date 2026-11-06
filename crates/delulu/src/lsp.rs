@@ -9,7 +9,10 @@
 //!
 //! **The diagnostics ARE the compiler's** (invariant 38): every publish re-runs the
 //! exact `check_source` pipeline; codes, spans, messages, and repairs are the same
-//! objects `delulu check --json` reports — the smoke suite asserts equality.
+//! objects `delulu check --json` reports — the smoke suite asserts equality. A file that is a
+//! module of a package is checked AS that package (RW 6.72), with every open document of it in
+//! place of its copy on disk: the check `delulu check DIR` runs, so a module that uses an import
+//! is not shown false errors, and a widening the manifest refuses (DL1009) is shown.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -988,11 +991,92 @@ impl Server {
         json!({ "isIncomplete": false, "items": items })
     }
 
-    /// Re-check the document and push its diagnostics — the compiler's own, verbatim.
+    /// Re-check the document and push its diagnostics — the compiler's own, verbatim. A module of a
+    /// package is checked as the package, and every open module of it is republished from that one
+    /// check: an edit to one module can break or mend another (RW 6.72).
     fn publish(&self, uri: &str) {
-        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else { return };
-        let diags: Vec<Value> = checked.diagnostics.iter().map(|d| lsp_diagnostic(text, d)).collect();
-        notify("textDocument/publishDiagnostics", json!({ "uri": uri, "diagnostics": diags }));
+        let Some(root) = package_of(uri) else {
+            let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else { return };
+            let diags: Vec<Value> = checked.diagnostics.iter().map(|d| lsp_diagnostic(text, d)).collect();
+            notify("textDocument/publishDiagnostics", json!({ "uri": uri, "diagnostics": diags }));
+            return;
+        };
+        let checked = self.check_package(&root);
+        for u in self.uris() {
+            let (Some(text), Some(path)) = (self.text(u), uri_to_path(u)) else { continue };
+            if package_of(u).as_deref() != Some(root.as_path()) {
+                continue;
+            }
+            let (_, shown) = self.shown_in_package(&checked, &path);
+            let diags: Vec<Value> = shown.iter().map(|s| s.to_lsp(text)).collect();
+            notify("textDocument/publishDiagnostics", json!({ "uri": u, "diagnostics": diags }));
+        }
+    }
+
+    /// What `delulu check DIR` says about the package at `root`, with every open document of it in
+    /// place of its copy on disk: an unsaved buffer is the truth about a file (RW 6.72).
+    fn check_package(&self, root: &std::path::Path) -> delulu_check::CheckedPackage {
+        let overlay: delulu_check::Overlay = self
+            .docs
+            .iter()
+            .filter_map(|(uri, d)| {
+                let path = uri_to_path(uri)?;
+                (delulu_check::package_root_of(&path).as_deref() == Some(root))
+                    .then(|| (delulu_check::canonical_file(&path), d.text.clone()))
+            })
+            .collect();
+        delulu_check::check_package_overlaid(root, &overlay)
+    }
+
+    /// The diagnostics the open document at `path` shows from its package's check, with the file id
+    /// its own spans carry. Its own are placed where they are. One that lies in no open module — the
+    /// manifest's, or none at all — is shown at the top of the file with where it lies, because the
+    /// package does not check without it; an ERROR in a module no editor has open is too, for the same
+    /// reason. One that lies in another open module is that module's to show.
+    fn shown_in_package(&self, checked: &delulu_check::CheckedPackage, path: &std::path::Path) -> (Option<u32>, Vec<Shown>) {
+        let own = checked.module_of(path).map(|m| m.unit.file);
+        let open: Vec<u32> = self
+            .docs
+            .keys()
+            .filter_map(|u| uri_to_path(u))
+            .filter_map(|p| checked.module_of(&p).map(|m| m.unit.file))
+            .collect();
+        let modules: Vec<u32> = checked.ws.modules.iter().map(|m| m.unit.file).collect();
+        let map = &checked.ws.source_map;
+        let mut shown = Vec::new();
+        for d in &checked.diagnostics {
+            let span = d.primary_span();
+            let file = span.map(|s| s.file);
+            if file.is_some() && file == own {
+                shown.push(Shown { diagnostic: d.clone(), here: true, at: None });
+                continue;
+            }
+            let Some(sp) = span.filter(|s| map.has(s.file)) else {
+                shown.push(Shown { diagnostic: d.clone(), here: false, at: None });
+                continue;
+            };
+            if open.contains(&sp.file) || (modules.contains(&sp.file) && !d.is_error()) {
+                continue;
+            }
+            let (line, col) = map.position(sp.file, sp.start);
+            shown.push(Shown { diagnostic: d.clone(), here: false, at: Some(format!("{}:{line}:{col}", map.name(sp.file))) });
+        }
+        (own, shown)
+    }
+
+    /// The diagnostics an open document shows, with the file id its own spans and repairs carry —
+    /// the package's check for a module of one, the file's own otherwise. What `publish` sends and
+    /// what code actions are offered for, so the two cannot disagree.
+    fn diagnostics_of(&self, uri: &str) -> Option<(Option<u32>, Vec<Shown>)> {
+        self.text(uri)?;
+        match package_of(uri) {
+            Some(root) => Some(self.shown_in_package(&self.check_package(&root), &uri_to_path(uri)?)),
+            None => {
+                let checked = self.analyze(uri)?;
+                let shown = checked.diagnostics.iter().map(|d| Shown { diagnostic: d.clone(), here: true, at: None }).collect();
+                Some((Some(0), shown))
+            }
+        }
     }
 
     /// Hover: a fn declaration name shows its full signature + transitive authority; any
@@ -1078,22 +1162,36 @@ impl Server {
     /// person to choose, as a widening repair does, with the flag in `data` for a harness.
     fn code_actions(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else {
+        let (Some(text), Some((own, shown))) = (self.text(uri), self.diagnostics_of(uri)) else {
             return json!([]);
         };
         let range = &params["range"];
         let lo =
             pos_to_byte(text, range["start"]["line"].as_u64().unwrap_or(0), range["start"]["character"].as_u64().unwrap_or(0));
         let hi = pos_to_byte(text, range["end"]["line"].as_u64().unwrap_or(0), range["end"]["character"].as_u64().unwrap_or(0));
+        Self::actions_for(uri, text, own, &shown, (lo, hi))
+    }
+
+    /// The code actions for the repairs of the diagnostics `shown` in the document at `uri` (`text`)
+    /// whose spans meet `lo..hi`. `own` is the file id this document's spans and edits carry. Only a
+    /// diagnostic whose span lies in this document offers its repairs here — one shown here from
+    /// elsewhere in the package has them where it lies — and a repair that also edits another file is
+    /// offered without an edit (RW 6.72: only this document's ranges can be named here).
+    fn actions_for(uri: &str, text: &str, own: Option<u32>, shown: &[Shown], (lo, hi): (u32, u32)) -> Value {
         let mut actions = Vec::new();
-        for d in &checked.diagnostics {
+        for d in shown.iter().filter(|s| s.here).map(|s| &s.diagnostic) {
             let overlaps = d.primary_span().map(|sp| sp.start <= hi && lo <= sp.end).unwrap_or(true);
             if !overlaps {
                 continue;
             }
             for r in &d.repairs {
+                // RW 6.72: a repair that also edits another module is not applied from here, where only
+                // this document's ranges can be named.
+                let elsewhere = r.edits.iter().any(|e| Some(e.file) != own);
                 let widening = r.authority_widening;
-                let title = if widening {
+                let title = if elsewhere {
+                    format!("{} (edits another module too — not applied from this file)", r.id)
+                } else if widening {
                     format!("⚠ {} (widens authority — review)", r.id)
                 } else if r.requires_human && r.edits.is_empty() {
                     format!("{} (requires a human decision — no automatic edit)", r.id)
@@ -1109,7 +1207,7 @@ impl Server {
                     // editless repair `requires_human`, and the rule is restated here because this
                     // is where it is observable — an action a client can apply must have something
                     // to apply.
-                    "isPreferred": !widening && !r.requires_human && !r.edits.is_empty(),
+                    "isPreferred": !elsewhere && !widening && !r.requires_human && !r.edits.is_empty(),
                     "diagnostics": [lsp_diagnostic(text, d)],
                     "data": {
                         "code": d.code,
@@ -1118,7 +1216,7 @@ impl Server {
                         "requires_human": r.requires_human,
                     },
                 });
-                if !r.edits.is_empty() {
+                if !r.edits.is_empty() && !elsewhere {
                     let edits: Vec<Value> = r
                         .edits
                         .iter()
@@ -1482,6 +1580,35 @@ fn pos_to_byte(text: &str, line: u64, character: u64) -> u32 {
 
 /// The compiler's diagnostic, in LSP clothes: same code, same primary span, same message
 /// (en-US — the machine surface is locale-invariant; catalogs are terminal-human only).
+/// RW 6.72: the package an open document is a module of — the nearest `delulu.toml` above it, when
+/// the file lies under that package's `src/`. `None` for a loose file, which is checked alone.
+fn package_of(uri: &str) -> Option<std::path::PathBuf> {
+    uri_to_path(uri).and_then(|p| delulu_check::package_root_of(&p))
+}
+
+/// One diagnostic as an open document shows it (RW 6.72).
+struct Shown {
+    diagnostic: Diagnostic,
+    /// Whether its span lies in this document. One that does not is shown at the top of the file.
+    here: bool,
+    /// Where it lies when not here (`name:line:column`), named after its message.
+    at: Option<String>,
+}
+
+impl Shown {
+    fn to_lsp(&self, text: &str) -> Value {
+        let mut v = lsp_diagnostic(text, &self.diagnostic);
+        if self.here {
+            return v;
+        }
+        v["range"] = byte_range(text, 0, 0);
+        if let Some(at) = &self.at {
+            v["message"] = json!(format!("{} (at {at})", self.diagnostic.message));
+        }
+        v
+    }
+}
+
 fn lsp_diagnostic(text: &str, d: &Diagnostic) -> Value {
     let (start, end) = d.primary_span().map(|s| (s.start, s.end)).unwrap_or((0, 0));
     json!({
@@ -1977,6 +2104,42 @@ fn walk_module<'m>(module: &'m delulu_syntax::ast::Module, f: &mut impl FnMut(Vi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 6.72: from a package's check, a document offers the repairs of its own diagnostics only, and a
+    /// repair that also edits another file is offered with no edit — its ranges would be read against
+    /// this document's text and land in the wrong place. No diagnostic the checker raises today carries
+    /// such a repair (DL1009 has none), so the two guards are held here, on a constructed one.
+    #[test]
+    fn a_document_applies_only_repairs_that_edit_it_alone() {
+        use delulu_diag::{Confidence, Edit, Repair, Span};
+        let text = "module m\nfn f() {}\n";
+        let repair = |id: &'static str, files: &[u32]| Repair {
+            id,
+            confidence: Confidence::Safe,
+            authority_widening: false,
+            requires_human: false,
+            edits: files.iter().map(|&file| Edit { file, start_byte: 9, end_byte: 9, insert: "x".into() }).collect(),
+            reason: None,
+        };
+        let here = Diagnostic::error("DL0301", "unknown name `g`")
+            .with_span(Span::new(3, 9, 10), "here")
+            .with_repair(repair("mine", &[3]))
+            .with_repair(repair("reaches", &[3, 4]));
+        let away = Diagnostic::error("DL0301", "unknown name `h`").with_span(Span::new(4, 0, 1), "there").with_repair(repair("theirs", &[4]));
+        let shown = [
+            Shown { diagnostic: here, here: true, at: None },
+            Shown { diagnostic: away, here: false, at: Some("src/b.delulu:1:1".into()) },
+        ];
+        let actions = Server::actions_for("file:///m.delulu", text, Some(3), &shown, (0, 30));
+        let actions = actions.as_array().unwrap();
+        let ids: Vec<&str> = actions.iter().filter_map(|a| a["data"]["repair_id"].as_str()).collect();
+        assert_eq!(ids, ["mine", "reaches"], "a diagnostic shown from elsewhere offers nothing here: {actions:#?}");
+        assert!(actions[0]["edit"]["changes"]["file:///m.delulu"].is_array(), "its own edit applies: {:#}", actions[0]);
+        assert_eq!(actions[0]["isPreferred"], true);
+        assert!(actions[1].get("edit").is_none(), "an edit into another file is not applied here: {:#}", actions[1]);
+        assert_eq!(actions[1]["isPreferred"], false);
+        assert!(actions[1]["title"].as_str().unwrap().contains("edits another module"), "{:#}", actions[1]);
+    }
 
     /// URIs are hand-parsed here, so the shapes real clients send are pinned rather than assumed.
     ///
