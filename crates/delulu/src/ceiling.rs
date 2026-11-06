@@ -38,6 +38,58 @@ pub fn enter_guest_mode() {
     GUEST.store(true, Ordering::SeqCst);
 }
 
+/// RW 3.29: the memory ceiling this process runs under, as the OS enforces it — a Windows Job Object's per-process or
+/// per-job memory limit, Linux's `RLIMIT_DATA` (what `jail::harden` sets) — or `None` when it has none the OS can name
+/// (macOS's ceiling is the host's sampler). Read from the OS rather than told by the host, so the guest's depth bound
+/// follows the ceiling that actually holds.
+pub fn own_memory_ceiling() -> Option<u64> {
+    own_memory_ceiling_os()
+}
+
+#[cfg(windows)]
+fn own_memory_ceiling_os() -> Option<u64> {
+    use windows_sys::Win32::System::JobObjects::{
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_JOB_MEMORY, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
+    };
+    // SAFETY: the structure is zeroed and sized with `size_of`; a null handle names the job of the calling process,
+    // and a process in no job gets a failure, read as no ceiling.
+    let ext = unsafe {
+        let mut ext: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        let ok = QueryInformationJobObject(
+            std::ptr::null_mut(),
+            JobObjectExtendedLimitInformation,
+            &mut ext as *mut _ as *mut core::ffi::c_void,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            std::ptr::null_mut(),
+        ) != 0;
+        if !ok {
+            return None;
+        }
+        ext
+    };
+    let flags = ext.BasicLimitInformation.LimitFlags;
+    let per_process = (flags & JOB_OBJECT_LIMIT_PROCESS_MEMORY != 0).then_some(ext.ProcessMemoryLimit as u64);
+    let per_job = (flags & JOB_OBJECT_LIMIT_JOB_MEMORY != 0).then_some(ext.JobMemoryLimit as u64);
+    match (per_process, per_job) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn own_memory_ceiling_os() -> Option<u64> {
+    let mut lim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    // SAFETY: `getrlimit` writes the one structure it is given.
+    let ok = unsafe { libc::getrlimit(libc::RLIMIT_DATA, &mut lim) } == 0;
+    (ok && lim.rlim_cur != libc::RLIM_INFINITY).then_some(lim.rlim_cur as u64)
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn own_memory_ceiling_os() -> Option<u64> {
+    None
+}
+
 /// This process is a microVM's guest (see [`VM_MEMORY_MARKER`]).
 #[cfg(target_os = "linux")]
 pub fn enter_vm_guest_mode() {

@@ -172,46 +172,64 @@ pub const INTERPRETER_STACK_LADDER: [usize; 5] =
 /// reserved: the smallest a supported host gives it (Windows' 1 MiB default), so the bound sized for it fits every one.
 pub const MAIN_THREAD_STACK_ASSUMED: usize = 1024 * 1024;
 
-/// The depth bound an interpreter takes when its builder names none: [`DEFAULT_MAX_DEPTH`], unless the process said its
-/// interpreter thread has less stack ([`set_process_stack_bytes`]). Process-wide on purpose: every interpreter the CLI
+/// The stack this process's interpreter thread may use, which sets the depth bound an interpreter takes when its builder
+/// names none ([`process_max_depth`]): [`INTERPRETER_STACK_BYTES`] — so [`DEFAULT_MAX_DEPTH`] — unless the process said
+/// less ([`set_process_stack_bytes`], [`cap_process_stack_bytes`]). Process-wide on purpose: every interpreter the CLI
 /// builds — `run`'s, the guest's, a plugin's, `test`'s, the REPL's — runs on that one thread, and a setting one
-/// constructor forgot would be the crash (§11: a thread-local setting reaches one thread). It only ever lowers the bound;
-/// a thread with its own reservation (an actor worker) sets its own with [`Interp::with_max_depth`].
-static PROCESS_MAX_DEPTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(DEFAULT_MAX_DEPTH);
+/// constructor forgot would be the crash (§11: a thread-local setting reaches one thread). A thread with its own
+/// reservation (an actor worker) sets its own bound with [`Interp::with_max_depth`].
+static PROCESS_STACK_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(INTERPRETER_STACK_BYTES);
 
 /// Record the stack the process's interpreter thread was given, so every interpreter built without a bound fits it.
 pub fn set_process_stack_bytes(stack_bytes: usize) {
-    PROCESS_MAX_DEPTH.store(max_depth_for_stack(stack_bytes), std::sync::atomic::Ordering::SeqCst);
+    PROCESS_STACK_BYTES.store(stack_bytes, std::sync::atomic::Ordering::SeqCst);
 }
 
-/// The bound an interpreter takes when its builder names none (see [`set_process_stack_bytes`]).
+/// Lower the stack the process's interpreters may count on to `stack_bytes`, never raise it: a sandbox guest under a
+/// memory ceiling that counts the stack pages it commits (a Windows Job Object's) can use only so much of its
+/// reservation, however large (RW 3.29).
+pub fn cap_process_stack_bytes(stack_bytes: usize) {
+    PROCESS_STACK_BYTES.fetch_min(stack_bytes, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// The bound an interpreter takes when its builder names none (see [`PROCESS_STACK_BYTES`]).
 pub fn process_max_depth() -> u32 {
-    PROCESS_MAX_DEPTH.load(std::sync::atomic::Ordering::SeqCst)
+    max_depth_for_stack(PROCESS_STACK_BYTES.load(std::sync::atomic::Ordering::SeqCst))
 }
 
-/// RW 3.29: run `f` on the largest rung of [`INTERPRETER_STACK_LADDER`] this host grants, its bound recorded for that
-/// stack before `f` starts; on the calling thread with [`MAIN_THREAD_STACK_ASSUMED`]'s bound when it grants none. The
-/// result is `f`'s, or `None` when its thread panicked (the panic has already been printed).
+/// RW 3.29: run `f` on the largest rung of [`INTERPRETER_STACK_LADDER`] this host grants, that stack recorded before `f`
+/// starts; on the calling thread with [`MAIN_THREAD_STACK_ASSUMED`] recorded when it grants none. The result is `f`'s,
+/// or `None` when its thread panicked (the panic has already been printed).
 pub fn on_laddered_thread<T, F>(f: F) -> Option<T>
 where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    laddered(f, |bytes, job| std::thread::Builder::new().name("delulu-main".into()).stack_size(bytes).spawn(job).map_err(|_| ()))
+    laddered(
+        f,
+        |bytes, job| std::thread::Builder::new().name("delulu-main".into()).stack_size(bytes).spawn(job).map_err(|_| ()),
+        set_process_stack_bytes,
+    )
 }
 
-/// [`on_laddered_thread`] with the spawner given, so the ladder is testable on a host that grants every rung.
-fn laddered<T, F, S>(f: F, mut spawn: S) -> Option<T>
+/// One run of `f` and its stack's record — what a rung's thread executes.
+type Laddered<T> = Box<dyn FnOnce() -> T + Send>;
+
+/// [`on_laddered_thread`] with the spawner and the recorder given, so the ladder is testable on a host that grants every
+/// rung without lowering the bound of every other test in the process.
+fn laddered<T, F, S, R>(f: F, mut spawn: S, record: R) -> Option<T>
 where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
-    S: FnMut(usize, Box<dyn FnOnce() -> T + Send>) -> Result<std::thread::JoinHandle<T>, ()>,
+    S: FnMut(usize, Laddered<T>) -> Result<std::thread::JoinHandle<T>, ()>,
+    R: Fn(usize) + Copy + Send + 'static,
 {
+    // A refused spawn drops its closure unrun, so the job waits here for the next rung.
     let job = std::sync::Arc::new(std::sync::Mutex::new(Some(f)));
     for bytes in INTERPRETER_STACK_LADDER {
         let job = std::sync::Arc::clone(&job);
-        let run: Box<dyn FnOnce() -> T + Send> = Box::new(move || {
-            set_process_stack_bytes(bytes);
+        let run: Laddered<T> = Box::new(move || {
+            record(bytes);
             let f = job.lock().ok().and_then(|mut j| j.take()).expect("the job runs once");
             f()
         });
@@ -219,7 +237,7 @@ where
             return handle.join().ok();
         }
     }
-    set_process_stack_bytes(MAIN_THREAD_STACK_ASSUMED);
+    record(MAIN_THREAD_STACK_ASSUMED);
     let f = job.lock().ok().and_then(|mut j| j.take())?;
     Some(f())
 }
@@ -883,8 +901,9 @@ impl Interp {
                 return Err(Escape::Fault(Fault::new(
                     "DL0905",
                     format!(
-                        "recursion depth exceeded (the bound is {} here: this host would not reserve the stack the full \
-                         bound of {DEFAULT_MAX_DEPTH} needs)",
+                        "recursion depth exceeded (the bound is {} here: the stack this process may use — what the \
+                         host would reserve, or what its memory ceiling leaves — is smaller than the full bound of \
+                         {DEFAULT_MAX_DEPTH} needs)",
                         self.max_depth
                     ),
                 )));
@@ -3115,6 +3134,44 @@ mod depth_contract_tests {
     #[test]
     fn the_thread_helper_returns_its_closures_value() {
         assert_eq!(on_interpreter_thread(|| 7 * 6).expect("spawn"), 42);
+    }
+
+    /// RW 3.29: the ladder runs its job once, on the largest rung the host grants, and records that stack before the job
+    /// starts; on a host that grants none it runs the job on the calling thread with the smallest stack a supported host
+    /// gives a main thread recorded. The recorder is this test's own, so no other test's bound moves.
+    #[test]
+    fn the_ladder_runs_on_the_largest_stack_granted_and_records_it() {
+        static RECORDED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        fn record(bytes: usize) {
+            RECORDED.store(bytes, std::sync::atomic::Ordering::SeqCst);
+        }
+        let seen = |cap: usize| {
+            let mut asked = Vec::new();
+            let out = laddered(
+                || (RECORDED.load(std::sync::atomic::Ordering::SeqCst), std::thread::current().name().map(str::to_string)),
+                |bytes, job| {
+                    asked.push(bytes);
+                    if bytes > cap {
+                        return Err(());
+                    }
+                    std::thread::Builder::new().name("rung".into()).stack_size(bytes).spawn(job).map_err(|_| ())
+                },
+                record,
+            );
+            (asked, out)
+        };
+        let (asked, out) = seen(64 * 1024 * 1024);
+        assert_eq!(asked, INTERPRETER_STACK_LADDER[..3], "largest first, down to the first granted");
+        assert_eq!(out, Some((64 * 1024 * 1024, Some("rung".to_string()))), "recorded before the job ran, on that rung");
+        let (asked, out) = seen(0);
+        assert_eq!(asked, INTERPRETER_STACK_LADDER, "every rung asked");
+        let here = std::thread::current().name().map(str::to_string);
+        assert_eq!(out, Some((MAIN_THREAD_STACK_ASSUMED, here)), "none granted: the calling thread, its stack assumed small");
+        // Each rung's bound fits it, and shrinks with it; the smallest is still a bound, not a refusal of every call.
+        let bounds: Vec<u32> = INTERPRETER_STACK_LADDER.iter().map(|&b| max_depth_for_stack(b)).collect();
+        assert_eq!(bounds[0], DEFAULT_MAX_DEPTH);
+        assert!(bounds.windows(2).all(|w| w[0] > w[1]), "{bounds:?}");
+        assert!(max_depth_for_stack(MAIN_THREAD_STACK_ASSUMED) >= 1);
     }
 
     #[test]
