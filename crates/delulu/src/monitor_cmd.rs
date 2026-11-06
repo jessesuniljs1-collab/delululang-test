@@ -104,10 +104,69 @@ fn end_the_watch(
     }
 }
 
+/// RW 7.25's timing: one pass of the watch's loop, step by step — each step's time from the mark before it — so the longest
+/// pass names the step that held it. Its sleep is not a step: a sleep that overran is measured apart.
+#[derive(Clone, Debug)]
+struct Turn {
+    last: Instant,
+    steps: Vec<(&'static str, Duration)>,
+}
+
+impl Turn {
+    fn begin() -> Turn {
+        Turn { last: Instant::now(), steps: Vec::new() }
+    }
+
+    /// The step just done, timed from the previous mark (or the turn's beginning).
+    fn mark(&mut self, step: &'static str) {
+        self.mark_at(step, Instant::now());
+    }
+
+    fn mark_at(&mut self, step: &'static str, now: Instant) {
+        self.steps.push((step, now.saturating_duration_since(self.last)));
+        self.last = now;
+    }
+
+    fn took(&self) -> Duration {
+        self.steps.iter().map(|(_, took)| *took).sum()
+    }
+}
+
+/// The watch's own progress (RW 4.98, RW 7.25): its longest whole turn with its steps; its last turn, the one that ended
+/// it, apart — a refused beat reads the whole chain to learn why, and that read must not hide the turn that held the watch
+/// before it; and its longest sleep between turns, which a host that did not run the monitor overran.
+#[derive(Debug, Default)]
+struct Progress {
+    longest_turn: Option<Turn>,
+    last_turn: Option<Turn>,
+    longest_sleep: Duration,
+}
+
+impl Progress {
+    fn turn_done(&mut self, turn: &Turn) {
+        if self.longest_turn.as_ref().is_none_or(|longest| turn.took() > longest.took()) {
+            self.longest_turn = Some(turn.clone());
+        }
+    }
+}
+
+/// A turn as the progress line names it: how long, then each step.
+fn turn_line(turn: Option<&Turn>) -> String {
+    turn.map_or_else(
+        || "none".to_string(),
+        |turn| {
+            let steps = turn.steps.iter().map(|(step, took)| format!("{step} {} ms", took.as_millis())).collect::<Vec<_>>();
+            format!("{} ms ({})", turn.took().as_millis(), steps.join(", "))
+        },
+    )
+}
+
 /// The line a monitor whose watch ended on an error writes about its own progress: its last beats, answered or still
-/// waiting, and its longest turn of the watch (one pass of its loop, its sleep left out). With the daemon's own line about
-/// the same dead-man, it says whether the beats were sent and when — the half of RW 7.25's evidence a daemon cannot see.
-fn progress_line(beats: &SentBeats, longest_turn: Duration) -> String {
+/// waiting, on a time line that starts when its dead-man was armed (`armed_unix_ms`, that moment on the wall clock, which
+/// the daemon's line names for its own start too — RW 7.25); its longest turn of the watch, step by step; and its longest
+/// sleep between turns against the `poll` it asked for. With the daemon's own line about the same dead-man, it says
+/// whether the beats were sent and when — the half of RW 7.25's evidence a daemon cannot see.
+fn progress_line(beats: &SentBeats, armed_unix_ms: Option<u128>, progress: &Progress, poll: Duration) -> String {
     let named = if beats.beats.is_empty() {
         "none".to_string()
     } else {
@@ -129,9 +188,14 @@ fn progress_line(beats: &SentBeats, longest_turn: Duration) -> String {
             .collect::<Vec<_>>()
             .join("; ")
     };
+    let armed = armed_unix_ms.map_or_else(String::new, |ms| format!(" (unix time {ms} ms)"));
     format!(
-        "monitor: its last beats, in ms since its dead-man was armed: {named}; its longest turn of the watch took {} ms (RW 4.98)",
-        longest_turn.as_millis()
+        "monitor: its last beats, in ms since its dead-man was armed{armed}: {named}; its longest whole turn took {}; its last \
+         turn, which ended the watch, took {}; its longest sleep between turns took {} ms of the {} ms asked (RW 4.98, RW 7.25)",
+        turn_line(progress.longest_turn.as_ref()),
+        turn_line(progress.last_turn.as_ref()),
+        progress.longest_sleep.as_millis(),
+        poll.as_millis()
     )
 }
 
@@ -402,6 +466,8 @@ fn cmd_watch(rest: &[String]) -> i32 {
     let mut deadman: Option<(String, u64, Duration)> = None; // (key, armed_seq, period)
                                                              // RW 4.98's timing: when the dead-man was armed, and the beats sent since (the watch's and the beater's).
     let mut armed_at: Option<Instant> = None;
+    // RW 7.25: that moment on the wall clock, so the daemon's line, which names its own start there too, can be put beside.
+    let mut armed_unix_ms: Option<u128> = None;
     let sent_beats = std::sync::Arc::new(std::sync::Mutex::new(SentBeats::default()));
     if o.on_death == OnDeath::Quarantine {
         // D-V2-106 item 2: the key that lets a beat through is about to live in this process's memory, so no
@@ -426,7 +492,9 @@ fn cmd_watch(rest: &[String]) -> i32 {
                     delulu_diag::terminal_line(&o.node)
                 );
                 deadman = Some((key, seq, period));
-                armed_at = Some(Instant::now());
+                let armed = crate::brokerd::Moment::now();
+                armed_at = Some(armed.instant);
+                armed_unix_ms = Some(armed.unix_ms);
             }
             Ok(Response::Error { code, message, .. }) => {
                 eprintln!("error[{code}]: the broker refused the monitor's dead-man: {}", delulu_diag::terminal_line(&message));
@@ -509,12 +577,15 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // Whether the watch ended as it was asked to (`--for`, or its node revoked by someone else) — a clean
     // end, after which the dead-man is disarmed or already gone — rather than on an error.
     let mut clean_end = false;
-    // RW 4.98's timing: the longest pass of the loop below, its sleep left out — the watch's own progress.
-    let mut longest_turn = Duration::ZERO;
-    let mut turn: Instant;
+    // RW 4.98's and RW 7.25's timing: each pass of the loop below, step by step, and each sleep between — the watch's own
+    // progress.
+    let mut progress = Progress::default();
+    let mut turn: Turn;
     loop {
-        turn = Instant::now();
-        let state = match state_of_node() {
+        turn = Turn::begin();
+        let state = state_of_node();
+        turn.mark("its node's state");
+        let state = match state {
             Ok(s) => s,
             Err(e) => {
                 refused_any = true;
@@ -546,13 +617,17 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 break;
             }
         }
-        if let Err((fatal, why)) = beat() {
+        let beaten = beat();
+        turn.mark("a beat");
+        if let Err((fatal, why)) = beaten {
             refused_any |= fatal;
             clean_end = !fatal;
             ended = why;
             break;
         }
-        let got = match follower.read_new() {
+        let got = follower.read_new();
+        turn.mark("reading what was appended");
+        let got = match got {
             Ok(got) => got,
             Err(e) => {
                 refused_any = true;
@@ -561,7 +636,9 @@ fn cmd_watch(rest: &[String]) -> i32 {
             }
         };
         // A large append is a slow read: beat again once it is read, so the period covers one read, not two.
-        if let Err((fatal, why)) = beat() {
+        let beaten = beat();
+        turn.mark("a beat");
+        if let Err((fatal, why)) = beaten {
             refused_any |= fatal;
             clean_end = !fatal;
             ended = why;
@@ -571,16 +648,14 @@ fn cmd_watch(rest: &[String]) -> i32 {
         // and before its records were read is in the tree when it is asked after (ids are never reused, nodes never leave).
         let actors: Vec<String> =
             got.records.iter().filter_map(|r| r.actor_node.clone()).collect::<HashSet<_>>().into_iter().collect();
-        let runs = if actors.is_empty() {
-            HashMap::new()
-        } else {
-            match runs_under(actors) {
-                Ok((_, runs)) => runs,
-                Err(e) => {
-                    refused_any = true;
-                    ended = e;
-                    break;
-                }
+        let asked = if actors.is_empty() { Ok(HashMap::new()) } else { runs_under(actors).map(|(_, runs)| runs) };
+        turn.mark("asking whose runs they are");
+        let runs = match asked {
+            Ok(runs) => runs,
+            Err(e) => {
+                refused_any = true;
+                ended = e;
+                break;
             }
         };
         if got.rewritten {
@@ -704,6 +779,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
             }
             reports.push(report);
         }
+        turn.mark("judging and quarantining");
         if let Some(f) = o.for_ms {
             if started.elapsed() >= Duration::from_millis(f) {
                 ended = format!("watched for {f} ms");
@@ -711,15 +787,20 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 break;
             }
         }
-        longest_turn = longest_turn.max(turn.elapsed());
+        progress.turn_done(&turn);
+        let sleeping = Instant::now();
         std::thread::sleep(o.poll);
+        progress.longest_sleep = progress.longest_sleep.max(sleeping.elapsed());
     }
-    longest_turn = longest_turn.max(turn.elapsed());
+    // The turn that ended the watch, to its end: a refused beat's reading of the chain is in its step.
+    turn.mark("ending");
+    progress.last_turn = Some(turn);
     eprintln!("monitor: ended — {}", delulu_diag::terminal_line(&ended));
     end_the_watch(
         || {
             if deadman.is_some() && !clean_end {
-                eprintln!("{}", progress_line(&sent_beats.lock().unwrap_or_else(|p| p.into_inner()), longest_turn));
+                let beats = sent_beats.lock().unwrap_or_else(|p| p.into_inner());
+                eprintln!("{}", progress_line(&beats, armed_unix_ms, &progress, o.poll));
             }
         },
         &beater_stop,
@@ -835,12 +916,16 @@ mod tests {
     }
 
     /// RW 4.98's timing, the monitor's half: it keeps its last beats in order, names who sent each and how it was
-    /// answered, and its longest turn. A beat is noted when it is sent, so one whose answer has not come is named as
-    /// waiting (the independent review's finding 4), and an answer for a beat no longer named changes nothing.
+    /// answered, and its turns. A beat is noted when it is sent, so one whose answer has not come is named as waiting (the
+    /// independent review's finding 4), and an answer for a beat no longer named changes nothing. RW 7.25's additions: the
+    /// beats' time line starts at a moment the wall clock names; the longest whole turn and the turn that ended the watch
+    /// are named apart, step by step; and the longest sleep between turns is named against the poll asked for.
     #[test]
     fn a_monitor_names_its_last_beats_and_its_longest_turn() {
         let ms = Duration::from_millis;
-        assert!(progress_line(&SentBeats::default(), ms(3)).contains("last beats, in ms since its dead-man was armed: none"));
+        let none = progress_line(&SentBeats::default(), None, &Progress::default(), ms(25));
+        assert!(none.contains("last beats, in ms since its dead-man was armed: none"), "{none}");
+        assert!(none.contains("its longest whole turn took none; its last turn, which ended the watch, took none"), "{none}");
         let beats = std::sync::Mutex::new(SentBeats::default());
         let first = sending_beat(&beats, ms(0), false);
         for i in 1..8u64 {
@@ -852,13 +937,44 @@ mod tests {
         answered_beat(&beats, first, ms(1), true);
         let beats = beats.into_inner().unwrap();
         assert_eq!(beats.beats.len(), SENT_BEATS_NAMED, "the last six only");
-        let line = progress_line(&beats, ms(740));
+        // Turns: each step timed from the mark before it, not from the turn's beginning.
+        let begun = Instant::now();
+        let turn = |steps: &[(&'static str, u64)]| {
+            let mut turn = Turn { last: begun, steps: Vec::new() };
+            let mut at = begun;
+            for (step, took) in steps {
+                at += ms(*took);
+                turn.mark_at(step, at);
+            }
+            turn
+        };
+        let mut progress = Progress::default();
+        progress.turn_done(&turn(&[("its node's state", 2), ("a beat", 1), ("reading what was appended", 3)]));
+        progress.turn_done(&turn(&[("its node's state", 1), ("a beat", 1), ("reading what was appended", 700), ("a beat", 38)]));
+        progress.turn_done(&turn(&[("its node's state", 5)]));
+        progress.last_turn = Some(turn(&[("its node's state", 1), ("a beat", 1300), ("ending", 0)]));
+        progress.longest_sleep = ms(612);
+        let line = progress_line(&beats, Some(1_762_000_000_123), &progress, ms(25));
+        assert!(line.contains("in ms since its dead-man was armed (unix time 1762000000123 ms): "), "{line}");
         assert!(!line.contains("sent +25 ") && line.contains("sent +50 by the watch (answered in 2 ms, kept)"), "{line}");
         assert!(line.contains("sent +125 by the watch (no answer yet)"), "a beat still waiting is named: {line}");
         assert!(line.contains("sent +150 by the beater (answered in 2 ms, kept)"), "{line}");
         assert!(line.contains("sent +175 by the watch (answered in 2 ms, refused or unanswered)"), "{line}");
         assert!(!line.contains("sent +0 "), "a beat no longer named is not brought back by its answer: {line}");
-        assert!(line.contains("its longest turn of the watch took 740 ms (RW 4.98)"), "{line}");
+        assert!(
+            line.contains(
+                "its longest whole turn took 740 ms (its node's state 1 ms, a beat 1 ms, reading what was appended 700 ms, \
+                 a beat 38 ms)"
+            ),
+            "the longest whole turn, step by step: {line}"
+        );
+        assert!(
+            line.contains(
+                "its last turn, which ended the watch, took 1301 ms (its node's state 1 ms, a beat 1300 ms, ending 0 ms)"
+            ),
+            "the turn that ended the watch, apart from the longest whole one: {line}"
+        );
+        assert!(line.contains("its longest sleep between turns took 612 ms of the 25 ms asked (RW 4.98, RW 7.25)"), "{line}");
     }
 
     /// D-V2-113: `special-use` fires on a special-use refusal by the egress client and on nothing else — not on its
