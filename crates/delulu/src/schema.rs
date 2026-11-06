@@ -769,6 +769,8 @@ pub fn document(name: &str) -> Option<Value> {
                     // A sandboxed run's custody: the broker's node when one decided every use.
                     ("custody", obj(&[("mode", t("string")), ("node", nullable("string"))], &[])),
                     ("audit", obj(&[("required_grants", arr(t("string"))), ("unsupported_surface", nullable("string"))], &[])),
+                    // RW 6.73: a run stopped for a grant — every grant the program's text asks for that the run lacked.
+                    ("missing_grants", arr(t("string"))),
                 ],
             )
         }

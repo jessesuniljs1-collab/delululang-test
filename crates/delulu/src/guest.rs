@@ -586,6 +586,8 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--json",
     "--report-out",
     "--no-prompt",
+    // RW 6.73: decided by the host before a guest exists (`run_cmd::preflight_refusal`).
+    "--preflight",
     // PS-C: `--isolation microvm` chooses the boundary a sandboxed run gets; any other value is refused
     // by `isolation_of` before anything runs.
     "--isolation",
@@ -963,6 +965,13 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     // they let the program write — decided before a root is issued or a guest exists.
     if let Some(code) = crate::run_cmd::refuse_runtime_paths_in_write_scopes(opts, &grants.build_root().fs_write) {
         return code;
+    }
+    // RW 6.73: `--preflight` decides the program's text against those final grants before a guest exists, as the
+    // ordinary run decides it before an engine does.
+    if opts.preflight {
+        if let Some(code) = crate::run_cmd::preflight_refusal(file, is_package, &map, &checked, &grants, opts.json) {
+            return code;
+        }
     }
     if daemon_mode && !opts.json {
         eprintln!("custody: daemon");

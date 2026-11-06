@@ -742,3 +742,123 @@ fn under_a_capped_address_space_deep_recursion_is_dl0905_with_a_report() {
     assert_eq!(o.status.code(), Some(1), "a runtime fault exits 1: {out}");
     assert!(report.exists(), "the report is written: {out}");
 }
+
+/// RW 6.73's program: it writes a file, then prints — two grants, the second reached only after the first's effect.
+const PARTIAL: &str = "module m\n\nfn main(root: Root) ! {Write} {\n  let w = root.fs_write(\"./out\")\n  \
+     match w.write_text(\"step1.txt\", \"done\") { Ok(_) => {}, Err(_) => {} }\n  root.console().println(\"step 2\")\n}\n";
+
+/// `run` in `dir`, so a program's `./out` is the scratch directory's.
+fn run_in(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(dir)
+        .env("DELULU_HOME", dir.join("home"))
+        .env("DELULU_STATE_DIR", dir.join("state"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .arg("run")
+        .args(args)
+        .output()
+        .expect("failed to run delulu")
+}
+
+fn json_of(o: &Output) -> serde_json::Value {
+    serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("stdout is one JSON envelope ({e}): {}", text(o)))
+}
+
+fn read_json(p: &Path) -> serde_json::Value {
+    serde_json::from_str(&std::fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
+}
+
+/// RW 6.73: a run stopped for one grant names, in that one refusal, every grant the program's text asks for that the
+/// run lacks — as `missing_grants` on the envelope and in the report, and at each call — so an agent pays one run, not
+/// one per grant. The run itself is unchanged without `--preflight`: still decided at each use, so the first effect
+/// still happens before the refusal (the file is written), as it did.
+#[test]
+fn a_refusal_for_one_grant_names_every_grant_the_text_shows_the_run_lacks() {
+    let dir = scratch("every-missing-grant");
+    std::fs::write(dir.join("partial.delulu"), PARTIAL).unwrap();
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--json", "--report-out", "rep.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    let env = json_of(&o);
+    assert_eq!(env["missing_grants"], serde_json::json!(["fs.write=./out", "console"]), "one envelope names both: {env}");
+    let d = &env["diagnostics"][0];
+    assert_eq!(d["code"], "DL0703", "{env}");
+    let also = d["spans"].as_array().unwrap().iter().find(|s| s["secondary"] == true).expect("the other call, placed");
+    assert!(also["label"].as_str().unwrap().contains("`--grant console`"), "{also}");
+    assert_eq!(also["start"]["line"], 6, "{also}");
+    let rep = read_json(&dir.join("rep.json"));
+    assert_eq!(rep["missing_grants"], env["missing_grants"], "the report says what the envelope says: {rep}");
+
+    // The WASM engine's refusal says the same, and its report now records the fault as the interpreter's does.
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--engine", "wasm", "--json", "--report-out", "wasm.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    assert_eq!(json_of(&o)["missing_grants"], env["missing_grants"], "{}", text(&o));
+    let rep = read_json(&dir.join("wasm.json"));
+    assert_eq!(rep["diagnostics"][0]["code"], "DL0703", "{rep}");
+    assert_eq!(rep["missing_grants"], env["missing_grants"], "{rep}");
+
+    // One grant given: the other is the refusal, and the effect before it happened — the default is lazy, as before.
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--grant", "fs.write=./out"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    assert!(text(&o).contains("error[DL0703]: `console` was not granted"), "{}", text(&o));
+    assert!(dir.join("out").join("step1.txt").is_file(), "without --preflight the first effect still happens");
+    assert!(!text(&o).contains("note: by its text"), "the one grant the message names needs no second line: {}", text(&o));
+
+    // Both given: no refusal, nothing missing.
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--json", "--grant", "fs.write=./out", "--grant", "console"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.73 (D-V2-217): `run --preflight` decides the program's text against the run's grants before `main` starts. A
+/// grant it lacks refuses the run with DL0703 naming every one, and nothing runs — no file, `outcome.ran: false` — on
+/// the ordinary run and under `--sandbox` alike. A scope the program computes is still decided at its call: against a
+/// grant of its kind it runs, and against none it is refused up front, by its placeholder.
+#[test]
+fn preflight_refuses_before_any_effect_naming_every_missing_grant() {
+    let dir = scratch("preflight");
+    std::fs::write(dir.join("partial.delulu"), PARTIAL).unwrap();
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let step1 = dir.join("out").join("step1.txt");
+
+    let o = run_in(
+        &dir,
+        &["partial.delulu", "--no-prompt", "--preflight", "--grant", "fs.write=./out", "--json", "--report-out", "rep.json"],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    assert!(!step1.exists(), "nothing ran, so nothing was written: {}", text(&o));
+    let env = json_of(&o);
+    assert_eq!(env["missing_grants"], serde_json::json!(["console"]), "{env}");
+    assert_eq!(env["diagnostics"][0]["code"], "DL0703", "{env}");
+    assert!(env["diagnostics"][0]["message"].as_str().unwrap().contains("so nothing ran (`--preflight`)"), "{env}");
+    let rep = read_json(&dir.join("rep.json"));
+    assert_eq!(rep["outcome"]["ran"], false, "{rep}");
+    assert_eq!(rep["missing_grants"], serde_json::json!(["console"]), "{rep}");
+
+    // Under the sandbox the host decides it before a guest exists.
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--preflight", "--sandbox", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    assert!(!step1.exists(), "no guest, no file: {}", text(&o));
+    assert_eq!(json_of(&o)["missing_grants"], serde_json::json!(["fs.write=./out", "console"]), "{}", text(&o));
+
+    // Everything granted: it runs as without the flag.
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--preflight", "--grant", "fs.write=./out", "--grant", "console"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("step 2") && step1.is_file(), "{}", text(&o));
+
+    // A computed scope: decided at its call against a grant of its kind, refused up front against none.
+    std::fs::write(
+        dir.join("computed.delulu"),
+        "module m\n\nfn place() -> Str {\n  \"./out\"\n}\n\nfn main(root: Root) ! {Write} {\n  let w = root.fs_write(place())\n  \
+         match w.write_text(\"c.txt\", \"c\") { Ok(_) => {}, Err(_) => {} }\n}\n",
+    )
+    .unwrap();
+    let o = run_in(&dir, &["computed.delulu", "--no-prompt", "--preflight", "--grant", "fs.write=./out"]);
+    assert_eq!(o.status.code(), Some(0), "a computed scope inside a grant of its kind runs: {}", text(&o));
+    assert!(dir.join("out").join("c.txt").is_file(), "{}", text(&o));
+    let o = run_in(&dir, &["computed.delulu", "--no-prompt", "--preflight", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    assert_eq!(json_of(&o)["missing_grants"], serde_json::json!(["fs.write=PATH"]), "its placeholder: {}", text(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}

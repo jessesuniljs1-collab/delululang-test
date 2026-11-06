@@ -371,17 +371,18 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     language server and `edit` check a module of a package as the package (`check_package_overlaid`); the other LSP
     providers' half is RW 6.82. ~~RW 3.28~~ closed the same day (D-V2-215: a wrapper calls any `main` the checker
     accepts in the WASM host's shape), and ~~RW 3.29~~ too (D-V2-216: the interpreter's stack walks a ladder and its
-    depth bound follows the stack it got, or half a sandbox guest's memory ceiling). Next: RW 6.73 and 6.74 (the
-    audit's §7 order);
-  - then RW 6.75 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
+    depth bound follows the stack it got, or half a sandbox guest's memory ceiling), and ~~RW 6.73~~ (D-V2-217: a
+    refusal names every grant the run lacks, `missing_grants`; `run --preflight` refuses before anything runs). Next:
+    RW 6.74 (the audit's §7 order);
+  - then RW 6.75, 6.83 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);
   - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-216;
-  - the last mutant is M1147;
+  - the last decision is D-V2-217;
+  - the last mutant is M1155;
   - there are 157 DL codes and 366 reference anchors;
   - pull requests are numbered on GitHub, and #138 was the last merged (by fast-forward, the laptop, 2026-11-06).
 

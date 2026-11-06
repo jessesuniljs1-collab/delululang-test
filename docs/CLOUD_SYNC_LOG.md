@@ -8557,3 +8557,42 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. RW 3.30: measure on Linux before any fix. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and
      7.30 wait for their next red.
   4. Still the owner's: holding 2.0 and the reviews' open decisions; `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-06 — the laptop: RW 6.73 closed — a refusal for one grant names every grant the run lacks; `run --preflight` (D-V2-217)
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef).
+- Branch: `laptop/missing-grants` → a pull request into `master`. Base: `e9a8974` (RW 3.29, PR #139; this one lands
+  after it).
+- **PR #139's first run, read:** `42235807959` on `56069fd` was red in `lints` alone. On 64-bit Linux, clippy refused
+  `lim.rlim_cur as u64` in `ceiling.rs` as an unnecessary cast; the Windows clippy never compiles that line. Every other
+  job was green (13 more; `miri-slow` and `heavy-gates` skipped). `e9a8974` allows the lint on that one function, with
+  the reason (`rlim_t` is 32 bits on a 32-bit target). Its run is the next to read.
+- **The milestone:** RW 6.73 (D-V2-217).
+  - A DL0703 refusal names every grant the text shows the run lacks: `missing_grants` on the envelope and in the report,
+    a secondary span at each call, and one line of flags.
+  - `run --preflight` refuses before anything runs, on the ordinary run and under `--sandbox`.
+  - On `--engine wasm` the report now records its fault.
+- **New:** RW 6.83 (a sandboxed run refused before its guest starts writes no report).
+- Files and folders (`git diff --name-status e9a8974..HEAD`): M `CHANGELOG.md`, `README.md`,
+  `crates/delulu/src/cli.rs`, `crates/delulu/src/guest.rs`, `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu/src/schema.rs`, `crates/delulu/tests/cli_contract.rs`, `docs/AI_ONBOARDING.md`,
+  `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md`,
+  `docs/for-agents.md`, `docs/survey/*`. Nothing added, deleted or renamed; no entrenched file.
+- **Verified on the laptop (Windows):**
+  - the two new `cli_contract` tests were red on the old code and are green now;
+  - mutants M1148–M1155 were all red, and the control green;
+  - `delulu`'s unit tests and `cli_contract`, `json_contract`, `completions_cli`, `sandbox_modes_cli`,
+    `message_spacing`, `cli`, `examples_run`, `package_run`, `grants_cli` and `plugin_load_cli` are green;
+  - `scripts/clippy.sh -j 2` was clean.
+- **The full suite:** the pull request's run.
+- Survey and doctor (after the last edit): in the pull request.
+- **Open / next:**
+  1. PR #139's CI, then this pull request's; land each by fast-forward and read the push runs. Delete
+     `laptop/stack-ladder-witness`.
+  2. The reviews' order: RW 6.74 (MCP cannot cancel a call), then the outcome contracts: RW 6.75 with 6.83, then 6.77,
+     6.76 and 6.78–6.81.
+  3. RW 3.30: measure on Linux before any fix. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and
+     7.30 wait for their next red.
+  4. Still the owner's: holding 2.0 and the reviews' open decisions, now including whether `--preflight` becomes the
+     default for `--sandbox` runs. `launch/2.0.0` stays prepared, not launched.
