@@ -12433,3 +12433,33 @@ taken for *someone else revoked it*, fail-open whatever the cause), and a monito
 test job's `actors_pingpong` verdict as before (arm64 MEASURED 2.83x against a bar of 1.48x; the other three NOT MEASURED);
 the OpenShell run `42162246404` success.
 
+## 2026-11-06 — the same session, at the owner's word: the red CI runs explained; RW 7.29's fail-open closed (D-V2-213)
+
+**Why.** The owner: *"CI Runs failed … Search web … What about that CI run fails"*. Every `master` run of the day was green
+(push runs `42158064500`, `42162246455`, `42164047178`). The red runs were the laptop's `witness.yml` repeat runs of the
+whole `monitor_cli` target on `laptop/rw-7-25-repeat` — about 1,500 runs in all, some beside busy loops: macOS
+`42148295822` and Windows `42148239197` red in RW 7.25's test; Windows `42148230468` and macOS `42153816861` red in RW
+7.29's; Windows `42153830411` cancelled at the job's 90-minute limit. A web search found reports of uneven hosted-runner
+speed on macOS and Windows and no fix; its one firm point is that a missed heartbeat looks the same whether its sender was
+starved, hung or crashed, until each side's timing is read.
+
+**RW 7.25's Windows red, read against the code.** The watch beat at +372 ms and next at +4110 ms (refused). The beater beats
+only while the watch waits on the daemon (DEADMAN-BUSY-1), and none beat, so for 3.7 s the watch was held outside a daemon
+request: in its step *reading what was appended*, or not scheduled. That run predates the step timing (`d3da12b`), so
+which is not known; the cause is still not named.
+
+**RW 7.29's Windows red, read against the code.** The monitor ended *"was revoked — nothing left to watch"*, exit 0, the
+end kept for an operator's revocation. That ending was reached only when no record of its own dead-man was found: a chain
+it could not read, or one without the record (RW 4.58: a revocation stays in force when its record cannot be written).
+Whatever the cause, that is a guess reported as a clean end.
+
+**The fix (`b1d7d44`, D-V2-213).** `ending_of_a_node_gone`, one function for both places a watch sees its node gone: with a
+dead-man armed, a clean end only on someone else's revocation recorded since the arming, or a TTL's end; otherwise a
+failure that says it cannot tell by whom. Witness `monitor_cmd::tests::a_gone_node_ends_the_watch_clean_only_on_a_revocation_the_chain_names`
+red on the old ending (extracted unchanged first); `a_watch_whose_node_expires_ends_clean_with_its_dead_man_armed` keeps a
+TTL's end clean; RW 7.29's test prints the node's state and `broker.log` at each failure. Mutants M1111–M1115 red; M1116
+survives (no test can place a TTL's end between a turn's state check and its beat). The full suite: 192 targets, 2,693
+passed, 0 failed. `witness.yml` on `b1d7d44`: Windows `42168550190` and macOS `42168552718` green, every new test named.
+Repeats of the whole target beside two busy loops — Windows ×90 `42168555302`, macOS ×120 `42168558046` — running at this
+entry.
+

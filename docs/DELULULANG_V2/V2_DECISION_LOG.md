@@ -5955,3 +5955,21 @@ the row's suggestion; it would change how each reads its values, for no gain the
 
 **Evidence.** `a_signing_command_refuses_an_option_it_does_not_know`; mutants M1108–M1110 red.
 
+## D-V2-213 — RW 7.29: a watch whose node is gone ends clean only on a revocation the chain names — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** Reading RW 7.25's repeat runs, Windows `42148230468` showed a monitor whose own dead-man the test had made fire
+end *"was revoked — nothing left to watch"*, exit 0 — the end kept for an operator's revocation. The monitor decides whose
+revocation it was from the chain (never from a refusal's words, D-V2-106), but took *no dead-man record found* — a chain it
+could not read, or one that did not hold the record (RW 4.58: a revocation stays in force when its record cannot be
+written) — for *someone else*. The owner, 2026-11-06: *"CI Runs failed … Search web … What about that CI run fails"*.
+
+**Decision.** One function, `ending_of_a_node_gone`, ends a watch whose node is no longer live, for both places that see
+it (a refused beat, the node's state). With a dead-man armed it ends clean only on evidence: someone else's revocation
+recorded since the arming (a record names a subtree's root, so an ancestor's revocation counts), or a TTL's end. Its own
+dead-man's record ends it as a failure, as before. A chain it cannot read, or one naming no revocation since the arming,
+ends it as a failure that says it cannot tell by whom. With no dead-man armed, every end is clean, as before. The cause of
+RW 7.29's two reds is not established, and nothing here claims it: the test now prints the daemon's `broker.log` and the
+node's state at each of its failures, so the next red says which way it went.
+
+**Evidence.** The witness red on the old ending; Mutants M1111–M1115 red (M1115 by the TTL test `a_watch_whose_node_expires_ends_clean_with_its_dead_man_armed`); **M1116** (a refused beat's DL1402 read as an expiry) survives: the TTL witness meets the expiry at the state check, and no test can place a TTL's end between a turn's state check and its beat — the mapping is the refusal code's own meaning (DL1402, *lease expired*). The full suite on `b1d7d44`: 192 targets, 2,693 passed, 0 failed; `witness.yml` Windows `42168550190` and macOS `42168552718` green, every new test named.
+

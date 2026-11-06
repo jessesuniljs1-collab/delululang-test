@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a monitor ends clean only when the chain says someone else ended it, 2026-11-06
+
+- **Fixed (RW 7.29, D-V2-213):** `delulu monitor watch` with a dead-man armed ended *"was revoked — nothing left to watch"*,
+  exit 0, whenever it found no record of its own dead-man firing — even when it could not read the chain, or the chain did
+  not hold the revocation. It now ends clean only on someone else's revocation recorded since its dead-man was armed, or
+  its node's TTL; otherwise it ends as a failure that says it cannot tell by whom (its dead-man may have fired).
+
 ## Unreleased — a plugin's export is handed out only at a type that covers it; signing commands refuse unknown options, 2026-11-06
 
 - **Fixed (security, RW 4.95, D-V2-210):** `p.get` checks the export against the function type the program asks for

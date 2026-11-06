@@ -8426,3 +8426,30 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      not yet hold D-V2-210 to D-V2-212 (D-V2-210 refuses a program that typed an export narrower than it is — judge it
      against the *Breaking* paragraph at the next merge).
 
+### 2026-11-06 — the same session, at the owner's word: the red CI runs explained; RW 7.29's fail-open closed (D-V2-213)
+- Session: `https://claude.ai/code/session_01Deh6WADFripHmdEgmnBcCo`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner, live: *"CI Runs failed … Search web … What about that CI run fails"*.
+- Branch: `master` (fast-forwarded to `b1d7d44` once its suite was green); the code first went to
+  `claude/peaceful-carson-qprliy` for its runner reads. Base: `7cf3321`.
+- **What the red runs were:** none on `master` — its three push runs of the day were green. They were the laptop's repeat
+  runs on `laptop/rw-7-25-repeat`: macOS `42148295822` and Windows `42148239197` (RW 7.25's test), Windows `42148230468` and
+  macOS `42153816861` (RW 7.29's), Windows `42153830411` cancelled at the 90-minute limit. Each reading is in `V2_LOG.md`.
+- **What changed:** `b1d7d44` — `crates/delulu/src/monitor_cmd.rs` (`ending_of_a_node_gone`: a watch whose node is gone ends
+  clean only on a revocation the chain names, or a TTL's end; its unit witness), `crates/delulu/tests/monitor_cli.rs`
+  (RW 7.29's test prints the node's state and `broker.log` at each failure; a TTL's end stays clean); then this records
+  commit — RW 7.29, D-V2-213, `CHANGELOG.md`, `V2_LOG.md`, `AI_ONBOARDING.md` §10 (D-V2-213, M1116), this entry,
+  `docs/survey/*`.
+- Files and folders (`git diff --name-status 7cf3321..HEAD`): M `crates/delulu/src/monitor_cmd.rs`,
+  `crates/delulu/tests/monitor_cli.rs`, `CHANGELOG.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`.
+  Nothing added, deleted or renamed.
+- **Verified:** the witness red on the old ending; mutants M1111–M1115 red, M1116 survives (recorded in RW 7.29);
+  `scripts/clippy.sh` clean; the full suite on `b1d7d44` 192 targets, 2,693 passed, 0 failed, 16 ignored; `witness.yml`
+  Windows `42168550190` and macOS `42168552718` green, every new test named.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. Read the push run of this records commit, and the repeats running at this entry: Windows ×90 `42168555302` and macOS
+     ×120 `42168558046` (the whole `monitor_cli` target beside two busy loops). A red there now prints the daemon's side:
+     read its `broker.log` before naming a cause, for RW 7.25 and RW 7.29 alike.
+  2. Then as the entry before: the reviews' order — RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74 — and on.
+

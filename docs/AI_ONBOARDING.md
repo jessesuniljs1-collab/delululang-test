@@ -359,7 +359,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     the export against the type the program asks for (R-Get), in the host and inside a plugin; a `Plugin[Contained]`
     request is refused at `load` as one; the six commands that read their own options refuse one they do not know;
   - **RW 7.29 first** (found the same run, reading RW 7.25's repeat runs): `a_watch_held_outside_the_daemon_lets_its_dead_man_fire`
-    red in two shapes; shape 1 is a monitor that takes a chain it could not read for *someone else revoked it*;
+    red in two shapes; shape 1's fail-open (a chain it could not read taken for *someone else revoked it*) closed the same
+    day (D-V2-213), and the test now prints `broker.log` at each failure — read the next red's before naming a cause;
   - RW 4.98 is closed (D-V2-209, amended after an independent review): a beat of this version read whole and stamped
     before a judgment counts, by its key, for the period it bought; counter-tests for incomplete connections, wrong keys,
     another protocol version and other traffic; the broker's Miri green on it (`42093191962`). RW 7.25's cause is
@@ -374,8 +375,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-212;
-  - the last mutant is M1110;
+  - the last decision is D-V2-213;
+  - the last mutant is M1116;
   - there are 157 DL codes and 366 reference anchors;
   - pull requests are numbered on GitHub, and #136 was the last merged (by fast-forward, on-demand routine run 20).
 
