@@ -228,6 +228,13 @@ fn launch_external(
 pub fn run_guest(args: &[String]) -> i32 {
     // SANDBOX-STOP-1: from here a refused allocation ends this process with a status the host names.
     crate::ceiling::enter_guest_mode();
+    // RW 3.29: a ceiling that counts the stack pages a recursion commits (a Windows Job Object's) can be reached before
+    // the depth bound, however large the reservation — `hostile-agent`'s 256 MiB ended a deep recursion with *"has
+    // overflowed its stack"*, not DL0905. Half the ceiling is the most the interpreter's stack may count on; the heap
+    // keeps the rest.
+    if let Some(ceiling) = crate::ceiling::own_memory_ceiling() {
+        delulu_runtime::cap_process_stack_bytes(usize::try_from(ceiling / 2).unwrap_or(usize::MAX));
+    }
     // D-V2-83: the outer-wall declaration is an external launcher's alone. A guest the HOST starts is
     // started with fixed words and never needs it; a word a guest does not act on is refused, not ignored.
     if args.iter().any(|a| a == OUTER_FILTER_FLAG) && args.first().map(String::as_str) != Some(STDIO_PIPES_FLAG) {

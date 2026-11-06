@@ -77,26 +77,19 @@ static ALLOCATOR: ceiling::CeilingAware = ceiling::CeilingAware;
 /// reserves a stack sized for the depth bound"* existed at exactly one site — and the actor
 /// scheduler, which runs the same interpreter on its own worker threads, was the site that never
 /// learned it.
-use delulu_runtime::INTERPRETER_STACK_BYTES;
-
+///
+/// **RW 3.29: the reservation walks a ladder, and the bound follows the stack it got.** A host that caps address space
+/// (`ulimit -v`, the sandbox's own memory ceiling — `hostile-agent`'s 256 MiB) refuses the full reservation. This used to
+/// fall back to the main stack (8 MiB on Linux) with the full bound, so a recursion 100,000 deep, DL0905 without the
+/// cap, aborted the process (*"thread 'main' has overflowed its stack"*, exit 134, no report). Now the CLI runs on the
+/// largest rung of `INTERPRETER_STACK_LADDER` the host grants, and every interpreter it builds takes the bound that fits
+/// that stack (`delulu_runtime::on_laddered_thread`), so the guard still fires first.
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let worker =
-        std::thread::Builder::new().name("delulu-main".into()).stack_size(INTERPRETER_STACK_BYTES).spawn(move || cli::run(&args));
-    let code = match worker {
-        // A worker panic becomes exit 2 (internal), never a pretended success. Rust has already
-        // printed the panic itself. **This mapping is load-bearing and must not be "simplified"
-        // into something that loses it**: `json_contract.rs` once keyed its no-panic sweep on exit
-        // 101 and could therefore not see *any* crash in the path where all the work happens
-        // (campaign finding C49, ruling D44c).
-        Ok(handle) => handle.join().unwrap_or(2),
-        // If the thread cannot be spawned, fall back to the main stack rather than refusing to
-        // run at all — a shallow program still works, and a deep one now hits DL0905 or the same
-        // crash it would have hit anyway.
-        Err(_) => {
-            let args: Vec<String> = std::env::args().skip(1).collect();
-            cli::run(&args)
-        }
-    };
+    // A worker panic becomes exit 2 (internal), never a pretended success. Rust has already printed the panic itself.
+    // **This mapping is load-bearing and must not be "simplified" into something that loses it**: `json_contract.rs` once
+    // keyed its no-panic sweep on exit 101 and could therefore not see *any* crash in the path where all the work happens
+    // (campaign finding C49, ruling D44c).
+    let code = delulu_runtime::on_laddered_thread(move || cli::run(&args)).unwrap_or(2);
     ExitCode::from(code as u8)
 }
