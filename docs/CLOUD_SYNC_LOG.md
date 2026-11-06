@@ -8404,17 +8404,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   busy loops) and macOS `42148266268` and `42148287472` green; Windows `42148239197` red at run 60 of 100 in RW 7.25's test
   (three busy loops, before the step timing; its numbers in the row); Windows `42148230468` red in another test. Round 3, on
   `d3da12b`: macOS `42153802328`, `42153809227` and Windows `42153823661` green; macOS `42153816861` red in that other test;
-  Windows `42153830411` still running at this entry. **RW 7.29 is new** — that other test, red in two shapes (its row).
+  Windows `42153830411` cancelled at `witness.yml`'s 90-minute job limit, no run red before it (its annotations hold only
+  the limit). **RW 7.29 is new** — that other test, red in two shapes (its row).
 - Survey and doctor (after the last edit): in the commit message.
 - Redo on the laptop: nothing for the milestone. Delete the merged branches listed above.
 - For the laptop's memory: `HANDOFF.md` §11.2 — *a guard that reads the usage text inherits every mention in it*; *a rule
   written and unit-tested is enforced only where a program's path calls it*.
 - **Open / next:**
-  1. **The push run of this run's records commit** — read it; it is named in the next commit or entry.
+  1. **CI of this run, read:** `master`'s push run `42162246455` on `d49e2d0` — success, 14 + 2 skipped (arm64 pingpong
+     MEASURED 2.83x, bar 1.48x); OpenShell `42162246404` success. The push run of the follow-up commit that wrote this line
+     is unread here: read it first.
   2. **RW 7.29 first** (a monitor that may report a fired dead-man as a clean end): make a failed chain read end the watch
      as a failure, witnessed by a seam red first; then have the test print the node's state and `broker.log` when the
      monitor does not end.
-  3. Read Windows `42153830411` (RW 7.25 round 3) into RW 7.25. RW 7.25 stays open: name no cause before a red's step line.
+  3. RW 7.25 stays open: name no cause before a red's step line. A Windows repeat must fit `witness.yml`'s 90-minute limit
+     (`42153830411` was cancelled by it).
   4. Then the reviews' order (`AI_ONBOARDING.md` §10): the package-blind fast paths, RW 6.72 with 6.69, then RW 3.28, 3.29,
      6.73 and 6.74; then the outcome contracts (6.75, 6.77, then 6.76, 6.78–6.81); and on.
   5. The Windows re-runs of the reviews' rows, into the rows (`docs/assistant-memory/windows-verification-2026-11-05.md`).

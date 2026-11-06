@@ -12424,8 +12424,12 @@ red; M1108 no option guard, M1109 `--x=v` read whole, M1110 three commands not s
 **RW 7.25's runs, read on the way (the inbox's item 2).** Round 2's six: four green; Windows `42148239197` red at run 60 of
 100 beside three busy loops in RW 7.25's test (before the step timing — its numbers in the row); Windows `42148230468` red
 in another test. Round 3, on the step timing: macOS `42153802328`, `42153809227` and Windows `42153823661` green; macOS
-`42153816861` red in that other test; Windows `42153830411` still running. The other test is **RW 7.29, new**:
+`42153816861` red in that other test; Windows `42153830411` cancelled at `witness.yml`'s 90-minute limit, no run red before it. The other test is **RW 7.29, new**:
 `a_watch_held_outside_the_daemon_lets_its_dead_man_fire`, red in two shapes — a monitor that ended *"was revoked — nothing
 left to watch"*, exit 0, which by the code means its chain read failed or lacked the fire record (and a failed read is
 taken for *someone else revoked it*, fail-open whatever the cause), and a monitor that never ended within 27 s.
+
+**CI.** `master`'s push run `42162246455` on `d49e2d0` (this run's fix and records): success, 14 jobs and 2 skipped, every
+test job's `actors_pingpong` verdict as before (arm64 MEASURED 2.83x against a bar of 1.48x; the other three NOT MEASURED);
+the OpenShell run `42162246404` success.
 
