@@ -285,6 +285,31 @@ another OS, and then takes about seven minutes itself (run 5).
 **4. Choose one piece of work** — the first of these that is not done:
 1. Anything steps 2–3 found.
 2. `Open / next` items from the newest sync-log entries.
+   **Since 2026-11-06 that list is DeluluLang's development, in the reviews' order, and it comes first** (the owner: *"We
+   have to continue actual development and improvements to DeluluLang also according to the review files also, That's
+   more important"*; `HANDOFF.md` §11.1). Four reviews in `docs/review/` (2026-11-04 and 05) set what DeluluLang builds
+   next: Codex's strategic review, Claude's independent strategic verification, the AI-first compiler and
+   execution-pipeline audit, and the hidden-complexity AI-first experience audit. `docs/AI_ONBOARDING.md` §10 keeps
+   their order current. Read the reviews and the newest sync-log entry before naming the milestone.
+   - **What is being built:** a language an AI agent can use for ordinary work, CLI-first, over one typed service layer
+     that the CLI, MCP and the LSP share. Its fast paths give true answers: the LSP and `edit` see the whole package. Its
+     refusals come before effects, not after them. Its artifacts run, and MCP is bounded and cancellable. Text stays
+     the canonical form. OpenShell is an optional backend (its pin bumped, RW 7.28), and the PS-C microVM is frozen. The
+     verification recommends holding 2.0 behind an ordinary-agent-utility bar: argv and environment, exit outcomes,
+     JSON, math, strings, methods and WASM parity (RW §8 items 7 and 8). The owner has not yet answered on that.
+   - **The order:**
+     1. RW 4.95 (R-Get enforced at `p.get`, HIGH), with 4.96 and 4.97;
+     2. the package-blind fast paths: RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74;
+     3. the outcome contracts: RW 6.75 and 6.77, then 6.76 and 6.78–6.81;
+     4. the DIR and review-surface defects: RW 4.93, 4.94, 5.7, 6.67 and 6.68;
+     5. the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88;
+     6. RW 7.28;
+     7. the language basics (RW §8 items 7 and 8), then RW 3.24.
+   - Each is a milestone of its own: witnessed red first, fixed, mutant-tested and recorded. The decisions the reviews
+     leave to the owner (holding 2.0, the OpenShell verdict, and the rest in `AI_ONBOARDING.md` §10) wait for his
+     answer.
+   - A rare flaky test (RW 7.25) gets its instrument and its record, then waits for its next red. It never holds the
+     order up. A run may read, in passing, the RW 7.25 runs its inbox names.
 3. **Since 2026-10-17: the release program** — the owner's commission (`HANDOFF.md`, *The owner's commission of
    2026-10-17*). Its order: audit → P9-05 (done) → the decisions → WSL and VS Code validation → the scheduled task (this
    routine, D-V2-146) → the release → the final report. The current list, in order, is the newest sync-log entry's

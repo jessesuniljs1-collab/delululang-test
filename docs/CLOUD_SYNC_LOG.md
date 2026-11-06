@@ -8314,6 +8314,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
     refresh).
   - Records: RW 7.25; `HANDOFF.md` §11.1 (the owner's priority: development first) and §11.2 (re-run a flake the way it
     failed); `AI_ONBOARDING.md` §10 (RW 7.25, M1098, #135); `CHANGELOG.md`; `V2_LOG.md`; this entry; `docs/survey/*`.
+  - **The cloud routine** (the owner: *"Update claude code cloud routine (scheduled task) about new development and review
+    files and what we are gonna build in DeluluLang. Let the routine remain paused"*):
+    - `docs/CLOUD_ROUTINE.md` step 4 item 2 now carries what the reviews say DeluluLang builds next and in what order,
+      ahead of the release program;
+    - the routine `trig_01HFG6usfzmDAPQigiDu9DLq` gained one paragraph, WHAT TO BUILD NOW, by API at 03:06 UTC, with the
+      rest of its prompt unchanged;
+    - it was read back still paused (`enabled: false`).
 - Files and folders: the pull request's `git diff --name-status fddb1f6..HEAD`. Added: seven
   `docs/assistant-memory/*.md` notes. Nothing deleted or renamed.
 - **CI read:**
