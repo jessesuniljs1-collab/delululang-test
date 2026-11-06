@@ -1718,3 +1718,84 @@ fn a_content_length_past_the_bound_is_refused_in_words_not_allocated() {
         assert!(err.contains("exceeds") && err.contains("bound"), "Content-Length {length}: refused in words: {err}");
     }
 }
+
+/// RW 6.72: a module of a package is checked as its package — the check `delulu check DIR` runs — with
+/// every open document in place of its copy on disk. Checked alone, the shipped greeter's entry module
+/// showed `DL0301 unknown name salutation` and `shout_count` while `delulu check` was clean, and a
+/// widening its manifest refuses (DL1009) showed nothing.
+#[test]
+fn a_module_of_a_package_is_checked_as_its_package() {
+    let dir = std::env::temp_dir().join(format!("delulu-lsp-pkg-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    let from = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/greeter");
+    for f in ["delulu.toml", "src/main.delulu", "src/greetings.delulu"] {
+        std::fs::copy(from.join(f), dir.join(f)).unwrap();
+    }
+    let uri_of = |rel: &str| format!("file:///{}", dir.join(rel).to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+    let (main_uri, lib_uri) = (uri_of("src/main.delulu"), uri_of("src/greetings.delulu"));
+    let main = std::fs::read_to_string(dir.join("src/main.delulu")).unwrap();
+    let lib = std::fs::read_to_string(dir.join("src/greetings.delulu")).unwrap();
+    let check_json = || -> Value {
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(["check", dir.to_str().unwrap(), "--json"])
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .unwrap();
+        serde_json::from_slice(&o.stdout).unwrap()
+    };
+    assert_eq!(check_json()["summary"]["errors"], 0, "the reference: the package checks clean");
+
+    let mut c = Client::start_in(&dir);
+    let change = |c: &mut Client, uri: &str, text: &str, v: i64| {
+        c.notify(
+            "textDocument/didChange",
+            json!({ "textDocument": { "uri": uri, "version": v }, "contentChanges": [{ "text": text }] }),
+        );
+    };
+    c.open(&main_uri, &main);
+    let d = c.wait_diagnostics(&main_uri);
+    assert_eq!(d, json!([]), "the entry module checks as its package does: {d:#}");
+
+    // A widening the manifest refuses is shown, as `check` refuses it — at the top of the module, saying
+    // where it lies — though the module alone checks.
+    let widened = main.replace(
+        "fn main(root: Root) ! {Write} {\n",
+        "fn main(root: Root) ! {Write, Net} {\n    let client = root.http([\"evil.example.com\"])\n    \
+         match client.get(\"https://evil.example.com/x\") {\n        Ok(body) => root.console().println(body)\n        \
+         Err(e) => root.console().println(\"no\")\n    }\n",
+    );
+    assert_ne!(widened, main);
+    change(&mut c, &main_uri, &widened, 2);
+    let d = c.wait_diagnostics(&main_uri);
+    let refused = d.as_array().unwrap().iter().find(|x| x["code"] == "DL1009").unwrap_or_else(|| panic!("DL1009 shown: {d:#}"));
+    assert_eq!(refused["range"]["start"], json!({ "line": 0, "character": 0 }), "{refused:#}");
+    // The compiler's own message, with where it lies: `check` on the same text says the same.
+    std::fs::write(dir.join("src/main.delulu"), &widened).unwrap();
+    let cli = check_json();
+    std::fs::write(dir.join("src/main.delulu"), &main).unwrap();
+    let cli_d =
+        cli["diagnostics"].as_array().unwrap().iter().find(|x| x["code"] == "DL1009").expect("check refuses it too").clone();
+    let msg = refused["message"].as_str().unwrap();
+    assert!(msg.starts_with(cli_d["message"].as_str().unwrap()) && msg.contains("(at delulu.toml:"), "{msg} / {cli_d:#}");
+
+    // Mend main, then open the other module and rename what main calls, unsaved: main is republished
+    // from that one check, and now names the missing function — the buffer, not the disk, is the truth.
+    change(&mut c, &main_uri, &main, 3);
+    assert_eq!(c.wait_diagnostics(&main_uri), json!([]));
+    c.open(&lib_uri, &lib);
+    assert_eq!(c.wait_diagnostics(&lib_uri), json!([]));
+    assert_eq!(c.wait_diagnostics(&main_uri), json!([]), "every open module is republished");
+    change(&mut c, &lib_uri, &lib.replace("pub fn salutation(", "pub fn salute("), 2);
+    assert_eq!(c.wait_diagnostics(&lib_uri), json!([]), "the renamed module itself checks");
+    let d = c.wait_diagnostics(&main_uri);
+    assert!(
+        d.as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["code"] == "DL0301" && x["message"].as_str().unwrap_or_default().contains("salutation")),
+        "main names what it calls that no longer exists: {d:#}"
+    );
+    c.shutdown();
+    let _ = std::fs::remove_dir_all(&dir);
+}

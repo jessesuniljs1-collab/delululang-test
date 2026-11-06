@@ -12469,3 +12469,39 @@ dead-man fired; the daemon logged five times that it did not run for 100 ms). Th
 and the binary's unit tests were the job's first target. Re-run once: attempt 2 green, every job. RW 7.30 records it,
 with a VM probe (four copies at once: 1 red in 12, a fourth test, whose process-wide thread count its neighbours share).
 
+## 2026-11-06 — the laptop: RW 6.72 and 6.69 closed — the language server and `edit` check a module as its package (D-V2-214)
+
+**Why.** The owner: *"Head Chef Claude, Continue cooking and improving DeluluLang The lang of Future. I did run claude
+routine once, Check that."* The routine's run 20 (session `session_01Deh6WADFripHmdEgmnBcCo`) was read first: it
+succeeded and stopped cleanly — RW 4.95–4.97 and RW 7.29 closed, `master` `a2afa97` green (push run `42176177682`, 14 +
+2 skipped; scheduled run `42201603964` green), the routine read back `enabled: false`. The nine merged branches its git
+proxy could not delete were deleted from the laptop, each first confirmed an ancestor of `master`. Then the reviews'
+order: the package-blind fast paths, RW 6.72 with 6.69 — one cause, two readers.
+
+**The cause.** `delulu lsp` (`Doc::analyze`) and `delulu edit` checked text nobody had saved with `check_source`: one
+file, alone. A module that imports another never checks alone, so the server showed the shipped greeter's entry module
+`DL0301 unknown name salutation` and `shout_count` while `delulu check examples/greeter` was clean, and `edit` answered
+`before: null`, `widened: null`, 0 errors for a `main` adding `Net` — written under `--if-checks` — and refused a body
+calling `salutation`. All three re-run on the current binary before the fix; `fn:BOGUSPKG/greeter.main` was accepted too.
+
+**What changed** (D-V2-214):
+- `delulu-check`: `Overlay` (canonical path → text), `load_package_overlaid`, `resolve_workspace_overlaid`,
+  `package_root_of`, and `check_package_overlaid` → `CheckedPackage` — `delulu check DIR`'s three lists (the workspace's,
+  the program's, the supply-chain gate's) in its order, with the overlay read in place of the files it names, in every
+  package of the graph; an overlaid module under `src/` not on disk yet is a module.
+- `lsp.rs`: a module of a package is checked as the package, with every open buffer of it overlaid, and every open
+  module is republished from that one check (`publish`, `check_package`, `shown_in_package`, `Shown`). The manifest's
+  diagnostics and errors in modules no editor has open are shown at the top of each open module, naming
+  `file:line:column`. Code actions read the same list (`diagnostics_of`, `actions_for`): only a diagnostic placed in the
+  document offers its repairs, and a repair that also edits another file is offered without an edit.
+- `edit.rs`: a module of a package is checked as the package with the edited text overlaid, its authority before and
+  after is the package's (`cli::authority_of_package`, factored out of `emit_authority` as `package_authority_report`),
+  and an id must name the file's own package (or, loose, its module); none is refused.
+
+**Measured after the fix** (a scripted LSP client on the greeter): diagnostics `[]`; go-to-definition and signature help
+reach `greetings.delulu`; hover over `salutation` and `shout_count` shows `'t0` and `'t2` — hover, inlay hints and
+completion still read the file's own analysis. Recorded as **RW 6.82**, not claimed fixed.
+
+**Evidence.** Witnesses red on the old code by stash (`lsp_cli`: the audit's two `DL0301`; `edit_cli`: *written: true*,
+exit 0) and green now; four unit tests; mutants M1117–M1133 all red, M1122 by the test's 900 s timeout (the republish
+removed, the other module's diagnostics never come); control green. `scripts/clippy.sh -j 4` clean. The laptop's full suite (`scripts/suite.sh`) did not run: Claude Code stopped it for low memory while it compiled, before a test ran (one `rustc` had already failed to start, `STATUS_DLL_INIT_FAILED`), and its leftover `cargo`/`rustc` were stopped. By the owner's rule of 2026-10-19 the suite runs on GitHub instead: this pull request's run, read to its end before landing.

@@ -8457,3 +8457,41 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      RW 7.30: give the daemon tests a control for the runner (D-V2-47's pattern), never a longer bound.
   3. Then as the entry before: the reviews' order — RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74 — and on.
 
+### 2026-11-06 — the laptop: routine run 20 read; RW 6.72 and 6.69 closed — the language server and `edit` check a module as its package (D-V2-214)
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner: *"Continue cooking and improving DeluluLang The lang of Future. I did run claude routine once,
+  Check that. … Did that CI thing fixed and all green now"*, then *"check last run routine"*.
+- Branch: `laptop/package-fast-paths` → a pull request into `master`. Base: `a2afa97`.
+- **Housekeeping:**
+  - The routine's last run (`cse_01Deh6WADFripHmdEgmnBcCo`, fired 03:33 UTC, `ROUTINE_RUN_STATUS_SUCCEEDED`, then the
+    owner's live follow-ups in the same session until 06:42 UTC) — read through `list_runs`, `get` and its log: it landed
+    PR #136, closed RW 4.95–4.97 and RW 7.29, recorded RW 7.30, and stopped clean. The routine reads back
+    `enabled: false`.
+  - CI: `master`'s push run `42176177682` on `a2afa97` green (14 + 2 skipped); the scheduled run `42201603964` green.
+  - Branches: the nine the routine listed for the laptop (`claude/dazzling-goodall-iaapyw`,
+    `claude/peaceful-carson-qprliy`, `laptop/rw-4-98-fix`, `-orders`, `-review`, `laptop/rw-7-25-ci-evidence`,
+    `-records`, `-repeat`, `-witness`) each confirmed an ancestor of `origin/master`, then deleted from `origin`.
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1636 nodes, 19657 edges)`; `ok: 29 check(s) passed`.
+- **The milestone:** RW 6.72 with 6.69 — the reviews' next item. Delivered: `check_package_overlaid` (`delulu check DIR`
+  with unsaved texts in place of files); the language server checks a module of a package as the package and republishes
+  every open module; `edit` checks and attributes as the package and refuses an id of another package. RW 6.82 added
+  (hover, inlay hints and completion still read one file — measured, `'t0` over an imported name).
+- Files and folders (`git diff --name-status a2afa97..HEAD`): M `CHANGELOG.md`, `HANDOFF.md`, `README.md`,
+  `crates/delulu-check/src/deps.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-check/src/package.rs`,
+  `crates/delulu/src/cli.rs`, `crates/delulu/src/edit.rs`, `crates/delulu/src/lsp.rs`, `crates/delulu/tests/edit_cli.rs`,
+  `crates/delulu/tests/lsp_cli.rs`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/GETTING_STARTED.md`,
+  `docs/REMAINING_WORK.md`, `docs/editors.md`, `docs/for-agents.md`, `editors/vscode/README.md`, `docs/survey/*`. Nothing
+  added, deleted or renamed; no entrenched file.
+- **Verified:** both CLI witnesses red on the old code by stash, green now; four unit tests; mutants M1117–M1133 all red,
+  control green; `scripts/clippy.sh -j 4` clean. The laptop's full suite (`scripts/suite.sh`) did not run: Claude Code stopped it for low memory while it compiled, before a test ran (one `rustc` had already failed to start, `STATUS_DLL_INIT_FAILED`), and its leftover `cargo`/`rustc` were stopped. By the owner's rule of 2026-10-19 the suite runs on GitHub instead: this pull request's run, read to its end before landing.
+- Survey and doctor (after the last edit): in the pull request.
+- For the laptop's memory: `HANDOFF.md` §11.2's *a fast path must see what the slow path sees* now says how it closed —
+  give the fast path the slow path itself.
+- **Open / next:**
+  1. **This pull request's CI**, then land it by fast-forward and read the push run.
+  2. RW 6.82 (the rest of the language server inside a package) when the LSP is next touched; otherwise the reviews'
+     order goes on: RW 3.28, 3.29, 6.73 and 6.74; then the outcome contracts (6.75, 6.77, then 6.76, 6.78–6.81).
+  3. RW 7.25, 7.29 and 7.30 wait for their next red (`broker.log` and the step timing first).
+  4. Still the owner's: holding 2.0 and the reviews' open decisions; `launch/2.0.0` stays prepared, not launched, and
+     does not hold D-V2-210 to D-V2-214 (D-V2-214 refuses an `edit` id with another package's name, or none).

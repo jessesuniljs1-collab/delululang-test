@@ -44,13 +44,15 @@ Four rules that will save you time:
    If you are running a long edit→check loop, `delulu lsp` pays the process cost once and every
    check after that is the sub-millisecond part.
 
-   **Except inside a multi-module package (until `docs/REMAINING_WORK.md` row 6.72 is closed):** the server checks each
-   open file alone, so a module that uses an import shows false `DL0301 unknown name` errors (the shipped
-   `examples/greeter/src/main.delulu` does). For a package, `delulu check <package-dir> --json` is the answer to trust.
+   **Inside a package** the server checks a module as its package — the check `delulu check <package-dir> --json` runs,
+   with every open buffer in place of its file — and republishes every open module of it, so the fast answer is the true
+   one there too (`docs/REMAINING_WORK.md` row 6.72, closed 2026-11-06). Hover and inlay hints still read the file
+   alone: over a name another module exports, hover shows an unsettled type (`'t0`) instead of the name's type
+   (row 6.82); go-to-definition and signature help reach the other module.
 
 5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
-   the same compiler, so its answers cannot drift from `delulu check --json` on a loose file (inside a
-   package, see the exception above). Four of them are worth
+   the same compiler, so its answers cannot drift from `delulu check --json` (inside a package, from
+   `delulu check <package-dir> --json`). Four of them are worth
    knowing about specifically:
 
    - `workspace/executeCommand` with `delulu.authority` returns the §10.5 authority report as JSON —
@@ -308,10 +310,14 @@ delulu edit <file> --expect-hash <blake3> --node <Atlas id> --with '<one item>' 
   `required_grants`, `foreign_calls`), and `edit.authority.widened` lists what the edit **adds**.
   A non-empty `widened` is the same signal as `authority_widening: true` on a repair: a person
   decides it, not a loop. It is `null` when either side does not check.
-- **In a package, `edit` checks the edited file alone.** A module that imports another never checks
-  alone, so `before` and `widened` are `null` for every edit of it, and `--if-checks` can write an
-  edit the package refuses. After editing a package, run `delulu check <package-dir> --json` and
-  `delulu authority <package-dir> --json` yourself (`docs/REMAINING_WORK.md` row 6.69).
+- **In a package, `edit` checks the package.** A file under the `src/` of the nearest `delulu.toml`
+  above it is checked as that package, with the edited text in its place — the check
+  `delulu check <package-dir>` runs once it is written, its manifest ceiling (`DL1009`) included —
+  and `before`, `after` and `widened` are the package's authority (`delulu authority <package-dir>`).
+  So `--if-checks` writes only an edit the whole package accepts: an error anywhere in it, the
+  edit's or one already there, holds the write. An id must name the file's own package
+  (`fn:<package>/<module>.<name>`; for a loose file, its module); another package's, or none, is
+  refused (`docs/REMAINING_WORK.md` row 6.69, closed 2026-11-06).
 - A file stored in a surface morph is refused: offsets and Atlas ids refer to the canonical text.
 - The answer is described by `delulu schema edit` (a closed `anyOf` of the applied and the refused
   shape).

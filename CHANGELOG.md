@@ -11,6 +11,22 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the language server and `edit` check a module as its package, 2026-11-06
+
+- **Fixed (RW 6.72):** `delulu lsp` checks a file that is a module of a package (under the `src/` of the nearest
+  `delulu.toml` above it) as that package: the check `delulu check <package-dir>` runs, with every open buffer in place
+  of its file on disk, and every open module of the package is republished from that one check. The shipped
+  `examples/greeter/src/main.delulu` showed `DL0301 unknown name salutation` and `shout_count` while the package checked
+  clean; it shows nothing now. An effect the manifest does not allow shows its `DL1009` at the top of each open module,
+  saying where in `delulu.toml` it lies, as does an error in a module no editor has open. A code action applies only a
+  repair that edits the document it is asked in. A loose file is checked alone, as before.
+- **Fixed (RW 6.69, D-V2-214):** `delulu edit` on a module of a package checks the package with the edited text in
+  place — its manifest ceiling included — and reports the package's authority before and after, so `--if-checks`
+  writes only an edit the whole package accepts, and `widened` names what the edit adds. A body adding `Net` to the
+  greeter's `main` used to answer `before: null`, `widened: null` and 0 errors, and was written under `--if-checks`;
+  it is refused with `DL1009` now. **An id must name the file's own package**: `fn:BOGUSPKG/greeter.main` was accepted
+  and edited `greeter.main`; it is refused now, as is an id with no package part (`fn:greeter.main`).
+
 ## Unreleased — a monitor ends clean only when the chain says someone else ended it, 2026-11-06
 
 - **Fixed (RW 7.29, D-V2-213):** `delulu monitor watch` with a dead-man armed ended *"was revoked — nothing left to watch"*,

@@ -5971,6 +5971,33 @@ fn emit_authority(
     (modules, units): (&[&delulu_syntax::ast::Module], &[&str]),
     opts: &Opts,
 ) -> i32 {
+    let report = package_authority_report(program, name, dir, map, (modules, units), opts);
+    // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
+    if !opts.within.is_empty() || opts.within_file.is_some() {
+        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
+    }
+    if opts.show_grants && !opts.json {
+        print!("{}", render_required_grants(&report));
+        return 0;
+    }
+    if opts.json {
+        note_json_emitted();
+        println!("{}", envelope_to_string("authority", &[], Some(report), map));
+    } else {
+        print!("{}", render_authority(&report));
+    }
+    0
+}
+
+/// The authority report of a checked package, stamped in the one order `delulu authority DIR` stamps it.
+fn package_authority_report(
+    program: &delulu_check::Program,
+    name: &str,
+    dir: &str,
+    map: &SourceMap,
+    (modules, units): (&[&delulu_syntax::ast::Module], &[&str]),
+    opts: &Opts,
+) -> Json {
     let scopes = scopes_in_dir(std::path::Path::new(dir));
     let mut report = program_authority(program, name, &scopes);
     stamp_custody(&mut report, opts);
@@ -5991,21 +6018,28 @@ fn emit_authority(
     if let (false, Some(obj)) = (requests.is_empty(), report.as_object_mut()) {
         obj.insert("requests".into(), json!(requests));
     }
-    // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
-    if !opts.within.is_empty() || opts.within_file.is_some() {
-        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
+    report
+}
+
+/// The authority report `delulu authority DIR` prints for the package at `root`, with `overlay`'s texts
+/// in place of the files they name (RW 6.69: the before and after of an `edit` inside a package), under
+/// default options. `Err` carries the number of errors when the package does not check, by the gate
+/// `authority DIR` applies.
+pub(crate) fn authority_of_package(root: &std::path::Path, overlay: &delulu_check::Overlay) -> Result<Json, usize> {
+    let ws = delulu_check::resolve_workspace_overlaid(root, overlay);
+    let program = check_workspace(&ws);
+    let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+    diags.extend(program.diagnostics.iter().cloned());
+    let n = errors(&diags);
+    if n > 0 {
+        return Err(n);
     }
-    if opts.show_grants && !opts.json {
-        print!("{}", render_required_grants(&report));
-        return 0;
-    }
-    if opts.json {
-        note_json_emitted();
-        println!("{}", envelope_to_string("authority", &[], Some(report), map));
-    } else {
-        print!("{}", render_authority(&report));
-    }
-    0
+    let name =
+        program.entry_module.clone().or_else(|| ws.root_pkg().map(|p| p.name.clone())).unwrap_or_else(|| "package".to_string());
+    let modules: Vec<&delulu_syntax::ast::Module> = ws.modules.iter().map(|m| &m.unit.module).collect();
+    let units: Vec<&str> = ws.modules.iter().map(|m| m.unit.name.as_str()).collect();
+    let (_, opts) = parse_opts(&[]);
+    Ok(package_authority_report(&program, &name, &root.to_string_lossy(), &ws.source_map, (&modules, &units), &opts))
 }
 
 // ----- authority --diff (§8: the supply-chain review surface) --------------

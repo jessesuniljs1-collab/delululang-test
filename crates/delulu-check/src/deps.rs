@@ -19,7 +19,7 @@ use delulu_syntax::ast::*;
 
 use crate::check::check_module;
 use crate::manifest::{AuthoritySpec, DepSource, Manifest};
-use crate::package::{load_package_into, ModuleUnit};
+use crate::package::{load_package_overlaid, ModuleUnit, Overlay};
 use crate::program::{build_kind, dup, insert_unique_type, push_prelude, Program};
 use crate::resolve::{classify_generics, ConstSig, DeclTable, FnSig, ForeignDef, ForeignFnDef, TypeDef};
 use crate::ty::{ResourceKind, TypeDefId};
@@ -89,6 +89,12 @@ impl Workspace {
 
 /// Resolve a workspace rooted at `root_dir`. Never panics; problems land in `diagnostics`.
 pub fn resolve_workspace(root_dir: impl AsRef<Path>) -> Workspace {
+    resolve_workspace_overlaid(root_dir, &Overlay::new())
+}
+
+/// [`resolve_workspace`], with `overlay`'s texts read in place of the source files they name, in
+/// every package of the graph (RW 6.69, 6.72: an editor's open buffers, the text an `edit` would write).
+pub fn resolve_workspace_overlaid(root_dir: impl AsRef<Path>, overlay: &Overlay) -> Workspace {
     let root_dir = root_dir.as_ref().to_path_buf();
     let mut ws = Workspace {
         root: 0,
@@ -101,7 +107,7 @@ pub fn resolve_workspace(root_dir: impl AsRef<Path>) -> Workspace {
     };
     let mut stack: Vec<String> = Vec::new();
     let root_canon = canonical(&root_dir);
-    let root_idx = resolve_dir(&mut ws, &root_dir, &root_canon, true, &mut stack);
+    let root_idx = resolve_dir(&mut ws, &root_dir, &root_canon, true, &mut stack, overlay);
     ws.root = root_idx.unwrap_or(0);
     ws
 }
@@ -110,7 +116,14 @@ fn canonical(p: &Path) -> PathBuf {
     std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-fn resolve_dir(ws: &mut Workspace, dir: &Path, root_dir: &Path, is_root: bool, stack: &mut Vec<String>) -> Option<usize> {
+fn resolve_dir(
+    ws: &mut Workspace,
+    dir: &Path,
+    root_dir: &Path,
+    is_root: bool,
+    stack: &mut Vec<String>,
+    overlay: &Overlay,
+) -> Option<usize> {
     let manifest_path = dir.join("delulu.toml");
     let raw = match std::fs::read_to_string(&manifest_path) {
         Ok(s) => s,
@@ -176,7 +189,7 @@ fn resolve_dir(ws: &mut Workspace, dir: &Path, root_dir: &Path, is_root: bool, s
 
     // Register this package and load its modules into the shared source map.
     let prefix = if is_root { String::new() } else { format!("dep:{name}/") };
-    let loaded = load_package_into(dir, &mut ws.source_map, &prefix);
+    let loaded = load_package_overlaid(dir, &mut ws.source_map, &prefix, overlay);
     ws.diagnostics.extend(loaded.diagnostics);
     let idx = ws.packages.len();
     let source_id = source_id_for(root_dir, &dir_canon, is_root);
@@ -210,7 +223,7 @@ fn resolve_dir(ws: &mut Workspace, dir: &Path, root_dir: &Path, is_root: bool, s
                     );
                     continue;
                 }
-                if let Some(child) = resolve_dir(ws, &dep_dir, root_dir, false, stack) {
+                if let Some(child) = resolve_dir(ws, &dep_dir, root_dir, false, stack, overlay) {
                     if !dep_idxs.contains(&child) {
                         dep_idxs.push(child);
                     }
@@ -868,6 +881,45 @@ pub fn supply_chain_gate(ws: &Workspace, program: &Program) -> Vec<Diagnostic> {
     diags
 }
 
+/// The package a source file is a module of: the nearest directory above it that holds a
+/// `delulu.toml`, when the file lies under that directory's `src/`. `None` for a loose file — and for
+/// a file beside a manifest but outside its `src/`, which `delulu check DIR` does not read either.
+/// The answer is canonical ([`crate::package::canonical_file`]).
+pub fn package_root_of(file: &Path) -> Option<PathBuf> {
+    let file = crate::package::canonical_file(file);
+    let dir = file.ancestors().skip(1).find(|d| d.join("delulu.toml").is_file())?;
+    file.starts_with(dir.join("src")).then(|| dir.to_path_buf())
+}
+
+/// What `delulu check DIR` checks, with `overlay`'s texts in place of the files they name: the
+/// workspace resolved, every module checked under one registry, and the supply-chain gate (DL1009,
+/// DL1001). `diagnostics` holds all three lists in the order `check` prints them. The one check a
+/// tool runs on text nobody has saved, so its answer is the one `check` gives once it is saved
+/// (RW 6.69, 6.72).
+pub struct CheckedPackage {
+    pub ws: Workspace,
+    pub program: Program,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl CheckedPackage {
+    /// The module read from `file` (any spelling of it), if the package has it.
+    pub fn module_of(&self, file: &Path) -> Option<&WsModule> {
+        let key = crate::package::canonical_file(file);
+        self.ws.modules.iter().find(|m| crate::package::canonical_file(&m.unit.path) == key)
+    }
+}
+
+/// See [`CheckedPackage`].
+pub fn check_package_overlaid(root_dir: &Path, overlay: &Overlay) -> CheckedPackage {
+    let ws = resolve_workspace_overlaid(root_dir, overlay);
+    let program = check_workspace(&ws);
+    let mut diagnostics: Vec<Diagnostic> = ws.diagnostics.clone();
+    diagnostics.extend(program.diagnostics.iter().cloned());
+    diagnostics.extend(supply_chain_gate(&ws, &program));
+    CheckedPackage { ws, program, diagnostics }
+}
+
 // ===== DL1001: dependency authority pin check ===================================================
 
 /// For every dependency edge, verify the dependency's computed authority is within its pin
@@ -1197,6 +1249,53 @@ mod tests {
         prog.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
     }
     const LIB: &str = "[package]\nname=\"p\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\n";
+
+    /// RW 6.69, 6.72: a file is a module of the package whose `src/` holds it — at any depth — and of no
+    /// package when it lies beside a manifest but outside its `src/`, or under no manifest at all.
+    #[test]
+    fn a_file_is_a_module_of_the_package_whose_src_holds_it() {
+        let dir = scratch("package_root_of");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/a.delulu", "module a\n");
+        write(&dir, "src/deep/b.delulu", "module deep.b\n");
+        write(&dir, "tools/c.delulu", "module c\n");
+        let root = Some(crate::package::canonical_file(&dir));
+        assert_eq!(package_root_of(&dir.join("src/a.delulu")), root);
+        assert_eq!(package_root_of(&dir.join("src/deep/b.delulu")), root, "at any depth under src/");
+        assert_eq!(package_root_of(&dir.join("src/unsaved.delulu")), root, "a file not on disk yet");
+        assert_eq!(package_root_of(&dir.join("tools/c.delulu")), None, "beside the manifest, outside src/");
+        let loose = std::env::temp_dir().join("delulu_deps_test_loose_root_of");
+        let _ = fs::remove_dir_all(&loose);
+        write(&loose, "m.delulu", "module m\n");
+        assert_eq!(package_root_of(&loose.join("m.delulu")), None, "under no manifest");
+    }
+
+    /// RW 6.69, 6.72: an overlay's text is checked in place of the file it names, and an overlaid module
+    /// not on disk yet is a module of the package.
+    #[test]
+    fn an_overlay_is_checked_in_place_of_the_disk() {
+        let dir = scratch("overlay");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/a.delulu", "module a\n\npub fn one() -> Int {\n    1\n}\n");
+        write(&dir, "src/b.delulu", "module b\n\nimport a\n\npub fn two() -> Int {\n    one() + 1\n}\n");
+        assert!(check_package_overlaid(&dir, &Overlay::new()).diagnostics.iter().all(|d| !d.is_error()), "clean on disk");
+        let a = crate::package::canonical_file(&dir.join("src/a.delulu"));
+        let renamed: Overlay = [(a, "module a\n\npub fn uno() -> Int {\n    1\n}\n".to_string())].into_iter().collect();
+        let checked = check_package_overlaid(&dir, &renamed);
+        let b = checked.module_of(&dir.join("src/b.delulu")).expect("b is a module").unit.file;
+        assert!(
+            checked.diagnostics.iter().any(|d| d.code == "DL0301" && d.primary_span().map(|s| s.file) == Some(b)),
+            "b reads a's overlaid text: {:?}",
+            checked.diagnostics
+        );
+        assert!(fs::read_to_string(dir.join("src/a.delulu")).unwrap().contains("fn one"), "the disk is untouched");
+        let c = crate::package::canonical_file(&dir.join("src/c.delulu"));
+        let added: Overlay =
+            [(c, "module c\n\nimport a\n\npub fn three() -> Int {\n    zero()\n}\n".to_string())].into_iter().collect();
+        let checked = check_package_overlaid(&dir, &added);
+        assert!(checked.module_of(&dir.join("src/c.delulu")).is_some(), "an unsaved new module is a module");
+        assert!(checked.diagnostics.iter().any(|d| d.code == "DL0301"), "and it is checked: {:?}", checked.diagnostics);
+    }
 
     #[test]
     fn a_new_secret_read_is_seen_as_an_authority_widening() {

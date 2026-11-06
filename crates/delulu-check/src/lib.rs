@@ -32,15 +32,18 @@ pub mod unify;
 pub use authority::{authority_report, ScopeInfo};
 pub use check::{CheckResult, FnFacts, PluginGet};
 pub use deps::{
-    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, supply_chain_gate, PackageAuthority,
-    ResolvedPackage, Workspace,
+    check_package_overlaid, check_pins, check_self_authority, check_workspace, package_authority, package_root_of,
+    resolve_workspace, resolve_workspace_overlaid, supply_chain_gate, CheckedPackage, PackageAuthority, ResolvedPackage,
+    Workspace,
 };
 pub use dir::{deserialize as dir_deserialize, serialize as dir_serialize, verify as dir_verify, Dir, DirError};
 pub use lockfile::{
     authority_widened, compute_entry, compute_lockfile, content_hash, enforce_semver_law, verify_locked, LockEntry, Lockfile,
 };
 pub use manifest::{AuthoritySpec, DepSource, Dependency, Manifest, PackageKind};
-pub use package::{load_package, load_package_into, LoadedModules, ModuleUnit, Package};
+pub use package::{
+    canonical_file, load_package, load_package_into, load_package_overlaid, LoadedModules, ModuleUnit, Overlay, Package,
+};
 pub use plugin::{check_plugin_module, render_type, PluginAuthority, PluginManifest, PLUGIN_API_SUPPORTED};
 pub use program::{check_program, program_authority, program_effects, Program};
 pub use resolve::{ActorDef, DeclTable, FnSig, GKind, STD_ACTORS_SRC};

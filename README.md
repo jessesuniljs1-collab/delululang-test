@@ -197,10 +197,12 @@ Kate, Emacs and JetBrains need three lines of config; VS Code has a packaged ext
 [`editors/vscode`](editors/vscode). It launches the `delulu` on your `PATH` unless the setting
 `delulu.serverPath` names another, so the editor is only as current as that binary.
 
-**One exception, open since 2026-11-05:** the server checks each open file on its own, so in a multi-module
-package a module that imports another shows false `DL0301 unknown name` errors that `delulu check <package>`
-does not (the shipped `examples/greeter` shows two; [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 6.72). Inside a
-package, trust `delulu check <package-dir>` until it is fixed.
+**Inside a package** (since 2026-11-06, [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 6.72), a module is checked as
+its package — the check `delulu check <package-dir>` runs, with your unsaved buffers in place of the files on disk — so
+a module that uses an import shows no false `DL0301`, and an effect the manifest does not allow shows its `DL1009` at
+the top of the file. Hover and inlay hints still read the file alone: over a name another module exports, hover
+shows an unsettled type (`'t0`) instead of the name's type (row 6.82); go-to-definition and signature help reach the
+other module.
 
 You get diagnostics, hover carrying the effect row, completion, signature help, definition,
 references, rename, document and workspace symbols, semantic tokens, inlay hints showing *inferred*
@@ -310,7 +312,7 @@ Six more things worth knowing before you evaluate it:
   judged by its method at every check (D-V2-183, D-V2-208), and a redirect never carries a method other than `GET`
   to another origin.
 - **Independent reviews (2026-11-04/05) found open defects, each re-run and recorded.** Besides the plugin row
-  above (4.95, closed 2026-11-06): the editor's fast path is package-blind (6.72); `run` refuses a missing grant only when the program
+  above (4.95, closed 2026-11-06): `run` refuses a missing grant only when the program
   reaches it, after earlier effects (6.73); `build --target wasm` accepts a `main` its own host cannot call (3.28);
   MCP cannot cancel a call (6.74); under `--sandbox` a guest's fault code reaches neither the envelope nor the report
   (6.75), and under `hostile-agent` a deep recursion aborts the guest instead of raising `DL0905` (3.29);
