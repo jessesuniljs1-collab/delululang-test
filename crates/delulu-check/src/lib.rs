@@ -41,7 +41,9 @@ pub use lockfile::{
     authority_widened, compute_entry, compute_lockfile, content_hash, enforce_semver_law, verify_locked, LockEntry, Lockfile,
 };
 pub use manifest::{AuthoritySpec, DepSource, Dependency, Manifest, PackageKind};
-pub use package::{canonical_file, load_package, load_package_into, load_package_overlaid, LoadedModules, ModuleUnit, Overlay, Package};
+pub use package::{
+    canonical_file, load_package, load_package_into, load_package_overlaid, LoadedModules, ModuleUnit, Overlay, Package,
+};
 pub use plugin::{check_plugin_module, render_type, PluginAuthority, PluginManifest, PLUGIN_API_SUPPORTED};
 pub use program::{check_program, program_authority, program_effects, Program};
 pub use resolve::{ActorDef, DeclTable, FnSig, GKind, STD_ACTORS_SRC};

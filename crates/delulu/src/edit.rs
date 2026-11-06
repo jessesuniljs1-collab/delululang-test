@@ -428,7 +428,8 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
         let id = a.node.clone().unwrap_or_default();
         let named = match (&package, &package_name) {
             (Some(root), None) => Err(format!(
-                "this file is a module of the package at `{}`, whose `delulu.toml` does not name it, so an Atlas id                  cannot be checked against it — fix the manifest, or edit by `--edits`",
+                "this file is a module of the package at `{}`, whose `delulu.toml` does not name it, so an Atlas id \
+                 cannot be checked against it — fix the manifest, or edit by `--edits`",
                 root.display()
             )),
             _ => Ok(package_name.as_deref()),

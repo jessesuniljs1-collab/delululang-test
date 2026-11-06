@@ -5973,3 +5973,41 @@ node's state at each of its failures, so the next red says which way it went.
 
 **Evidence.** The witness red on the old ending; Mutants M1111–M1115 red (M1115 by the TTL test `a_watch_whose_node_expires_ends_clean_with_its_dead_man_armed`); **M1116** (a refused beat's DL1402 read as an expiry) survives: the TTL witness meets the expiry at the state check, and no test can place a TTL's end between a turn's state check and its beat — the mapping is the refusal code's own meaning (DL1402, *lease expired*). The full suite on `b1d7d44`: 192 targets, 2,693 passed, 0 failed; `witness.yml` Windows `42168550190` and macOS `42168552718` green, every new test named.
 
+## D-V2-214 — RW 6.69, 6.72: a tool that checks unsaved text inside a package checks the package — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.2, §5.5) and the AI-first pipeline audit (§12) found the two fast paths an
+agent's edit→check loop leans on blind inside a package: `delulu lsp` and `delulu edit` checked a file alone
+(`check_source`), and a module that imports another never checks alone. The shipped `examples/greeter/src/main.delulu`
+showed `DL0301 unknown name salutation` and `shout_count` in the editor while `delulu check examples/greeter` was clean;
+`edit` answered `before: null`, `widened: null` and 0 errors for a `main` that added `Net` and `evil.example.com`, and
+wrote it under `--if-checks`, though `check .` refuses it (DL1009); a body calling the imported `salutation` was refused
+as DL0301 under `--if-checks`; and `fn:BOGUSPKG/greeter.main` was accepted, its package part cut off unread. The owner,
+2026-11-06: *"Continue cooking and improving DeluluLang The lang of Future"*; the reviews' order puts these two next.
+
+**Decision.**
+1. **One check for text nobody has saved:** `delulu_check::check_package_overlaid(root, overlay)` — `resolve_workspace`,
+   `check_workspace` and the supply-chain gate (DL1009, DL1001), exactly `delulu check DIR`'s lists in its order, with an
+   `Overlay` (canonical path → text) read in place of the files it names in every package of the graph, and an overlaid
+   module under `src/` that is not on disk yet loaded as a module. A file is a module of the package whose `src/` holds it
+   (`package_root_of`: the nearest `delulu.toml` above it; a file beside a manifest but outside its `src/` is loose, as
+   `check DIR` never reads it). The paths are canonical, so two spellings of one file are one key.
+2. **The language server** checks a module of a package with every open buffer of that package overlaid, and republishes
+   every open module of it from that one check. Each module shows its own diagnostics where they lie; one that lies in no
+   open module — the manifest's (DL1009), or an error in a module no editor has open — is shown at the top of each open
+   module, its message naming `file:line:column`. Code actions come from the same list, so the two cannot disagree; only
+   a diagnostic placed in the document offers its repairs there, and a repair that also edits another file is offered
+   without an edit (its ranges would be read against the wrong text). Hover, inlay hints, completion and the other
+   providers still read the file's own analysis — RW 6.82.
+3. **`edit`** on a module of a package checks the package with the edited text overlaid and reports the package's
+   authority before and after (`authority_of_package`, the report `delulu authority DIR` prints). `--if-checks` counts
+   every error of the package: an edit is written only when the whole package checks, because that is what `check DIR`
+   says once it is written. An id must name the file's own package — the package's name, or for a loose file its module,
+   as the Atlas names them — and an id with no package part is refused. Content-hashed node ids (the row's third
+   suggestion) are not added: `--expect-hash` already binds an edit to the bytes it was computed against, and a stale id
+   is refused by name.
+
+**Breaking.** An `edit --node` id with another package's name, or with none, used to be accepted and is refused (exit 2);
+`--if-checks` holds a write that a package's other modules or its manifest refuse. Both were answers the package's own
+check contradicted.
+
+**Evidence.** The two CLI witnesses, `lsp_cli` `a_module_of_a_package_is_checked_as_its_package` and `edit_cli` `inside_a_package_an_edit_is_checked_and_attributed_as_the_package`, red on the old code and green now; four unit tests (`package_root_of`, the overlay, the code-action guards, the id's package part). Mutants M1117–M1133 all red (M1122 by the test's timeout: without the republish, the other open module's diagnostics never come); control green. Measured after the fix: hover over an imported name still shows `'t0` (RW 6.82).

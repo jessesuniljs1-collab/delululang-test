@@ -1035,12 +1035,8 @@ impl Server {
     /// reason. One that lies in another open module is that module's to show.
     fn shown_in_package(&self, checked: &delulu_check::CheckedPackage, path: &std::path::Path) -> (Option<u32>, Vec<Shown>) {
         let own = checked.module_of(path).map(|m| m.unit.file);
-        let open: Vec<u32> = self
-            .docs
-            .keys()
-            .filter_map(|u| uri_to_path(u))
-            .filter_map(|p| checked.module_of(&p).map(|m| m.unit.file))
-            .collect();
+        let open: Vec<u32> =
+            self.docs.keys().filter_map(|u| uri_to_path(u)).filter_map(|p| checked.module_of(&p).map(|m| m.unit.file)).collect();
         let modules: Vec<u32> = checked.ws.modules.iter().map(|m| m.unit.file).collect();
         let map = &checked.ws.source_map;
         let mut shown = Vec::new();
@@ -2125,7 +2121,9 @@ mod tests {
             .with_span(Span::new(3, 9, 10), "here")
             .with_repair(repair("mine", &[3]))
             .with_repair(repair("reaches", &[3, 4]));
-        let away = Diagnostic::error("DL0301", "unknown name `h`").with_span(Span::new(4, 0, 1), "there").with_repair(repair("theirs", &[4]));
+        let away = Diagnostic::error("DL0301", "unknown name `h`")
+            .with_span(Span::new(4, 0, 1), "there")
+            .with_repair(repair("theirs", &[4]));
         let shown = [
             Shown { diagnostic: here, here: true, at: None },
             Shown { diagnostic: away, here: false, at: Some("src/b.delulu:1:1".into()) },

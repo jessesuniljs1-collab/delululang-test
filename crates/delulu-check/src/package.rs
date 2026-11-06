@@ -92,7 +92,12 @@ pub fn canonical_file(path: &Path) -> PathBuf {
 
 /// [`load_package_into`], with `overlay`'s texts read in place of the files they name. An overlaid
 /// `.delulu` file under `src/` that is not on disk yet is a module too.
-pub fn load_package_overlaid(root_dir: &Path, source_map: &mut SourceMap, display_prefix: &str, overlay: &Overlay) -> LoadedModules {
+pub fn load_package_overlaid(
+    root_dir: &Path,
+    source_map: &mut SourceMap,
+    display_prefix: &str,
+    overlay: &Overlay,
+) -> LoadedModules {
     let src_dir = root_dir.join("src");
     let mut modules = Vec::new();
     let mut index = HashMap::new();

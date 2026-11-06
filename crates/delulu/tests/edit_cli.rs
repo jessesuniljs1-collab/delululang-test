@@ -322,7 +322,13 @@ fn inside_a_package_an_edit_is_checked_and_attributed_as_the_package() {
     let f = dir.join("src").join("main.delulu");
     let original = std::fs::read_to_string(&f).unwrap();
     let atlas: Value = serde_json::from_slice(
-        &Command::new(bin()).args(["atlas", ".", "--json"]).current_dir(&dir).env("DELULU_NO_FIRST_RUN", "1").output().unwrap().stdout,
+        &Command::new(bin())
+            .args(["atlas", ".", "--json"])
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
     let ids: Vec<&str> = atlas["atlas"]["nodes"].as_array().unwrap().iter().filter_map(|n| n["id"].as_str()).collect();
@@ -349,8 +355,11 @@ fn inside_a_package_an_edit_is_checked_and_attributed_as_the_package() {
     assert_eq!(auth["widened"], json!(["Net", "net=evil.example.com"]), "{auth:#}");
 
     // A body that calls the imported function checks, as the package does with it, and is written.
-    std::fs::write(dir.join("calls.txt"), "fn main(root: Root) ! {Write} {\n    root.console().println(salutation(\"you\"))\n}\n")
-        .unwrap();
+    std::fs::write(
+        dir.join("calls.txt"),
+        "fn main(root: Root) ! {Write} {\n    root.console().println(salutation(\"you\"))\n}\n",
+    )
+    .unwrap();
     let (code, env) = edit(&dir, &[path, "--expect-hash", &hash(&f), "--node", main_id, "--with", "@calls.txt", "--if-checks"]);
     assert_eq!(code, 0, "{env:#}");
     assert_eq!((env["edit"]["written"].clone(), env["summary"]["errors"].clone()), (json!(true), json!(0)), "{env:#}");

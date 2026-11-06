@@ -1774,7 +1774,8 @@ fn a_module_of_a_package_is_checked_as_its_package() {
     std::fs::write(dir.join("src/main.delulu"), &widened).unwrap();
     let cli = check_json();
     std::fs::write(dir.join("src/main.delulu"), &main).unwrap();
-    let cli_d = cli["diagnostics"].as_array().unwrap().iter().find(|x| x["code"] == "DL1009").expect("check refuses it too").clone();
+    let cli_d =
+        cli["diagnostics"].as_array().unwrap().iter().find(|x| x["code"] == "DL1009").expect("check refuses it too").clone();
     let msg = refused["message"].as_str().unwrap();
     assert!(msg.starts_with(cli_d["message"].as_str().unwrap()) && msg.contains("(at delulu.toml:"), "{msg} / {cli_d:#}");
 
@@ -1789,7 +1790,10 @@ fn a_module_of_a_package_is_checked_as_its_package() {
     assert_eq!(c.wait_diagnostics(&lib_uri), json!([]), "the renamed module itself checks");
     let d = c.wait_diagnostics(&main_uri);
     assert!(
-        d.as_array().unwrap().iter().any(|x| x["code"] == "DL0301" && x["message"].as_str().unwrap_or_default().contains("salutation")),
+        d.as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["code"] == "DL0301" && x["message"].as_str().unwrap_or_default().contains("salutation")),
         "main names what it calls that no longer exists: {d:#}"
     );
     c.shutdown();

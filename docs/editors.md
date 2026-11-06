@@ -24,7 +24,9 @@ transport: stdio
   file on disk, and every open module of the package republished from it. A diagnostic that lies
   in the manifest (`DL1009`, an effect it does not allow) or an error in a module no editor has
   open is shown at the top of each open module, its message naming where it lies
-  (`docs/REMAINING_WORK.md` row 6.72, closed 2026-11-06). HOVER_SENTENCE
+  (`docs/REMAINING_WORK.md` row 6.72, closed 2026-11-06). Hover and inlay hints still read the
+  file alone: over a name another module exports, hover shows an unsettled type (`'t0`) instead
+  of the name's type (row 6.82); go-to-definition and signature help reach the other module.
 - **Code actions from typed repairs** — an authority-widening repair is ⚠-titled and
   never preferred; a repair a human must decide is never preferred either, and offers
   its edit when it has one (DL0414's rename to `_x`); `authority_widening`/`requires_human`

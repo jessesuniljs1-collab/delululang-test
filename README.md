@@ -200,7 +200,9 @@ Kate, Emacs and JetBrains need three lines of config; VS Code has a packaged ext
 **Inside a package** (since 2026-11-06, [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 6.72), a module is checked as
 its package — the check `delulu check <package-dir>` runs, with your unsaved buffers in place of the files on disk — so
 a module that uses an import shows no false `DL0301`, and an effect the manifest does not allow shows its `DL1009` at
-the top of the file. HOVER_SENTENCE
+the top of the file. Hover and inlay hints still read the file alone: over a name another module exports, hover
+shows an unsettled type (`'t0`) instead of the name's type (row 6.82); go-to-definition and signature help reach the
+other module.
 
 You get diagnostics, hover carrying the effect row, completion, signature help, definition,
 references, rename, document and workspace symbols, semantic tokens, inlay hints showing *inferred*

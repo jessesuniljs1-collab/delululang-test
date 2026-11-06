@@ -46,7 +46,9 @@ Four rules that will save you time:
 
    **Inside a package** the server checks a module as its package — the check `delulu check <package-dir> --json` runs,
    with every open buffer in place of its file — and republishes every open module of it, so the fast answer is the true
-   one there too (`docs/REMAINING_WORK.md` row 6.72, closed 2026-11-06). HOVER_SENTENCE
+   one there too (`docs/REMAINING_WORK.md` row 6.72, closed 2026-11-06). Hover and inlay hints still read the file
+   alone: over a name another module exports, hover shows an unsettled type (`'t0`) instead of the name's type
+   (row 6.82); go-to-definition and signature help reach the other module.
 
 5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
    the same compiler, so its answers cannot drift from `delulu check --json` (inside a package, from
