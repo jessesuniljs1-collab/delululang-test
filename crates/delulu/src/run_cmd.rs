@@ -397,6 +397,58 @@ static BUDGET_RUN: std::sync::Mutex<Option<BudgetRun>> = std::sync::Mutex::new(N
 /// call), never from words the runtime or the program chose.
 static RUN_FAULT: std::sync::Mutex<Option<Json>> = std::sync::Mutex::new(None);
 
+/// RW 6.73: the grants a run stopped for a grant lacks, by the program's text — the run report's `missing_grants`.
+static RUN_LACKING: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The fault that ended a run, printed and kept for the report ([`RUN_FAULT`]).
+///
+/// RW 6.73: a run stopped for a grant (DL0703) used to name only the grant it reached, after the effects before it had
+/// happened, so an agent paid one run per missing grant. `lacking` is every grant the program's text asks for that this
+/// run lacks ([`lacking_grants`], `authority --within` asked of the run's own grants). Each one is shown at its call, as a
+/// secondary span. All of them — the reached one included when the text shows it — are listed as `missing_grants` on
+/// the `--json` envelope and in the run report, and as one line of flags after the human rendering.
+fn print_run_fault(mut d: Diagnostic, lacking: &[crate::within::Finding], map: &SourceMap, json: bool) {
+    let reached = d.primary_span();
+    let mut beyond_the_message = false;
+    for f in lacking {
+        if f.at.is_none() || f.at != reached {
+            beyond_the_message = true;
+        }
+        if let Some(at) = f.at.filter(|at| Some(*at) != reached) {
+            d = d.with_secondary_span(at, format!("this call needs `--grant {}`, which this run lacks", f.grant));
+        }
+    }
+    let lines: Vec<String> = lacking.iter().map(|f| f.grant.clone()).collect();
+    if let Ok(mut g) = RUN_LACKING.lock() {
+        *g = lines.clone();
+    }
+    let env = delulu_diag::envelope("run", std::slice::from_ref(&d), None, map);
+    if let Ok(mut g) = RUN_FAULT.lock() {
+        *g = env["diagnostics"].get(0).cloned();
+    }
+    if lines.is_empty() {
+        print_diagnostics("run", &[d], map, None, json);
+    } else if json {
+        let mut env = env;
+        env["missing_grants"] = json!(lines);
+        note_json_emitted();
+        println!("{}", serde_json::to_string_pretty(&env).expect("the envelope serializes"));
+    } else {
+        print_diagnostics("run", &[d], map, None, false);
+        // The one grant the message already names, at its own call, needs no second line.
+        if !beyond_the_message {
+            return;
+        }
+        let flags: Vec<String> = lines.iter().map(|g| format!("--grant {g}")).collect();
+        eprintln!(
+            "note: by its text, this program asks for {} grant(s) this run lacks: {} (`delulu authority FILE --grants` \
+             lists every grant it needs)",
+            lines.len(),
+            flags.join(" ")
+        );
+    }
+}
+
 /// Arm the watchdog the moment the program starts, on whichever engine runs it — the interpreter,
 /// the WASM engine and a `.dwx` artifact all pass through [`note_program_started`], which is what
 /// makes one budget hold on every engine (PS-B-01's "on every engine" is this one call site).
@@ -627,6 +679,10 @@ fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog
     }
     if let Some(d) = RUN_FAULT.lock().ok().and_then(|g| g.clone()) {
         env["diagnostics"] = json!([d]);
+    }
+    // RW 6.73: what the run lacked, so the report says it as the envelope does.
+    if let Some(lines) = RUN_LACKING.lock().ok().map(|g| g.clone()).filter(|l| !l.is_empty()) {
+        env["missing_grants"] = json!(lines);
     }
     env
 }
@@ -1503,7 +1559,9 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 if let Some(span) = sites.locate(e.frames()) {
                     d = d.with_span(span, "runtime fault here");
                 }
-                print_diagnostics("run", &[d], &map, None, opts.json);
+                let lacking =
+                    if code == "DL0703" { lacking_grants(&file, is_package, &map, &checked, &grants) } else { Vec::new() };
+                print_run_fault(d, &lacking, &map, opts.json);
                 1
             }
         };
@@ -1837,10 +1895,9 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             if let Some(span) = fault.span {
                 d = d.with_span(span, "runtime fault here");
             }
-            if let Ok(mut g) = RUN_FAULT.lock() {
-                *g = delulu_diag::envelope("run", std::slice::from_ref(&d), None, &map)["diagnostics"].get(0).cloned();
-            }
-            print_diagnostics("run", &[d], &map, None, opts.json);
+            let lacking =
+                if fault.code == "DL0703" { lacking_grants(&file, is_package, &map, &checked, &grants) } else { Vec::new() };
+            print_run_fault(d, &lacking, &map, opts.json);
             1
         }
     };
