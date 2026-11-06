@@ -298,7 +298,8 @@ another OS, and then takes about seven minutes itself (run 5).
      verification recommends holding 2.0 behind an ordinary-agent-utility bar: argv and environment, exit outcomes,
      JSON, math, strings, methods and WASM parity (RW §8 items 7 and 8). The owner has not yet answered on that.
    - **The order:**
-     1. RW 4.95 (R-Get enforced at `p.get`, HIGH), with 4.96 and 4.97;
+     1. ~~RW 4.95 (R-Get enforced at `p.get`, HIGH), with 4.96 and 4.97~~ — done (on-demand routine run 20, D-V2-210 to
+        D-V2-212);
      2. the package-blind fast paths: RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74;
      3. the outcome contracts: RW 6.75 and 6.77, then 6.76 and 6.78–6.81;
      4. the DIR and review-surface defects: RW 4.93, 4.94, 5.7, 6.67 and 6.68;
@@ -630,7 +631,11 @@ one per pull request. So at step 1, after landing what came in, delete from `ori
 whose tip is in `master`'s history — checked with `git merge-base --is-ancestor origin/BRANCH origin/master` immediately
 before `git push origin --delete BRANCH` — and at step 9 this run's own the same way. Never one with a commit `master`
 lacks (land it or record it first), and never `master`, `launch/*`, `rc/*`, `archive/*` or `autosave/*`. If the git proxy
-refuses a deletion, name the branch in *Open / next* for the laptop.
+refuses a deletion, name the branch in *Open / next* for the laptop (on-demand run 20: the push answered `Everything
+up-to-date` and deleted nothing — fetch with `--prune` and list the branches again to know).
+**A repeated `witness.yml` run (`repeat` > 1) is read by its verdict, then its red's block** (on-demand run 20): a green one
+had no red (the step exits nonzero on any); for a red one, save the whole log to a file (`tail_lines` above its
+`original_length`) and find `... FAILED`: the failure's message is the next 15 lines, and `run N of M FAILED` follows it.
 
 ## Rules a run never bends
 

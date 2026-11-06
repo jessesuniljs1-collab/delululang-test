@@ -18,6 +18,12 @@ tool, run `delulu explain E-PLUGIN`. The flagship artifact lives in `examples/pl
 > as one. A grant carrying **`Declassify` or `ForeignCall`** is refused, because those two are enforced
 > by custody and a plugin's export runs in its own interpreter which cannot share the host's. And the
 > **`Contained` class on Windows** is refused as before.
+>
+> **Since 2026-11-06** (RW 4.95, 4.96; D-V2-210, D-V2-211): `p.get` checks the export against the type the program
+> asks for (rule R-Get — exact parameter and return types, the export's row inside the requested one) and refuses
+> anything else as `VerifyFailed` before the export can run; until then only the name was checked. And a program
+> loads only **Verified** plugins: a `let p: Plugin[Contained] = load(…)` is refused at `load` as a request for a
+> Contained plugin, before a byte is read — check a Contained artifact with `delulu plugin verify`.
 
 ## The two classes (a trust statement, not a quality ranking)
 

@@ -1076,6 +1076,29 @@ fn refuse_undocumented_shared_flags(cmd: &str, rest: &[String]) -> Option<i32> {
     Some(2)
 }
 
+/// The commands that read their options themselves (`signing.rs`), never through [`parse_opts`] (RW 4.97).
+const OWN_OPTION_PARSERS: &[&str] = &["keygen", "sign", "verify-sig", "publish", "add", "login"];
+
+/// Refuse, for a command with its own option parser, every `--option` (or `--option=value`) its usage does not
+/// document (RW 4.97). An option nobody understood is refused, never ignored: a mistyped key pin must not turn
+/// a verification into one with no pin.
+fn refuse_undocumented_own_options(cmd: &str, rest: &[String]) -> Option<i32> {
+    let documented = documented_flags(cmd);
+    let mut refused: Vec<String> = Vec::new();
+    for word in rest {
+        let Some(body) = word.strip_prefix("--") else { continue };
+        let name = format!("--{}", body.split('=').next().unwrap_or_default());
+        if !documented.contains(&name) && !refused.contains(&name) {
+            refused.push(name);
+        }
+    }
+    if refused.is_empty() {
+        return None;
+    }
+    print_option_refusal(cmd, &refused);
+    Some(2)
+}
+
 fn print_option_refusal(cmd: &str, refused: &[String]) {
     eprintln!(
         "error: `{cmd}` does not know {}: {}",
@@ -1198,6 +1221,15 @@ fn run_inner(args: &[String]) -> i32 {
     // at such a flag, so `keygen --grants` minted a key and exited 0 having ignored it.
     if SUBCOMMANDS.contains(&cmd.as_str()) {
         if let Some(code) = refuse_undocumented_shared_flags(cmd, own_words(rest)) {
+            return code;
+        }
+    }
+    // RW 4.97: a command that parses its own options never meets the shared parser, so the guard above saw
+    // only the flags that parser knows: `verify-sig art.dwx --kye K` dropped the key pin and said *valid*,
+    // `sign --name second` signed with the default key, and `keygen --bogus` minted a key. Each such command
+    // refuses every option its usage does not document, before it runs.
+    if OWN_OPTION_PARSERS.contains(&cmd.as_str()) {
+        if let Some(code) = refuse_undocumented_own_options(cmd, own_words(rest)) {
             return code;
         }
     }
@@ -1609,12 +1641,12 @@ fn usage() -> &'static str {
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list [--json]   (catalog plugins: verified-class, ZERO authority, prose only)\n\
      \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical) [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (surface keyword skins: human languages or AI-compact profiles; the program is unchanged)\n\
-     \x20 delulu keygen    [--name N] [--json]                 (mint an ed25519 signing key in ~/.delulu/keys)\n\
-     \x20 delulu sign      <artifact> [--hybrid] [--unstable] [--json]\n\
+     \x20 delulu keygen    [--name N] [--dangerously-allow-insecure-perms] [--json]   (mint an ed25519 signing key in ~/.delulu/keys)\n\
+     \x20 delulu sign      <artifact> [--key-name N] [--hybrid] [--unstable] [--json]   (--key-name: the name a key was minted under)\n\
      \x20 delulu verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable] [--json]\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; a hybrid .sig and --require-hybrid touch post-quantum\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ML-DSA-65 and need --unstable — unaudited, pre-KAT, refused as DL1910 without it)\n\
-     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR] [--json]   (validate manifest + semver-authority + signature; no upload)\n\
+     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR] [--registry URL] [--json]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu add       --path <dir> [--accept-authority] [--json]   (declare a dependency on the package\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is\n\
@@ -5939,6 +5971,33 @@ fn emit_authority(
     (modules, units): (&[&delulu_syntax::ast::Module], &[&str]),
     opts: &Opts,
 ) -> i32 {
+    let report = package_authority_report(program, name, dir, map, (modules, units), opts);
+    // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
+    if !opts.within.is_empty() || opts.within_file.is_some() {
+        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
+    }
+    if opts.show_grants && !opts.json {
+        print!("{}", render_required_grants(&report));
+        return 0;
+    }
+    if opts.json {
+        note_json_emitted();
+        println!("{}", envelope_to_string("authority", &[], Some(report), map));
+    } else {
+        print!("{}", render_authority(&report));
+    }
+    0
+}
+
+/// The authority report of a checked package, stamped in the one order `delulu authority DIR` stamps it.
+fn package_authority_report(
+    program: &delulu_check::Program,
+    name: &str,
+    dir: &str,
+    map: &SourceMap,
+    (modules, units): (&[&delulu_syntax::ast::Module], &[&str]),
+    opts: &Opts,
+) -> Json {
     let scopes = scopes_in_dir(std::path::Path::new(dir));
     let mut report = program_authority(program, name, &scopes);
     stamp_custody(&mut report, opts);
@@ -5959,21 +6018,28 @@ fn emit_authority(
     if let (false, Some(obj)) = (requests.is_empty(), report.as_object_mut()) {
         obj.insert("requests".into(), json!(requests));
     }
-    // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
-    if !opts.within.is_empty() || opts.within_file.is_some() {
-        return authority_within(map, modules, package_use_sites(program, modules, units), report, opts);
+    report
+}
+
+/// The authority report `delulu authority DIR` prints for the package at `root`, with `overlay`'s texts
+/// in place of the files they name (RW 6.69: the before and after of an `edit` inside a package), under
+/// default options. `Err` carries the number of errors when the package does not check, by the gate
+/// `authority DIR` applies.
+pub(crate) fn authority_of_package(root: &std::path::Path, overlay: &delulu_check::Overlay) -> Result<Json, usize> {
+    let ws = delulu_check::resolve_workspace_overlaid(root, overlay);
+    let program = check_workspace(&ws);
+    let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+    diags.extend(program.diagnostics.iter().cloned());
+    let n = errors(&diags);
+    if n > 0 {
+        return Err(n);
     }
-    if opts.show_grants && !opts.json {
-        print!("{}", render_required_grants(&report));
-        return 0;
-    }
-    if opts.json {
-        note_json_emitted();
-        println!("{}", envelope_to_string("authority", &[], Some(report), map));
-    } else {
-        print!("{}", render_authority(&report));
-    }
-    0
+    let name =
+        program.entry_module.clone().or_else(|| ws.root_pkg().map(|p| p.name.clone())).unwrap_or_else(|| "package".to_string());
+    let modules: Vec<&delulu_syntax::ast::Module> = ws.modules.iter().map(|m| &m.unit.module).collect();
+    let units: Vec<&str> = ws.modules.iter().map(|m| m.unit.name.as_str()).collect();
+    let (_, opts) = parse_opts(&[]);
+    Ok(package_authority_report(&program, &name, &root.to_string_lossy(), &ws.source_map, (&modules, &units), &opts))
 }
 
 // ----- authority --diff (§8: the supply-chain review surface) --------------

@@ -298,6 +298,13 @@ pub struct Interp {
     foreign_binds: HashMap<NodeId, String>,
     foreign_grants: HashMap<String, String>,
     foreign_max_ret: usize,
+    /// Each `p.get(name)` site's settled `F` and class (from the checker's `plugin_gets`, RW 4.95): what
+    /// `plugin_get` checks the loaded export against — rule R-Get's runtime half. Empty unless
+    /// `with_plugin_gets` is called, and then every `get` is refused: a site with no checked `F` cannot
+    /// be decided, and R-Get is a security rule, so an undecidable answer is not an allow.
+    plugin_gets: std::sync::Arc<HashMap<NodeId, delulu_check::PluginGet>>,
+    /// Each `load(..)` site's class as the program asked for it (from the checker's `plugin_loads`, RW 4.96).
+    plugin_loads: std::sync::Arc<HashMap<NodeId, delulu_check::Type>>,
     /// How a bound foreign lib executes (Stage 5 phase 5h). Default [`InProcBinder`] — Stage-4
     /// in-process load, so `--foreign-isolation inproc` (and every program that never opts in) is
     /// byte-identical to Stage 4. `--foreign-isolation process` injects the CLI's worker-spawning
@@ -414,6 +421,8 @@ impl Interp {
             foreign_binds: HashMap::new(),
             foreign_grants: HashMap::new(),
             foreign_max_ret: foreign::DEFAULT_MAX_RET,
+            plugin_gets: std::sync::Arc::new(HashMap::new()),
+            plugin_loads: std::sync::Arc::new(HashMap::new()),
             foreign_binder: Rc::new(InProcBinder),
             plugin_engine: None,
             custody: Rc::new(RefCell::new(Box::new(EmbeddedCustody::new()))),
@@ -662,6 +671,20 @@ impl Interp {
         self.foreign_binds = binds;
         self.foreign_grants = grants;
         self.foreign_max_ret = max_ret;
+        self
+    }
+
+    /// Attach the checker's plugin sites (builder style): each `p.get` site's settled `F` (RW 4.95), which
+    /// `plugin_get` checks the loaded export against before it hands out the callable (rule R-Get —
+    /// `row(export) ⊆ row(F)`, exact parameter and return types; without it every `get` is refused), and each
+    /// `load` site's class (RW 4.96), so a request for a Contained plugin is answered as one.
+    pub fn with_plugin_sites(
+        mut self,
+        gets: std::sync::Arc<HashMap<NodeId, delulu_check::PluginGet>>,
+        loads: std::sync::Arc<HashMap<NodeId, delulu_check::Type>>,
+    ) -> Interp {
+        self.plugin_gets = gets;
+        self.plugin_loads = loads;
         self
     }
 
@@ -1033,8 +1056,8 @@ impl Interp {
                 self.note_alloc(&v); // 10d
                 Ok(v)
             }
-            Expr::Call { callee, args, span, .. } => {
-                self.eval_call(callee, args, *span, env).map_err(|e| depth_at_call(e, *span))
+            Expr::Call { callee, args, span, id } => {
+                self.eval_call(callee, args, *span, *id, env).map_err(|e| depth_at_call(e, *span))
             }
             Expr::Method { recv, name, args, span, id } => self.eval_method(recv, name, args, *span, *id, env),
             Expr::Field { recv, name, .. } => {
@@ -1170,7 +1193,7 @@ impl Interp {
         Err(Escape::Fault(Fault::at("DL0907", format!("unbound name `{name}`"), span)))
     }
 
-    fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
+    fn eval_call(&self, callee: &Expr, args: &[Expr], span: delulu_diag::Span, node_id: NodeId, env: &Env) -> R<Value> {
         // A14: a call by name to one of the module's functions — what the order below reaches when no local binds the
         // name and it is no prelude builtin (DL0302 keeps those apart) — evaluates its arguments straight into the
         // callee's scope. Whether a local binds the name cannot change while the arguments run: an argument binds
@@ -1230,7 +1253,7 @@ impl Interp {
                 // reason `root.foreign` is: it mints a custody node and reads a container through the
                 // injected engine, and `prim` has neither.
                 if name == "load" && env.get(name).is_none() && !self.home().funcs.contains_key(name) {
-                    let v = self.load_plugin(&argvals, span).map_err(Escape::Fault)?;
+                    let v = self.load_plugin(&argvals, node_id, span).map_err(Escape::Fault)?;
                     self.note_alloc(&v);
                     return Ok(v);
                 }
@@ -1592,7 +1615,7 @@ impl Interp {
             // P2: the loaded plugin's two methods (spec §3.3). Here rather than in `prim` because
             // both touch custody: `get` re-checks the node's liveness, `unload` revokes it.
             Value::Plugin(p) => match name.name.as_str() {
-                "get" => self.plugin_get(p, &argvals, span),
+                "get" => self.plugin_get(p, &argvals, node_id, span),
                 "unload" => self.plugin_unload(p),
                 other => Err(Fault::at("DL0907", format!("a plugin has no method `{other}`"), span)),
             },
@@ -1739,7 +1762,7 @@ impl Interp {
     ///
     /// Every refusal reaches the program as a `PluginErr` VALUE, never a fault: the point of the load
     /// sequence is that a host can decide what to do when a plugin will not load.
-    fn load_plugin(&self, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+    fn load_plugin(&self, args: &[Value], node_id: NodeId, span: delulu_diag::Span) -> Result<Value, Fault> {
         use crate::plugin::{LoadedHandle, PluginErr};
 
         let Some(Value::Cap(host)) = args.first() else {
@@ -1762,6 +1785,21 @@ impl Interp {
             Some(v) => grant_from_value(v),
             None => return Err(Fault::at("DL0907", "`load` expects a Grant as its third argument", span)),
         };
+
+        // ----- 0. which class (RW 4.96) ----------------------------------------------------------------
+        // The class is declared, never substituted: a program that asks for `Plugin[Contained]` is answered
+        // as one, before a byte is read. Until on-demand routine run 20 the request was always Verified, so a
+        // Verified artifact ran under a `Plugin[Contained]` annotation (its `get` sites typed under R-1 and
+        // R-6a, rules this handle never met), and a Contained one was refused for a request the program
+        // never made ("the host requested `Plugin[verified]`").
+        if matches!(self.plugin_loads.get(&node_id), Some(delulu_check::Type::Contained)) {
+            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                "this program asks for `{path}` as a Contained plugin (`Plugin[Contained]`), and in this build a \
+                 program can load only Verified plugins: a Contained plugin's opaque WebAssembly is confined by \
+                 the WASM engine under rule R-1, and that engine is not wired into `load` (RW 4.96). Load a \
+                 Verified plugin as `Plugin[Verified]`, or check a Contained one with `delulu plugin verify`"
+            )))));
+        }
 
         // ----- 1. where ---------------------------------------------------------------------------
         // The same rule a `Cap[FsRead]` operation obeys: resolve inside the granted root, lexically,
@@ -1899,7 +1937,19 @@ impl Interp {
     ///
     /// The liveness re-check is here as well as at the call (R-6c): a `get` on an already-unloaded
     /// plugin must not hand back a callable that looks usable.
-    fn plugin_get(&self, p: &Rc<crate::plugin::LoadedHandle>, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+    ///
+    /// **R-Get, at the site (RW 4.95).** The callable is handed out only when the export's re-proved type
+    /// matches the `F` the program asked for, with `row(export) ⊆ row(F)` (`r_get_verified`). Until
+    /// on-demand routine run 20 only the name was checked: the annotation never reached the run, so a
+    /// host typed a `! {Write}` export `! {}`, `check` and `authority` called its function pure, and the
+    /// run wrote a file. A site the checker recorded no `F` for is refused, never guessed.
+    fn plugin_get(
+        &self,
+        p: &Rc<crate::plugin::LoadedHandle>,
+        args: &[Value],
+        node_id: NodeId,
+        span: delulu_diag::Span,
+    ) -> Result<Value, Fault> {
         use crate::plugin::{PluginErr, PluginFn, PluginRef};
         let Some(Value::Str(export)) = args.first() else {
             return Err(Fault::at("DL0907", "`get` expects a Str export name", span));
@@ -1914,6 +1964,26 @@ impl Interp {
                 p.name,
                 p.exports.keys().cloned().collect::<Vec<_>>().join(", ")
             )))));
+        }
+        let Some(asked) = self.plugin_gets.get(&node_id) else {
+            return Ok(Value::err(plugin_err_value(&PluginErr::VerifyFailed(format!(
+                "this `get` of `{export}` carries no type the checker settled, so rule R-Get cannot be \
+                 decided here: refused, never guessed (the run was started without the program's checked \
+                 `get` sites)"
+            )))));
+        };
+        // A program loads only Verified plugins (RW 4.96), so a site typed against a Contained one asks for
+        // rules this handle was never checked under (R-1, R-6a). Unreachable from `load`, which refuses such
+        // a program first; refused here too, because a `get` must never trust that it was.
+        if matches!(asked.class, delulu_check::Type::Contained) {
+            return Ok(Value::err(plugin_err_value(&PluginErr::VerifyFailed(format!(
+                "this `get` of `{export}` types plugin `{}` as `Plugin[Contained]`, and the loaded plugin is \
+                 Verified: a program can load only Verified plugins in this build",
+                p.name
+            )))));
+        }
+        if let Err(e) = crate::plugin::r_get_verified(p.verified.dir.fn_types.get(export.as_ref()), &asked.f, export) {
+            return Ok(Value::err(plugin_err_value(&e)));
         }
         Ok(Value::ok(Value::PluginFn(Rc::new(PluginFn { reference, plugin: p.clone() }))))
     }
@@ -1958,7 +2028,11 @@ impl Interp {
             )));
         }
         let module = &f.plugin.verified.dir.module;
-        let mut sub = Interp::new(module).with_max_depth(self.max_depth);
+        // RW 4.95: a plugin the host hands this export is got at the export's OWN sites, so their `F`s are the
+        // replay's of this plugin's code.
+        let mut sub = Interp::new(module)
+            .with_max_depth(self.max_depth)
+            .with_plugin_sites(std::sync::Arc::clone(&f.plugin.verified.plugin_gets), std::sync::Arc::new(HashMap::new()));
         if let Some(t) = &self.trace {
             sub = sub.with_trace(t.clone());
         }

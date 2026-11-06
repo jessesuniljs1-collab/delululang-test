@@ -19,7 +19,12 @@
 //!   one the current file no longer has — is refused.
 //!
 //! Either way the edited source is CHECKED and the answer is one envelope: the new source's
-//! diagnostics, the old and new hashes, and whether the file was written. `--dry-run` writes nothing;
+//! diagnostics, the old and new hashes, and whether the file was written. A file that is a module of a
+//! package (under the `src/` of the nearest `delulu.toml` above it) is checked AS that package, with the
+//! edited text in its place — the check `delulu check DIR` runs once the edit is written, its manifest
+//! ceiling (DL1009) included — and the authority delta is the package's (RW 6.69: checked alone, a
+//! module that imports another never checked, so `--if-checks` wrote a widening edit and the delta was
+//! `null`). An id must name the file's own package: a package's name, or for a loose file its module's. `--dry-run` writes nothing;
 //! `--if-checks` writes only when the result has no errors. A file stored in a surface morph is refused:
 //! its bytes are not the canonical program the offsets and the Atlas refer to. The write replaces the
 //! file in one rename, so a reader never sees half an edit.
@@ -122,9 +127,11 @@ fn span_of(s: delulu_diag::Span) -> (usize, usize) {
     (s.start as usize, s.end as usize)
 }
 
-/// Resolve an Atlas node id to one item's span in `src`. The id must name this file's module, and
-/// the item must exist NOW — an id from an older read that names nothing is stale, and refused.
-fn resolve_node(src: &str, id: &str) -> Result<(usize, usize, Kind), String> {
+/// Resolve an Atlas node id to one item's span in `src`. The id must name this file's package and
+/// module — `package` is the name of the package the file is a module of, `None` for a loose file,
+/// whose Atlas names its module as its package — and the item must exist NOW: an id from an older
+/// read that names nothing is stale, and refused.
+fn resolve_node(src: &str, id: &str, package: Option<&str>) -> Result<(usize, usize, Kind), String> {
     use delulu_syntax::ast::Item;
     let (prefix, rest) = id.split_once(':').ok_or_else(|| format!("`{id}` is not an Atlas node id (`fn:pkg/module.name`)"))?;
     if prefix != "fn" && prefix != "type" {
@@ -135,7 +142,19 @@ fn resolve_node(src: &str, id: &str) -> Result<(usize, usize, Kind), String> {
         return Err("the file does not parse, so its items cannot be addressed".into());
     }
     let dotted = module.name.dotted();
-    let qualified = rest.rsplit_once('/').map_or(rest, |(_, m)| m);
+    // RW 6.69: the package part was cut off unread, so `fn:BOGUSPKG/greeter.main` edited `greeter.main`.
+    let Some((pkg, qualified)) = rest.split_once('/') else {
+        return Err(format!("`{id}` names no package: an Atlas id is `{prefix}:pkg/module.name`"));
+    };
+    let expected = package.unwrap_or(&dotted);
+    if pkg != expected {
+        return Err(match package {
+            Some(p) => format!("`{id}` names the package `{pkg}`, but this file is a module of the package `{p}`"),
+            None => format!(
+                "`{id}` names the package `{pkg}`, but this file is in no package: its Atlas ids name its module `{dotted}` there"
+            ),
+        });
+    }
     let Some(name) = qualified.strip_prefix(dotted.as_str()).and_then(|n| n.strip_prefix('.')) else {
         return Err(format!("`{id}` does not name an item of this file's module `{dotted}`"));
     };
@@ -235,11 +254,9 @@ const AUTHORITY_ROWS: [&str; 3] = ["effects", "required_grants", "foreign_calls"
 /// only in a later `authority` — the rule `fix` keeps for its own repairs (it never applies a
 /// widening one unless named). Empty when nothing is added; `null` when either side does not check,
 /// because a program that does not check has no authority to compare.
-fn authority_change(file: &str, before: &str, after: &str) -> Value {
-    let rows = |src: &str| {
-        crate::cli::authority_of_text(file, src)
-            .ok()
-            .map(|r| Value::Object(AUTHORITY_ROWS.iter().map(|k| (k.to_string(), r[*k].clone())).collect()))
+fn authority_change(before: Result<Value, usize>, after: Result<Value, usize>) -> Value {
+    let rows = |report: Result<Value, usize>| {
+        report.ok().map(|r| Value::Object(AUTHORITY_ROWS.iter().map(|k| (k.to_string(), r[*k].clone())).collect()))
     };
     let (b, a) = (rows(before), rows(after));
     let widened = match (&b, &a) {
@@ -390,6 +407,13 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
         );
     }
 
+    // RW 6.69: the package this file is a module of, and that package's name — which its ids carry.
+    let package = delulu_check::package_root_of(std::path::Path::new(&a.file));
+    let package_name = package.as_ref().and_then(|root| {
+        let raw = std::fs::read_to_string(root.join("delulu.toml")).ok()?;
+        delulu_check::Manifest::parse(&raw, 0).0.map(|m| m.name)
+    });
+
     let (edited, count, node) = if let Some(spec) = &a.edits {
         let parsed = text_or_file(spec)
             .and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| format!("the edits are not JSON: {e}")));
@@ -402,7 +426,14 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
         }
     } else {
         let id = a.node.clone().unwrap_or_default();
-        let result = resolve_node(&src, &id).and_then(|(start, end, kind)| {
+        let named = match (&package, &package_name) {
+            (Some(root), None) => Err(format!(
+                "this file is a module of the package at `{}`, whose `delulu.toml` does not name it, so an Atlas id                  cannot be checked against it — fix the manifest, or edit by `--edits`",
+                root.display()
+            )),
+            _ => Ok(package_name.as_deref()),
+        };
+        let result = named.and_then(|pkg| resolve_node(&src, &id, pkg)).and_then(|(start, end, kind)| {
             let text = text_or_file(a.with.as_deref().unwrap_or(""))?;
             let item = canonical_item(&text, kind)?;
             apply(&src, vec![RangeEdit { start, end, insert: item }])
@@ -413,11 +444,22 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
         }
     };
 
-    // Checked as the file it will be.
-    let mut map = delulu_diag::SourceMap::new();
-    let fid = map.add_file(&a.file, &edited);
-    let checked = delulu_check::check_source(fid, &edited);
-    let errors = checked.diagnostics.iter().filter(|d| d.is_error()).count();
+    // Checked as the file it will be: inside a package, as the package it will be (RW 6.69).
+    let overlay: delulu_check::Overlay =
+        [(delulu_check::canonical_file(std::path::Path::new(&a.file)), edited.clone())].into_iter().collect();
+    let (map, diagnostics) = match &package {
+        Some(root) => {
+            let checked = delulu_check::check_package_overlaid(root, &overlay);
+            (checked.ws.source_map, checked.diagnostics)
+        }
+        None => {
+            let mut map = delulu_diag::SourceMap::new();
+            let fid = map.add_file(&a.file, &edited);
+            let checked = delulu_check::check_source(fid, &edited);
+            (map, checked.diagnostics)
+        }
+    };
+    let errors = diagnostics.iter().filter(|d| d.is_error()).count();
     let new_hash = file_hash(edited.as_bytes());
     let write = !(a.dry_run || (a.if_checks && errors > 0));
     let mut written = false;
@@ -427,7 +469,13 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
         }
         written = true;
     }
-    let authority = authority_change(&a.file, &src, &edited);
+    let authority = match &package {
+        Some(root) => authority_change(
+            crate::cli::authority_of_package(root, &delulu_check::Overlay::new()),
+            crate::cli::authority_of_package(root, &overlay),
+        ),
+        None => authority_change(crate::cli::authority_of_text(&a.file, &src), crate::cli::authority_of_text(&a.file, &edited)),
+    };
     let report = json!({
         "file": a.file,
         "previous_hash": current,
@@ -440,11 +488,11 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
     });
     if json_out {
         crate::cli::note_json_emitted();
-        let mut env = delulu_diag::envelope("edit", &checked.diagnostics, None, &map);
+        let mut env = delulu_diag::envelope("edit", &diagnostics, None, &map);
         env["edit"] = report;
         println!("{}", serde_json::to_string_pretty(&env).expect("the edit envelope serializes"));
     } else {
-        crate::cli::print_diagnostics("edit", &checked.diagnostics, &map, None, false);
+        crate::cli::print_diagnostics("edit", &diagnostics, &map, None, false);
         let what = if written {
             "written"
         } else if a.dry_run {
@@ -493,12 +541,12 @@ mod tests {
     #[test]
     fn a_node_resolves_by_its_atlas_id_and_a_stale_one_is_refused() {
         let src = "module m\n\nfn a() -> Int {\n    1\n}\n\nfn b() -> Int {\n    2\n}\n";
-        let (s, end, kind) = resolve_node(src, "fn:m/m.b").unwrap();
+        let (s, end, kind) = resolve_node(src, "fn:m/m.b", None).unwrap();
         assert_eq!(kind, Kind::Fn);
         assert!(src[s..end].starts_with("fn b"), "{}", &src[s..end]);
-        assert!(resolve_node(src, "fn:m/m.gone").unwrap_err().contains("stale"));
-        assert!(resolve_node(src, "fn:other/other.b").is_err(), "another module's id");
-        assert!(resolve_node(src, "mod:m/m").is_err());
+        assert!(resolve_node(src, "fn:m/m.gone", None).unwrap_err().contains("stale"));
+        assert!(resolve_node(src, "fn:other/other.b", None).is_err(), "another module's id");
+        assert!(resolve_node(src, "mod:m/m", None).is_err());
         let item = canonical_item("fn b()->Int{3}", Kind::Fn).unwrap();
         assert!(item.starts_with("fn b() -> Int {"), "formatted: {item}");
         assert!(canonical_item("fn b() -> Int { 3 }\nfn c() {}", Kind::Fn).is_err(), "two items");
@@ -525,13 +573,13 @@ actor A {
     }
 }
 ";
-        let (s, e, k) = resolve_node(src, "fn:m/m.A.hit").unwrap();
+        let (s, e, k) = resolve_node(src, "fn:m/m.A.hit", None).unwrap();
         assert_eq!(k, Kind::ActorBe);
         assert!(src[s..e].starts_with("be hit"), "{}", &src[s..e]);
-        assert_eq!(resolve_node(src, "fn:m/m.A.get").unwrap().2, Kind::ActorFn);
-        assert_eq!(resolve_node(src, "fn:m/m.A.new").unwrap().2, Kind::ActorNew);
-        assert!(resolve_node(src, "fn:m/m.A.gone").unwrap_err().contains("stale"));
-        assert!(resolve_node(src, "fn:m/m.B.hit").unwrap_err().contains("stale"));
+        assert_eq!(resolve_node(src, "fn:m/m.A.get", None).unwrap().2, Kind::ActorFn);
+        assert_eq!(resolve_node(src, "fn:m/m.A.new", None).unwrap().2, Kind::ActorNew);
+        assert!(resolve_node(src, "fn:m/m.A.gone", None).unwrap_err().contains("stale"));
+        assert!(resolve_node(src, "fn:m/m.B.hit", None).unwrap_err().contains("stale"));
         let be = canonical_item("be hit(k:Int){self.n=self.n+k*2}", Kind::ActorBe).unwrap();
         assert_eq!(
             be,

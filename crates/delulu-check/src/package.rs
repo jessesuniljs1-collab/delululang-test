@@ -63,22 +63,78 @@ pub struct LoadedModules {
 /// Discover and parse a package's modules into `source_map`, prefixing each file's display path
 /// with `display_prefix` (e.g. `"dep:mathkit/"`) so diagnostics carry the spec's `dep:` marker.
 pub fn load_package_into(root_dir: &Path, source_map: &mut SourceMap, display_prefix: &str) -> LoadedModules {
+    load_package_overlaid(root_dir, source_map, display_prefix, &Overlay::new())
+}
+
+/// Texts that stand in for files on disk, keyed by the file's canonical path ([`canonical_file`]).
+///
+/// RW 6.69 and 6.72: a tool that checks text nobody has saved — an editor's open buffer, the result an
+/// `edit` would write — checked it as a file alone, and a module that imports another never checks
+/// alone. The package is checked instead, with these texts in place of what the disk holds, so the
+/// answer is the one `delulu check DIR` gives once the text is saved.
+pub type Overlay = HashMap<PathBuf, String>;
+
+/// The canonical spelling of a source file's path, the key an [`Overlay`] is read by. A file that
+/// does not exist yet (an editor's unsaved new file) is spelled from its directory's canonical path,
+/// so the same file is one key however it was named (§11.4: what else spells this?).
+pub fn canonical_file(path: &Path) -> PathBuf {
+    if let Ok(p) = std::fs::canonicalize(path) {
+        return p;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(dir), Some(name)) => {
+            let dir = if dir.as_os_str().is_empty() { Path::new(".") } else { dir };
+            std::fs::canonicalize(dir).map_or_else(|_| path.to_path_buf(), |d| d.join(name))
+        }
+        _ => path.to_path_buf(),
+    }
+}
+
+/// [`load_package_into`], with `overlay`'s texts read in place of the files they name. An overlaid
+/// `.delulu` file under `src/` that is not on disk yet is a module too.
+pub fn load_package_overlaid(root_dir: &Path, source_map: &mut SourceMap, display_prefix: &str, overlay: &Overlay) -> LoadedModules {
     let src_dir = root_dir.join("src");
     let mut modules = Vec::new();
     let mut index = HashMap::new();
     let mut diagnostics = Vec::new();
 
-    let mut files = Vec::new();
-    collect_delulu_files(&src_dir, &mut files);
+    let mut found = Vec::new();
+    collect_delulu_files(&src_dir, &mut found);
+    // Each file with the overlay key it is read by, when the overlay holds it.
+    let mut files: Vec<(PathBuf, Option<PathBuf>)> = Vec::with_capacity(found.len());
+    if overlay.is_empty() {
+        files.extend(found.into_iter().map(|p| (p, None)));
+    } else {
+        let mut on_disk: HashSet<PathBuf> = HashSet::new();
+        for p in found {
+            let key = canonical_file(&p);
+            on_disk.insert(key.clone());
+            let held = overlay.contains_key(&key).then_some(key);
+            files.push((p, held));
+        }
+        let src_canon = canonical_file(&src_dir);
+        for key in overlay.keys() {
+            let is_module = key.extension().and_then(|s| s.to_str()) == Some("delulu") && key.starts_with(&src_canon);
+            if is_module && !on_disk.contains(key) {
+                // Spelled under `root_dir` as given, as the files found on disk are, so its display
+                // path is relative like theirs.
+                let rel = key.strip_prefix(&src_canon).unwrap_or(key);
+                files.push((src_dir.join(rel), Some(key.clone())));
+            }
+        }
+    }
     files.sort();
 
-    for path in files {
-        let src = match std::fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                diagnostics.push(Diagnostic::error("DL0303", format!("cannot read `{}`: {e}", path.display())));
-                continue;
-            }
+    for (path, key) in files {
+        let src = match key.and_then(|k| overlay.get(&k)) {
+            Some(text) => text.clone(),
+            None => match std::fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(e) => {
+                    diagnostics.push(Diagnostic::error("DL0303", format!("cannot read `{}`: {e}", path.display())));
+                    continue;
+                }
+            },
         };
         let rel = path.strip_prefix(root_dir).unwrap_or(&path).to_string_lossy().replace('\\', "/");
         let display = format!("{display_prefix}{rel}");

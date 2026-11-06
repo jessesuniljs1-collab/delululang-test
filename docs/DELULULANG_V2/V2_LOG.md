@@ -12374,3 +12374,98 @@ owner set the priority: development and the reviews' improvements come first (`H
 - workflow: `.github/workflows/witness.yml`;
 - records: RW 7.25, `HANDOFF.md` §11.1 and §11.2, `AI_ONBOARDING.md` §10, `CHANGELOG.md`, `docs/assistant-memory/`,
   this entry, the sync log, `docs/survey/*`.
+
+## 2026-11-06 — on-demand routine run 20: RW 4.95, 4.96 and 4.97 closed — R-Get enforced at `p.get`; a load asks for its class; the signing commands refuse an option they do not know
+
+**Why.** The routine's work order (the owner, 2026-11-06: *"We have to continue actual development and improvements to
+DeluluLang also according to the review files also, That's more important"*): the reviews' first item, RW 4.95 (HIGH),
+with 4.96 and 4.97. Housekeeping first: PR #136 (`laptop/rw-7-25-repeat`, its PR run `42154648068` 14 + 2 skipped green)
+verified in the VM (`brokerd`/`monitor_cmd` unit tests 73 passed, `monitor_cli` 26) and landed by fast-forward; `master`'s
+push run `42158064500` on `d53bf4e` read green (14 + 2 skipped).
+
+**RW 4.95 — what was wrong.** `plugin_get` checked only that the export's name existed; the type the program annotated
+never reached the run. Witnessed by hand on the binary before the fix, then by five tests (each red by stash on the old
+code): a `! {Load, Read}` function took a `! {Write}` export as `! {}` and wrote a file (`check` clean); a function
+`authority` lists as pure read a file through a `! {Read}` export typed `! {}`; a package whose ceiling is `Load, Read`
+passed `check .` and wrote; an export taken at other parameter types faulted inside the plugin (DL0907, *"arithmetic on
+non-numeric values"*); and a plugin handed a loaded plugin wrote through it from a pure export.
+
+**The fix (D-V2-210).** The checker records each `p.get` site's node id, `F` and class, settled once inference is
+(`CheckResult::plugin_gets`); `delulu run` hands the table to the interpreter (`with_plugin_sites`); `plugin_get` calls
+`r_get_verified` before it hands out the callable, and refuses a site with no checked `F`. A plugin's own sites are checked
+against the replay of its code (`dir::verify_checked` → `VerifiedPlugin::plugin_gets`); nothing stored in the artifact is
+trusted for it, and the DIR's format is unchanged.
+
+**RW 4.96 (D-V2-211).** Each `load` site's class is recorded too (`CheckResult::plugin_loads`): a `Plugin[Contained]`
+request is refused at `load` as one (`NotGranted`, before a byte is read). Before, it ran a Verified artifact under the
+other class (*"RAN hello!"*) or refused a Contained one for a request never made (*"the host requested
+`Plugin[verified]`"*). A `get` typed against a Contained plugin is refused too, the wall behind it.
+
+**RW 4.97 (D-V2-212).** The class is six commands, every one that reads its own options. Witnessed before the fix:
+`verify-sig art.dwx --kye K` *valid*, exit 0, where `--key K` is *invalid*, exit 1; `sign --name second` signed with the
+default key; `sign --bogus`, `keygen --bogus` (a key minted) and `login … --bogus` (a credential stored) exit 0. The
+dispatcher now refuses for those six every option their usage does not document. Their usage documents what the code
+read and the help did not (`sign --key-name`, `publish --registry`, `keygen --dangerously-allow-insecure-perms`), and
+`verify-sig`'s note no longer names `--hybrid`. On the way: `sign`'s first note named `keygen --name N`, which made
+`--name` a documented `sign` option, and the witness's `sign --name` stayed exit 0 until the note was reworded
+(`HANDOFF.md` §11.2).
+
+**Mutants** (`scripts/mutants.py`): M1099 no R-Get call — red (the five R-Get witnesses); M1100 the run not wired AND an
+absent site allowed — red (four; the nested one keeps its replay's table); M1101 the run not wired — red (20, every honest
+`get`); M1102 the nested interpreter without the replay's table — red (the nested honest witness); M1103 `F` unsettled —
+red (20); M1104 no load refusal — red; M1105 no load refusal and no `get` guard — red; **M1106 the `get` guard alone —
+survived, by design** (the second wall, behind `load`'s; M1105 shows the witness can fail); M1107 the class not recorded —
+red; M1108 no option guard, M1109 `--x=v` read whole, M1110 three commands not six — each red. Control green.
+
+**Verified.** `scripts/clippy.sh -j 4` clean (after the last `.rs` edit). The full suite, `scripts/suite.sh`: 192 targets,
+2,691 passed, 0 failed, 16 ignored, `EXIT=0`. `witness.yml` on `cb33630`: Windows `42160558260` and macOS `42160561227`,
+`plugin_load_cli` 31 of 31 and `signing_cli` 7 of 7 each, every new test named.
+
+**RW 7.25's runs, read on the way (the inbox's item 2).** Round 2's six: four green; Windows `42148239197` red at run 60 of
+100 beside three busy loops in RW 7.25's test (before the step timing — its numbers in the row); Windows `42148230468` red
+in another test. Round 3, on the step timing: macOS `42153802328`, `42153809227` and Windows `42153823661` green; macOS
+`42153816861` red in that other test; Windows `42153830411` cancelled at `witness.yml`'s 90-minute limit, no run red before it. The other test is **RW 7.29, new**:
+`a_watch_held_outside_the_daemon_lets_its_dead_man_fire`, red in two shapes — a monitor that ended *"was revoked — nothing
+left to watch"*, exit 0, which by the code means its chain read failed or lacked the fire record (and a failed read is
+taken for *someone else revoked it*, fail-open whatever the cause), and a monitor that never ended within 27 s.
+
+**CI.** `master`'s push run `42162246455` on `d49e2d0` (this run's fix and records): success, 14 jobs and 2 skipped, every
+test job's `actors_pingpong` verdict as before (arm64 MEASURED 2.83x against a bar of 1.48x; the other three NOT MEASURED);
+the OpenShell run `42162246404` success.
+
+## 2026-11-06 — the same session, at the owner's word: the red CI runs explained; RW 7.29's fail-open closed (D-V2-213)
+
+**Why.** The owner: *"CI Runs failed … Search web … What about that CI run fails"*. Every `master` run of the day was green
+(push runs `42158064500`, `42162246455`, `42164047178`). The red runs were the laptop's `witness.yml` repeat runs of the
+whole `monitor_cli` target on `laptop/rw-7-25-repeat` — about 1,500 runs in all, some beside busy loops: macOS
+`42148295822` and Windows `42148239197` red in RW 7.25's test; Windows `42148230468` and macOS `42153816861` red in RW
+7.29's; Windows `42153830411` cancelled at the job's 90-minute limit. A web search found reports of uneven hosted-runner
+speed on macOS and Windows and no fix; its one firm point is that a missed heartbeat looks the same whether its sender was
+starved, hung or crashed, until each side's timing is read.
+
+**RW 7.25's Windows red, read against the code.** The watch beat at +372 ms and next at +4110 ms (refused). The beater beats
+only while the watch waits on the daemon (DEADMAN-BUSY-1), and none beat, so for 3.7 s the watch was held outside a daemon
+request: in its step *reading what was appended*, or not scheduled. That run predates the step timing (`d3da12b`), so
+which is not known; the cause is still not named.
+
+**RW 7.29's Windows red, read against the code.** The monitor ended *"was revoked — nothing left to watch"*, exit 0, the
+end kept for an operator's revocation. That ending was reached only when no record of its own dead-man was found: a chain
+it could not read, or one without the record (RW 4.58: a revocation stays in force when its record cannot be written).
+Whatever the cause, that is a guess reported as a clean end.
+
+**The fix (`b1d7d44`, D-V2-213).** `ending_of_a_node_gone`, one function for both places a watch sees its node gone: with a
+dead-man armed, a clean end only on someone else's revocation recorded since the arming, or a TTL's end; otherwise a
+failure that says it cannot tell by whom. Witness `monitor_cmd::tests::a_gone_node_ends_the_watch_clean_only_on_a_revocation_the_chain_names`
+red on the old ending (extracted unchanged first); `a_watch_whose_node_expires_ends_clean_with_its_dead_man_armed` keeps a
+TTL's end clean; RW 7.29's test prints the node's state and `broker.log` at each failure. Mutants M1111–M1115 red; M1116
+survives (no test can place a TTL's end between a turn's state check and its beat). The full suite: 192 targets, 2,693
+passed, 0 failed. `witness.yml` on `b1d7d44`: Windows `42168550190` and macOS `42168552718` green, every new test named.
+Repeats of the whole target beside two busy loops — Windows ×90 `42168555302`, macOS ×120 `42168558046` — both green
+(210 runs, no red, 40–45 minutes each).
+
+**`master`'s push run `42169915249` on `fbd6fc6`.** Attempt 1 red on macOS only: three of the `delulu` binary's
+`brokerd::tests` in one stall of the runner (two in-process daemons did not come up within 10 s; a held-request beat test's
+dead-man fired; the daemon logged five times that it did not run for 100 ms). The commit's change was not in their path,
+and the binary's unit tests were the job's first target. Re-run once: attempt 2 green, every job. RW 7.30 records it,
+with a VM probe (four copies at once: 1 red in 12, a fourth test, whose process-wide thread count its neighbours share).
+

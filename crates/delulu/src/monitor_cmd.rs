@@ -516,10 +516,8 @@ fn cmd_watch(rest: &[String]) -> i32 {
             Ok(Response::Ok) => Ok(()),
             // Revoked or expired: whose doing it was is read from the chain, below — never from the words.
             Ok(Response::Error { code, .. }) if code == "DL1403" || code == "DL1402" => {
-                Err(match read_chain().ok().and_then(|recs| deadman_fired_at(&recs, &o.node)) {
-                    Some(seq) => (true, dead_man_fired(&o.node, seq, *period)),
-                    None => (false, format!("`{}` was revoked — nothing left to watch", o.node)),
-                })
+                let armed = deadman.as_ref().map(|(_, seq, period)| (*seq, *period));
+                Err(ending_of_a_node_gone(read_chain(), &o.node, armed, "was revoked", code == "DL1402"))
             }
             Ok(Response::Error { code, message, .. }) => Err((
                 true,
@@ -597,17 +595,12 @@ fn cmd_watch(rest: &[String]) -> i32 {
             Some(s) if s != "live" => {
                 // Its own dead-man, or someone else (the operator ending the watch)? The chain says which: a
                 // monitor too slow to beat must not end as if it had been asked to.
-                let fired = deadman.as_ref().and(read_chain().ok()).and_then(|recs| deadman_fired_at(&recs, &o.node));
-                match (fired, &deadman) {
-                    (Some(seq), Some((_, _, period))) => {
-                        refused_any = true;
-                        ended = dead_man_fired(&o.node, seq, *period);
-                    }
-                    _ => {
-                        ended = format!("`{}` is {s} — nothing left to watch", o.node);
-                        clean_end = true;
-                    }
-                }
+                let armed = deadman.as_ref().map(|(_, seq, period)| (*seq, *period));
+                let read = if armed.is_some() { read_chain() } else { Ok(Vec::new()) };
+                let (fatal, why) = ending_of_a_node_gone(read, &o.node, armed, &format!("is {s}"), s == "expired");
+                refused_any |= fatal;
+                clean_end = !fatal;
+                ended = why;
                 break;
             }
             Some(_) => {}
@@ -876,6 +869,47 @@ fn deadman_fired_at(recs: &[delulu_broker::audit::AuditRecord], node: &str) -> O
         .map(|r| r.seq)
 }
 
+/// How a watch whose node is no longer live ends (RW 7.29): `(fatal, why)`. `read` is the chain as this monitor could read
+/// it; `armed`, its dead-man's arming seq and period, when one is armed; `gone`, how the node's end is said ("was revoked",
+/// "is expired"); `expired`, whether its TTL ended it rather than a revocation.
+fn ending_of_a_node_gone(
+    read: Result<Vec<delulu_broker::audit::AuditRecord>, String>,
+    node: &str,
+    armed: Option<(u64, Duration)>,
+    gone: &str,
+    expired: bool,
+) -> (bool, String) {
+    let clean = || (false, format!("`{node}` {gone} — nothing left to watch"));
+    // No dead-man armed: nothing of this monitor's own can have ended the watch.
+    let Some((armed_seq, period)) = armed else { return clean() };
+    let cannot_tell = |why: String| {
+        (
+            true,
+            format!(
+                "`{node}` {gone}, and this monitor cannot tell by whom: {why} — so it does not end as if it had been asked \
+                 to; its dead-man may have fired (`delulu audit verify` and `broker.log` say)"
+            ),
+        )
+    };
+    let recs = match read {
+        Ok(recs) => recs,
+        Err(e) => return cannot_tell(e),
+    };
+    if let Some(seq) = deadman_fired_at(&recs, node) {
+        return (true, dead_man_fired(node, seq, period));
+    }
+    // A TTL's end is no revocation, and has no record to find.
+    if expired {
+        return clean();
+    }
+    // Someone else's revocation is a record: one made since the dead-man was armed. A record names a subtree's root, so an
+    // ancestor's revocation counts — and a chain that names none cannot say anyone else ended it (RW 7.29).
+    if recs.iter().any(|r| r.action == "revoke" && r.decision == "allow" && r.seq > armed_seq) {
+        return clean();
+    }
+    cannot_tell(format!("the chain it read names no revocation since its dead-man was armed (seq {armed_seq})"))
+}
+
 fn dead_man_fired(node: &str, seq: u64, period: Duration) -> String {
     format!(
         "the broker's dead-man revoked `{node}` and every run under it (seq {seq}): this monitor sent no beat within {} ms",
@@ -889,6 +923,50 @@ fn now_millis() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    /// **RW 7.29: a watch whose node is gone ends clean only on a revocation the chain names.** On Windows (`42148230468`) a
+    /// monitor whose own dead-man the test had made fire ended *"was revoked — nothing left to watch"*, exit 0: the end it
+    /// keeps for an operator's revocation. The chain it read held no dead-man record, and "none found" was taken for
+    /// *someone else*. A chain it cannot read, or one that names no revocation since the dead-man was armed, cannot say
+    /// that, and must not end the watch as if it had been asked to. Its own dead-man, someone else's recorded revocation, a
+    /// TTL's end and a watch with no dead-man keep their endings.
+    #[test]
+    fn a_gone_node_ends_the_watch_clean_only_on_a_revocation_the_chain_names() {
+        use delulu_broker::audit::AuditRecord;
+        let rec = |seq: u64, action: &str, target: &str, why: Option<&str>| AuditRecord {
+            seq,
+            ts: 0,
+            prev_hash: String::new(),
+            hash: String::new(),
+            actor_node: None,
+            action: action.to_string(),
+            target: Some(target.to_string()),
+            authority: why.map(|w| serde_json::json!({ "why": w })),
+            span: None,
+            decision: "allow".to_string(),
+        };
+        let (node, armed) = ("g_m", Some((5, Duration::from_millis(200))));
+        let ends = |read: Result<Vec<AuditRecord>, String>, armed: Option<(u64, Duration)>, expired: bool| {
+            ending_of_a_node_gone(read, node, armed, "was revoked", expired)
+        };
+
+        let (fatal, why) = ends(Ok(vec![rec(6, "revoke", node, Some("dead-man: the holder sent no beat"))]), armed, false);
+        assert!(fatal && why.contains("dead-man revoked") && why.contains("seq 6"), "its own dead-man: {why}");
+        let (fatal, why) = ends(Ok(vec![rec(7, "revoke", "g_parent", Some("the operator ended it"))]), armed, false);
+        assert!(!fatal && why.contains("nothing left to watch"), "someone else's revocation since arming: {why}");
+
+        let (fatal, why) = ends(Err("the audit chain at `x` cannot be read: denied".to_string()), armed, false);
+        assert!(fatal, "a chain it could not read is no evidence of anyone else: {why}");
+        assert!(why.contains("cannot tell") && why.contains("denied"), "and it says why: {why}");
+        let only_before = vec![rec(3, "revoke", "g_other", None), rec(6, "delegate", "g_run", None)];
+        let (fatal, why) = ends(Ok(only_before), armed, false);
+        assert!(fatal && why.contains("cannot tell"), "no revocation recorded since the dead-man was armed: {why}");
+
+        let (fatal, why) = ends(Ok(Vec::new()), armed, true);
+        assert!(!fatal, "a TTL's end needs no record: {why}");
+        let (fatal, why) = ends(Err("unreadable".to_string()), None, false);
+        assert!(!fatal, "with no dead-man armed, nothing of its own can have ended it: {why}");
+    }
+
     use super::*;
 
     /// **The independent review's finding 4: a watch says how far it got before it waits for its beater.** Here the beater

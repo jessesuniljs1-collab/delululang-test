@@ -236,3 +236,99 @@ fn a_signature_from_another_artifact_does_not_verify() {
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(v["code"], "DL1705", "a valid signature over other bytes is a verification failure: {v}");
 }
+
+/// Every file under `dir`, recursively — what a refused command must not have written.
+fn files_under(dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                found.push(p);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// **An option a signing command does not know is refused, never ignored (RW 4.97).** `keygen`, `sign`,
+/// `verify-sig`, `publish`, `add` and `login` read their options themselves, so the dispatcher's refusal of
+/// unknown options never saw theirs. Before on-demand routine run 20 `verify-sig art --kye K` dropped the key pin
+/// and said *valid*, exit 0, where `--key K` says *invalid*; `sign --name second` signed with the default key;
+/// and `keygen --bogus` minted a key. Now each refuses, exit 2, before it does anything — and the options their
+/// usage documents (`--key`, `--key-name`) still do what they say.
+#[test]
+fn a_signing_command_refuses_an_option_it_does_not_know() {
+    let dir = tmp("unknown_option");
+    let home = dir.join("home");
+    let art = dir.join("art.dwx");
+    std::fs::write(&art, b"artifact bytes").unwrap();
+    let text = |o: &Output| format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    let a = art.to_str().unwrap();
+
+    assert_eq!(delulu(&dir, &home, &["keygen"]).status.code(), Some(0));
+    assert_eq!(delulu(&dir, &home, &["keygen", "--name", "second"]).status.code(), Some(0));
+    let signed = delulu(&dir, &home, &["sign", a, "--key-name", "second", "--json"]);
+    assert_eq!(signed.status.code(), Some(0), "the documented `--key-name` selects a key: {}", text(&signed));
+    let second: Value = serde_json::from_slice(&signed.stdout).unwrap();
+    let second = second["signer"].as_str().unwrap().to_string();
+    let by_default = delulu(&dir, &home, &["sign", a, "--json"]);
+    let default: Value = serde_json::from_slice(&by_default.stdout).unwrap();
+    assert_ne!(default["signer"].as_str(), Some(second.as_str()), "the witness needs two different keys");
+    let sig = std::fs::read(format!("{a}.sig")).unwrap();
+
+    // The pin spelled right: the default key's signature is not the pinned key's.
+    let pinned = delulu(&dir, &home, &["verify-sig", a, "--key", &second]);
+    assert_eq!(pinned.status.code(), Some(1), "{}", text(&pinned));
+
+    // Spelled wrong, either way and in either mode: refused, never `valid`.
+    let kye_eq = format!("--kye={second}");
+    for args in [
+        vec!["verify-sig", a, "--kye", &second],
+        vec!["verify-sig", a, &kye_eq],
+        vec!["verify-sig", a, "--kye", &second, "--json"],
+    ] {
+        let o = delulu(&dir, &home, &args);
+        let t = text(&o);
+        assert_eq!(o.status.code(), Some(2), "a mistyped pin must be refused, not dropped: {args:?}\n{t}");
+        assert!(t.contains("`verify-sig` does not know this option: --kye"), "{t}");
+        assert!(!t.contains("valid, signed by") && !t.contains("\"verdict\": \"valid\""), "{t}");
+    }
+
+    // `sign --name` is not `--key-name`: refused, and the signature on disk is the one before it.
+    let o = delulu(&dir, &home, &["sign", a, "--name", "second"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o));
+    assert!(text(&o).contains("`sign` does not know this option: --name"), "{}", text(&o));
+    assert_eq!(std::fs::read(format!("{a}.sig")).unwrap(), sig, "a refused `sign` must not rewrite the signature");
+
+    // Every command with its own option parser, the same way, before it does anything.
+    let fresh = dir.join("fresh-home");
+    let index = dir.join("index");
+    std::fs::create_dir_all(&index).unwrap();
+    let ix = index.to_str().unwrap();
+    for args in [
+        vec!["sign", a, "--bogus"],
+        vec!["keygen", "--bogus"],
+        vec!["publish", "--dry-run", ".", "--bogus"],
+        vec!["add", "foo", "--index", ix, "--bogus"],
+        vec!["login", "--registry", "http://127.0.0.1:9", "--token", "t0ken", "--bogus"],
+    ] {
+        let o = delulu(&dir, &fresh, &args);
+        let t = text(&o);
+        assert_eq!(o.status.code(), Some(2), "{args:?}\n{t}");
+        assert!(t.contains(&format!("`{}` does not know this option: --bogus", args[0])), "{t}");
+    }
+    assert!(files_under(&fresh).is_empty(), "a refused command must write nothing: {:?}", files_under(&fresh));
+
+    // The documented pin still verifies the key it names, in both of its spellings.
+    let o = delulu(&dir, &home, &["verify-sig", a, "--key", default["signer"].as_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o));
+    let key_eq = format!("--key={}", default["signer"].as_str().unwrap());
+    let o = delulu(&dir, &home, &["verify-sig", a, &key_eq]);
+    assert_eq!(o.status.code(), Some(0), "`--key=HEX` is the same documented option: {}", text(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}

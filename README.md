@@ -12,11 +12,13 @@
 > enforcement lives in custody, which a plugin's own interpreter cannot share), and the `Contained`
 > class on Windows. See `delulu explain E-PLUGIN`.
 >
-> **And one exception, found 2026-11-05 and still open — the most serious open finding:** a program can take a
-> plugin's export at a *narrower* effect row than the export's own. `p.get` does not yet compare the type the
-> program asks for with the export's (rule R-Get; [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 4.95, HIGH). Until it
-> is fixed, a function's row, `delulu authority` and a package's ceiling can understate what a program that loads a
-> plugin does. The run's grants still bound it, and the Guard still enforces them.
+> **And one exception, found 2026-11-05 and closed 2026-11-06:** a program could take a plugin's export at a
+> *narrower* effect row than the export's own, because `p.get` never compared the type the program asked for with the
+> export's (rule R-Get; [`REMAINING_WORK.md`](docs/REMAINING_WORK.md) 4.95, HIGH). It does now: a `get` whose type
+> leaves out an effect the export performs, or names other parameter or return types, is refused as `VerifyFailed`
+> before the export can run — in the program and inside a plugin that is handed another. So a function's row,
+> `delulu authority` and a package's ceiling hold for a program that loads a plugin. A program loads only
+> **Verified** plugins; a request for `Plugin[Contained]` is refused at `load` as one (4.96).
 
 DeluluLang (`.delulu`) is a programming language where every function, module, and plugin
 carries its **authority and effects in its type**, so the compiler can answer — mechanically —
@@ -235,7 +237,7 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | Install → first program → real programs. Start here. |
 | [`docs/book/THE_DELULULANG_BOOK.md`](docs/book/THE_DELULULANG_BOOK.md) | The complete guide, 20 chapters. Read Ch. 6 if you review AI-written code. |
 | [`docs/for-agents.md`](docs/for-agents.md) | The one page an agent harness should pin. |
-| [`docs/review/`](docs/review/) | **Independent reviews by AI sessions** (2026-11-04/05): Codex's strategic review, and Claude Code's independent verification, AI-first compiler-pipeline audit and hidden-complexity audit — each with the evidence it ran. A finding there becomes work only as a `REMAINING_WORK.md` row re-run against the binary; the most serious open one is 4.95 (above). |
+| [`docs/review/`](docs/review/) | **Independent reviews by AI sessions** (2026-11-04/05): Codex's strategic review, and Claude Code's independent verification, AI-first compiler-pipeline audit and hidden-complexity audit — each with the evidence it ran. A finding there becomes work only as a `REMAINING_WORK.md` row re-run against the binary; the most serious, 4.95, was closed on 2026-11-06 (above). |
 | [`docs/QUESTIONS.md`](docs/QUESTIONS.md) | **Hard questions, answered with evidence** — can authority be bypassed, how it compares to a sandbox, what the maths does and does not prove, whether several agents can share one machine, and the things this project cannot claim. Start here if you are evaluating it. |
 | [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) | **Everything that is specified, described, or implied and is not built** — in one place, each row checked against the current binary rather than inherited from prose. What the microVM layer does not have yet, the mechanization that covers one fragment, the backend that does not exist, and more. Read it before planning work, or before believing a feature exists. |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | **What a deployment protects, and what you must do to get it.** Three tiers with the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is *not* protected, and why strict anchored-root mode is not yet the default. Read this before running anything you did not write. |
@@ -308,7 +310,7 @@ Six more things worth knowing before you evaluate it:
   judged by its method at every check (D-V2-183, D-V2-208), and a redirect never carries a method other than `GET`
   to another origin.
 - **Independent reviews (2026-11-04/05) found open defects, each re-run and recorded.** Besides the plugin row
-  above (4.95): the editor's fast path is package-blind (6.72); `run` refuses a missing grant only when the program
+  above (4.95, closed 2026-11-06): the editor's fast path is package-blind (6.72); `run` refuses a missing grant only when the program
   reaches it, after earlier effects (6.73); `build --target wasm` accepts a `main` its own host cannot call (3.28);
   MCP cannot cancel a call (6.74); under `--sandbox` a guest's fault code reaches neither the envelope nor the report
   (6.75), and under `hostile-agent` a deep recursion aborts the guest instead of raising `DL0905` (3.29);

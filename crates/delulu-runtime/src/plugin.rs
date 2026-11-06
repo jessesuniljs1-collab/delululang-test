@@ -498,6 +498,9 @@ pub fn load_prepare(
 pub struct VerifiedPlugin {
     pub dir: delulu_check::Dir,
     pub table: DeclTable,
+    /// The plugin's OWN `p.get` sites, from the replay of its code (RW 4.95): what an export that is
+    /// handed a loaded plugin checks that plugin's exports against, in the export's interpreter.
+    pub plugin_gets: std::sync::Arc<std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::PluginGet>>,
 }
 
 /// **Step 5 (Verified)** — replay-check the DIR in full, then check every export's verified row
@@ -523,7 +526,7 @@ pub fn step5_verified(art: &PluginArtifact) -> Result<VerifiedPlugin, LoadRefusa
     };
 
     // The full replay — types, rows, R-rules, opacity: the whole Stage-1 §6 judgment, re-run.
-    let dir = delulu_check::dir::verify(dir_bytes).map_err(|e| LoadRefusal {
+    let (dir, replayed) = delulu_check::dir::verify_checked(dir_bytes).map_err(|e| LoadRefusal {
         code: e.code(),
         message: format!("plugin `{}`: {}", art.name(), e.message()),
         intersection: None,
@@ -553,7 +556,7 @@ pub fn step5_verified(art: &PluginArtifact) -> Result<VerifiedPlugin, LoadRefusa
         check_export_row(code_ty, &manifest_ty, &table).map_err(refuse)?;
     }
 
-    Ok(VerifiedPlugin { dir, table })
+    Ok(VerifiedPlugin { dir, table, plugin_gets: std::sync::Arc::new(replayed.plugin_gets) })
 }
 
 /// `verified ⊆ manifest`: identical parameter/return types, and the verified row's effects a

@@ -223,6 +223,13 @@ pub fn deserialize(bytes: &[u8]) -> Result<Dir, DirError> {
 /// structurally validated at decode — so this runs the checker over hostile input without a panic
 /// surface.
 pub fn verify(bytes: &[u8]) -> Result<Dir, DirError> {
+    verify_checked(bytes).map(|(dir, _)| dir)
+}
+
+/// [`verify`], also handing back the replay's own [`CheckResult`] — what a loader needs that the DIR
+/// does not store: each `p.get` site's settled `F` (RW 4.95), derived from the re-proved code rather
+/// than from bytes a hostile artifact could have written.
+pub fn verify_checked(bytes: &[u8]) -> Result<(Dir, CheckResult), DirError> {
     let dir = deserialize(bytes)?;
 
     // Reuse `check_source`'s exact pipeline, minus the parse step (the AST is replayed, not
@@ -258,7 +265,7 @@ pub fn verify(bytes: &[u8]) -> Result<Dir, DirError> {
         return Err(DirError::VerifyFailed("stored foreign bind sites disagree with the re-checked code".into()));
     }
 
-    Ok(dir)
+    Ok((dir, result))
 }
 
 // ===== structural validation (panic-proofing the reconstructed AST) =========================

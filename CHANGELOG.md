@@ -11,6 +11,31 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a monitor ends clean only when the chain says someone else ended it, 2026-11-06
+
+- **Fixed (RW 7.29, D-V2-213):** `delulu monitor watch` with a dead-man armed ended *"was revoked — nothing left to watch"*,
+  exit 0, whenever it found no record of its own dead-man firing — even when it could not read the chain, or the chain did
+  not hold the revocation. It now ends clean only on someone else's revocation recorded since its dead-man was armed, or
+  its node's TTL; otherwise it ends as a failure that says it cannot tell by whom (its dead-man may have fired).
+
+## Unreleased — a plugin's export is handed out only at a type that covers it; signing commands refuse unknown options, 2026-11-06
+
+- **Fixed (security, RW 4.95, D-V2-210):** `p.get` checks the export against the function type the program asks for
+  (rule R-Get): exact parameter and return types, and the export's effect row inside the requested one. A narrower row
+  or other types are refused as `VerifyFailed` before the export can run. Until now only the name was checked, so a
+  program could take a `! {Write}` export as `! {}` and write a file from a function `check` and `delulu authority`
+  called pure, past a package's ceiling. The check holds inside a plugin's export too, at the plugin's own `get` of a
+  plugin it is handed. **A program that typed an export narrower than it is is refused now**: type it as the export is
+  (`delulu plugin inspect FILE.dpx --json`, `exports`).
+- **Fixed (RW 4.96, D-V2-211):** a `load` whose program asks for `Plugin[Contained]` is refused as one (`NotGranted`,
+  before a byte is read): a program loads only Verified plugins in this build. Such a request used to run a Verified
+  plugin under the other class's rules, or refuse a Contained one saying the program had asked for `Plugin[verified]`.
+- **Fixed (RW 4.97, D-V2-212):** `keygen`, `sign`, `verify-sig`, `publish`, `add` and `login` refuse an option their
+  usage does not document (exit 2, nothing done). `verify-sig art.dwx --kye KEY` used to drop the key pin and say
+  *valid*. Their usage now names the options they already read — `sign --key-name`, `publish --registry`, `keygen
+  --dangerously-allow-insecure-perms` — and `toolchain --json` lists them; `verify-sig` no longer lists `--hybrid`,
+  which it never read.
+
 ## Unreleased — a fired dead-man's two timing lines on one clock, 2026-11-06
 
 - **Changed, in `broker.log` and in `delulu monitor watch`'s standard error (RW 7.25):** the daemon's line about a fired

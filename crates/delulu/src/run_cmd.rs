@@ -1558,7 +1558,14 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         // DEFINES, so the runtime cannot reach it and the binary wires it — the same arrangement the
         // foreign binder uses. Unconditional: a program that loads no plugin never touches it, and a
         // program that does must not depend on a flag to have found its reader.
-        .with_plugin_engine(Rc::new(delulu_wasm::WasmPluginEngine::new()));
+        .with_plugin_engine(Rc::new(delulu_wasm::WasmPluginEngine::new()))
+        // RW 4.95 and 4.96: each `p.get` site's checked `F`, so an export is handed out only at the type the
+        // program was checked with (rule R-Get) — never at a narrower row than its own — and each `load`
+        // site's class, so a request for a Contained plugin is answered as one.
+        .with_plugin_sites(
+            std::sync::Arc::new(checked.result.plugin_gets.clone()),
+            std::sync::Arc::new(checked.result.plugin_loads.clone()),
+        );
     if foreign_process {
         // Stage 5 phase 5h: run each granted C library in an isolated worker subprocess. Additive —
         // a program with no foreign binds never spawns a worker (the binder is only consulted by
