@@ -8519,3 +8519,41 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      `hostile-agent` triggers it), then 6.73 and 6.74; then the outcome contracts (6.75, 6.77, then 6.76, 6.78–6.81).
   3. RW 6.82 when the language server is next touched; RW 7.25, 7.29 and 7.30 wait for their next red.
   4. Still the owner's: holding 2.0 and the reviews' open decisions; `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-06 — the laptop: PR #138 landed (its CI read); RW 3.29 closed — a deep recursion is DL0905 under a capped address space and under `hostile-agent` (D-V2-216)
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner: *"Continue cooking and improving DeluluLang The lang of Future till limit hits"*.
+- Branch: `laptop/stack-ladder` → a pull request into `master`. Base: `5c69eed`.
+- **PR #138, read to its end:** run `42223778436` on `5c69eed` green (14 jobs, plus `miri-slow` and `heavy-gates`
+  skipped); landed by fast-forward. Its push run: in the next entry.
+- **The milestone:** RW 3.29. The interpreter's stack walks a ladder, every interpreter's bound fits the stack granted,
+  and a guest's stack fits half its OS memory ceiling (D-V2-216). New: RW 3.30, unmeasured.
+- **Witnesses on the old code:** branch `laptop/stack-ladder-witness` (`9471585`), the two tests alone, never to be
+  merged. `witness.yml` `42225556840` (`cli_contract`, ubuntu-24.04) and `42225562026` (`sandbox_run_cli`,
+  ubuntu-24.04) were both red, *"has overflowed its stack"*. The Windows sandbox witness was red on the laptop.
+- **A low-memory stop:** Claude Code stopped two background tasks on the laptop: the PR #138 watcher and the first
+  mutant run, after M1141. The tree was checked, and M1142's leftover change to `guest.rs` was restored. M1142–M1147 were
+  re-run one call at a time, in the foreground, once the owner said to continue.
+- Files and folders (`git diff --name-status 5c69eed..HEAD`): M `CHANGELOG.md`, `HANDOFF.md` (§11.2: *a stack reserved
+  is not a stack you can use*), `README.md`, `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/lib.rs`,
+  `crates/delulu/src/ceiling.rs`, `crates/delulu/src/guest.rs`, `crates/delulu/src/main.rs`,
+  `crates/delulu/tests/cli_contract.rs`, `crates/delulu/tests/sandbox_run_cli.rs`, `docs/AI_ONBOARDING.md`,
+  `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md`, `docs/survey/*`.
+  Nothing added, deleted or renamed; no entrenched file.
+- **Verified on the laptop (Windows):**
+  - `sandbox_run_cli` `a_deep_recursion_under_the_hostile_agent_ceiling_is_dl0905_not_an_overflow` was red on the old
+    code and is green now;
+  - `delulu-runtime` `the_ladder_runs_on_the_largest_stack_granted_and_records_it` is green;
+  - mutants M1141–M1147 were all red, and the control green;
+  - `scripts/clippy.sh -j 2` was clean.
+- **The full suite** and the Linux witnesses with the fix are this pull request's run.
+- Survey and doctor (after the last edit): in the pull request.
+- **Open / next:**
+  1. **This pull request's CI**, then land it by fast-forward and read the push run; delete
+     `laptop/stack-ladder-witness`.
+  2. The reviews' order: RW 6.73 (a missing grant refused only when the program reaches it) and 6.74 (MCP cannot
+     cancel a call); then the outcome contracts (6.75, 6.77, then 6.76, 6.78–6.81).
+  3. RW 3.30: measure on Linux before any fix. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and
+     7.30 wait for their next red.
+  4. Still the owner's: holding 2.0 and the reviews' open decisions; `launch/2.0.0` stays prepared, not launched.

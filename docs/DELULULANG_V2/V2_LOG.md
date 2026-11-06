@@ -12527,3 +12527,38 @@ unchecked path.
 
 **Evidence.** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop. `scripts/clippy.sh -j 2` clean. The full suite runs on GitHub, as for #137: the laptop's
 memory could not hold it earlier today.
+
+## 2026-11-06 — the laptop: PR #138 landed; RW 3.29 closed — a deep recursion is DL0905 under a capped address space and under `hostile-agent` (D-V2-216)
+
+**PR #138 (RW 3.28), read to its end.** Run `42223778436` on `5c69eed` was green: 14 jobs success, `miri-slow` and
+`heavy-gates` skipped as on every pull request. It landed on `master` by fast-forward.
+
+**What.** RW 3.29 (the hidden-complexity audit §5.6 and its second pass): a recursion 100,000 deep is DL0905 with a
+report without a cap. It aborted the process (*"has overflowed its stack"*) under a `ulimit -v` and inside a
+`hostile-agent` guest. The causes:
+- **Linux:** the ~781 MiB reservation is refused, and the CLI fell back to the 8 MiB main stack with the full bound.
+- **Windows** (found on the laptop before the fix): the reservation is granted, and the Job Object's limit counts the
+  pages the recursion commits.
+
+D-V2-216 takes the row's first remedy:
+- the CLI's thread walks a ladder of stacks (`on_laddered_thread`) and records the one granted;
+- every interpreter built without a bound takes the bound that fits it (`process_max_depth`);
+- a sandbox guest lowers that stack to half the memory ceiling the OS enforces on it (`own_memory_ceiling`);
+- a lowered bound names itself in the fault.
+
+**Evidence.**
+- Both witnesses were red on the old code:
+  - the sandbox witness on Windows (the laptop) and on Linux (`witness.yml` `42225562026`);
+  - the `ulimit -v 600000` witness on Linux (`42225556840`). Both runs read *"has overflowed its stack"*.
+- Branch `laptop/stack-ladder-witness`, the tests alone on the old code, is not to be merged and is deleted after use.
+- The sandbox witness and the ladder's unit test are green with the fix on the laptop.
+- Mutants M1141–M1147 were all red, and the control green. A low-memory stop on the laptop killed the first mutant run
+  after M1141. M1142, which it had left applied in `guest.rs`, was restored and checked, and M1142–M1147 were re-run
+  one call at a time.
+- `scripts/clippy.sh -j 2` was clean. The full suite and the Linux witnesses with the fix are the pull request's run.
+
+**Not run:** the row's own `ulimit -v 300000`.
+
+**New, from reading the code while closing it:** RW 3.30. An actor program's workers settle their stack by one probe
+thread and are then spawned with `.expect`. Under a capped address space this may be a panic, not a diagnostic. This
+is INFERENCE and has not been measured.

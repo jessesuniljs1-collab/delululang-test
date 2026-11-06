@@ -843,6 +843,15 @@ wins, and you should update the memory to match.
   the server and `edit` call it. A third reader of unsaved text should call it too. The server's other providers
   still read one file (RW 6.82). **The third the same day (D-V2-215):** the WASM build calls a `main` of any shape the
   interpreter runs through a wrapper in its host's shape — the interpreter's semantics, not a narrower copy.
+- **A stack reserved is not a stack you can use; size the bound by the one you got** (the laptop, 2026-11-06; RW 3.29,
+  D-V2-216). The depth bound was sized for a reservation of about 781 MiB, and the bound stayed when the reservation
+  did not. Linux refuses that reservation under a `ulimit -v` or the guest's `RLIMIT_DATA`, and the CLI fell back to
+  the 8 MiB main stack. A Windows Job Object grants it and then counts every stack page a recursion commits against
+  `hostile-agent`'s 256 MiB. Each failure has its own cause, and both end in *"has overflowed its stack"* instead of
+  DL0905. Keep the (stack, bound) pair as one fact: record the stack actually granted before any work starts
+  (`on_laddered_thread`), and lower it to what the OS ceiling leaves (`own_memory_ceiling`, half of it). Do not trust
+  the number you asked for. A refused thread spawn drops its closure unrun, so the job must wait outside it for the
+  next rung.
 - **A stamp is not a hand-over, and a flaky red's reading is not its cause** (the laptop, 2026-11-05; RW 4.98, RW 7.25).
   The daemon judges a beat by the stamp its reader puts on it, but the judgment sees only what has been handed over. A
   beat stamped in time and handed over late is not counted, and RW 4.87 had called that window microseconds. A test-only
