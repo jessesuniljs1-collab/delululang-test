@@ -400,6 +400,38 @@ static RUN_FAULT: std::sync::Mutex<Option<Json>> = std::sync::Mutex::new(None);
 /// RW 6.73: the grants a run stopped for a grant lacks, by the program's text — the run report's `missing_grants`.
 static RUN_LACKING: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+/// RW 6.73 (D-V2-217): `run --preflight` — before `main` starts, the program's text against the run's final grants. A
+/// request they do not cover refuses the run with DL0703 at its call, naming every grant the run lacks, and nothing
+/// runs: no effect, no partial file, `outcome.ran: false`. Opt-in: without it a run is decided at each use, as before,
+/// so a branch that never runs never needs its grant. A request whose scope the program computes is decided at its call
+/// either way ([`lacking_grants`] keeps only *exceeds*). Shared by the ordinary run and the sandboxed one, after each
+/// has its final grants (a lease's or a manifest's included) and before an engine or a guest exists.
+pub(crate) fn preflight_refusal(
+    file: &str,
+    is_package: bool,
+    map: &SourceMap,
+    checked: &delulu_check::Checked,
+    grants: &Grants,
+    json: bool,
+) -> Option<i32> {
+    let lacking = lacking_grants(file, is_package, map, checked, grants);
+    let first = lacking.first()?;
+    let flags: Vec<String> = lacking.iter().map(|f| format!("--grant {}", f.grant)).collect();
+    let mut d = Diagnostic::error(
+        "DL0703",
+        format!(
+            "this run lacks {} grant(s) the program's text asks for, so nothing ran (`--preflight`) — pass {}",
+            lacking.len(),
+            flags.join(" ")
+        ),
+    );
+    if let Some(at) = first.at {
+        d = d.with_span(at, format!("this call needs `--grant {}`", first.grant));
+    }
+    print_run_fault(d, &lacking, map, json);
+    Some(1)
+}
+
 /// The fault that ended a run, printed and kept for the report ([`RUN_FAULT`]).
 ///
 /// RW 6.73: a run stopped for a grant (DL0703) used to name only the grant it reached, after the effects before it had
@@ -1452,6 +1484,12 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // scopes included), and neither runtime-written file may lie in a scope the program can write.
     if let Some(code) = refuse_runtime_paths_in_write_scopes(&opts, &grants.build_root().fs_write) {
         return code;
+    }
+    // RW 6.73: `--preflight` decides the program's text against those final grants before an engine exists.
+    if opts.preflight {
+        if let Some(code) = preflight_refusal(&file, is_package, &map, &checked, &grants, opts.json) {
+            return code;
+        }
     }
 
     // ----- foreign isolation selection (Stage 5 phase 5h) --------------------------------------

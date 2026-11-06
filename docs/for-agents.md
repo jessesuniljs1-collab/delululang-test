@@ -422,6 +422,20 @@ reach. `deploy plan` decides the same against a profile, whose `secrets` entries
 decided too, by its path against the boundary's `net` entries as the call decides it (D-V2-181): a request outside a
 path-scoped entry *exceeds*, named at the request by the narrowest line that takes it (`net=example.com/admin`).
 
+**A refusal for one grant names every grant the run lacks** (RW 6.73, since 2026-11-06).
+- **What the refusal carries.** A run is decided at each use, so the first DL0703 comes after the effects before it.
+  That refusal now lists, as `missing_grants` on the `--json` envelope and in the `--report-out` report, every grant the
+  program's text asks for that this run does not hold. The list is `authority --within` asked of the run's own grants.
+  Each other missing call is also a secondary span of the diagnostic. Add them all at once instead of paying one run per
+  grant.
+- **Nothing done before a refusal: `run --preflight`.** The program's text is decided against the run's grants before
+  `main` starts. A grant it lacks is DL0703 naming every one, nothing runs (`outcome.ran: false`), and no partial file is
+  left. This holds on the ordinary run and under `--sandbox` alike.
+- **What stays lazy.** A scope the program computes is still decided at its call. Against no grant of its kind it is
+  refused up front, by its placeholder (`fs.write=PATH`).
+- **Not yet.** A `.dwx` refuses `--preflight` by name. A sandboxed run refused before its guest starts writes no report
+  yet (row 6.83), so read the envelope.
+
 **When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the
