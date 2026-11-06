@@ -359,8 +359,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - RW 4.97 with it (a small fix: refuse unknown options in the signing commands);
   - RW 4.98 is closed (D-V2-209, amended after an independent review): a beat of this version read whole and stamped
     before a judgment counts, by its key, for the period it bought; counter-tests for incomplete connections, wrong keys,
-    another protocol version and other traffic. RW 7.25's cause is still not known;
-    its next red names its path in the job log (both sides' beat timing);
+    another protocol version and other traffic; the broker's Miri green on it (`42093191962`). RW 7.25's cause is
+    still not known (six of six green on Windows and macOS with the new timing); its next red names its path in the
+    job log (both sides' beat timing);
   - then the package-blind fast paths, RW 6.72 with 6.69 (one cause), and RW 3.28, 3.29, 6.73 and 6.74 (the audit's §7 order);
   - then RW 6.75 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;

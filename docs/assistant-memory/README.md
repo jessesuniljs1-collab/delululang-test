@@ -18,6 +18,11 @@ The cloud's notes were carried to the laptop first. Then every laptop file was c
 topic files and the index. Since then the folder and the laptop's directory hold the same notes. A non-Claude AI has
 no memory of its own here, so this folder, `HANDOFF.md` §11 and `AI_ONBOARDING.md` are its memory too.
 
+**Refreshed again 2026-11-06, from the laptop** (the owner: *"Push everything to GitHub repo"*): the six notes the
+laptop had written since 2026-11-05 and this folder lacked, and the laptop's newer `release-program-progress.md`, copied
+in and sanitized as below; the index has a line for each. Five notes a cloud session wrote here on 2026-11-05 hold the
+same facts as the laptop's copies in other words, and keep the cloud's wording.
+
 **What was changed on the way in — only this.** The repository is public, and a word the owner banned
 (`HANDOFF.md` §1) appeared in nine of the files. Every occurrence, in every casing, reads
 `[the banned word]` here, and the file named after the rule is `no-banned-word-mentions.md`. Nothing else

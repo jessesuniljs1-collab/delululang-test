@@ -8268,3 +8268,30 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** land this on a green run; read the dispatched runs to their end and record them; RW 7.25 stays open
   unless a run reads it.
+
+### 2026-11-06 — the laptop: RW 4.98's CI evidence read to its end (Miri green); RW 7.25's test six of six
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-7-25-ci-evidence`   Base: `master` `125d36f` (#134 landed: PR run `42094208050`, push run
+  `42097929801`, each 14 + 2 skipped, read green). Nothing else came in on `origin`.
+- **Why:** the owner: *"Finish this thing completely and verify. Run monitor to check on CI runs."* The dispatched runs
+  were watched by monitors and read to their end.
+- **CI read:**
+  - **`miri-slow`, run `42093191962` on `31b1692`: success.**
+    - `delulu-broker`: 1 h 25 min; 222 passed, 0 failed, 2 ignored; every `deadman::tests` test passed, D-V2-209's
+      among them.
+    - `delulu-check` 1 h 36 min; `delulu-syntax` 16 min.
+  - **RW 7.25's test via `witness.yml` on `31b1692`: six of six green**, each log showing the test run and its
+    measurement:
+    - Windows: `42093261520`, `42093278446`, `42093295263`;
+    - macOS: `42093310306`, `42093323509`, `42093337696`.
+- Files and folders (`git diff --name-status 125d36f..HEAD`): M `docs/REMAINING_WORK.md` (RW 7.25, RW 4.98),
+  `docs/AI_ONBOARDING.md` (§10), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. No code.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. RW 7.25 stays open: when it is next red, read both timing lines in that job's log before naming a cause.
+  2. Then the 2026-11-05 list:
+     - the Windows re-runs of the reviews' rows, into their rows;
+     - RW 4.95 first, with 4.96 and 4.97;
+     - the owner's answers;
+     - the launch, only on his word.
