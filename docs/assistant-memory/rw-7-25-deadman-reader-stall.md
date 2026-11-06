@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: eb34182b-835b-44af-b5ec-07064fcae52c
-  modified: 2026-11-06T01:55:09.110Z
+  modified: 2026-11-06T03:02:34.772Z
 ---
 
 Jesse pasted another AI's read-only analysis of RW 7.25 ("Head Chef Go Through This", 2026-11-05 evening). Head chef
@@ -113,3 +113,17 @@ is excluded from "longest turn" but shows as a gap in the beats' sent times. mac
 after the test's delegation (i.e. right after an append); Windows red after 5 beats ≈ 3rd turn. Hypothesis to MEASURE,
 not claim: a stall on the 30 MB day file after an append (Windows scanner; read the runner's Defender status the repeat
 run now prints) or the monitor descheduled under the sibling tests' load.
+
+**2026-11-06 ~03:00 UTC — REPRODUCED on macOS** (`42148295822`, run 9 of 150, whole target, 2 busy loops, 5-CPU
+runner; log copy in scratchpad `rw725_red_42148295822.log`). Old (pre-d3da12b) timing: monitor's last kept beats +1960,
++2004, +2004, +2092 (0 ms answers), next +3944 refused; daemon stamped/taken/handled/written each in the same ms (offset
+3734 ms) and fired on time. ⇒ **daemon heard everything; the MONITOR went silent 1,852 ms**, beater silent too (so not in a
+request, or the whole process stalled). Began ~2.1 s into the watch = the test's delegation append (10-29 macOS red too).
+Windows runner: Defender real-time OFF (measured). Rounds: r1 64/64; laptop 15/15 + 30/30 (16 hogs); r2 mac s0 #2 green.
+d3da12b = timing on one wall clock (`Moment`), turn steps, last turn apart, longest sleep (M1093–M1098 red). Round 3 on
+d3da12b: mac `42153802328` `42153809227` (s2) `42153816861` (s4); win `42153823661` (s3) `42153830411` (s6).
+**Web lead (Jesse: "Search web about this thing"):** macOS launchd jobs with no ProcessType / Background are CPU- and
+I/O-throttled (IOPOL_THROTTLE tier); GitLab runner jobs via LaunchAgent ran ~6× slower until `ProcessType Interactive`
+(gitlab-runner#29089). witness.yml now prints `debug.lowpri_throttle_enabled`, the step's `getiopolicy_np` and any
+plist ProcessType on macOS — measure before claiming. Jesse 2026-11-06: development per the reviews is MORE important —
+record, land, move to RW 4.95.

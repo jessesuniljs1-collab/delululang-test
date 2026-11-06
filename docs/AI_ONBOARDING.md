@@ -360,8 +360,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - RW 4.98 is closed (D-V2-209, amended after an independent review): a beat of this version read whole and stamped
     before a judgment counts, by its key, for the period it bought; counter-tests for incomplete connections, wrong keys,
     another protocol version and other traffic; the broker's Miri green on it (`42093191962`). RW 7.25's cause is
-    still not known (six of six green on Windows and macOS with the new timing); its next red names its path in the
-    job log (both sides' beat timing);
+    still not known. The six green runs of 2026-11-05 ran the test alone; since 2026-11-06 it is re-run as the push
+    run runs it, the whole `monitor_cli` target many times (`witness.yml` `repeat` and `stress`), and both sides' beat
+    timing is on one wall clock, with the monitor's turns step by step, so one red names its path;
   - then the package-blind fast paths, RW 6.72 with 6.69 (one cause), and RW 3.28, 3.29, 6.73 and 6.74 (the audit's §7 order);
   - then RW 6.75 and 6.77 (outcome contracts), and RW 6.76, 6.78–6.81 (the audit's §11.7);
   - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68–6.69;
@@ -371,9 +372,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-209;
-  - the last mutant is M1092;
+  - the last mutant is M1098;
   - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #128 was the last merged.
+  - pull requests are numbered on GitHub, and #135 was the last merged.
 
 ## 11. Keep this file true
 

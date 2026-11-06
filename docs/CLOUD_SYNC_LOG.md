@@ -8295,3 +8295,46 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      - RW 4.95 first, with 4.96 and 4.97;
      - the owner's answers;
      - the launch, only on his word.
+
+### 2026-11-06 — the laptop: RW 7.25 re-run as it failed and reproduced; timing on one clock; memory pushed
+- Session: `https://claude.ai/code/session_01Deh6WC4dF9kSoeMiqyCBx6`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `laptop/rw-7-25-repeat`   Base: `master` `fddb1f6` (#135 landed; its PR run `42108805025` and push run
+  `42112445483` each 14 + 2 skipped, read green). Nothing else came in on `origin`.
+- **Why:** the owner: *"Push everything to GitHub repo. Why isn't it solved yet"*, *"Search web about this thing"*, and
+  *"Add notes for next sessions and cloud sessions. Update .md files. Finish this thing. We have to continue actual
+  development and improvements to DeluluLang also according to the review files also, That's more important"*.
+- **What changed:**
+  - `.github/workflows/witness.yml`: `repeat` and `stress` inputs. A repeated run prints the CPUs, the Windows scanner's
+    status, and on macOS the low-priority throttle, the step's disk I/O policy and any launchd `ProcessType`.
+  - `crates/delulu/src/brokerd.rs` (`Moment`) and `crates/delulu/src/monitor_cmd.rs` (`Turn`, `Progress`): both timing
+    lines on one wall clock; the monitor's turns step by step, its ending turn apart, its longest sleep. Witnesses in
+    `monitor_cmd`, `brokerd` and `monitor_cli`; mutants M1093–M1098 red.
+  - `docs/assistant-memory/`: the laptop's notes since 2026-11-05 (seven new, two updated, the index, the README's dated
+    refresh).
+  - Records: RW 7.25; `HANDOFF.md` §11.1 (the owner's priority: development first) and §11.2 (re-run a flake the way it
+    failed); `AI_ONBOARDING.md` §10 (RW 7.25, M1098, #135); `CHANGELOG.md`; `V2_LOG.md`; this entry; `docs/survey/*`.
+- Files and folders: the pull request's `git diff --name-status fddb1f6..HEAD`. Added: seven
+  `docs/assistant-memory/*.md` notes. Nothing deleted or renamed.
+- **CI read:**
+  - Round 1 (whole `monitor_cli`, `master`'s code): 64 of 64 green. Windows `42146850780` (20) and `42146857227` (12,
+    three busy loops); macOS `42146863757` (20) and `42146870039` (12, two busy loops). Windows runners: real-time
+    scanner off.
+  - Round 2: macOS `42148279292` 150 of 150 green; **macOS `42148295822` red at run 9 of 150** (two busy loops, five
+    CPUs). The daemon heard every beat at once; the monitor sent none for 1,852 ms (RW 7.25 has the numbers).
+  - The laptop: 15 of 15; 30 of 30 beside 16 busy loops.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next — the next session's inbox (laptop, cloud or another AI):**
+  1. **Development comes first** (the owner, 2026-11-06; `HANDOFF.md` §11.1). Work the order in `AI_ONBOARDING.md` §10,
+     taken from the reviews in `docs/review/`:
+     - RW 4.95 (R-Get: `p.get` never calls `r_get_verified`) first, with 4.96 and 4.97;
+     - then the package-blind fast paths, RW 6.72 with 6.69, and RW 3.28, 3.29, 6.73 and 6.74.
+  2. **Read the RW 7.25 runs still out, and record them in RW 7.25** (a red: read the monitor's progress line and
+     `broker.log`'s "was judged at" line in the failure output; the step that held the watch is named there):
+     - round 2: Windows `42148221551`, `42148230468`, `42148239197`, `42148250027`; macOS `42148266268`, `42148287472`;
+     - round 3, on `d3da12b`: macOS `42153802328`, `42153809227`, `42153816861`; Windows `42153823661`, `42153830411`.
+
+     Then measure the macOS launchd lead: dispatch any repeated `witness.yml` run on macOS and read the printed policy.
+     Name no cause before a red's step line says it.
+  3. The Windows re-runs of the reviews' rows, into the rows themselves (`docs/assistant-memory/windows-verification-2026-11-05.md`).
+  4. Still with the owner: his answer on holding 2.0, and the reviews' open decisions. The launch happens only on his word.

@@ -768,6 +768,10 @@ wins, and you should update the memory to match.
   Constitution, the licence or any document's rule; it names the rule it crosses and its cost. It is a suggestion, not
   an edit: entrenched files still change only by the recorded route (`AGENTS.md`), and the prompt's own limits stay
   (that audit's: no code, test or configuration change). The suggestions that audit made are its report's §14.
+- **Development and the reviews' improvements come first** (owner, 2026-11-06, after RW 7.25's repeat runs: *"We have
+  to continue actual development and improvements to DeluluLang also according to the review files also, That's more
+  important"*). A rare flake gets its instrument and its record, then waits for its next red. It does not hold up the
+  work order that `docs/AI_ONBOARDING.md` §10 takes from the reviews in `docs/review/`, which starts at RW 4.95 (R-Get).
 
 ### 11.2 Working rules the project has paid for
 
@@ -857,6 +861,12 @@ wins, and you should update the memory to match.
     end, and pruning made that end look right: mutant M1087 (keep every node's beats) survived. It went red once the
     test seam recorded every node the table ever held. The same review found a refused request (DL1406) acted on
     before its refusal. Apply every gate the handler applies before anything acts on a request early.
+  - **Re-run a flaky test the way it failed** (2026-11-06; the owner: *"Why isn't it solved yet"*). Both of RW 7.25's
+    reds came in push runs, where the whole `monitor_cli` target runs its tests side by side, each starting daemons and
+    monitors. The six runs that "confirmed" it on 2026-11-05 ran the one test alone, through a `witness.yml` filter:
+    another experiment, so their green said little. `witness.yml` now takes `repeat` and `stress`. Run the target as the
+    push run does, many times, and count every run. Measure the runner before suspecting it: GitHub's Windows runners
+    run with Defender's real-time scan off. And put the two sides' timing on one clock, so one red is enough.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 
