@@ -300,7 +300,8 @@ another OS, and then takes about seven minutes itself (run 5).
    - **The order:**
      1. ~~RW 4.95 (R-Get enforced at `p.get`, HIGH), with 4.96 and 4.97~~ — done (on-demand routine run 20, D-V2-210 to
         D-V2-212);
-     2. the package-blind fast paths: RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74;
+     2. the package-blind fast paths: ~~RW 6.72 with 6.69~~ — done (the laptop, 2026-11-06, D-V2-214; the other LSP
+        providers are RW 6.82) — then RW 3.28, 3.29, 6.73 and 6.74;
      3. the outcome contracts: RW 6.75 and 6.77, then 6.76 and 6.78–6.81;
      4. the DIR and review-surface defects: RW 4.93, 4.94, 5.7, 6.67 and 6.68;
      5. the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88;

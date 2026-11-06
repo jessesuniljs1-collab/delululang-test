@@ -6,10 +6,9 @@ Language support for DeluluLang — an authority- and effect-typed language wher
 This extension is a **thin client**. It contributes syntax highlighting, snippets and a language
 configuration, and otherwise forwards everything to `delulu lsp`, the same LSP 3.17 server every
 other editor uses. There are no editor-specific server features, by rule (Constitution §8.4): the
-answers you get here are the compiler's answers, so they cannot drift from `delulu check` — with one
-exception, open: the server checks each open file alone, so in a multi-module package a module that
-imports another shows false `DL0301` errors that `delulu check <package-dir>` does not
-(`docs/REMAINING_WORK.md` row 6.72).
+answers you get here are the compiler's answers, so they cannot drift from `delulu check` — inside a
+package, from `delulu check <package-dir>`, with your unsaved buffers in place of the files on disk
+(`docs/REMAINING_WORK.md` row 6.72, closed 2026-11-06).
 
 ## Requirements
 
