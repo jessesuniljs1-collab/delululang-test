@@ -609,7 +609,9 @@ impl Calls {
         Calls { tree, out, inflight: Default::default(), queue: None, workers: Vec::new() }
     }
 
-    fn inflight(&self) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>> {
+    fn inflight(
+        &self,
+    ) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>> {
         self.inflight.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
@@ -647,7 +649,9 @@ impl Calls {
                     let id = msg["id"].clone();
                     let _ = out.send(match result {
                         Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
-                        Err((code, message)) => json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }),
+                        Err((code, message)) => {
+                            json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+                        }
                     });
                 }));
             }

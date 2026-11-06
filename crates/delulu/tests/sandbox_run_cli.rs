@@ -1079,3 +1079,74 @@ fn a_deep_recursion_under_the_hostile_agent_ceiling_is_dl0905_not_an_overflow() 
     assert_eq!(o.status.code(), Some(1), "a fault, not a stopped run: {all}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn report_of(path: &std::path::Path) -> serde_json::Value {
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))).unwrap()
+}
+
+/// RW 6.75: a fault the guest's program ends at on its own reaches the `--json` envelope and the run report, as an
+/// unsandboxed run's does: `DL0902` at its call, labelled as the guest's report. Before, both said `diagnostics: []`,
+/// the envelope only "the command ran and failed", and the code was on the guest's stderr alone.
+#[test]
+fn a_guests_own_fault_reaches_the_envelope_and_the_report() {
+    let dir = tmp("guest-fault");
+    let src = dir.join("fault.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn div(a: Int, b: Int) -> Int {\n  a / b\n}\n\nfn main(root: Root) ! {Write} {\n  \
+         root.console().println(str(div(1, 0)))\n}\n",
+    )
+    .unwrap();
+    let report = dir.join("r.json");
+    let o = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--grant",
+        "console",
+        "--sandbox",
+        "--json",
+        "--report-out",
+        report.to_str().unwrap(),
+    ]);
+    let all = out(&o);
+    assert_eq!(o.status.code(), Some(1), "{all}");
+    let env: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope ({e}): {all}"));
+    let d = &env["diagnostics"][0];
+    assert_eq!(d["code"], "DL0902", "the fault's code, in the envelope: {env}");
+    assert_eq!(d["spans"][0]["start"]["line"], 4, "at its call: {env}");
+    assert!(d["spans"][0]["label"].as_str().unwrap_or("").contains("as the guest reports it"), "the guest's word: {env}");
+    let rep = report_of(&report);
+    assert_eq!(rep["diagnostics"][0]["code"], "DL0902", "and in the report: {rep}");
+    assert_eq!(rep["outcome"]["ran"], true, "{rep}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.75 with RW 6.73: a sandboxed run the host refused at a grant says so in the envelope too — the host's own
+/// refusal, at its call — and both the envelope and the report name every grant the program's text shows it lacked.
+#[test]
+fn a_sandboxed_refusal_names_every_grant_the_run_lacked() {
+    let dir = tmp("guest-lacking");
+    let scope = dir.join("out").display().to_string().replace('\\', "/");
+    let src = dir.join("partial.delulu");
+    std::fs::write(
+        &src,
+        format!(
+            "module m\n\nfn main(root: Root) ! {{Write}} {{\n  let w = root.fs_write(\"{scope}\")\n  \
+             match w.write_text(\"step1.txt\", \"done\") {{ Ok(_) => {{}}, Err(_) => {{}} }}\n  \
+             root.console().println(\"step 2\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let report = dir.join("r.json");
+    let o = delulu(&["run", src.to_str().unwrap(), "--no-prompt", "--sandbox", "--json", "--report-out", report.to_str().unwrap()]);
+    let all = out(&o);
+    assert_eq!(o.status.code(), Some(1), "{all}");
+    let env: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope ({e}): {all}"));
+    let want = serde_json::json!([format!("fs.write={scope}"), "console"]);
+    assert_eq!(env["diagnostics"][0]["code"], "DL0703", "{env}");
+    assert!(env["diagnostics"][0]["spans"][0]["label"].as_str().unwrap_or("").contains("refused by the host"), "{env}");
+    assert_eq!(env["missing_grants"], want, "{env}");
+    let rep = report_of(&report);
+    assert_eq!(rep["missing_grants"], want, "{rep}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

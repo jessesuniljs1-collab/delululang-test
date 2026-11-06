@@ -478,11 +478,18 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
     let interp = Interp::new(&checked.module).with_effect_sink(sink.clone());
     // The guest's root grants NOTHING. Every capability the program obtains is minted by the host,
     // over the channel, from the root the operator actually granted.
+    let mut fault = None;
     let exit = match interp.run_main(Value::Root(Rc::new(RootVal::default()))) {
         Ok(_) => 0,
         Err(f) => {
             // TERMINAL-TEXT-1: a fault can quote the program's own strings (an assertion's values).
             let message = delulu_diag::terminal_line(&f.message);
+            // RW 6.75: told to the host at the goodbye, so the run's envelope and report carry it as an unsandboxed run's do.
+            fault = Some(delulu_runtime::channel::GuestFault {
+                code: f.code.to_string(),
+                message: message.to_string(),
+                at: f.span.map(|s| (s.file, s.start, s.end)),
+            });
             match f.span.filter(|_| !hello.name.is_empty()) {
                 // RW 6.39: at its place, as an ordinary run prints it, under the name the host gave; the host relays each
                 // line marked as the guest's.
@@ -498,7 +505,7 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
         }
     };
     // Say goodbye even on failure, so the host stops serving rather than waiting on a dead guest.
-    let _ = sink.done(exit);
+    let _ = sink.done_with(exit, fault);
     exit
 }
 
@@ -1028,13 +1035,17 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     let root = Rc::new(crate::cli::build_root(&grants));
     // P9-03: the report names the program's calls as the ordinary run's does — the file, or a package's flattened text.
     let source = if is_package { crate::run_cmd::flattened_name(file) } else { file.to_string() };
+    // RW 6.73: what the program's text asks for that these grants do not cover, decided by the host before a guest
+    // exists, and named only if the run ends at a grant.
+    let lacking: Vec<String> =
+        crate::cli::lacking_grants(file, is_package, &map, &checked, &grants).into_iter().map(|f| f.grant).collect();
     let served = spawn_and_serve_custody(
         &program,
         &source,
         root,
         limits,
         profile,
-        opts.report_out.as_deref().map(|path| ReportTo { path, source: &source }),
+        opts.report_out.as_deref().map(|path| ReportTo { path, source: &source, lacking: &lacking }),
         isolation,
         custody.map(|c| Box::new(c) as Box<dyn delulu_runtime::Custody>),
         custody_record,
@@ -1057,6 +1068,23 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
         crate::run_cmd::print_egress_notes(&egress);
+    }
+    // RW 6.75: under `--json`, a run that ended at a fault prints the envelope an unsandboxed run prints — its
+    // diagnostic, and (RW 6.73) the grants it lacked when the fault is one — instead of the bare "failed" fallback.
+    let diagnostics = SANDBOX_DIAGNOSTICS.lock().map(|g| g.clone()).unwrap_or_default();
+    if opts.json && !diagnostics.is_empty() && !matches!(served, Ok(0)) {
+        let mut env = serde_json::json!({
+            "command": "run",
+            "schema": 1,
+            "delulu_version": env!("CARGO_PKG_VERSION"),
+            "diagnostics": diagnostics,
+            "summary": { "errors": 1, "warnings": 0 },
+        });
+        if env["diagnostics"][0]["code"] == "DL0703" && !lacking.is_empty() {
+            env["missing_grants"] = serde_json::json!(lacking);
+        }
+        crate::cli::note_json_emitted();
+        println!("{}", serde_json::to_string_pretty(&env).expect("the envelope serializes"));
     }
     // Stage 10 (10f, invariant 48), as the ordinary run: the sign-off is written only for a run that
     // finished clean under the simulator — here, a guest that was sent its program and exited 0.
@@ -1179,6 +1207,8 @@ pub fn spawn_and_serve_with(
 pub struct ReportTo<'a> {
     pub path: &'a str,
     pub source: &'a str,
+    /// RW 6.73: the grants the program's text asks for that the run lacks, reported when it ends at one (DL0703).
+    pub lacking: &'a [String],
 }
 
 /// P8-01: a sandboxed run's devices — the plan checked before the guest exists, and the broker it
@@ -1551,6 +1581,7 @@ fn serve_under(
     };
     let denied = evidence.denied;
     let host_refusal = evidence.refusal;
+    let guest_fault = evidence.guest_fault;
     // PS-E-01: a guest that never confirmed its boundary was never sent the program, so it never ran —
     // and (the red-team pass, F1) neither did one that confirmed and then never took the program.
     let confirmed = evidence.confirmed;
@@ -1668,7 +1699,14 @@ fn serve_under(
     if let Some(s) = &stop {
         eprintln!("error: {}", s.message);
     }
-    if let Some(ReportTo { path, source }) = report_out {
+    // RW 6.75: what ended the run, for the report below and for the `--json` envelope printed after the conversation.
+    let source_name = report_out.as_ref().map_or(name, |r| r.source);
+    let exited = served.as_ref().ok().copied();
+    let diagnostics = run_diagnostics(program, source_name, exited, host_refusal.as_ref(), guest_fault.as_ref());
+    if let Ok(mut g) = SANDBOX_DIAGNOSTICS.lock() {
+        *g = diagnostics.clone();
+    }
+    if let Some(ReportTo { path, lacking, .. }) = report_out {
         let exit = if refused { 2 } else { served.as_ref().copied().unwrap_or(1) };
         let mut outcome = serde_json::json!({ "ran": sent, "exit": exit });
         if let Some(s) = &stop {
@@ -1678,8 +1716,9 @@ fn serve_under(
             "command": "run",
             "schema": 1,
             "delulu_version": env!("CARGO_PKG_VERSION"),
-            // P9-03: the host's refusal that ended the run, at its call — as the ordinary run's report records its fault.
-            "diagnostics": host_refusal_diagnostics(program, source, served.as_ref().ok().copied(), host_refusal.as_ref()),
+            // P9-03: the host's refusal that ended the run, at its call — as the ordinary run's report records its fault; and
+            // since RW 6.75, a fault the guest's program ended at on its own.
+            "diagnostics": diagnostics,
             "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
             "sandbox": with_image(policy.to_json_with(backend, &applied, &denied.0, denied.1)),
             "outcome": outcome,
@@ -1689,6 +1728,10 @@ fn serve_under(
         });
         // PS-D-02: the attester's claims, as the attester's — beside `host_guarantees`, never in them.
         let mut report = report;
+        // RW 6.73, for a guest: a run that ended at a grant names every grant the program's text shows it lacked.
+        if report["diagnostics"][0]["code"] == "DL0703" && !lacking.is_empty() {
+            report["missing_grants"] = serde_json::json!(lacking);
+        }
         // PS-E-01: the five properties this boundary has, answered from what was applied — the same words
         // as `host_guarantees` and the posture, so the three cannot disagree. An external launcher's are
         // `unknown`: DeluluLang measured none of its wall — and (D-V2-87) one its pinned attester named
@@ -2112,6 +2155,8 @@ struct Evidence {
     own: Vec<&'static str>,
     /// P9-03: the refusal the guest's last capability request met, if it met one.
     refusal: Option<delulu_runtime::channel::Refusal>,
+    /// RW 6.75: the fault the guest said its program ended with, at its goodbye.
+    guest_fault: Option<delulu_runtime::channel::GuestFault>,
 }
 
 /// P9-03 (`V2_P9_DESIGN.md`): a sandboxed run's `diagnostics` — the host's refusal that ended the run, as the ordinary run's
@@ -2120,6 +2165,44 @@ struct Evidence {
 /// assertion) ended for a reason the host never saw, and its words stay its own (RW 4.31); one whose channel failed was
 /// ended by something else. The span is placed only where it lies in the one program the host sent, on character
 /// boundaries — a guest's word, checked: a span inside a character would have panicked the renderer.
+/// RW 6.75: a sandboxed run's `diagnostics`, for its `--json` envelope and its report, as an unsandboxed run's carry its
+/// fault. The host's refusal that ended the run ([`host_refusal_diagnostics`], the host's own word) when there is one and
+/// the guest's fault does not name another code. Otherwise the fault the guest said its program ended at: a code the
+/// registry has, or nothing (an unknown word is not a diagnostic), its words bounded as they arrived, and its span placed
+/// only inside the program the host sent — the guest's word, as its exit status is, and labelled so. Only for a failing
+/// goodbye, as before.
+fn run_diagnostics(
+    program: &str,
+    source: &str,
+    exit: Option<i32>,
+    refusal: Option<&delulu_runtime::channel::Refusal>,
+    guest_fault: Option<&delulu_runtime::channel::GuestFault>,
+) -> Vec<serde_json::Value> {
+    let another = matches!((refusal, guest_fault), (Some(r), Some(f)) if r.code != f.code);
+    if !another {
+        let host = host_refusal_diagnostics(program, source, exit, refusal);
+        if !host.is_empty() {
+            return host;
+        }
+    }
+    let (Some(f), Some(exit)) = (guest_fault, exit) else { return Vec::new() };
+    let Some(code) = delulu_diag::static_code(&f.code).filter(|_| exit != 0) else { return Vec::new() };
+    let mut map = delulu_diag::SourceMap::new();
+    map.add_file(source.to_string(), program.to_string());
+    let mut d = delulu_diag::Diagnostic::error(code, f.message.clone());
+    if let Some((file, start, end)) = f.at {
+        let placed = start <= end && program.is_char_boundary(start as usize) && program.is_char_boundary(end as usize);
+        if placed {
+            d = d.with_span(delulu_diag::Span::new(file, start, end), "runtime fault here, as the guest reports it");
+        }
+    }
+    delulu_diag::envelope("run", std::slice::from_ref(&d), None, &map)["diagnostics"].as_array().cloned().unwrap_or_default()
+}
+
+/// RW 6.75: the last sandboxed run's `diagnostics` ([`run_diagnostics`]), for the `--json` envelope `cmd_run_sandboxed`
+/// prints after it — the report is written inside the conversation, the envelope after it.
+static SANDBOX_DIAGNOSTICS: std::sync::Mutex<Vec<serde_json::Value>> = std::sync::Mutex::new(Vec::new());
+
 fn host_refusal_diagnostics(
     program: &str,
     source: &str,
@@ -2207,6 +2290,7 @@ fn converse(
     let (list, total) = host.denied();
     evidence.denied = (list.to_vec(), total);
     evidence.refusal = host.refusal().cloned();
+    evidence.guest_fault = host.guest_fault().cloned();
     served
 }
 
@@ -2933,6 +3017,41 @@ mod tests {
         assert!(super::host_refusal_diagnostics(program, "p.delulu", Some(0), Some(&good)).is_empty());
         assert!(super::host_refusal_diagnostics(program, "p.delulu", None, Some(&good)).is_empty());
         assert!(super::host_refusal_diagnostics(program, "p.delulu", Some(1), None).is_empty());
+    }
+
+    /// RW 6.75: what a sandboxed run reports as its diagnostic. The host's refusal, its own word, wins when the guest's
+    /// fault is the same code or absent; a guest that ended at another fault is reported in its words — a registered code
+    /// only, its span placed only inside the program, labelled as the guest's — and only for a failing goodbye.
+    #[test]
+    fn a_guests_fault_is_reported_only_as_a_registered_code_inside_the_program() {
+        use delulu_runtime::channel::{GuestFault, Refusal};
+        let program = "fn main(root: Root) {\n    let x = 1 / 0\n}\n";
+        let at = program.find("1 / 0").unwrap() as u32;
+        let fault = |code: &str, span: Option<(u32, u32, u32)>| GuestFault { code: code.into(), message: "division by zero".into(), at: span };
+        let refusal = Refusal { code: "DL0703".into(), message: "not granted".into(), file: 0, start: at, end: at + 5 };
+        let d = super::run_diagnostics(program, "p.delulu", Some(1), None, Some(&fault("DL0902", Some((0, at, at + 5)))));
+        assert_eq!(d[0]["code"], "DL0902", "{d:?}");
+        assert_eq!(d[0]["spans"][0]["start"]["line"], 2, "{d:?}");
+        assert!(d[0]["spans"][0]["label"].as_str().unwrap().contains("as the guest reports it"), "{d:?}");
+        // The host's refusal, when the guest's fault is that refusal or says nothing.
+        let host = super::run_diagnostics(program, "p.delulu", Some(1), Some(&refusal), Some(&fault("DL0703", None)));
+        assert!(host[0]["spans"][0]["label"].as_str().unwrap().contains("refused by the host"), "{host:?}");
+        let host = super::run_diagnostics(program, "p.delulu", Some(1), Some(&refusal), None);
+        assert_eq!(host[0]["code"], "DL0703", "{host:?}");
+        // A guest that ended at another fault after a refusal it handled: its fault.
+        let other = super::run_diagnostics(program, "p.delulu", Some(1), Some(&refusal), Some(&fault("DL0902", None)));
+        assert_eq!(other[0]["code"], "DL0902", "{other:?}");
+        // An unregistered word is no diagnostic; a span outside the program, or in another file, is not placed.
+        assert!(super::run_diagnostics(program, "p.delulu", Some(1), None, Some(&fault("DL9999", None))).is_empty());
+        assert!(super::run_diagnostics(program, "p.delulu", Some(1), None, Some(&fault("pwned\n", None))).is_empty());
+        for span in [(0, at, program.len() as u32 + 3), (0, at + 5, at), (2, at, at + 5)] {
+            let d = super::run_diagnostics(program, "p.delulu", Some(1), None, Some(&fault("DL0902", Some(span))));
+            assert_eq!(d[0]["code"], "DL0902", "{span:?}");
+            assert_eq!(d[0]["spans"], serde_json::json!([]), "{span:?}: not placed: {d:?}");
+        }
+        // Only for a failing goodbye.
+        assert!(super::run_diagnostics(program, "p.delulu", Some(0), None, Some(&fault("DL0902", None))).is_empty());
+        assert!(super::run_diagnostics(program, "p.delulu", None, None, Some(&fault("DL0902", None))).is_empty());
     }
 
     use super::*;
