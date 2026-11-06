@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a deep recursion is DL0905 under a capped address space and under `hostile-agent`, 2026-11-06
+
+- **Fixed (RW 3.29, D-V2-216):** a recursion deep enough for DL0905 aborted the process instead, with *"has overflowed
+  its stack"*, no diagnostic and no `--report-out` report. This happened under a `ulimit -v` below about 940,000 KiB,
+  and inside a sandbox guest under `--sandbox-profile hostile-agent` or `--limits mem` up to 768 MiB. The guest's case
+  was reported as `{exit 1, ran: true}`. The CLI now runs on the largest stack the host grants, and each interpreter
+  takes the depth bound that fits that stack. A sandbox guest also keeps its stack within half the memory ceiling the
+  OS enforces on it. So the program stops with DL0905, exit 1, and a report. When the host's stack lowered the bound
+  below 10,000, the fault says so: *"recursion depth exceeded (the bound is N here: …)"*. With the full stack granted,
+  nothing changes.
+
 ## Unreleased — every `main` the checker accepts runs on WASM and as a `.dwx`, 2026-11-06
 
 - **Fixed (RW 3.28, D-V2-215):** `build --target wasm` exited 0 for `fn main()`, or a `main` that returns a value, and

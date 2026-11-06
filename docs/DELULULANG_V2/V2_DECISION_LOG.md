@@ -6032,3 +6032,62 @@ which the checker already refuses (DL0401, DL0403) — is refused by the code ge
 unchecked path. No change to the host, the `.dwx` format or any artifact already built in the host's shape.
 
 **Evidence.** `crates/delulu/tests/wasm_cli.rs` `every_main_shape_runs_on_wasm_and_as_a_dwx_as_on_the_interpreter` — seven shapes (`fn main()`, `-> Int`, `-> Str`, `-> Bool` by a string comparison, a list, `(root: Root) -> Int`, `(root: Root)`), each run on the interpreter, on `--engine wasm` and as a built `.dwx`, the three alike — red on the old code (`no_root on --engine wasm: error[DL0904]: expected 0 arguments, got 1`) and green now; the unit test `a_main_the_host_cannot_call_is_refused_at_its_name` (codegen.rs, the unchecked path). Mutants M1134–M1140 all red (M1140, the wrapper's index after `__str_eq`, by the `-> Bool` shape alone); control green. Every `delulu-wasm` test target, `wasm_cli`, `examples_run` and `corpus_cli` green on the laptop.
+
+## D-V2-216 — RW 3.29: the interpreter's stack walks a ladder, and every bound fits the stack the host granted — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.6, and its second pass): the CLI runs on a thread reserving
+`INTERPRETER_STACK_BYTES` (10,000 × 80 KiB + 256 KiB, about 781 MiB), so that the depth bound fires before the stack
+runs out. When the reservation was refused, it fell back to the main stack (8 MiB on Linux) and kept the full bound of
+10,000. Under `ulimit -v 300000` a recursion 100,000 deep, DL0905 with a report without the cap, ended *"thread 'main'
+has overflowed its stack"*, exit 134, with no report. The second pass found the same failure under `--sandbox
+--sandbox-profile hostile-agent` (256 MiB), the profile `docs/for-agents.md` recommends for code you did not write. The
+guest printed *"has overflowed its stack"* and the host reported `{exit 1, ran: true}` with no diagnostic. Re-run on
+the laptop before the fix: Windows' hostile-agent guest also overflowed (*"guest: thread 'delulu-main' has overflowed
+its stack"*). There the reservation is granted, and the Job Object's `ProcessMemoryLimit` counts the stack pages the
+recursion commits.
+
+**Decision.** Of the row's two remedies, run with a bound sized to the stack actually available or refuse with a
+reason, the first. A refusal would stop programs that run correctly within a smaller bound.
+- **The CLI's thread walks a ladder.** `delulu_runtime::on_laddered_thread` tries the rungs of
+  `INTERPRETER_STACK_LADDER` (about 781 MiB, then 256, 64, 16 and 8 MiB), largest first. It runs the CLI on the first
+  rung the host grants, and records that stack before the CLI starts. When the host grants none, the CLI runs on the
+  calling thread with `MAIN_THREAD_STACK_ASSUMED` (1 MiB, the smallest main stack a supported host gives) recorded.
+- **One process-wide bound.** Every interpreter built without a bound of its own takes `process_max_depth()`, the
+  bound `max_depth_for_stack` gives for the recorded stack. This covers the interpreters of `run`, the guest, a plugin,
+  `test` and the REPL. It is process-wide, not thread-local, because those interpreters all run on that one thread, and
+  a setting one constructor forgot would be the crash (§11, *a thread-local setting reaches one thread*). Actor workers
+  keep their own ladder and bound (D67), and a sandbox guest refuses actor programs.
+- **A guest's stack is capped by its ceiling.** `ceiling::own_memory_ceiling` reads the ceiling the OS enforces on the
+  process: a Windows Job Object's per-process or per-job memory limit (the smaller when both are set), or Linux's
+  `RLIMIT_DATA`. macOS has none the OS can name, since its ceiling is the host's sampler. A sandbox guest lowers the
+  recorded stack, and never raises it, to half that ceiling (`cap_process_stack_bytes`); the heap keeps the rest.
+- **A bound the host lowered says so.** The fault reads *"recursion depth exceeded (the bound is N here: the stack this
+  process may use — what the host would reserve, or what its memory ceiling leaves — is smaller than the full bound of
+  10000 needs)"*. The same program can recurse fine on one machine and be DL0905 on another, so the fault explains
+  why. A plugin's own depth limit (`Limits`) keeps the plain words, because it is not the host's stack.
+- **What does not change.** The code (DL0905) stays the same; no code is new. With the full reservation granted, the
+  bound is still 10,000 and the words are unchanged.
+
+**Evidence.**
+- `crates/delulu/tests/sandbox_run_cli.rs` `a_deep_recursion_under_the_hostile_agent_ceiling_is_dl0905_not_an_overflow`
+  runs everywhere but macOS, which refuses `hostile-agent` (D-V2-59).
+  - On the old code it was red on Windows (*"guest: thread 'delulu-main' has overflowed its stack"*, the laptop) and on
+    Linux (`witness.yml` run `42225562026`, ubuntu-24.04: *"guest: thread 'main' has overflowed its stack"*).
+  - It is green with the fix on the laptop.
+- `crates/delulu/tests/cli_contract.rs` `under_a_capped_address_space_deep_recursion_is_dl0905_with_a_report` runs on
+  Linux under `ulimit -v 600000`, and asserts DL0905 naming its bound, exit 1, and that the report is written.
+  - On the old code it was red (run `42225556840`: *"thread 'main' has overflowed its stack"*).
+- The unit test `the_ladder_runs_on_the_largest_stack_granted_and_records_it` (interp.rs) uses its own recorder, so
+  no other test's bound moves.
+- Mutants M1141–M1147 were all red, and the control green. The mutants:
+  - the rung's record skipped;
+  - the guest's cap removed;
+  - the cap able to raise the stack;
+  - no ceiling read;
+  - the default bound kept;
+  - the bound's words dropped;
+  - the main-thread record skipped.
+- Not run: the row's own `ulimit -v 300000` (the witness uses 600,000 KiB). The Linux witnesses with the fix are the
+  pull request's CI.
+- A neighbour read while closing this, and not measured: an actor program's workers under a capped address space
+  (RW 3.30).
