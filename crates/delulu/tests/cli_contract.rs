@@ -706,3 +706,39 @@ fn check_refuses_grants_and_diff_but_keeps_its_documented_flags() {
     assert_eq!(o.status.code(), Some(0), "{}", text(&o));
     let _ = std::fs::remove_dir_all(&home);
 }
+
+/// RW 3.29: on a host that caps address space, deep recursion is still DL0905 — never an abort. The CLI reserves its
+/// interpreter's stack before `main`; under `ulimit -v` the full reservation is refused, and the CLI used to fall back
+/// to the 8 MiB main stack with the full bound, so a recursion 100,000 deep ended *"thread 'main' has overflowed its
+/// stack"*, exit 134, and no `--report-out` report. Now it takes the largest stack the host grants and the bound that
+/// fits it, and says so in the fault.
+#[cfg(target_os = "linux")]
+#[test]
+fn under_a_capped_address_space_deep_recursion_is_dl0905_with_a_report() {
+    let home = scratch("capped-recursion");
+    let src = home.join("deep.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn down(n: Int) -> Int {\n  if n < 1 { 0 } else { down(n - 1) + 1 }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n  root.console().println(str(down(100000)))\n}\n",
+    )
+    .unwrap();
+    let report = home.join("report.json");
+    // 600,000 KiB: below the full reservation (about 781 MiB), above what the binary needs to start.
+    let o = Command::new("sh")
+        .arg("-c")
+        .arg("ulimit -v 600000 && exec \"$0\" run \"$1\" --grant console --report-out \"$2\"")
+        .arg(env!("CARGO_BIN_EXE_delulu"))
+        .arg(&src)
+        .arg(&report)
+        .current_dir(&home)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_STATE_DIR", home.join("state"))
+        .output()
+        .unwrap();
+    let out = text(&o);
+    assert!(!out.contains("overflowed its stack"), "the host must not crash: {out}");
+    assert!(out.contains("error[DL0905]: recursion depth exceeded (the bound is "), "the bound that fits, named: {out}");
+    assert_eq!(o.status.code(), Some(1), "a runtime fault exits 1: {out}");
+    assert!(report.exists(), "the report is written: {out}");
+}
