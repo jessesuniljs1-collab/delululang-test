@@ -352,13 +352,32 @@ pub enum ReqBody {
     /// root: the host mints from the real one and answers with a handle (PS-A-03).
     RootMethod { method: String, args: Vec<WireValue>, file: u32, start: u32, end: u32 },
     /// The guest has finished; the host stops reading.
-    Done { exit: i32 },
+    ///
+    /// RW 6.75: with the fault its program ended with, when it ended at one — absent from a guest that predates it, and
+    /// not written when there is none, so a goodbye without a fault is the same bytes as before and either side of
+    /// this protocol version reads the other.
+    Done {
+        exit: i32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fault: Option<GuestFault>,
+    },
     /// What the guest applied to ITSELF, sent once, as its FIRST request: after it locked itself down
     /// and before a line of the program ran, while it is still the toolchain's own code (RW 4.23). A
     /// report at the goodbye would come from a guest the program had already been running in. Since
     /// `/3` (PS-E-01) it comes before the guest has even been SENT the program, and it carries the
     /// generation of the [`Open`] frame it answers.
     Confined { applied: Vec<String>, generation: String },
+}
+
+/// RW 6.75: the fault a guest's program ended with, as the guest states it — its code, its words, and the call's place
+/// (`file`, `start`, `end` in the program the host sent). The guest's word, as its exit status is: the host bounds the
+/// words as they arrive ([`MAX_DENIED_CHARS`]) and places the span, and accepts the code, only where they hold in the
+/// program it sent (`guest.rs`), before a reader sees any of it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GuestFault {
+    pub code: String,
+    pub message: String,
+    pub at: Option<(u32, u32, u32)>,
 }
 
 /// The host's answer. A fault is the program's own error (an `IoErr`, a refusal the checks made);
@@ -567,6 +586,8 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     denied_total: u64,
     /// P9-03: the refusal the guest's LAST capability request met, if it met one ([`Refusal`]).
     refusal: Option<Refusal>,
+    /// RW 6.75: the fault the guest said its program ended with, at its goodbye ([`GuestFault`]), its words bounded.
+    guest_fault: Option<GuestFault>,
     /// Requests answered so far — [`ReqBody::Confined`] is accepted only as the first.
     answered: u64,
     /// What the guest reported applying to itself, each word one of [`SELF_APPLIED`].
@@ -619,6 +640,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             denied: Vec::new(),
             denied_total: 0,
             refusal: None,
+            guest_fault: None,
             answered: 0,
             self_applied: Vec::new(),
             generation: None,
@@ -702,6 +724,11 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     /// refusal still held when the guest says goodbye with a failing exit is the one that ended the run.
     pub fn refusal(&self) -> Option<&Refusal> {
         self.refusal.as_ref()
+    }
+
+    /// RW 6.75: the fault the guest said its program ended with, at its goodbye — the guest's word, its message bounded.
+    pub fn guest_fault(&self) -> Option<&GuestFault> {
+        self.guest_fault.as_ref()
     }
 
     /// Record one refusal. Called on the way out, so no refusal path can forget: a rule that has to
@@ -1018,7 +1045,17 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             // a frame it has begun is owed whole within the frame deadline.
             let req: Request = read_frame(&mut Within::from_first_byte(&mut *io, self.frame_deadline))?;
             let done = matches!(req.body, ReqBody::Done { .. });
-            let exit = if let ReqBody::Done { exit } = req.body { exit } else { 0 };
+            let exit = if let ReqBody::Done { exit, ref fault } = req.body {
+                // Bounded as it arrives, as every refusal's words are: what a reader is shown is never the guest's whole text.
+                self.guest_fault = fault.as_ref().map(|f| GuestFault {
+                    code: shown(&f.code, 16),
+                    message: shown(&f.message, MAX_DENIED_CHARS),
+                    at: f.at,
+                });
+                exit
+            } else {
+                0
+            };
             let resp = self.answer(&req);
             // RW 4.37: and the host's answer is owed whole within the same deadline. A guest that stops
             // reading — an 8 MiB answer is far more than a socket holds — otherwise holds the host for ever,
@@ -1053,7 +1090,13 @@ impl<T: Read + Write> ChannelSink<T> {
 
     /// Tell the host the guest is finished, so it stops serving.
     pub fn done(&self, exit: i32) -> io::Result<()> {
-        let req = Request { version: CHANNEL_VERSION.into(), seq: self.next_seq(), body: ReqBody::Done { exit } };
+        self.done_with(exit, None)
+    }
+
+    /// [`ChannelSink::done`], with the fault the program ended at (RW 6.75), so the host can report it as an
+    /// unsandboxed run reports its own.
+    pub fn done_with(&self, exit: i32, fault: Option<GuestFault>) -> io::Result<()> {
+        let req = Request { version: CHANNEL_VERSION.into(), seq: self.next_seq(), body: ReqBody::Done { exit, fault } };
         let mut io = self.io.borrow_mut();
         write_frame(&mut *io, &req)?;
         let _: Response = read_frame(&mut *io)?;
@@ -1362,7 +1405,7 @@ mod tests {
 
         // And not after an ordinary request either.
         let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
-        let _ = host.answer(&Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 0 } });
+        let _ = host.answer(&Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 0, fault: None } });
         assert!(matches!(host.answer(&confined(2, &["no new programs"])), Response::Error { .. }));
         assert!(host.self_applied().is_empty());
     }
@@ -1691,8 +1734,45 @@ mod tests {
 
     fn done_frame() -> Vec<u8> {
         let mut f = Vec::new();
-        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 7 } }).unwrap();
+        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 7, fault: None } })
+            .unwrap();
         f
+    }
+
+    /// RW 6.75: a goodbye carries the guest's fault, which the host keeps with its words bounded and escaped as they
+    /// arrive, as every refusal's are — a guest cannot make the report hold megabytes or break a line. A goodbye without
+    /// one is the same bytes as before the field existed, so either side of this protocol version reads the other.
+    #[test]
+    fn a_goodbye_carries_the_guests_fault_bounded_and_without_one_is_unchanged() {
+        let long = format!("{}\n\u{1b}[31mforged", "x".repeat(MAX_DENIED_CHARS * 4));
+        let fault = GuestFault { code: "DL0902\nDL0001".into(), message: long, at: Some((0, 3, 9)) };
+        let mut f = Vec::new();
+        let body = ReqBody::Done { exit: 1, fault: Some(fault) };
+        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body }).unwrap();
+        let mut io =
+            Drip { bytes: f, at: 0, pause: std::time::Duration::ZERO, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        assert_eq!(host.serve(&mut io).unwrap(), 1);
+        let kept = host.guest_fault().expect("the fault is kept");
+        assert!(kept.message.chars().count() < MAX_DENIED_CHARS + 32, "bounded: {} chars", kept.message.chars().count());
+        assert!(!kept.message.contains('\n') && !kept.code.contains('\n'), "escaped: {kept:?}");
+        assert_eq!(kept.at, Some((0, 3, 9)));
+        // The old goodbye, byte for byte: a CBOR map of one key.
+        #[derive(Serialize)]
+        enum OldBody {
+            Done { exit: i32 },
+        }
+        #[derive(Serialize)]
+        struct OldRequest {
+            version: String,
+            seq: u64,
+            body: OldBody,
+        }
+        let mut old = Vec::new();
+        write_frame(&mut old, &OldRequest { version: CHANNEL_VERSION.into(), seq: 1, body: OldBody::Done { exit: 7 } }).unwrap();
+        assert_eq!(done_frame(), old, "a goodbye without a fault is the bytes it always was");
+        let back: Request = read_frame(&mut &old[..]).unwrap();
+        assert_eq!(back.body, ReqBody::Done { exit: 7, fault: None }, "and an old guest's goodbye reads as one without a fault");
     }
 
     /// RW 4.32, FRAME-DRIP-1: the host's deadline was on each READ, so a guest sending one byte just
@@ -1921,7 +2001,7 @@ mod tests {
         assert!(host.refusal().is_none(), "cleared by the answered request: {:?}", host.refusal());
         // Refused again, then a goodbye: the goodbye leaves it.
         let _ = host.answer(&at(3, read(90, 99)));
-        let r = host.answer(&at(4, ReqBody::Done { exit: 1 }));
+        let r = host.answer(&at(4, ReqBody::Done { exit: 1, fault: None }));
         assert!(matches!(r, Response::Ok(_)), "{r:?}");
         assert_eq!(host.refusal().map(|r| (r.code.as_str(), r.start, r.end)), Some(("DL0703", 90, 99)));
         // A channel error is the host's refusal too, held at its call.
@@ -2011,7 +2091,7 @@ mod tests {
                         version: if next().is_multiple_of(8) { "wrong/1".into() } else { CHANNEL_VERSION.into() },
                         seq: next(),
                         body: match next() % 4 {
-                            0 => ReqBody::Done { exit: (next() % 8) as i32 },
+                            0 => ReqBody::Done { exit: (next() % 8) as i32, fault: None },
                             3 => ReqBody::Confined {
                                 applied: (0..next() % 3)
                                     .map(|_| {
