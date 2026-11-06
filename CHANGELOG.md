@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the MCP server runs calls side by side, honours a cancel, and declares each tool's output, 2026-11-06
+
+- **Fixed (RW 6.74, D-V2-218):** `delulu mcp` answered one request at a time, so a `ping` sent behind a slow call waited
+  for it, and `notifications/cancelled` was ignored: a cancelled call still ran to its end and answered. Now:
+  - up to four tool calls run at once, and `ping`, `initialize` and `tools/list` are answered at once;
+  - a cancelled call is stopped, its child process killed, and not answered, as the protocol asks;
+  - replies may arrive in a different order from the requests, so match them by `id`.
+- **Added (RW 6.74, D-V2-218):** every tool that answers with the CLI's envelope declares `outputSchema`: the
+  `delulu schema envelope` document, naming the command's own payload where a closed schema describes it.
+- **Fixed:** `delulu schema chain` did not describe `capabilities[].requested_computed`, which `atlas chain --json`
+  writes, so `schema validate chain` refused the chain of any program holding a capability. It is described now.
+
 ## Unreleased — a refusal for one grant names every grant the run lacks; `run --preflight`, 2026-11-06
 
 - **Added (RW 6.73, D-V2-217):** when `run` stops for a grant (DL0703), the refusal names every grant the program's

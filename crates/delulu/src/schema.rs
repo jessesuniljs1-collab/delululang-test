@@ -135,7 +135,9 @@ fn chain_payload() -> Value {
             ("resource_class", nullable("string")),
             ("resources", strs()),
         ],
-        &[],
+        // The authority report's own (A8), which the chain copies with each capability: a minting site of this kind
+        // computes its scope. Undescribed here until 2026-11-06 (RW 6.74's `outputSchema` test found it).
+        &[("requested_computed", t("boolean"))],
     );
     let links: Vec<(&str, Value)> = vec![
         (

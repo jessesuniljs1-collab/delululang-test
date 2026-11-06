@@ -12583,3 +12583,26 @@ only `fs.write`, so an agent paid one run per missing grant. D-V2-217 takes the 
 
 **Found on the way:** RW 6.83. A `--sandbox` run refused before its guest starts writes no `--report-out` report: a
 check error wrote one without `--sandbox` and none with it. It is deferred to the outcome contracts, with RW 6.75.
+
+## 2026-11-06 — the laptop: RW 6.74 closed — MCP calls run beside the reader, a cancel is honoured, each tool declares its `outputSchema` (D-V2-218)
+
+**What.** RW 6.74 (the hidden-complexity audit §5.7, P1-6). `delulu mcp` answered one line at a time and dropped
+`notifications/cancelled`. D-V2-218:
+- tool calls go to a pool of four workers, and the reader answers `ping`, `initialize` and `tools/list` at once;
+- a cancel sets the call's flag: a queued call is skipped, a running call's child is killed, and neither is answered;
+- each CLI tool declares the `envelope` document as `outputSchema`, naming its closed payload where one exists.
+
+**Found on the way.** The closed `chain` schema missed `capabilities[].requested_computed`, and no test had validated
+the chain payload. The schema is fixed, and `schema_cli` now validates the chain of every corpus program.
+
+**Evidence.**
+- Two new `mcp_cli` tests, red on the old server (the ping waited behind the call; no `outputSchema`).
+- The cancellation test's kill is measured against a control on the same machine: a 16,000-function `check`, 3.2 s on
+  the laptop.
+- The `schema_cli` chain check was red before the schema fix.
+- Mutants M1156–M1161 were all red, the kill mutant by the timing alone (3.19 s against 3.22 s). Control green.
+
+**The owner, meanwhile:** *"are language basics being currently built for DeluluLang"*. Answered: not yet. The 25 of 39
+everyday constructs refused (RW 1.15, 2.33–2.40, §8 items 7 and 8) come after the outcome contracts, the DIR and
+review-surface fixes, the answer contracts and the OpenShell pin bump, in the reviews' order. They can be moved ahead
+at his word, and whether 2.0 waits for them is still his choice.

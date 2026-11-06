@@ -6158,3 +6158,69 @@ could leave partial effects. The audit asks for two things, with a question for 
   RW 6.75, the next item in the order.
 - A sandboxed run refused before its guest starts writes no report (RW 6.83, found while closing this).
 - What a run did before its refusal is still not in the report.
+
+## D-V2-218 — RW 6.74: MCP tool calls run beside the reader, a cancelled call is killed and not answered, and each tool declares its `outputSchema` — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.7, P1-6) found three gaps in the MCP server:
+- **One message at a time.** `delulu mcp` read and answered one line at a time.
+- **Cancellation ignored.** It dropped every notification, `notifications/cancelled` included. A `check` cancelled
+  50 ms into its 0.5 s still answered, and a `ping` sent behind it waited for it. The specification says a server
+  SHOULD stop a cancelled request and not answer it. That holds in the `2025-06-18` revision this server speaks first,
+  and in `2026-07-28`.
+- **No `outputSchema`.** No tool declared one, though `delulu schema` holds each command's closed schema.
+
+Re-run on the laptop before the fix: the `ping` came after the slow call's answer.
+
+**Decision.**
+- **Calls run on a pool, beside the reader.**
+  - A pool of four workers, started with a session's first call, so a slow call no longer holds up the session. It is
+    bounded because each `Cli` call is a child process; a call past the bound waits in the queue.
+  - The reader answers `ping`, `initialize`, `tools/list` and every error itself, at once. Replies may now come in a
+    different order from their requests, which JSON-RPC allows: match them by `id`.
+  - A `tools/call` without an id (a notification) is still run on the reader and never answered, as before.
+- **A cancelled call stops and is not answered.**
+  - Each queued call carries a flag that `notifications/cancelled` with its `requestId` sets. A worker skips a call
+    cancelled before it starts. For a running one, the poll that already enforced the deadline kills the child
+    (`run_self_until`). Neither is answered.
+  - A Survey tool answers in-process, so it cannot be stopped midway: it runs to its end, and its answer is not sent.
+  - A cancel for an id no call holds (never sent, or already answered) is ignored, as the specification says.
+  - A second call reusing an id already in flight is refused (-32600), because one id names one request.
+- **At the input's end** every call still queued or running is answered before the server exits, as when calls ran
+  one at a time; a cancelled call is not.
+- **The process per call stays.** It is what makes a cancellation a `kill` rather than a request to stop.
+- **`outputSchema` is the CLI's own schema, not a second description of it.**
+  - A `Cli` tool's `structuredContent` is its command's `--json` envelope. So its schema is the `delulu schema envelope`
+    document, self-contained with its `$defs`, open beyond its five fields.
+  - Where the command carries a payload with a closed schema, the payload is named as an optional property (a program
+    that does not check gets the envelope without it). This covers `authority`, `atlas`, `atlas_chain` (`chain`),
+    `sandbox_policy` (`policy`) and `toolchain`.
+  - A Survey tool answers with the Survey's own JSON, which no document describes, so it declares none.
+- **Found and fixed with it.**
+  - The `chain` schema did not describe `capabilities[].requested_computed`, which the chain has copied from the
+    authority report since A8. So `atlas chain --json` of any program holding a capability failed
+    `schema validate chain`.
+  - No test validated the chain payload. Declaring it as an `outputSchema` would have made the server state a schema
+    its own answers broke.
+  - The field is now optional in a chain capability, as it is in the authority report's, and `schema_cli` validates
+    the chain of every corpus program.
+
+**Evidence.**
+- **`crates/delulu/tests/mcp_cli.rs` `a_cancelled_call_is_not_answered_and_a_ping_behind_a_call_is_answered_first`.**
+  - A `check` of a generated 16,000-function program (3.2 s on the laptop's debug build).
+  - The control: the ping is answered first and the call's answer comes after it.
+  - Cancelled: no reply for the call, the ping answered, and the session over in under half the control's time.
+  - A cancel for an unknown id changes nothing.
+- **`each_tools_output_schema_is_the_clis_own_and_its_answer_conforms`.**
+  - Every CLI tool declares the envelope document, and the Survey tools declare none.
+  - The `authority`, `toolchain`, `check` and `atlas_chain` answers are each valid by `delulu schema validate`,
+    envelope and payload.
+- **Red first.** Both tests were red on the old server: the ping waited behind the call, and there was no
+  `outputSchema`. `schema_cli`'s chain check was red before the schema fix.
+- **Mutants M1156–M1161** were all red, and the control green. The mutants:
+  - no kill: red by the timing alone, the cancelled session 3.19 s against the control's 3.22 s;
+  - a cancelled call answered;
+  - the cancel ignored;
+  - calls run on the reader;
+  - no `outputSchema`;
+  - no payload property.
+- `mcp_cli`, `schema_cli` and `atlas_chain` are green on the laptop.

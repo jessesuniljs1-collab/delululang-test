@@ -8596,3 +8596,37 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      7.30 wait for their next red.
   4. Still the owner's: holding 2.0 and the reviews' open decisions, now including whether `--preflight` becomes the
      default for `--sandbox` runs. `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-06 — the laptop: RW 6.74 closed — MCP calls run beside the reader, a cancel is honoured, each tool declares its `outputSchema` (D-V2-218)
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner asked *"are language basics being currently built for DeluluLang"*. Answered: not yet, they
+  come after the outcome contracts and the rest of the reviews' order, unless he moves them up; 2.0's hold is his.
+- Branch: `laptop/mcp-cancel` → a pull request into `master`. Base: `e6d4785` (RW 6.73, PR #140, on top of #139; this
+  lands after both).
+- **The milestone:** RW 6.74 (D-V2-218).
+  - `tools/call` runs on a pool of four workers, and `ping`, `initialize` and `tools/list` are answered at once.
+  - `notifications/cancelled` kills the call's child and sends no reply.
+  - Each CLI tool declares `outputSchema` from `delulu schema`.
+  - Fixed with it: the `chain` schema now describes `capabilities[].requested_computed`.
+- Files and folders (`git diff --name-status e6d4785..HEAD`): M `CHANGELOG.md`, `README.md`,
+  `crates/delulu/src/mcp.rs`, `crates/delulu/src/schema.rs`, `crates/delulu/tests/mcp_cli.rs`,
+  `crates/delulu/tests/schema_cli.rs`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/REMAINING_WORK.md`, `docs/for-agents.md`, `docs/survey/*`. Nothing added, deleted or renamed; no entrenched
+  file.
+- **Verified on the laptop (Windows):**
+  - the two new `mcp_cli` tests and the `schema_cli` chain check were red on the old code and are green now;
+  - mutants M1156–M1161 were all red, and the control green;
+  - `mcp_cli`, `schema_cli` and `atlas_chain` are green;
+  - `scripts/clippy.sh -j 2` was clean.
+- **The full suite:** the pull request's run.
+- Survey and doctor (after the last edit): in the pull request.
+- **Open / next:**
+  1. PRs #139 → #140 → this one, each landed by fast-forward on a green run, and its push run read. Delete
+     `laptop/stack-ladder-witness`.
+  2. The outcome contracts: RW 6.75 with 6.83, then 6.77, 6.76 and 6.78–6.81. Or the language basics first, if the owner
+     says so.
+  3. RW 3.30: measure on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for
+     their next red.
+  4. Still the owner's: holding 2.0 for the language basics, and the reviews' open decisions (`--preflight` as the
+     default for `--sandbox` among them). `launch/2.0.0` stays prepared, not launched.
