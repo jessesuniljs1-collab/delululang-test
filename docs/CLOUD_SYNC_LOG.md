@@ -8448,8 +8448,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Windows `42168550190` and macOS `42168552718` green, every new test named.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:**
-  1. Read the push run of this records commit, and the repeats running at this entry: Windows ×90 `42168555302` and macOS
-     ×120 `42168558046` (the whole `monitor_cli` target beside two busy loops). A red there now prints the daemon's side:
-     read its `broker.log` before naming a cause, for RW 7.25 and RW 7.29 alike.
-  2. Then as the entry before: the reviews' order — RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74 — and on.
+  1. **Read:** the repeats — Windows ×90 `42168555302` and macOS ×120 `42168558046` — both green (210 runs, no red).
+     `master`'s push run `42169915249` on `fbd6fc6`: attempt 1 red on macOS only — three `brokerd::tests` in one runner stall
+     (RW 7.30, new) — and attempt 2, re-run once, green on every job. The push run of the follow-up records commit is the
+     next session's first read.
+  2. RW 7.25 and 7.29 stay open: their next red prints the daemon's side; read its `broker.log` before naming a cause.
+     RW 7.30: give the daemon tests a control for the runner (D-V2-47's pattern), never a longer bound.
+  3. Then as the entry before: the reviews' order — RW 6.72 with 6.69, then RW 3.28, 3.29, 6.73 and 6.74 — and on.
 

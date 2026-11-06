@@ -12460,6 +12460,12 @@ red on the old ending (extracted unchanged first); `a_watch_whose_node_expires_e
 TTL's end clean; RW 7.29's test prints the node's state and `broker.log` at each failure. Mutants M1111–M1115 red; M1116
 survives (no test can place a TTL's end between a turn's state check and its beat). The full suite: 192 targets, 2,693
 passed, 0 failed. `witness.yml` on `b1d7d44`: Windows `42168550190` and macOS `42168552718` green, every new test named.
-Repeats of the whole target beside two busy loops — Windows ×90 `42168555302`, macOS ×120 `42168558046` — running at this
-entry.
+Repeats of the whole target beside two busy loops — Windows ×90 `42168555302`, macOS ×120 `42168558046` — both green
+(210 runs, no red, 40–45 minutes each).
+
+**`master`'s push run `42169915249` on `fbd6fc6`.** Attempt 1 red on macOS only: three of the `delulu` binary's
+`brokerd::tests` in one stall of the runner (two in-process daemons did not come up within 10 s; a held-request beat test's
+dead-man fired; the daemon logged five times that it did not run for 100 ms). The commit's change was not in their path,
+and the binary's unit tests were the job's first target. Re-run once: attempt 2 green, every job. RW 7.30 records it,
+with a VM probe (four copies at once: 1 red in 12, a fourth test, whose process-wide thread count its neighbours share).
 
