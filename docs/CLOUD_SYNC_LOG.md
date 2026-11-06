@@ -8345,3 +8345,80 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      Name no cause before a red's step line says it.
   3. The Windows re-runs of the reviews' rows, into the rows themselves (`docs/assistant-memory/windows-verification-2026-11-05.md`).
   4. Still with the owner: his answer on holding 2.0, and the reviews' open decisions. The launch happens only on his word.
+
+### 2026-11-06 — on-demand routine run 20: RW 4.95, 4.96 and 4.97 closed (D-V2-210 to D-V2-212); PR #136 landed; RW 7.29 found
+- Session: `https://claude.ai/code/session_01Deh6WADFripHmdEgmnBcCo`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command, all `"effort":"xhigh"` (2 at the start of the run). The setup
+  script had run: the 1.96.1 toolchain was installed before the first command (`rustup` installed only the cross targets).
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*); the code first went to the session's
+  branch `claude/peaceful-carson-qprliy` for its runner reads. Pull request: none.
+- Base: `fddb1f6` (`master` at the start; its push run `42112445483` green). `gh` is installed (`/usr/local/bin/gh`); CI
+  was read with the MCP tools and `curl`.
+- **Housekeeping:**
+  - **PR #136** (`laptop/rw-7-25-repeat`, five commits, the laptop's RW 7.25 instrument and the routine's new work order):
+    its PR run `42154648068` 14 + 2 skipped green; verified in the VM (`brokerd`/`monitor_cmd` unit tests 73 passed,
+    `monitor_cli` 26 passed); landed by fast-forward to `d53bf4e`, whose push run `42158064500` was read green (14 + 2
+    skipped).
+  - `origin/autosave/laptop`'s newest snapshot (03:07 UTC, base `1769bd5`) is identical to `d53bf4e`
+    (`git diff origin/autosave/laptop d53bf4e` empty): nothing unfinished.
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1629 nodes, 19575 edges)`; `ok: 26 check(s) passed`.
+  - Merged branches: the git proxy deleted none of them (`Everything up-to-date`) except `laptop/sandbox-fault-place`.
+    Still on `origin`, each in `master`'s history: `claude/dazzling-goodall-iaapyw`, `laptop/rw-4-98-fix`,
+    `laptop/rw-4-98-orders`, `laptop/rw-4-98-review`, `laptop/rw-7-25-ci-evidence`, `laptop/rw-7-25-records`,
+    `laptop/rw-7-25-repeat`, `laptop/rw-7-25-witness` — for the laptop.
+- **The milestone, named before building:** RW 4.95 closed end to end — R-Get enforced at `p.get` in the host, in a
+  plugin's own interpreter and in a package — with RW 4.96 (the class a program asks for reaches `load`) and RW 4.97 (the
+  signing commands refuse an unknown option); each witnessed red first, fixed, mutant-tested, the full suite green, recorded,
+  pushed to `master` and its push run read. **Delivered:**
+  - `cb33630` — the fix. The checker records each `p.get` site's settled `F` and class and each `load` site's class by node
+    id (`CheckResult::plugin_gets`, `plugin_loads`); `delulu run` wires both (`Interp::with_plugin_sites`); `plugin_get`
+    calls `r_get_verified` before it hands out the callable and refuses a site with no checked `F`; a plugin's own sites
+    are checked against the replay of its code (`dir::verify_checked`, `VerifiedPlugin::plugin_gets`); a `Plugin[Contained]`
+    request is refused at `load` as one; `OWN_OPTION_PARSERS` (six commands) refuse every option their usage does not
+    document, and the usage names `sign --key-name`, `publish --registry`, `keygen --dangerously-allow-insecure-perms`.
+    Seven new tests (five R-Get, one Contained request, one signing).
+  - this records commit — `explain E-PLUGIN` names R-Get at run time; README, `QUESTIONS.md`, `for-agents.md` and
+    `STAGE6_PLUGINS_GUIDE.md` no longer call RW 4.95 open; RW 4.95–4.97 closed, RW 7.25 read, RW 7.29 added; D-V2-210 to
+    D-V2-212; `CHANGELOG.md`; `V2_LOG.md`; `V2_PHASE_STATUS.md`; `AI_ONBOARDING.md` §10; `CLOUD_ROUTINE.md` step 4 and its
+    branch note; `HANDOFF.md` §11.2 (two lessons); `docs/survey/*`.
+- Files and folders (`git diff --name-status fddb1f6..HEAD`, after #136's): M `crates/delulu-check/src/check.rs`,
+  `crates/delulu-check/src/dir.rs`, `crates/delulu-check/src/lib.rs`, `crates/delulu-runtime/src/interp.rs`,
+  `crates/delulu-runtime/src/plugin.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu-diag/src/codes.rs`, `crates/delulu/tests/plugin_load_cli.rs`, `crates/delulu/tests/signing_cli.rs`,
+  `README.md`, `CHANGELOG.md`, `HANDOFF.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/QUESTIONS.md`, `docs/REMAINING_WORK.md`, `docs/for-agents.md`, `docs/design/STAGE6_PLUGINS_GUIDE.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/survey/*`. Nothing added, deleted or renamed; no entrenched file (`STAGE6_PLUGINS_GUIDE.md` is not).
+- **Verified:**
+  - every witness red before its fix: the five R-Get tests by stash on the old code (*"RAN 1"*, *"READ the file's
+    contents"*, DL0907, the file written, *"RAN 1"*); RW 4.96 and 4.97 by hand on the old binary, then by mutant;
+  - mutants M1099–M1110: all red but **M1106** (the `get`-time class guard alone), which survives by design behind
+    `load`'s refusal — M1105, removing both, is red; control green;
+  - `scripts/clippy.sh -j 4` clean after the last `.rs` edit;
+  - the full suite (`scripts/suite.sh`, on `cb33630`): 192 targets, 2,691 passed, 0 failed, 16 ignored, `EXIT=0`; after the
+    records' `codes.rs` edit, the explain and document gates again (in the commit message);
+  - `witness.yml` on `cb33630`: Windows `42160558260` and macOS `42160561227`, `plugin_load_cli` 31 of 31 and `signing_cli`
+    7 of 7 each, every new test named in the log.
+- **RW 7.25's runs** (the inbox's item 2), read: round 2 — Windows `42148221551` (150/150) and `42148250027` (100/100, three
+  busy loops) and macOS `42148266268` and `42148287472` green; Windows `42148239197` red at run 60 of 100 in RW 7.25's test
+  (three busy loops, before the step timing; its numbers in the row); Windows `42148230468` red in another test. Round 3, on
+  `d3da12b`: macOS `42153802328`, `42153809227` and Windows `42153823661` green; macOS `42153816861` red in that other test;
+  Windows `42153830411` still running at this entry. **RW 7.29 is new** — that other test, red in two shapes (its row).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing for the milestone. Delete the merged branches listed above.
+- For the laptop's memory: `HANDOFF.md` §11.2 — *a guard that reads the usage text inherits every mention in it*; *a rule
+  written and unit-tested is enforced only where a program's path calls it*.
+- **Open / next:**
+  1. **The push run of this run's records commit** — read it; it is named in the next commit or entry.
+  2. **RW 7.29 first** (a monitor that may report a fired dead-man as a clean end): make a failed chain read end the watch
+     as a failure, witnessed by a seam red first; then have the test print the node's state and `broker.log` when the
+     monitor does not end.
+  3. Read Windows `42153830411` (RW 7.25 round 3) into RW 7.25. RW 7.25 stays open: name no cause before a red's step line.
+  4. Then the reviews' order (`AI_ONBOARDING.md` §10): the package-blind fast paths, RW 6.72 with 6.69, then RW 3.28, 3.29,
+     6.73 and 6.74; then the outcome contracts (6.75, 6.77, then 6.76, 6.78–6.81); and on.
+  5. The Windows re-runs of the reviews' rows, into the rows (`docs/assistant-memory/windows-verification-2026-11-05.md`).
+  6. Still the owner's: holding 2.0, and the reviews' open decisions. `launch/2.0.0` stays prepared, not launched; it does
+     not yet hold D-V2-210 to D-V2-212 (D-V2-210 refuses a program that typed an export narrower than it is — judge it
+     against the *Breaking* paragraph at the next merge).
+

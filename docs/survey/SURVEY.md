@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 201134 |
+| Rust lines | 201139 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 324 |
-| Markdown lines | 109515 |
+| Markdown lines | 109760 |
 | DeluluLang programs | 258 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1636 / 19621 |
+| Nodes / edges in this map | 1636 / 19644 |
 | Open discrepancies | 43 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -237,12 +237,12 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 4032 lines
+- **Modules:** 9 files, 4037 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 445 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 2171 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 2176 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 192 |  |
 | `src/json.rs` | 173 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |

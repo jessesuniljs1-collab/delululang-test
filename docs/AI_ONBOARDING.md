@@ -355,8 +355,11 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 - **Open / next, in order:** as the newest `docs/CLOUD_SYNC_LOG.md` entry says. In short:
   - the owner's answers (the language basics, and the reviews' decisions above);
   - cite `41416143488` and `41416147296` in CHECKLIST-2.0 at the next merge;
-  - **RW 4.95 first** (enforce R-Get at `p.get`; its two witnesses red first), with RW 4.96;
-  - RW 4.97 with it (a small fix: refuse unknown options in the signing commands);
+  - ~~RW 4.95 with 4.96 and 4.97~~ **closed 2026-11-06 by on-demand routine run 20** (D-V2-210 to D-V2-212): `p.get` checks
+    the export against the type the program asks for (R-Get), in the host and inside a plugin; a `Plugin[Contained]`
+    request is refused at `load` as one; the six commands that read their own options refuse one they do not know;
+  - **RW 7.29 first** (found the same run, reading RW 7.25's repeat runs): `a_watch_held_outside_the_daemon_lets_its_dead_man_fire`
+    red in two shapes; shape 1 is a monitor that takes a chain it could not read for *someone else revoked it*;
   - RW 4.98 is closed (D-V2-209, amended after an independent review): a beat of this version read whole and stamped
     before a judgment counts, by its key, for the period it bought; counter-tests for incomplete connections, wrong keys,
     another protocol version and other traffic; the broker's Miri green on it (`42093191962`). RW 7.25's cause is
@@ -371,10 +374,10 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the language basics (RW §8 items 7 and 8), then RW 3.24, a compiled form;
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-209;
-  - the last mutant is M1098;
+  - the last decision is D-V2-212;
+  - the last mutant is M1110;
   - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #135 was the last merged.
+  - pull requests are numbered on GitHub, and #136 was the last merged (by fast-forward, on-demand routine run 20).
 
 ## 11. Keep this file true
 

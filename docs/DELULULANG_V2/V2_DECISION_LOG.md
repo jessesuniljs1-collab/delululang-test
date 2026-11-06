@@ -5894,3 +5894,64 @@ Mutants M1086–M1090 are red. Two orders had no witness at first, and both have
 - **The progress comes before the join.** The watch's end is one function, `end_the_watch`, and its test blocks a beater
   as a stuck request would (`a_watch_says_its_progress_before_it_waits_for_a_stuck_beater`). M1092, the join first, is
   red.
+
+## D-V2-210 — RW 4.95: rule R-Get is enforced at `p.get` — the checker hands each site's settled `F` to the run, a site with none is refused, and a plugin's own sites are checked against the replay of its code — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** R-Get (`STAGE1_SPECIFICATION.md`; `SOUNDNESS_AUDIT.md` F-1): `p.get[F](name)` succeeds only if the export's
+type matches `F` with `row(export) ⊆ row(F)`. The checker leaves that half to run time and `plugin.rs` implements it
+(`r_get_verified`, unit-tested since `33f08d1`), but the interpreter's `plugin_get` checked only the name: the
+annotation never reached the run. Witnessed on the binary before the fix: a `! {Load, Read}` function took a `! {Write}`
+export as `! {}` and wrote a file; a function `authority` calls pure read one; a package's `[authority]` ceiling of
+`Load` and `Read` passed `check .` and wrote; an export taken at other parameter types faulted inside the plugin.
+
+**Decision.**
+1. **The checker records every `p.get` site** — its `Expr::Method` node id, the fresh `F` and the receiver's class —
+   and settles them once inference is (`CheckResult::plugin_gets`), the `root.foreign` bind-site pattern. R-6a's
+   compile-time half reads the same records.
+2. **`plugin_get` calls `r_get_verified` before it hands out the callable**, against the export's re-proved type (the
+   DIR's `fn_types`) and that site's `F`, after the manifest-exports check that keeps a module's private functions out
+   of reach. Every refusal is `VerifyFailed`, a value the program can catch, and nothing of the plugin runs.
+3. **A site with no checked `F` is refused, never guessed** (an embedder that builds an interpreter without the table
+   gets a refusal at every `get`, not an allow). `delulu run` is the one path that wires a plugin engine, and it
+   wires the table (`Interp::with_plugin_sites`).
+4. **A plugin's own `get` sites are checked against the replay of its code**: `dir::verify_checked` hands the loader
+   the re-proved module's `CheckResult`, and `VerifiedPlugin::plugin_gets` keeps its table; the export's interpreter
+   gets it. Nothing the artifact stores is trusted for it, and the DIR's format does not change.
+5. The comparison is `r_get_verified`'s, unchanged — exact types (so a type a host defines apart from the plugin is
+   refused, fail-closed), and the effects `F` names (an unbound row tail adds nothing).
+
+**Evidence.** Five witnesses in `plugin_load_cli.rs`, each red by stash on the old code and paired with the honest
+typing; mutants M1099–M1103 red, control green; the full suite; `witness.yml` on Windows and macOS (RW 4.95's row).
+
+## D-V2-211 — RW 4.96: the class a program asks for reaches `load`, and a request for a Contained plugin is refused as one — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** `load` called `load_verified` whatever the program wrote. A `Plugin[Contained]` request ran a Verified
+artifact under the other class's rules (its `get` sites typed under R-1 and R-6a), and refused a Contained one for a
+request never made (*"the host requested `Plugin[verified]`"*). RW 4.96 offered two closings: a Contained execution path
+with `r_get_contained`, or an honest refusal.
+
+**Decision.** The honest refusal, at run time and without a new code: each `load` site's class is recorded and settled
+(`CheckResult::plugin_loads`), and a `Plugin[Contained]` request answers `NotGranted` before a byte is read, naming the
+limit. A `get` whose site is typed against a Contained plugin is refused too, the wall behind `load`'s. A load whose
+class no annotation pins asks for Verified, as before. Not a check-time refusal: a refusal the checker issues needs a
+code of its own or a borrowed one that would mean something else, and the run is where the limit lives. A Contained
+execution path for programs (the WASM engine under R-1) is future work.
+
+**Evidence.** `a_request_for_a_contained_plugin_is_refused_as_one`; mutants M1104, M1105 and M1107 red; M1106, the
+second wall alone, survives by design.
+
+## D-V2-212 — RW 4.97: a command that reads its own options refuses every option its usage does not document — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The dispatcher refuses an option the shared parser knows and a command's help does not document, but six
+commands read their options themselves (`keygen`, `sign`, `verify-sig`, `publish`, `add`, `login`), so an option they
+did not know was ignored: `verify-sig art.dwx --kye K` dropped the pin and said *valid*.
+
+**Decision.** Those six are named (`OWN_OPTION_PARSERS`), and before any of them runs, every `--option` or
+`--option=value` its usage lines do not document is refused, exit 2, by the same words as every other command. The
+usage now documents the options the code already read (`sign --key-name`, `publish --registry`, `keygen
+--dangerously-allow-insecure-perms`); `verify-sig`'s note stops naming `--hybrid`, which it never read — the usage text
+is the one list (`documented_flags`), and `toolchain --json` reads it. Routing them through the shared parser was
+the row's suggestion; it would change how each reads its values, for no gain the guard does not give.
+
+**Evidence.** `a_signing_command_refuses_an_option_it_does_not_know`; mutants M1108–M1110 red.
+

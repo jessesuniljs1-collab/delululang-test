@@ -867,6 +867,15 @@ wins, and you should update the memory to match.
     another experiment, so their green said little. `witness.yml` now takes `repeat` and `stress`. Run the target as the
     push run does, many times, and count every run. Measure the runner before suspecting it: GitHub's Windows runners
     run with Defender's real-time scan off. And put the two sides' timing on one clock, so one red is enough.
+  - **A guard that reads the usage text inherits every mention in it** (on-demand routine run 20, RW 4.97). A command's
+    documented options are every `--word` its usage lines hold (`documented_flags`; `toolchain --json` reads the same).
+    So a note naming another command's option documented it for this one: `sign`'s *"a key `keygen --name N` minted"*
+    let `sign --name` through the new refusal, and `verify-sig`'s *"--hybrid/--require-hybrid"* had always listed a
+    `--hybrid` it never read. Write a usage note without another command's options, and read `toolchain --json`'s
+    `flags` for the command after editing its help.
+  - **A rule written and unit-tested is enforced only where a program's path calls it** (on-demand routine run 20, RW
+    4.95, again). `r_get_verified` had tests since 2026-07-15 and no caller on a program's path; the device adapter
+    called it, so a search for its name found a caller. Ask what each path that hands out the guarded thing calls.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

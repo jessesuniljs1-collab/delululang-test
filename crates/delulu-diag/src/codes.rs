@@ -659,6 +659,11 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  `let f: fn(Str) -> Str ! {} = p.get(\"shout\")?`. Do NOT copy the bracket form out of \
                  the spec — it will not parse. R-6a still fires at the `get` site: a function-typed \
                  parameter in a Contained `F` is DL0803, and an underdetermined `F` is DL1509.\n\n\
+                 R-GET AT RUN TIME (RW 4.95): the annotation is what a running `get` checks the export against — \
+                 exact parameter and return types, and the export's row inside `F`'s. A `get` at a narrower row \
+                 or other types answers `VerifyFailed` and hands out nothing, so copy an export's real signature \
+                 (`delulu plugin inspect FILE.dpx --json`, `exports`). A program loads only Verified plugins in \
+                 this build: `Plugin[Contained]` is refused at `load` (RW 4.96).\n\n\
                  SINGLE-MODULE (build-order deviation 3): a plugin package is exactly one module in \
                  v0.6. A multi-module package is refused cleanly at build with DL1004 (\"plugin \
                  packages are single-module in v0.6\") — no partial artifact, no fake repair. \

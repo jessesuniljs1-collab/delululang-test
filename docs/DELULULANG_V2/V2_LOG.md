@@ -12374,3 +12374,58 @@ owner set the priority: development and the reviews' improvements come first (`H
 - workflow: `.github/workflows/witness.yml`;
 - records: RW 7.25, `HANDOFF.md` §11.1 and §11.2, `AI_ONBOARDING.md` §10, `CHANGELOG.md`, `docs/assistant-memory/`,
   this entry, the sync log, `docs/survey/*`.
+
+## 2026-11-06 — on-demand routine run 20: RW 4.95, 4.96 and 4.97 closed — R-Get enforced at `p.get`; a load asks for its class; the signing commands refuse an option they do not know
+
+**Why.** The routine's work order (the owner, 2026-11-06: *"We have to continue actual development and improvements to
+DeluluLang also according to the review files also, That's more important"*): the reviews' first item, RW 4.95 (HIGH),
+with 4.96 and 4.97. Housekeeping first: PR #136 (`laptop/rw-7-25-repeat`, its PR run `42154648068` 14 + 2 skipped green)
+verified in the VM (`brokerd`/`monitor_cmd` unit tests 73 passed, `monitor_cli` 26) and landed by fast-forward; `master`'s
+push run `42158064500` on `d53bf4e` read green (14 + 2 skipped).
+
+**RW 4.95 — what was wrong.** `plugin_get` checked only that the export's name existed; the type the program annotated
+never reached the run. Witnessed by hand on the binary before the fix, then by five tests (each red by stash on the old
+code): a `! {Load, Read}` function took a `! {Write}` export as `! {}` and wrote a file (`check` clean); a function
+`authority` lists as pure read a file through a `! {Read}` export typed `! {}`; a package whose ceiling is `Load, Read`
+passed `check .` and wrote; an export taken at other parameter types faulted inside the plugin (DL0907, *"arithmetic on
+non-numeric values"*); and a plugin handed a loaded plugin wrote through it from a pure export.
+
+**The fix (D-V2-210).** The checker records each `p.get` site's node id, `F` and class, settled once inference is
+(`CheckResult::plugin_gets`); `delulu run` hands the table to the interpreter (`with_plugin_sites`); `plugin_get` calls
+`r_get_verified` before it hands out the callable, and refuses a site with no checked `F`. A plugin's own sites are checked
+against the replay of its code (`dir::verify_checked` → `VerifiedPlugin::plugin_gets`); nothing stored in the artifact is
+trusted for it, and the DIR's format is unchanged.
+
+**RW 4.96 (D-V2-211).** Each `load` site's class is recorded too (`CheckResult::plugin_loads`): a `Plugin[Contained]`
+request is refused at `load` as one (`NotGranted`, before a byte is read). Before, it ran a Verified artifact under the
+other class (*"RAN hello!"*) or refused a Contained one for a request never made (*"the host requested
+`Plugin[verified]`"*). A `get` typed against a Contained plugin is refused too, the wall behind it.
+
+**RW 4.97 (D-V2-212).** The class is six commands, every one that reads its own options. Witnessed before the fix:
+`verify-sig art.dwx --kye K` *valid*, exit 0, where `--key K` is *invalid*, exit 1; `sign --name second` signed with the
+default key; `sign --bogus`, `keygen --bogus` (a key minted) and `login … --bogus` (a credential stored) exit 0. The
+dispatcher now refuses for those six every option their usage does not document. Their usage documents what the code
+read and the help did not (`sign --key-name`, `publish --registry`, `keygen --dangerously-allow-insecure-perms`), and
+`verify-sig`'s note no longer names `--hybrid`. On the way: `sign`'s first note named `keygen --name N`, which made
+`--name` a documented `sign` option, and the witness's `sign --name` stayed exit 0 until the note was reworded
+(`HANDOFF.md` §11.2).
+
+**Mutants** (`scripts/mutants.py`): M1099 no R-Get call — red (the five R-Get witnesses); M1100 the run not wired AND an
+absent site allowed — red (four; the nested one keeps its replay's table); M1101 the run not wired — red (20, every honest
+`get`); M1102 the nested interpreter without the replay's table — red (the nested honest witness); M1103 `F` unsettled —
+red (20); M1104 no load refusal — red; M1105 no load refusal and no `get` guard — red; **M1106 the `get` guard alone —
+survived, by design** (the second wall, behind `load`'s; M1105 shows the witness can fail); M1107 the class not recorded —
+red; M1108 no option guard, M1109 `--x=v` read whole, M1110 three commands not six — each red. Control green.
+
+**Verified.** `scripts/clippy.sh -j 4` clean (after the last `.rs` edit). The full suite, `scripts/suite.sh`: 192 targets,
+2,691 passed, 0 failed, 16 ignored, `EXIT=0`. `witness.yml` on `cb33630`: Windows `42160558260` and macOS `42160561227`,
+`plugin_load_cli` 31 of 31 and `signing_cli` 7 of 7 each, every new test named.
+
+**RW 7.25's runs, read on the way (the inbox's item 2).** Round 2's six: four green; Windows `42148239197` red at run 60 of
+100 beside three busy loops in RW 7.25's test (before the step timing — its numbers in the row); Windows `42148230468` red
+in another test. Round 3, on the step timing: macOS `42153802328`, `42153809227` and Windows `42153823661` green; macOS
+`42153816861` red in that other test; Windows `42153830411` still running. The other test is **RW 7.29, new**:
+`a_watch_held_outside_the_daemon_lets_its_dead_man_fire`, red in two shapes — a monitor that ended *"was revoked — nothing
+left to watch"*, exit 0, which by the code means its chain read failed or lacked the fire record (and a failed read is
+taken for *someone else revoked it*, fail-open whatever the cause), and a monitor that never ended within 27 s.
+
