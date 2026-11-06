@@ -516,10 +516,17 @@ impl<'a> Printer<'a> {
                 head.push_str(" = ");
                 self.value_line(head, value, span.end);
             }
-            Stmt::Assign { target, value, span } => {
-                let head = format!("{} = ", lvalue_text(target));
-                self.value_line(head, value, span.end);
-            }
+            Stmt::Assign { target, value, span, compound } => match (compound, value) {
+                // RW 2.34: printed as written, `target op= rhs` — the parser's rewrite is the value's left side.
+                (Some(op), Expr::Binary { rhs, .. }) => {
+                    let head = format!("{} {}= ", lvalue_text(target), bin_text(*op));
+                    self.value_line(head, rhs, span.end);
+                }
+                _ => {
+                    let head = format!("{} = ", lvalue_text(target));
+                    self.value_line(head, value, span.end);
+                }
+            },
             Stmt::While { cond, body, span } => {
                 let c = expr_flat(cond, 0, true);
                 self.line(&format!("while {c} {{"));
@@ -1055,9 +1062,12 @@ fn stmt_flat(s: &Stmt) -> String {
             t.push_str(&expr_flat(value, 0, false));
             t
         }
-        Stmt::Assign { target, value, .. } => {
-            format!("{} = {}", lvalue_text(target), expr_flat(value, 0, false))
-        }
+        Stmt::Assign { target, value, compound, .. } => match (compound, value) {
+            (Some(op), Expr::Binary { rhs, .. }) => {
+                format!("{} {}= {}", lvalue_text(target), bin_text(*op), expr_flat(rhs, 0, false))
+            }
+            _ => format!("{} = {}", lvalue_text(target), expr_flat(value, 0, false)),
+        },
         Stmt::Return { value, .. } => match value {
             Some(v) => format!("return {}", expr_flat(v, 0, false)),
             None => "return".to_string(),

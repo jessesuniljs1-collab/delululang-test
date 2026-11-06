@@ -546,7 +546,7 @@ impl<'a> Pass<'a> {
                     Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some(), why_val },
                 );
             }
-            Stmt::Assign { target, value, span } => {
+            Stmt::Assign { target, value, span, .. } => {
                 let vk = self.walk_expr(value);
                 if let Expr::Var { path, .. } = value {
                     if path.segs.len() == 1 {

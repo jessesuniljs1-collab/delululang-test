@@ -1004,7 +1004,7 @@ impl Interp {
                 env.define(&name.name, v);
                 Ok(Value::Unit)
             }
-            Stmt::Assign { target, value, span } => {
+            Stmt::Assign { target, value, span, .. } => {
                 let v = self.eval_expr(value, env)?;
                 self.assign(target, v, env, *span)?;
                 Ok(Value::Unit)

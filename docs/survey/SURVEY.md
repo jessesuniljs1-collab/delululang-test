@@ -24,16 +24,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 340 |
-| Rust lines | 203062 |
+| Rust lines | 203194 |
 | Rust files outside `src/` (test/bench targets) | 169 |
 | Markdown documents | 324 |
-| Markdown lines | 110773 |
-| DeluluLang programs | 258 |
+| Markdown lines | 110830 |
+| DeluluLang programs | 260 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1636 / 19917 |
-| Open discrepancies | 43 |
+| Nodes / edges in this map | 1640 / 19925 |
+| Open discrepancies | 44 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -364,19 +364,19 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 7632 lines
+- **Modules:** 9 files, 7764 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/ast.rs` | 665 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
-| `src/fmt.rs` | 1543 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
+| `src/ast.rs` | 671 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
+| `src/fmt.rs` | 1553 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
 | `src/grammar.rs` | 115 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
-| `src/lexer.rs` | 985 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
+| `src/lexer.rs` | 999 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 700 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 113 | The language's one rule for turning written decimal text into a `Float`. |
-| `src/parser.rs` | 3012 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
-| `src/token.rs` | 461 | The Stage-1 token model (spec §2). |
+| `src/parser.rs` | 3092 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
+| `src/token.rs` | 483 | The Stage-1 token model (spec §2). |
 
 ### `delulu-wasm`
 

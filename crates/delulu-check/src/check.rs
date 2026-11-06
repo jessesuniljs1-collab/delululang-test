@@ -1529,7 +1529,7 @@ impl<'a> Checker<'a> {
                     }
                     value_ty = Type::Unit;
                 }
-                Stmt::Assign { target, value, span } => {
+                Stmt::Assign { target, value, span, .. } => {
                     let (tt, tr) = self.check_lvalue(target, ctx);
                     acc.add_row_acc(&tr);
                     let (vt, vr) = self.check_expr(value, ctx);

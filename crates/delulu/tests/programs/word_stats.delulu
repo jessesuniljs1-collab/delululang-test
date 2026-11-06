@@ -1,0 +1,52 @@
+// engines: interp
+// RW 2.34: an everyday utility — word, character and length statistics for a text, every running total kept with
+// compound assignment.
+module word_stats
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let text = "the quick brown fox jumps over the lazy dog and the cat sleeps"
+    let words = text.split(" ")
+    var count = 0
+    var letters = 0
+    var longest = ""
+    var the_count = 0
+    let by_length = Map()
+    for w in words {
+        count += 1
+        letters += w.len()
+        if w.len() > longest.len() {
+            longest = w
+        }
+        if w == "the" {
+            the_count += 1
+        }
+        let seen = match by_length.get(w.len()) {
+            Some(k) => k
+            None => 0
+        }
+        by_length.insert(w.len(), seen + 1)
+    }
+    var report = "words=" + str(count)
+    report += " letters=" + str(letters)
+    report += " longest=" + longest
+    report += " the=" + str(the_count)
+    out.println(report)
+    var lengths = ""
+    for k in by_length.keys() {
+        let n = match by_length.get(k) {
+            Some(v) => v
+            None => 0
+        }
+        lengths += str(k) + ":" + str(n) + " "
+    }
+    out.println(lengths.trim())
+    // The average, in hundredths, without floats: integer division and remainder, each by compound assignment.
+    var hundredths = letters * 100
+    hundredths /= count
+    var whole = hundredths
+    whole /= 100
+    var frac = hundredths
+    frac %= 100
+    out.println("average=" + str(whole) + "." + str(frac))
+}

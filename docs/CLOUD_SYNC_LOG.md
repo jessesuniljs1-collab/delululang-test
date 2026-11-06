@@ -8677,3 +8677,60 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      their next red.
   5. Still the owner's: whether 2.0 waits for the basics; the reviews' open decisions. `launch/2.0.0` stays prepared,
      not launched.
+
+### 2026-11-06 — the laptop: the first language basic, compound assignment (RW 2.34), WORK IN PROGRESS; the session stops at the owner's word
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner: *"Head Chef, 97% current session usage used. Commit and push and record everything"*, so the
+  slice is committed as it stands, as work in progress. **Do not land it before the items below are done.**
+- Branch: `laptop/basics-compound`, WIP, no pull request yet. Base: `18ea4e4` (PR #142, RW 6.75).
+- **In flight on GitHub, to read first:**
+  - PR #141 (RW 6.74, run `42242082216`);
+  - PR #142 (RW 6.75 and D-V2-220, its run started at push);
+  - `master`'s push run on `e6d4785` (`42244557954`).
+
+  Land #141, then #142, by fast-forward on green, and read their push runs.
+- **The routine's prompt** (`trig_01HFG6usfzmDAPQigiDu9DLq`) was updated by the API at 15:44 UTC: its *WHAT TO BUILD
+  NOW* is the basics first (D-V2-220). It was read back `enabled: false`, still paused.
+- **What the WIP does (RW 2.34):**
+  - **Lexer.** `+=`, `-=`, `*=`, `/=` and `%=` are new tokens (`token.rs` `PlusEq`…`PercentEq`; `lexer.rs`
+    `op_or_compound`).
+  - **Parser.** `parser.rs` `compound_assignment` rewrites `t op= e` into `Stmt::Assign { target: t, value: t' op e }`.
+    `t'` is a re-read with fresh node ids (`reread`). The statement keeps `compound: Some(op)`, serde-default and
+    skipped when absent, so DIR bytes are unchanged for every other program.
+  - **Formatter.** `fmt.rs` prints it back as written.
+  - **Refusal.** A target whose index holds a call is refused with DL0207 *"bind the index first"*. Evaluating it once is
+    the row's remainder.
+  - **Walkers.** The three exhaustive walkers gained `..`.
+- **Verified so far (the laptop, by hand):**
+  - every operator, on a local, a field, a list index and a string;
+  - the interpreter equals Python's answer (`6 abc 42 6 21`);
+  - locals and fields agree on `--engine wasm` and as a built `.dwx` (`6 abc 6 385`);
+  - `fmt` keeps `+=` as written;
+  - the call-in-index refusal reads as above.
+- **The owner's program step, started:** `crates/delulu/tests/programs/` holds `counter.delulu` (interp and wasm) and
+  `word_stats.delulu` (interp), each with its `.out`. Both match by hand. Still to write: a few-hundred-line program
+  (a ledger was planned), and `crates/delulu/tests/programs_cli.rs`, which runs every program on its engines against
+  its `.out`.
+- **NOT done yet, in order:**
+  1. `programs_cli.rs`, and the large program;
+  2. parser, lexer and fmt unit tests (fresh ids unique; `a+=b` lexes as one token; `->` unchanged; the refusal; fmt
+     round trip);
+  3. witness red: the probe's `x += 2` was DL0202 on the old code;
+  4. mutants;
+  5. regenerate `docs/reference/tokens.md` (`delulu-conform --reference`, its `--check-reference` gate will fail
+     until then);
+  6. the suites `delulu-syntax`, `delulu-check`, `delulu-runtime` and `delulu-wasm`, core-invariance and the
+     conformance corpus;
+  7. records: the 2.34 row, a D-V2, CHANGELOG, the docs' language pages;
+  8. then the pull request.
+- **Found, to record as rows:**
+  - A list inside a record field cannot be written in place, even through a `var`: `p.ys[0] = …` and
+    `var ys = p.ys; ys[0] = …` are both DL1604 *"through a `val` receiver"*. Python and Java allow it, so this is a
+    basics gap.
+  - On `--engine wasm`, `range` and assignment to a list index are DL1201 (RW 3.25's parity).
+- Survey and doctor: run at the commit (the pre-commit hook requires the Survey fresh).
+- **Open / next:**
+  1. The CI and landings above.
+  2. Finish RW 2.34 by the list above, then the next basics in D-V2-220's order (2.38 math, 2.36 ranges, …), each with
+     programs of varying size.
+  3. Still the owner's: whether 2.0 waits for the basics. `launch/2.0.0` stays prepared, not launched.
