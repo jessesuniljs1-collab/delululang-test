@@ -1646,6 +1646,44 @@ fn size_a_record_whose_read_takes(at_least: std::time::Duration) -> (usize, std:
     }
 }
 
+/// **RW 7.29 (D-V2-213): a node's TTL ending is a clean end, dead-man armed or not.** A watch whose node is gone now ends
+/// clean only on evidence in the chain, and a TTL's end leaves none to find: it is said by the node's state (`expired`), and
+/// must not be read as *"cannot tell by whom"*. The monitor's node lives three seconds; the watch, armed with a dead-man and
+/// beating, must end when it expires, exit 0, saying so — and its dead-man must not fire on an expired node.
+#[test]
+fn a_watch_whose_node_expires_ends_clean_with_its_dead_man_armed() {
+    let f = setup("mttl");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor", "--ttl", "3s"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "60000", "--death-after", "1000"]);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let status = loop {
+        if let Some(s) = mon.child.try_wait().unwrap() {
+            break s;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the watch did not end when its node expired: {}",
+            revoked_monitor_evidence(&f, &mut mon)
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    let mut out = String::new();
+    std::io::Read::read_to_string(&mut mon.child.stdout.take().unwrap(), &mut out).unwrap();
+    while let Ok(l) = mon.lines.recv_timeout(std::time::Duration::from_secs(2)) {
+        mon.stderr_seen.push(l);
+    }
+    let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_default();
+    assert!(status.success(), "a node's TTL ending is a clean end: {status:?}\n{out}\n{:?}\nbroker.log:\n{log}", mon.stderr_seen);
+    let report: serde_json::Value = serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}"));
+    let ended = report["ended"].as_str().unwrap_or_default();
+    assert!(ended.contains("nothing left to watch") && !ended.contains("cannot tell"), "{report:#}");
+    assert!(!log.contains("dead-man on"), "no dead-man fires on an expired node:\n{log}");
+    assert_eq!(inspect_state(&f, &m), "expired", "{report:#}");
+}
+
 /// **RW 4.63: a watch held outside the daemon is a silent one.** While the monitor's watch waits on the daemon a thread of its
 /// own beats for it (DEADMAN-BUSY-1, D-V2-127) — and only then, so a watch held anywhere else for longer than its dead-man's
 /// period is revoked, as a stopped monitor is. No test held the loop outside the daemon, and M346 — the beater beating
@@ -1684,18 +1722,27 @@ fn a_watch_held_outside_the_daemon_lets_its_dead_man_fire() {
         mon.stderr_seen.push(l);
     }
     let seen = &mon.stderr_seen;
+    // RW 7.29: each failure below names the daemon's side too — whether its dead-man fired, and whether the chain took the
+    // revocation's record — and the node's state, so one red says which way it went.
+    let evidence = || {
+        let log = std::fs::read_to_string(f.state.join("broker.log")).unwrap_or_else(|e| format!("(unreadable: {e})"));
+        format!("the monitor's node is {}\nbroker.log:\n{log}", inspect_state(&f, &m))
+    };
     let status = status.unwrap_or_else(|| {
         panic!(
-            "a watch held {took:?} in one read of a {bytes}-byte record, against a {PERIOD_MS} ms dead-man, was still being \
-             beaten for after {:?} — something beat for it outside the daemon: {seen:?}",
-            took * 10 + std::time::Duration::from_secs(20)
+            "a watch held {took:?} in one read of a {bytes}-byte record, against a {PERIOD_MS} ms dead-man, did not end within \
+             {:?} (the test then killed it) — it was beaten for outside the daemon, or it stopped: {seen:?}\n{}",
+            took * 10 + std::time::Duration::from_secs(20),
+            evidence()
         )
     });
-    assert!(!status.success(), "a monitor whose dead-man fired ends as a failure: {status:?}\n{out}\n{seen:?}");
-    let report: serde_json::Value = serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}\n{seen:?}"));
+    assert!(!status.success(), "a monitor whose dead-man fired ends as a failure: {status:?}\n{out}\n{seen:?}\n{}", evidence());
+    let report: serde_json::Value =
+        serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}\n{seen:?}\n{}", evidence()));
     assert!(
         report["ended"].as_str().is_some_and(|e| e.contains("dead-man revoked")),
-        "the monitor says its own dead-man ended it: {report:#}\n{seen:?}"
+        "the monitor says its own dead-man ended it: {report:#}\n{seen:?}\n{}",
+        evidence()
     );
     assert_eq!(inspect_state(&f, &m), "revoked", "{report:#}");
     // RW 4.98's timing, both halves, so the next red of RW 7.25 names its path. The monitor names its last beats and its
