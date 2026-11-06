@@ -6091,3 +6091,70 @@ reason, the first. A refusal would stop programs that run correctly within a sma
   pull request's CI.
 - A neighbour read while closing this, and not measured: an actor program's workers under a capped address space
   (RW 3.30).
+
+## D-V2-217 — RW 6.73: a refusal for one grant names every grant the run lacks, and `run --preflight` refuses before anything runs — TAKEN (head chef, 2026-11-06, under the owner's delegation)
+
+**Context.** The hidden-complexity audit (§5.3, P1-3, §9 question 1): `authority` lists every grant the program's text
+asks for (`required_grants`), but `run` decides each grant at its use. `partial.delulu` writes `out/step1.txt` and then
+prints. Run with `--grant fs.write=./out` alone, it wrote the file and then stopped with DL0703 for `console`. Run with
+no grant, it named only `fs.write`. An agent that had not asked `authority` first paid one run per missing grant and
+could leave partial effects. The audit asks for two things, with a question for the owner:
+- an additive fix now: name every statically known missing grant in the refusal;
+- the question: should `run` refuse before the first effect when one is missing? *For:* no partial effects, one round
+  trip. *Against:* a branch that never runs would now need its grant. The audit's recommendation is an opt-in flag now,
+  and to consider making it the default for `--sandbox` runs.
+
+**Decision.**
+- **(1) Every refusal for a grant names what the text shows the run lacks.**
+  - When a run stops with DL0703 (the interpreter, or `--engine wasm`), `cli::lacking_grants` asks the program's text
+    against the run's own final grants: the flags, a manifest's and a lease's included. It uses `authority --within`'s
+    own requirement list and decision, so the two cannot disagree. On `--engine wasm` the run report now records the
+    fault too, as the interpreter's report did.
+  - Its *exceeds* findings are attached in three ways: as `missing_grants` (the `--grant` lines, the reached one
+    included when the text shows it) on the `--json` envelope and in the run report; as a secondary span at each other call; and as one line of
+    flags after the human rendering. That line is left out when it would repeat the message.
+  - This is additive. The code, the exit code and the message of the refusal are unchanged. The envelope is open beyond
+    its five fields, and the run report's closed schema gains `missing_grants` as an optional field.
+- **(2) Refusing before the first effect is opt-in: `run --preflight`.**
+  - The same decision, made after the grants are final and before an engine or a guest exists. On the ordinary run and
+    under `--sandbox` alike, a lacking grant is DL0703 at its call, naming every one. Nothing runs, and the report says
+    `outcome.ran: false`.
+  - **Not the default.** A run's meaning stays *"decided at each use"*, so a branch that never runs never needs its
+    grant. Making it the default, for `--sandbox` runs or for all, changes what a run means: it would be its own
+    decision, with its *Breaking* clause.
+  - **A scope the program computes stays lazy, as the row says.** It is *inconclusive* against a grant of its kind, so
+    it runs and is decided at its call. Against no grant of its kind every value is outside, so it is refused up front,
+    by its placeholder (`fs.write=PATH`).
+  - **A `.dwx` refuses the flag by name** (`APPLIED_TO_A_DWX`). It carries a manifest, not the calls a decision names.
+- **No new code.** A lacking grant is DL0703, what the run would have said at the call.
+
+**Evidence.**
+- `crates/delulu/tests/cli_contract.rs` `a_refusal_for_one_grant_names_every_grant_the_text_shows_the_run_lacks`.
+  - With no grant: one envelope, `missing_grants: ["fs.write=./out", "console"]`, the report the same, and the `console`
+    call placed at line 6.
+  - On `--engine wasm`: the same list, and its report records the DL0703.
+  - With one grant: the file is still written, because the default is lazy, and no second line is printed.
+  - With both: exit 0.
+- `preflight_refuses_before_any_effect_naming_every_missing_grant`.
+  - No file is written; the report has `outcome.ran: false` and `missing_grants: ["console"]`.
+  - Under `--sandbox`, with no grant: both are named and no file is written.
+  - Everything granted: it runs.
+  - A computed scope runs inside `fs.write=./out`, and is refused up front with `fs.write=PATH` when given nothing.
+- Both tests were red on the old code: `missing_grants` absent, and `--preflight` refused as an unknown option (exit 2).
+- Mutants M1148–M1155 were all red, and the control green. The mutants:
+  - no secondary span;
+  - no report field;
+  - the interpreter's refusal not asked;
+  - *inconclusive* counted as lacking;
+  - the ordinary run's `--preflight` skipped;
+  - the sandboxed run's `--preflight` skipped;
+  - the second line always printed;
+  - the run's grants ignored.
+- These targets are green on the laptop: `delulu`'s unit tests, `cli_contract`, `json_contract`, `completions_cli`,
+  `sandbox_modes_cli`, `message_spacing`, `cli`, `examples_run`, `package_run`, `grants_cli` and `plugin_load_cli`.
+
+**Left.**
+- Under `--sandbox`, a refusal mid-run reaches neither the envelope nor the report, and neither does its list. That is
+  RW 6.75, the next item in the order.
+- A sandboxed run refused before its guest starts writes no report (RW 6.83, found while closing this).
+- What a run did before its refusal is still not in the report.

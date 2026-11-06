@@ -12562,3 +12562,24 @@ D-V2-216 takes the row's first remedy:
 **New, from reading the code while closing it:** RW 3.30. An actor program's workers settle their stack by one probe
 thread and are then spawned with `.expect`. Under a capped address space this may be a panic, not a diagnostic. This
 is INFERENCE and has not been measured.
+
+## 2026-11-06 — the laptop: RW 6.73 closed — a refusal for one grant names every grant the run lacks; `run --preflight` (D-V2-217)
+
+**What.** RW 6.73 (the hidden-complexity audit §5.3, P1-3, §9 question 1). `run` decides each grant at its use. The
+audit's `partial.delulu` wrote `out/step1.txt` and then stopped with DL0703 for `console`, and with no grant it named
+only `fs.write`, so an agent paid one run per missing grant. D-V2-217 takes the audit's recommendation:
+- **The additive half.** On a DL0703 the run asks `authority --within` of its own final grants
+  (`cli::lacking_grants`). It names every grant the text shows it lacks, as `missing_grants` on the envelope and in the
+  report, as a secondary span at each call, and as one line of flags. This covers the interpreter and `--engine wasm`;
+  the WASM report gained its fault too.
+- **An opt-in flag.** `run --preflight` makes that decision before `main` starts, on the ordinary run and under
+  `--sandbox`, so nothing runs. A computed scope stays lazy. The default is unchanged.
+
+**Evidence.**
+- Two new `cli_contract` tests, both red on the old code: `missing_grants` absent, and `--preflight` an unknown option
+  (exit 2).
+- Mutants M1148–M1155 were all red, and the control green.
+- Eleven test targets are green on the laptop.
+
+**Found on the way:** RW 6.83. A `--sandbox` run refused before its guest starts writes no `--report-out` report: a
+check error wrote one without `--sandbox` and none with it. It is deferred to the outcome contracts, with RW 6.75.

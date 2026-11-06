@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refusal for one grant names every grant the run lacks; `run --preflight`, 2026-11-06
+
+- **Added (RW 6.73, D-V2-217):** when `run` stops for a grant (DL0703), the refusal names every grant the program's
+  text asks for that this run does not hold, so an agent pays one run, not one per grant. The list appears:
+  - as `missing_grants` on the `--json` envelope and in the `--report-out` report;
+  - as a pointer at each other call;
+  - as one line of `--grant` flags after the message.
+
+  The list is what `delulu authority FILE --within <the run's grants>` would say. On `--engine wasm` the run report now
+  records the fault, as the interpreter's report did.
+- **Added (RW 6.73, D-V2-217):** `run --preflight` checks the program's text against the run's grants before `main`
+  starts, on an ordinary run and under `--sandbox`. A grant the run lacks is DL0703 naming every one; nothing runs and
+  no partial file is left. Without the flag a run is still decided at each use, as before. A scope the program computes
+  is still decided at its call. A `.dwx` refuses the flag by name.
+
 ## Unreleased — a deep recursion is DL0905 under a capped address space and under `hostile-agent`, 2026-11-06
 
 - **Fixed (RW 3.29, D-V2-216):** a recursion deep enough for DL0905 aborted the process instead, with *"has overflowed

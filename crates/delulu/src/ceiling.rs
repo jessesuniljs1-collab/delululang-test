@@ -78,6 +78,9 @@ fn own_memory_ceiling_os() -> Option<u64> {
 }
 
 #[cfg(target_os = "linux")]
+// `rlim_t` is `u64` on 64-bit Linux, where the cast is to the same type, and 32 bits on a 32-bit target, where it is not
+// (the `lints` job of PR #139, run `42235807959`).
+#[allow(clippy::unnecessary_cast)]
 fn own_memory_ceiling_os() -> Option<u64> {
     let mut lim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
     // SAFETY: `getrlimit` writes the one structure it is given.

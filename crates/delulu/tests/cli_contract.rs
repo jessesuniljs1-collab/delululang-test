@@ -790,6 +790,14 @@ fn a_refusal_for_one_grant_names_every_grant_the_text_shows_the_run_lacks() {
     let rep = read_json(&dir.join("rep.json"));
     assert_eq!(rep["missing_grants"], env["missing_grants"], "the report says what the envelope says: {rep}");
 
+    // The WASM engine's refusal says the same, and its report now records the fault as the interpreter's does.
+    let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--engine", "wasm", "--json", "--report-out", "wasm.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+    assert_eq!(json_of(&o)["missing_grants"], env["missing_grants"], "{}", text(&o));
+    let rep = read_json(&dir.join("wasm.json"));
+    assert_eq!(rep["diagnostics"][0]["code"], "DL0703", "{rep}");
+    assert_eq!(rep["missing_grants"], env["missing_grants"], "{rep}");
+
     // One grant given: the other is the refusal, and the effect before it happened — the default is lazy, as before.
     let o = run_in(&dir, &["partial.delulu", "--no-prompt", "--grant", "fs.write=./out"]);
     assert_eq!(o.status.code(), Some(1), "{}", text(&o));

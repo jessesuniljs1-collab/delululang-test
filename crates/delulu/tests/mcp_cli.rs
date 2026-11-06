@@ -240,3 +240,128 @@ fn a_request_line_past_the_bound_is_refused_and_the_session_goes_on() {
     assert!(msg.contains("exceeds") && msg.contains("MiB"), "the error names the bound: {}", replies[0]);
     assert_eq!(replies[1]["id"], 7, "the session goes on: {}", replies[1]);
 }
+
+/// A program `check` takes seconds over: thousands of small recursive functions.
+fn slow_program(dir: &Path) -> String {
+    let mut src = String::from("module big\n\n");
+    for i in 0..16_000 {
+        src.push_str(&format!("fn f{i}(x: Int) -> Int {{\n  if x < 1 {{ {i} }} else {{ f{i}(x - 1) + x * {} }}\n}}\n\n", i % 7));
+    }
+    src.push_str("fn main(root: Root) {}\n");
+    let path = dir.join("big.delulu");
+    std::fs::write(&path, src).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+/// [`converse`], timed: every reply in the order the server wrote it, and how long the server took to exit after its
+/// input closed.
+fn converse_timed(cwd: &Path, messages: &[Value]) -> (Vec<Value>, std::time::Duration) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .arg("mcp")
+        .current_dir(cwd)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("start delulu mcp");
+    let started = std::time::Instant::now();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        for m in messages {
+            writeln!(stdin, "{m}").unwrap();
+        }
+    }
+    let out = child.wait_with_output().unwrap();
+    let took = started.elapsed();
+    assert!(out.status.success(), "mcp exited {:?}: {}", out.status, String::from_utf8_lossy(&out.stderr));
+    let replies = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).unwrap_or_else(|e| panic!("a reply line is not JSON ({e}): {l}")))
+        .collect();
+    (replies, took)
+}
+
+/// RW 6.74: a call runs beside the reader, so a `ping` behind a slow call is answered before it; a call the client
+/// cancels (`notifications/cancelled`) is not answered, and its child is killed rather than run to its end — the
+/// specification's SHOULD. The kill is measured against a control on the same machine: the same slow call, not
+/// cancelled, holds the session open for its whole check; cancelled, the session ends in a fraction of that.
+#[test]
+fn a_cancelled_call_is_not_answered_and_a_ping_behind_a_call_is_answered_first() {
+    let dir = scratch("cancel");
+    let big = slow_program(&dir);
+    let check = |id: i64| call(id, "check", json!({ "paths": [big] }));
+    let ping = |id: i64| json!({ "jsonrpc": "2.0", "id": id, "method": "ping" });
+    let cancel = |id: i64| json!({ "jsonrpc": "2.0", "method": "notifications/cancelled", "params": { "requestId": id, "reason": "test" } });
+
+    // The control: the slow call answered, and a ping behind it answered first.
+    let (replies, whole) = converse_timed(&dir, &[check(1), ping(2)]);
+    let ids: Vec<&Value> = replies.iter().map(|r| &r["id"]).collect();
+    assert_eq!(ids, [&json!(2), &json!(1)], "the ping is not held behind the call: {replies:#?}");
+    assert_eq!(reply(&replies, 1)["result"]["isError"], false, "the control's check ran clean: {replies:#?}");
+
+    // Cancelled: no answer for it, the ping answered, and the session over long before the check would have been.
+    let (replies, cut) = converse_timed(&dir, &[check(3), cancel(3), ping(4)]);
+    assert!(replies.iter().all(|r| r["id"] != json!(3)), "a cancelled call is not answered: {replies:#?}");
+    assert_eq!(replies.len(), 1, "{replies:#?}");
+    assert_eq!(replies[0]["id"], 4, "{replies:#?}");
+    assert!(cut * 2 < whole, "the cancelled call's child was killed: the session took {cut:?}, the control {whole:?}");
+
+    // A cancellation for an id no call has, or for an answered one, changes nothing.
+    let (replies, _) = converse_timed(&dir, &[cancel(99), ping(5)]);
+    assert_eq!(replies.len(), 1, "a notification is never answered: {replies:#?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.74: every tool that answers with the CLI's envelope declares it as `outputSchema` — the `delulu schema`
+/// document, with the command's own payload named where a closed schema describes it — and what it returns conforms:
+/// the envelope, and the payload, are each valid by `delulu schema validate`.
+#[test]
+fn each_tools_output_schema_is_the_clis_own_and_its_answer_conforms() {
+    let dir = scratch("output-schema");
+    let demo = repo().join("examples/demo.delulu").to_string_lossy().into_owned();
+    let replies = converse(
+        &dir,
+        &[
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+            call(2, "authority", json!({ "path": demo })),
+            call(3, "toolchain", json!({})),
+            call(4, "check", json!({ "paths": [demo] })),
+            call(5, "atlas_chain", json!({ "path": demo })),
+        ],
+    );
+    let tools = reply(&replies, 1)["result"]["tools"].as_array().unwrap().clone();
+    let schema_of = |name: &str| tools.iter().find(|t| t["name"] == name).unwrap()["outputSchema"].clone();
+    for t in &tools {
+        let s = &t["outputSchema"];
+        if t["name"].as_str().unwrap().starts_with("survey_") {
+            assert!(s.is_null(), "a Survey answer is not an envelope: {t}");
+        } else {
+            assert_eq!(s["$id"], "delulu:schema/envelope", "{}", t["name"]);
+            assert_eq!(s["type"], "object", "MCP asks for an object schema: {}", t["name"]);
+            assert!(s["$defs"]["diagnostic"].is_object(), "self-contained: {}", t["name"]);
+        }
+    }
+    assert!(schema_of("authority")["properties"]["authority"].is_object(), "the payload, named");
+    assert!(schema_of("toolchain")["properties"]["toolchain"].is_object(), "the payload, named");
+    assert!(schema_of("atlas_chain")["properties"]["chain"].is_object(), "the payload, named");
+    let valid = |schema: &str, v: &Value| {
+        let f = dir.join(format!("{schema}.json"));
+        std::fs::write(&f, v.to_string()).unwrap();
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(["schema", "validate", schema, f.to_str().unwrap()])
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{schema}: {}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    };
+    for (id, payload) in [(2, Some("authority")), (3, Some("toolchain")), (4, None), (5, Some("chain"))] {
+        let content = &reply(&replies, id)["result"]["structuredContent"];
+        valid("envelope", content);
+        if let Some(p) = payload {
+            valid(p, &content[p]);
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
