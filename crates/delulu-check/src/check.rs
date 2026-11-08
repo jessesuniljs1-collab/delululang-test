@@ -709,6 +709,8 @@ impl FnCtx {
     fn lookup_to_assign(&self, name: &str) -> Option<(Type, Binder)> {
         self.names.meet(name);
         let (i, ty) = self.locals.iter().enumerate().rev().find_map(|(i, scope)| scope.get(name).map(|t| (i, t.clone())))?;
+        // `bind` writes the binder beside the type, in the same scope, so this always finds one; the fallback, which no
+        // program reaches (mutant M1194 survives for that reason), refuses rather than allows.
         let binder = self.binders.get(i).and_then(|b| b.get(name)).copied().unwrap_or(Binder::Param);
         Some((ty, binder))
     }

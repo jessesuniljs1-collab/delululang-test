@@ -2660,5 +2660,9 @@ mod pattern_binding_rcap_tests {
             let found = errors(&src);
             assert!(found.iter().any(|c| c == "DL1604"), "{what}: still refused (DL1604), got {found:?}");
         }
+        // A `ref` list taken out of `Some` and stored where `val` is required would let its other name write a value
+        // the field promises no one writes: refused, because the binding is not `val`.
+        let src = "module m\ntype H { xs: List[Int] }\nfn f() -> Int {\nlet h = H { xs: [] }\nlet ys: ref List[Int] = [1]\nmatch Some(ys) {\nSome(w) => { h.xs = w }\nNone => {}\n}\nys.push(2)\n0\n}\n";
+        assert_eq!(errors(src), vec!["DL1603".to_string()], "a `ref` list out of a pattern is not stored as `val`");
     }
 }
