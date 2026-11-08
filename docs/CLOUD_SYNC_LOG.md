@@ -8761,7 +8761,8 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
     `origin`, each in `master`'s history: `laptop/mcp-cancel`, `laptop/sandbox-faults`, `laptop/missing-grants`,
     `laptop/package-fast-paths`, `laptop/stack-ladder`, `laptop/wasm-main-shapes`; and `laptop/basics-compound` once this
     run's commits land. `laptop/stack-ladder-witness` holds only its superseded witness (`9471585`), and the laptop
-    meant to delete it. All are for the laptop.
+    meant to delete it. All are for the laptop, with this run's own `claude/peaceful-carson-yjtqjc` (in `master` since
+  `555f33d`; its deletion was refused the same way).
 - **The milestone, named before building:** RW 2.34 closed end to end. That meant finishing the laptop's work in progress
   `2015f28`: witnessed red, unit tests, conformance witnesses, the program step's harness and programs on both engines,
   mutants, the full suite, records, pushed to `master` and its push run read. **Delivered:**
@@ -8835,8 +8836,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   where nothing runs between the copies*; and *a basic's programs find what its unit tests cannot*. `docs/CLOUD_ROUTINE.md`
   gained three: a download-step red is GitHub's; push a witness branch without `-u`; a basic's programs probe the basic.
 - **Open / next:**
-  1. **CI of this run:** `master`'s push runs of `95610bd` and of the records commit are unread here, so read them first.
-     `formal` on `42466462209` is still red from GitHub's 504s: re-run it if GitHub's release downloads still fail.
+  1. **CI of this run, read:** `master`'s push run `42469265379` on `555f33d` (the records commit; `95610bd` had no run of
+     its own, being pushed with it) had 12 jobs green at its first attempt, every test job among them (arm64 ping-pong
+     MEASURED 2.77x against a bar of 1.48x; macOS, Ubuntu and Windows NOT MEASURED, as always on those runners), and two
+     red in download steps, HTTP 504 from GitHub's release downloads. Re-run: `microvm` green at attempt 2 (its KVM tests
+     on this run's code); `formal` red again at attempt 2 (*Fetch TLA+ tools*, 504 at 10:17 UTC). So `formal` waits for
+     GitHub: re-run `42469265379`'s failed jobs and read `formal` green; it checks `docs/design/models`, which this run
+     did not touch. RW 7.31 (new) is why one outage can red it: its TLA+ jar is `latest`, unpinned and unverified. The
+     push run of the follow-up commit that wrote this item is unread here: read it first.
   2. **RW 2.46 next** (a basic, and a defect). A `let` can be reassigned, while DL0207's explanation says it cannot.
      First measure how many repository programs reassign a `let`; then refuse it with DL0207 (a D-V2, marked breaking if
      any did), or correct the explanation.
