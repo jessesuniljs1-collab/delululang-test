@@ -71,7 +71,8 @@ COMMENT   = "//" to end of line | "/*" ... "*/" (nesting allowed) | "///" doc co
 ```
 
 Punctuation/operators (each a distinct token):
-`( ) { } [ ] , . : ; -> => ! ? | = == != < <= > >= + - * / % && || _ @`
+`( ) { } [ ] , . : ; -> => ! ? | = == != < <= > >= + - * / % += -= *= /= %= && || _ @` (the five compound-assignment
+tokens since 2026-11-08, RW 2.34)
 
 **Source hygiene (normative, hardening D26).** Identifiers are ASCII by construction (the `IDENT`
 production above), which forecloses homoglyph and invisible-character attacks on names. In addition,
@@ -184,7 +185,8 @@ block         = "{" , { stmt } , "}" ;
 stmt          = let_stmt | var_stmt | assign_stmt | while_stmt | for_stmt | break_stmt | continue_stmt | return_stmt | expr_stmt ;
 let_stmt      = "let" , IDENT , [ ":" , type ] , "=" , expr , term ;
 var_stmt      = "var" , IDENT , [ ":" , type ] , "=" , expr , term ;
-assign_stmt   = lvalue , "=" , expr , term ;
+assign_stmt   = lvalue , ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) , expr , term ;
+                 (* RW 2.34, D-V2-221: `t op= e` is `t = t op e`, the place of t found once, before e runs; a call in t is DL0207 *)
 lvalue        = IDENT , { "." , IDENT | "[" , expr , "]" } ;
 while_stmt    = "while" , expr , block ;
 for_stmt      = "for" , IDENT , "in" , expr , block ;      (* Tier 1: expr must have type List[T]; IDENT binds T in the body *)

@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — compound assignment, `x += 1`, 2026-11-08
+
+- **Added (RW 2.34, D-V2-221):** compound assignment, `+=`, `-=`, `*=`, `/=` and `%=`, on a local, a record's field and
+  a list's index (`total += n`, `a.n *= 2`, `counts[i] += 1`).
+  - `t op= e` means `t = t op e`: the same types, refusals and faults as the long form, on both engines. An index write
+    runs on the interpreter only (RW 3.32).
+  - The place written is found once, before the right side runs. A right side that changes a name the target reads
+    still writes the place that was read.
+  - A target holding a call (`xs[xs.len() - 1] += 1`) is refused with DL0207: bind the index first.
+  - `delulu fmt` prints it as written.
+- **Fixed (RW 3.31):** on `--engine wasm`, comparing `None` with an `Option` of a record (`find(xs, id) == None`) was
+  DL1201. It compiles and answers as the interpreter does.
+
 ## Unreleased — a sandboxed run's fault is in its envelope and its report, 2026-11-06
 
 - **Fixed (RW 6.75, D-V2-219):** under `--sandbox` a fault the program ended at (DL0902, DL0905, …) reached the

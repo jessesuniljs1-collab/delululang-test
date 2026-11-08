@@ -12636,3 +12636,36 @@ softwares of varying complexities and test and verify and fix it. U can and u sh
 whenever needed, Anyway history of code changes will be github."* RW 6.75 was finished first, as he said. From here the
 language basics (RW 2.33–2.41, §8 items 7 and 8) come before the remaining review items. After each one, programs of
 varying size are written, run and fixed (D-V2-220).
+
+## 2026-11-08 — on-demand routine run 21: #141 and #142 landed; RW 2.34 closed — compound assignment (D-V2-221), with RW 3.31
+
+**Housekeeping.**
+- #141 (RW 6.74) and #142 (RW 6.75 and D-V2-220): their PR runs `42242082216` and `42245539476` were 14 + 2 skipped
+  green. Their new targets passed in the VM (`mcp_cli` 5, `sandbox_run_cli` 23, `schema_cli` 5). Both landed by one
+  fast-forward of `master` to `18ea4e4`.
+- That push run, `42466462209`, was red in two download steps: `formal`'s *Fetch TLA+ tools* and `microvm`'s *The pinned
+  Firecracker*. Each got HTTP 504 five times from GitHub's release downloads at 09:16 UTC; every test job was green. The
+  failed jobs were re-run (the sync-log entry has the result).
+- `origin/autosave/laptop`'s newest snapshot (`edd469f`, 15:47 UTC on 2026-11-06) is the work in progress's own early
+  draft: its lexer and token files are identical to `2015f28`'s, and its parser and AST are a subset.
+
+**What.** RW 2.34, the first language basic (D-V2-220), finished from the laptop's work in progress `2015f28`.
+- **A defect in the work in progress, found by probing it.** The rewrite `t op= e` → `t = t op e` reads the target, runs
+  the right side, then finds the place again. A right side that moved a name the target reads split the read from the
+  write: `ys[xs[0]] += bump(xs)` read `ys[0]` and wrote `ys[5]`; a closure assigning `i` in `ys[i] += f()`, and `swap`
+  giving `h` a new leaf in `h.leaf.n += swap(h)`, the same. Both engines now find the place before the right side runs.
+- **D-V2-221** fixes the meaning (Python's order) and refuses a target holding a call (DL0207, *bind the index first*).
+- **The program step** (D-V2-220): six programs in `crates/delulu/tests/programs/`, run by `programs_cli`. `ledger`
+  is 385 lines and runs on both engines. They found:
+  - RW 3.31, fixed: WASM refused `x == None` for an `Option` of a record;
+  - RW 2.45: a record held in a list or an `Option` cannot be written through its binding;
+  - RW 2.46: a `let` binding can be reassigned, though DL0207's explanation says it cannot;
+  - RW 3.32: WASM refuses an assignment to a list's index.
+
+**Evidence.**
+- The witness: `x += 2` DL0202 and DL0207 on `18ea4e4`, `3` now. The three probes, red on the work in progress's binary.
+- New tests: `compound_assign_cli` (5), the syntax crate's lexer, parser and fmt tests (6; the formatter's fuzz gate now
+  generates compound forms), conformance (an accept file, two DL0207 rejects), `match_parity` (RW 3.31), `programs_cli`
+  (3).
+- Mutants M1173–M1185: all red, the control green.
+- `scripts/clippy.sh -j 4` clean; the full suite, and witness runs on macOS and Windows (the sync-log entry).
