@@ -637,8 +637,24 @@ jobs:
         uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
 
+      # RW 7.31: the checker is pinned (v1.7.4, the release `latest` named on 2026-11-08, so nothing it checks moved) and
+      # its jar checked by SHA-256 (taken that day from the asset, 2,274,532 bytes; TLA+ publishes no checksum file), and
+      # both downloads are cached by version: an outage of GitHub's release downloads (HTTP 504 on push runs `42466462209`
+      # and `42469265379`, 2026-11-08) reds this job only while no cache holds them. Each is checked on every use.
+      - name: Cache the formal tools (checked against their pinned hashes on every use)
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/delulu-formal
+          key: formal-tools-tla2tools-1.7.4-lean-4.32.2
+
       - name: Fetch TLA+ tools
-        run: curl -sSfL --retry 4 --retry-delay 5 -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+        run: |
+          v=1.7.4
+          j="$HOME/.cache/delulu-formal/tla2tools-$v.jar"
+          mkdir -p "$HOME/.cache/delulu-formal"
+          [ -f "$j" ] || curl -sSfL --retry 6 --retry-delay 10 -o "$j" "https://github.com/tlaplus/tlaplus/releases/download/v$v/tla2tools.jar"
+          echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $j" | sha256sum -c -
+          cp "$j" tla2tools.jar
 
       # The grant tree: 585,771 distinct states, no error.
       - name: Model-check the grant tree
@@ -704,9 +720,11 @@ jobs:
         run: |
           v=4.32.2
           f="lean-$v-linux.tar.zst"
-          curl -sSfL --retry 4 --retry-delay 5 -o "$RUNNER_TEMP/$f" "https://github.com/leanprover/lean4/releases/download/v$v/$f"
-          echo "5f2069e6f5db73780f374ccb49ce8ea649aa20a0cebf0116816744c999ce72aa  $RUNNER_TEMP/$f" | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/lean" && tar --zstd -xf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP/lean" --strip-components=1
+          t="$HOME/.cache/delulu-formal/$f"
+          mkdir -p "$HOME/.cache/delulu-formal"
+          [ -f "$t" ] || curl -sSfL --retry 6 --retry-delay 10 -o "$t" "https://github.com/leanprover/lean4/releases/download/v$v/$f"
+          echo "5f2069e6f5db73780f374ccb49ce8ea649aa20a0cebf0116816744c999ce72aa  $t" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/lean" && tar --zstd -xf "$t" -C "$RUNNER_TEMP/lean" --strip-components=1
           "$RUNNER_TEMP/lean/bin/lean" --version
           cd docs/design/models/lean
           for m in DeluluCore.lean DeluluCoreSafety.lean; do
