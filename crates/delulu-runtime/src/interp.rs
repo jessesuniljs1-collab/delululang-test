@@ -1750,6 +1750,9 @@ impl Interp {
             },
             Value::Secret(s) => prim::call_secret_method(s, &name.name, &argvals, span),
             Value::Str(s) => prim::call_str_method(s, &name.name, &argvals, span),
+            // RW 2.38 (D-V2-223): the math methods.
+            Value::Int(n) => prim::call_int_method(*n, &name.name, &argvals, span),
+            Value::Float(x) => prim::call_float_method(*x, &name.name, &argvals, span),
             Value::List(l) => prim::call_list_method(l, &name.name, &argvals, span),
             Value::Map(m) => prim::call_map_method(m, &name.name, &argvals, span),
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),

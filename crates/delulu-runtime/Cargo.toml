@@ -52,6 +52,10 @@ delulu-broker = { path = "../delulu-broker" }
 # Stage 6 (Live): the `.dpx` plugin manifest is JSON, so the loader reads its ceiling/exports out of
 # a `serde_json::Value` (the container itself is parsed above this crate — see `plugin.rs` topology).
 serde_json = { workspace = true }
+# RW 2.38 (D-V2-223): `Float`'s transcendental methods (`sin`, `exp`, `pow`, …) are a port of musl's libm rather than the
+# platform's C library, so a program prints the same digits on every OS and both engines. Already in the tree (Wasmtime
+# and Cranelift depend on it), so it adds no crate.
+libm = "0.2.16"
 # PS-A-02: the sandbox channel reuses the broker wire shape (canonical CBOR, length-prefixed), so it
 # adds no new dependency — both crates are already workspace dependencies.
 serde = { workspace = true }

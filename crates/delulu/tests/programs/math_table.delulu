@@ -1,0 +1,87 @@
+// engines: interp wasm
+// RW 2.38 (D-V2-223): every math method over the edge values, one line each. Run on both engines and on every CI OS
+// against one `.out`, so a `libm` answer that differed by one bit anywhere would show here.
+module mathtable
+
+fn ints() -> List[Int] {
+    [0, 1, -1, 7, -7, 12, 9223372036854775807, -9223372036854775807 - 1]
+}
+
+fn floats() -> List[Float] {
+    let inf = 1.0 / 0.0
+    [0.0, -0.0, 0.5, -0.5, 1.0, 2.5, -2.5, 3.75, -3.75, 100.0, 0.001, inf, 0.0 - inf, 0.0 / 0.0]
+}
+
+fn opt(o: Option[Int]) -> Str {
+    match o {
+        Some(n) => str(n)
+        None => "-"
+    }
+}
+
+fn int_row(n: Int, m: Int) -> Str {
+    let mag = if n == -9223372036854775807 - 1 { "(MIN)" } else { str(n.abs()) }
+    let p = if n > -100 && n < 100 { str(n.pow(3)) } else { "(big)" }
+    var s = str(n) + " " + str(m) + ": abs " + mag
+    s += " min " + str(n.min(m)) + " max " + str(n.max(m)) + " clamp " + str(n.clamp(-5, 5)) + " pow3 " + p
+    s += " +" + opt(n.checked_add(m)) + " -" + opt(n.checked_sub(m)) + " *" + opt(n.checked_mul(m))
+    s += " /" + opt(n.checked_div(m)) + " %" + opt(n.checked_rem(m))
+    s
+}
+
+fn float_row(x: Float) -> Str {
+    var s = str(x) + ": abs " + str(x.abs()) + " sqrt " + str(x.sqrt())
+    s += " floor " + str(x.floor()) + " ceil " + str(x.ceil()) + " round " + str(x.round())
+    s += " trunc " + str(x.trunc()) + " nan " + str(x.is_nan()) + " finite " + str(x.is_finite())
+    s
+}
+
+fn float_fns(x: Float) -> Str {
+    var s = str(x) + ": sin " + str(x.sin()) + " cos " + str(x.cos()) + " tan " + str(x.tan())
+    s += " atan " + str(x.atan()) + " exp " + str(x.exp()) + " ln " + str(x.ln()) + " log10 " + str(x.log10())
+    s
+}
+
+fn float_pairs(x: Float, y: Float) -> Str {
+    var s = str(x) + " " + str(y) + ": min " + str(x.min(y)) + " max " + str(x.max(y))
+    s += " pow " + str(x.pow(y)) + " atan2 " + str(x.atan2(y)) + " clamp " + str(x.clamp(-1.0, 1.0))
+    s
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    out.println("-- Int")
+    for n in ints() {
+        out.println(int_row(n, 3))
+        out.println(int_row(n, 0))
+        out.println(int_row(n, -1))
+    }
+    out.println("-- Float")
+    for x in floats() {
+        out.println(float_row(x))
+        out.println(float_fns(x))
+        out.println(float_pairs(x, 2.0))
+        out.println(float_pairs(x, -0.0))
+        out.println(float_pairs(x, 0.0 / 0.0))
+    }
+    out.println("-- trigonometry")
+    let pi = 1.0.atan() * 4.0
+    out.println("pi " + str(pi) + " e " + str(1.0.exp()))
+    for d in [0, 30, 45, 60, 90, 180, 270] {
+        let r = float(d) * pi / 180.0
+        var s = str(d) + " deg: sin " + str(r.sin()) + " cos " + str(r.cos())
+        s += " asin(sin) " + str(r.sin().asin()) + " acos(cos) " + str(r.cos().acos())
+        out.println(s)
+    }
+    out.println("-- powers")
+    var k = 0
+    while k <= 62 {
+        out.println(
+            "2^" + str(k) + " = " + str(2.pow(k)) + "  2.0^" + str(k) + " = " + str(2.0.pow(float(k))),
+        )
+        k += 31
+    }
+    var s = opt(2.checked_mul(4611686018427387904)) + " " + str((-2).pow(63)) + " " + str(1.pow(9000000000))
+    s += " " + str((-1).pow(9000000001)) + " " + str(0.pow(0))
+    out.println(s)
+}

@@ -8910,3 +8910,45 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3. The next basics in D-V2-220's order: 2.38 math, 2.36 ranges, 2.37 strings, 2.35 bitwise, 2.33 methods. RW 3.32
      (WASM index stores) and RW 2.45 (records in a list) when a basic's programs need them.
   4. Still the owner's: whether 2.0 waits for the basics. `launch/2.0.0` stays prepared, not launched.
+
+## 2026-11-08 (late) — the laptop: #144 landed (RW 2.46/2.47); RW 2.38 math methods built, NOT finished (`laptop/basics-math`)
+
+**Landed.** PR #144's first run (42484005320) was red on the four test jobs at one test: `fix_cli`'s repair sweep had no
+case for the new `let-to-var` repair. `10ba5d7` adds it; run **42500706096 green on every job** (heavy-gates and
+miri-slow skipped as on every PR); fast-forwarded to `master` = `10ba5d7`. `master`'s push run on `9697738` (#143) read
+green (42483076544). The push run on `10ba5d7` is unread.
+
+**Built on `laptop/basics-math` (a work-in-progress commit — not a PR, not verified by a suite).** RW 2.38, the third
+basic: math as METHODS on `Int` and `Float` (D-V2-223 to be written), because a prelude function name is refused as a
+declaration (C11) and `tests/conformance/accept/01_pure.delulu`, `22_module_items.delulu`, `23_foreign_block.delulu`
+and `docs/book/samples/08_foreign.delulu` declare `fn abs`, `fn max`, `fn sqrt`, `fn cos`.
+- `Int`: `abs`, `min`, `max`, `clamp`, `pow`, `checked_add/sub/mul/div/rem` (→ `Option[Int]`). `abs`/`pow` past the
+  range DL0901; a negative exponent and `clamp(lo > hi)` DL0908.
+- `Float`: `abs`, `min`, `max` (IEEE 754-2019 minimumNumber/maximumNumber), `clamp`, `sqrt`, `floor`, `ceil`, `round`
+  (half away from zero), `trunc`, `pow`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `ln`, `log10`,
+  `is_nan`, `is_finite`. Transcendentals are the `libm` crate (already in the tree via Wasmtime), so every OS prints the
+  same digits; `1.0.exp()` prints `2.7182818284590455`, one ulp above e.
+- `prim.rs` `call_int_method`/`call_float_method`; checker `method_sig` arms + `prim_receiver_label`; `PRIM_TABLE` 92 →
+  124, `PRIM_TABLE_VERSION` 10; WASM `delulu:math.int_method`/`float_method` host imports running the interpreter's own
+  functions (a fault refuses and traps); `is_nan`/`is_finite` compiled in the guest.
+- Witnessed by hand on the laptop: every answer and every fault (DL0901 `abs`/`pow`, DL0908 `pow(-1)`/`clamp`) identical
+  on both engines, location and exit code included. `prim_table` tests 11/11. New program `math_table.delulu` + `.out`
+  (both engines agree). `scripts/clippy.sh` clean.
+
+**Open / next (the next AI's inbox):**
+1. Read `master`'s push run on `10ba5d7`. Then the records #144 left: `docs/AI_ONBOARDING.md` counters (D-V2-222, M1200,
+   last merged #144), `V2_PHASE_STATUS.md`, and `HANDOFF.md` §11.2's lesson *"a rule the documentation states and no
+   pass reads is a defect in both"*.
+2. Finish RW 2.38 on `laptop/basics-math`: `tests/conformance/witnesses.toml` (entrenched — 64 rows, two per new
+   anchor, as D-V2-208's; an `ENTRENCHED_CHANGE_RECORD.md` entry), `delulu-conform --reference` (primitives.md),
+   `--coverage`; DL0908's explanation (it says one operation faults so); `crates/delulu-wasm/tests/math_parity.rs` (each
+   fault on both engines; the law *`checked_op` is `None` exactly where `op` faults*); runtime unit tests; mutants; more
+   programs (loan schedule, geometry, statistics); the Skill and reference docs; D-V2-223, CHANGELOG, REMAINING_WORK 2.38;
+   the suite on GitHub (`ci.yml -f jobs=everything`), then a PR.
+3. Findings from this slice, to row in `REMAINING_WORK.md`: **FMT-FLOAT-EXP-1** `delulu fmt` rewrote `1.0e-300` as a
+   300-digit decimal (`fmt.rs` `lit_text` prints the value, not the source spelling); **`str` of a Float** of large or tiny
+   magnitude prints every digit (`exp(100.0)` → 44 digits) — RW 2.37's number formatting; **a line beginning with `+`**
+   does not continue the expression, even inside parentheses (DL0202/DL0201) — a trailing operator does.
+4. Then the basics: 2.36 ranges, 2.37 strings, 2.35 bitwise, 2.33 methods, 2.39, 2.40, 2.41.
+
+Survey and doctor: in the commit below.

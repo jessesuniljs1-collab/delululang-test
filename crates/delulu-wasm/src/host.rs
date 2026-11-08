@@ -2562,6 +2562,58 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // ----- RW 2.38 (D-V2-223): the `delulu:math` host interface (pure: neither traced nor gated) ---------------------
+    // An `Int` or `Float` method (`codegen.rs`'s `INT_METHODS` and `FLOAT_METHODS`) run by the interpreter's own
+    // `call_int_method` or `call_float_method`, so the WASM engine answers — and faults — exactly as the interpreter
+    // does. A fault is recorded in the interpreter's words and traps, so the guest never goes on past it.
+    let math_fault = |caller: &mut Caller<'_, HostState>, why: String| {
+        caller.refuse_first(|| why.clone());
+        wasmtime::Error::msg(why)
+    };
+    linker
+        .func_wrap(
+            "delulu:math",
+            "int_method",
+            move |mut caller: Caller<'_, HostState>, method: i32, n: i64, a: i64, b: i64| -> wasmtime::Result<(i32, i64)> {
+                let Some(name) = usize::try_from(method).ok().and_then(|i| crate::codegen::INT_METHODS.get(i)) else {
+                    return Err(math_fault(&mut caller, format!("DL0907: no `Int` method numbered {method}")));
+                };
+                let span = delulu_diag::Span::new(0, 0, 0);
+                match delulu_runtime::prim::call_int_method(n, name, &[Value::Int(a), Value::Int(b)], span) {
+                    Ok(Value::Int(v)) => Ok((1, v)),
+                    Ok(Value::Variant { name: c, fields }) if &*c == "Some" => match fields.first() {
+                        Some(Value::Int(v)) => Ok((1, *v)),
+                        _ => Err(math_fault(&mut caller, format!("DL0907: `{name}` answered a `Some` of no `Int`"))),
+                    },
+                    Ok(Value::Variant { name: c, .. }) if &*c == "None" => Ok((0, 0)),
+                    Ok(other) => Err(math_fault(
+                        &mut caller,
+                        format!("DL0907: `{name}` answered {} — not a value the WASM engine holds", other.display()),
+                    )),
+                    Err(fault) => Err(math_fault(&mut caller, format!("{}: {}", fault.code, fault.message))),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap(
+            "delulu:math",
+            "float_method",
+            move |mut caller: Caller<'_, HostState>, method: i32, x: f64, a: f64, b: f64| -> wasmtime::Result<f64> {
+                let Some(name) = usize::try_from(method).ok().and_then(|i| crate::codegen::FLOAT_METHODS.get(i)) else {
+                    return Err(math_fault(&mut caller, format!("DL0907: no `Float` method numbered {method}")));
+                };
+                let span = delulu_diag::Span::new(0, 0, 0);
+                match delulu_runtime::prim::call_float_method(x, name, &[Value::Float(a), Value::Float(b)], span) {
+                    Ok(Value::Float(v)) => Ok(v),
+                    Ok(other) => {
+                        Err(math_fault(&mut caller, format!("DL0907: `{name}` answered {} — not a `Float`", other.display())))
+                    }
+                    Err(fault) => Err(math_fault(&mut caller, format!("{}: {}", fault.code, fault.message))),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     // `parse_int(s)` by the interpreter's own rule (`call_builtin`): whether it parsed, and the number — the guest builds
     // the `Option[Int]` from the two.
     linker

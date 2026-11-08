@@ -2989,6 +2989,42 @@ impl<'a> Checker<'a> {
                 "chars" => Some((Type::List(Box::new(Type::Str)), None, None)),
                 _ => None,
             },
+            // RW 2.38 (D-V2-223): the math methods, pure (no effect row). Methods rather than free functions, because a
+            // prelude name is refused as a declaration (C11) and programs already declare `fn max` and `fn abs` and bind
+            // `foreign` functions named `sqrt` and `cos`. `prim.rs`'s `call_int_method` and `call_float_method` say
+            // what each answers and where it faults.
+            Type::Int => match method {
+                "abs" => Some((Type::Int, None, None)),
+                "min" | "max" | "pow" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Int, None, None))
+                }
+                "clamp" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    self.expect_arg(args, 1, &Type::Int, span);
+                    Some((Type::Int, None, None))
+                }
+                "checked_add" | "checked_sub" | "checked_mul" | "checked_div" | "checked_rem" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Option(Box::new(Type::Int)), None, None))
+                }
+                _ => None,
+            },
+            Type::Float => match method {
+                "abs" | "sqrt" | "floor" | "ceil" | "round" | "trunc" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan"
+                | "exp" | "ln" | "log10" => Some((Type::Float, None, None)),
+                "min" | "max" | "pow" | "atan2" => {
+                    self.expect_arg(args, 0, &Type::Float, span);
+                    Some((Type::Float, None, None))
+                }
+                "clamp" => {
+                    self.expect_arg(args, 0, &Type::Float, span);
+                    self.expect_arg(args, 1, &Type::Float, span);
+                    Some((Type::Float, None, None))
+                }
+                "is_nan" | "is_finite" => Some((Type::Bool, None, None)),
+                _ => None,
+            },
             Type::Map(kt, vt) => {
                 // The key discipline (D-V2-29 decision 4), checked **after** the argument has
                 // unified `K` with something concrete.
@@ -4763,6 +4799,8 @@ fn prim_receiver_label(recv: &Type) -> Option<&'static str> {
         Type::PyObj => "pyobj",
         Type::Secret(_) => "secret",
         Type::Str => "str",
+        Type::Int => "int",
+        Type::Float => "float",
         Type::List(_) => "list",
         Type::Map(_, _) => "map",
         Type::Plugin(_) => "plugin",

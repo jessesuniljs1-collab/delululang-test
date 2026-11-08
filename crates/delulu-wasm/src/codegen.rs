@@ -798,6 +798,10 @@ struct Imports {
     str_eq: u32,
     /// `delulu:str.str_method` — a `Str` method run host-side by the interpreter's own `call_str_method`.
     str_method: u32,
+    /// `delulu:math.int_method` and `delulu:math.float_method` — an `Int` or `Float` method run host-side by the
+    /// interpreter's own `call_int_method` or `call_float_method` (RW 2.38).
+    int_method: u32,
+    float_method: u32,
     /// `delulu:str.parse_int` — the builtin `parse_int`, run host-side by the interpreter's own `call_builtin`.
     parse_int: u32,
     /// `delulu:str.parse_float` — the builtin `parse_float`, the same way.
@@ -1160,6 +1164,22 @@ fn module_calls_str_methods(env: &EnumEnv, module: &Module) -> bool {
     module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if str_method_sig(&name.name).is_some()), false)
 }
 
+/// Does any compilable function call a method on a receiver the checker typed `want` (`Int` or `Float`) whose name is
+/// one the host runs? Then the module carries that `delulu:math` import.
+fn module_calls_num_methods(
+    env: &EnumEnv,
+    module: &Module,
+    node_types: &HashMap<NodeId, delulu_check::Type>,
+    want: &delulu_check::Type,
+    names: &[&str],
+) -> bool {
+    let hit = |e: &Expr| {
+        matches!(e, Expr::Method { recv, name, .. }
+            if names.contains(&name.name.as_str()) && node_types.get(&recv.id()) == Some(want))
+    };
+    module_any(env, module, &hit, false)
+}
+
 /// Does any function whose body is compiled call the builtin `name` (`parse_int`)? A builtin's name cannot be redefined
 /// (DL0302), so a call by that name is the builtin's.
 fn module_calls_builtin(env: &EnumEnv, module: &Module, name: &str) -> bool {
@@ -1217,6 +1237,41 @@ fn str_method_sig(name: &str) -> Option<(u32, &'static [Ty], Ty)> {
         _ => return None,
     };
     Some((id, args, ret))
+}
+
+/// The `Int` methods the WASM engine runs host-side (`delulu:math.int_method`), through the interpreter's own
+/// `call_int_method` (RW 2.38, D-V2-223), so each answers and faults exactly as the interpreter does. A method's id is
+/// its index here; `host.rs` reads it back.
+pub(crate) const INT_METHODS: [&str; 10] =
+    ["abs", "min", "max", "clamp", "pow", "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem"];
+
+/// An `Int` method's id, how many `Int` arguments it takes, and whether it answers an `Option[Int]` (a `checked_` form).
+fn int_method_sig(name: &str) -> Option<(u32, usize, bool)> {
+    let id = INT_METHODS.iter().position(|m| *m == name)? as u32;
+    Some(match name {
+        "abs" => (id, 0, false),
+        "clamp" => (id, 2, false),
+        n if n.starts_with("checked_") => (id, 1, true),
+        _ => (id, 1, false),
+    })
+}
+
+/// The `Float` methods the WASM engine runs host-side (`delulu:math.float_method`), through the interpreter's own
+/// `call_float_method` (RW 2.38, D-V2-223): `libm`'s functions, not a second implementation. `is_nan` and `is_finite`
+/// are not here — they are compiled in the guest, as comparisons.
+pub(crate) const FLOAT_METHODS: [&str; 20] = [
+    "abs", "min", "max", "clamp", "sqrt", "floor", "ceil", "round", "trunc", "pow", "sin", "cos", "tan", "asin", "acos", "atan",
+    "atan2", "exp", "ln", "log10",
+];
+
+/// A `Float` method's id, and how many `Float` arguments it takes.
+fn float_method_sig(name: &str) -> Option<(u32, usize)> {
+    let id = FLOAT_METHODS.iter().position(|m| *m == name)? as u32;
+    Some(match name {
+        "min" | "max" | "pow" | "atan2" => (id, 1),
+        "clamp" => (id, 2),
+        _ => (id, 0),
+    })
 }
 
 /// What `host.rs` hands `call_str_method` for the method numbered `id`: its name, and how many `Str` arguments (the
@@ -1416,6 +1471,8 @@ fn compile_module_typed(
         list_slot: u32::MAX,
         str_eq: u32::MAX,
         str_method: u32::MAX,
+        int_method: u32::MAX,
+        float_method: u32::MAX,
         parse_int: u32::MAX,
         parse_float: u32::MAX,
         float_rem: u32::MAX,
@@ -1546,6 +1603,16 @@ fn compile_module_typed(
     let needs_str_methods = module_calls_str_methods(&env, module);
     if needs_str_methods {
         imp.str_method = n_imports;
+        n_imports += 1;
+    }
+    let needs_int_methods = module_calls_num_methods(&env, module, node_types, &delulu_check::Type::Int, &INT_METHODS);
+    if needs_int_methods {
+        imp.int_method = n_imports;
+        n_imports += 1;
+    }
+    let needs_float_methods = module_calls_num_methods(&env, module, node_types, &delulu_check::Type::Float, &FLOAT_METHODS);
+    if needs_float_methods {
+        imp.float_method = n_imports;
         n_imports += 1;
     }
     let needs_parse_int = module_calls_builtin(&env, module, "parse_int");
@@ -1821,6 +1888,20 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I64, ValType::I64], [ValType::I32]);
         next_type += 1;
     }
+    let mut int_method_ty = 0;
+    if needs_int_methods {
+        int_method_ty = next_type;
+        // int_method(method, n, a, b) -> (answer, value): 1 and the value (or `Some`'s), 0 for `None`; a fault traps
+        types.ty().function([ValType::I32, ValType::I64, ValType::I64, ValType::I64], [ValType::I32, ValType::I64]);
+        next_type += 1;
+    }
+    let mut float_method_ty = 0;
+    if needs_float_methods {
+        float_method_ty = next_type;
+        // float_method(method, x, a, b) -> the value; a fault (`clamp`'s bounds) traps
+        types.ty().function([ValType::I32, ValType::F64, ValType::F64, ValType::F64], [ValType::F64]);
+        next_type += 1;
+    }
     let mut parse_int_ty = 0;
     if needs_parse_int {
         parse_int_ty = next_type;
@@ -2025,6 +2106,12 @@ fn compile_module_typed(
     }
     if needs_str_methods {
         imports.import("delulu:str", "str_method", EntityType::Function(str_method_ty));
+    }
+    if needs_int_methods {
+        imports.import("delulu:math", "int_method", EntityType::Function(int_method_ty));
+    }
+    if needs_float_methods {
+        imports.import("delulu:math", "float_method", EntityType::Function(float_method_ty));
     }
     if needs_parse_int {
         imports.import("delulu:str", "parse_int", EntityType::Function(parse_int_ty));
@@ -4553,6 +4640,31 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     return compile_str_method(id, params, ret, args, cx);
                 }
             }
+            // RW 2.38 (D-V2-223): the math methods, the receiver on the stack.
+            if let (Ty::I64, Some((id, n, checked))) = (recv_ty, int_method_sig(&name.name)) {
+                if n == args.len() {
+                    return compile_int_method(id, checked, args, cx);
+                }
+            }
+            if recv_ty == Ty::F64 && args.is_empty() && matches!(name.name.as_str(), "is_nan" | "is_finite") {
+                // `x != x` holds of a NaN alone; `x - x == 0.0` of a finite `x` alone (an infinity's is a NaN).
+                let x = cx.alloc_local(Ty::F64)?;
+                cx.emit(Instruction::LocalTee(x));
+                cx.emit(Instruction::LocalGet(x));
+                if name.name == "is_nan" {
+                    cx.emit(Instruction::F64Ne);
+                } else {
+                    cx.emit(Instruction::F64Sub);
+                    cx.emit(Instruction::F64Const(0.0));
+                    cx.emit(Instruction::F64Eq);
+                }
+                return Ok(Ty::I32);
+            }
+            if let (Ty::F64, Some((id, n))) = (recv_ty, float_method_sig(&name.name)) {
+                if n == args.len() {
+                    return compile_float_method(id, args, cx);
+                }
+            }
             if let Ty::List(s) = recv_ty {
                 return compile_list_method(s, &name.name, args, cx);
             }
@@ -4829,6 +4941,91 @@ fn compile_str_method(id: u32, params: &[Ty], ret: Ty, args: &[Expr], cx: &mut C
     }
     cx.emit(Instruction::Call(cx.imp.str_method));
     Ok(ret)
+}
+
+/// An `Int` method run host-side (`delulu:math.int_method`), the receiver on the stack: its arguments are computed in
+/// order, then passed in the import's `a` and `b` (the unused ones zero). A `checked_` form builds its `Option[Int]` from
+/// the import's two answers, as `compile_parse` does; the others keep the value. A fault traps in the host.
+fn compile_int_method(id: u32, checked: bool, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.int_method == u32::MAX {
+        return Err(CompileError::Unsupported("an `Int` method in a module compiled without the math interface".into()));
+    }
+    let recv = cx.alloc_local(Ty::I64)?;
+    cx.emit(Instruction::LocalSet(recv));
+    let mut given = Vec::new();
+    for arg in args {
+        compile_expr_as(arg, cx, Ty::I64)?;
+        let l = cx.alloc_local(Ty::I64)?;
+        cx.emit(Instruction::LocalSet(l));
+        given.push(l);
+    }
+    cx.emit(Instruction::I32Const(id as i32));
+    cx.emit(Instruction::LocalGet(recv));
+    for k in 0..2 {
+        match given.get(k) {
+            Some(l) => cx.emit(Instruction::LocalGet(*l)),
+            None => cx.emit(Instruction::I64Const(0)),
+        }
+    }
+    cx.emit(Instruction::Call(cx.imp.int_method));
+    let (answered, value) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I64)?);
+    cx.emit(Instruction::LocalSet(value));
+    cx.emit(Instruction::LocalSet(answered));
+    if !checked {
+        cx.emit(Instruction::LocalGet(value));
+        return Ok(Ty::I64);
+    }
+    let opt = Ty::Option(Scalar::I64);
+    let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
+    let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
+    let (some, none) = (tag("Some"), tag("None"));
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(cell));
+    cx.emit(Instruction::LocalGet(answered));
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(some));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(field_offset(0)));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalGet(value));
+    store_scalar(cx, Scalar::I64);
+    cx.emit(Instruction::Else);
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(none));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(cell));
+    Ok(opt)
+}
+
+/// A `Float` method run host-side (`delulu:math.float_method`), as `compile_int_method` runs an `Int` one.
+fn compile_float_method(id: u32, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.float_method == u32::MAX {
+        return Err(CompileError::Unsupported("a `Float` method in a module compiled without the math interface".into()));
+    }
+    let recv = cx.alloc_local(Ty::F64)?;
+    cx.emit(Instruction::LocalSet(recv));
+    let mut given = Vec::new();
+    for arg in args {
+        compile_expr_as(arg, cx, Ty::F64)?;
+        let l = cx.alloc_local(Ty::F64)?;
+        cx.emit(Instruction::LocalSet(l));
+        given.push(l);
+    }
+    cx.emit(Instruction::I32Const(id as i32));
+    cx.emit(Instruction::LocalGet(recv));
+    for k in 0..2 {
+        match given.get(k) {
+            Some(l) => cx.emit(Instruction::LocalGet(*l)),
+            None => cx.emit(Instruction::F64Const(0.0)),
+        }
+    }
+    cx.emit(Instruction::Call(cx.imp.float_method));
+    Ok(Ty::F64)
 }
 
 // ----- RW 3.4: the WASM `List` -------------------------------------------------------------------------------------
