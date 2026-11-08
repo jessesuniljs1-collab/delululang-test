@@ -65,6 +65,11 @@ be added, renamed or removed without this chapter changing with it.
 | `Star` | `*` | `*` |
 | `Slash` | `/` | `/` |
 | `Percent` | `%` | `%` |
+| `PlusEq` | `+=` | `+=` |
+| `MinusEq` | `-=` | `-=` |
+| `StarEq` | `*=` | `*=` |
+| `SlashEq` | `/=` | `/=` |
+| `PercentEq` | `%=` | `%=` |
 | `AndAnd` | `&&` | `&&` |
 | `OrOr` | `||` | `\|\|` |
 | `Term` | *(literal)* | end of statement |

@@ -1,0 +1,385 @@
+// engines: interp wasm
+// RW 2.34 (D-V2-220's program step): the few-hundred-line program — a small bank's day. Accounts, a day of
+// transactions, refusals that leave every balance as it was, transfers, fees, interest in basis points rounded half
+// up, a tally per kind, a check that money was neither made nor lost, and a report. Every running total is kept by
+// compound assignment: on locals, on a record's fields, and on a field of a record held in another. An account's
+// changing numbers live in maps keyed by its id: a record taken out of a list or an `Option` cannot be written
+// through its binding (DL1604, RW 2.45), so the records hold only what never changes.
+module ledger
+
+type Account {
+    id: Int,
+    owner: Str,
+    limit: Int,
+}
+
+// Each account's balance, fees and number of moves, by id.
+type Book {
+    balances: ref Map[Int, Int],
+    fees: ref Map[Int, Int],
+    moves: ref Map[Int, Int],
+}
+
+type Tx = Deposit(Int, Int) | Withdraw(Int, Int) | Transfer(Int, Int, Int) | Fee(Int, Int) | Interest(Int, Int)
+
+type Refusal = NoAccount(Int) | Overdrawn(Int, Int) | BadAmount(Int) | SameAccount(Int)
+
+type Tally {
+    count: Int,
+    cents: Int,
+}
+
+type Day {
+    deposits: ref Tally,
+    withdrawals: ref Tally,
+    transfers: ref Tally,
+    fees: ref Tally,
+    interest: ref Tally,
+    refused: ref Tally,
+}
+
+fn amount(m: ref Map[Int, Int], id: Int) -> Int {
+    match m.get(id) {
+        Some(v) => v
+        None => 0
+    }
+}
+
+fn add(m: ref Map[Int, Int], id: Int, delta: Int) {
+    var v = amount(m, id)
+    v += delta
+    m.insert(id, v)
+}
+
+fn tally() -> ref Tally {
+    Tally { count: 0, cents: 0 }
+}
+
+fn new_day() -> ref Day {
+    Day {
+        deposits: tally(),
+        withdrawals: tally(),
+        transfers: tally(),
+        fees: tally(),
+        interest: tally(),
+        refused: tally(),
+    }
+}
+
+// `-1234` as `-12.34`.
+fn money(cents: Int) -> Str {
+    var sign = ""
+    var c = cents
+    if c < 0 {
+        sign = "-"
+        c *= -1
+    }
+    var whole = c
+    whole /= 100
+    var frac = c
+    frac %= 100
+    var tail = str(frac)
+    if frac < 10 {
+        tail = "0" + tail
+    }
+    sign + str(whole) + "." + tail
+}
+
+fn right(s: Str, width: Int) -> Str {
+    var out = s
+    while out.len() < width {
+        out = " " + out
+    }
+    out
+}
+
+fn left(s: Str, width: Int) -> Str {
+    var out = s
+    while out.len() < width {
+        out += " "
+    }
+    out
+}
+
+fn find(accounts: List[Account], id: Int) -> Option[Account] {
+    for a in accounts {
+        if a.id == id {
+            return Some(a)
+        }
+    }
+    None
+}
+
+// What `a` may still take out: its balance and its overdraft limit.
+fn room(book: ref Book, a: Account) -> Int {
+    var r = amount(book.balances, a.id)
+    r += a.limit
+    r
+}
+
+// Interest on a positive balance, in basis points, rounded half up; nothing on a balance at or below zero.
+fn interest_on(balance: Int, bp: Int) -> Int {
+    if balance <= 0 {
+        return 0
+    }
+    var i = balance
+    i *= bp
+    i += 5000
+    i /= 10000
+    i
+}
+
+fn record(t: ref Tally, cents: Int) {
+    t.count += 1
+    t.cents += cents
+}
+
+fn deposit(
+    book: ref Book,
+    accounts: List[Account],
+    id: Int,
+    cents: Int,
+    day: ref Day,
+) -> Result[Int, Refusal] {
+    if cents <= 0 {
+        return Err(BadAmount(cents))
+    }
+    match find(accounts, id) {
+        Some(a) => {
+            add(book.balances, a.id, cents)
+            add(book.moves, a.id, 1)
+            record(day.deposits, cents)
+            Ok(amount(book.balances, a.id))
+        }
+        None => Err(NoAccount(id))
+    }
+}
+
+fn withdraw(
+    book: ref Book,
+    accounts: List[Account],
+    id: Int,
+    cents: Int,
+    day: ref Day,
+) -> Result[Int, Refusal] {
+    if cents <= 0 {
+        return Err(BadAmount(cents))
+    }
+    match find(accounts, id) {
+        Some(a) => {
+            if cents > room(book, a) {
+                return Err(Overdrawn(id, cents))
+            }
+            add(book.balances, a.id, 0 - cents)
+            add(book.moves, a.id, 1)
+            record(day.withdrawals, cents)
+            Ok(amount(book.balances, a.id))
+        }
+        None => Err(NoAccount(id))
+    }
+}
+
+fn transfer(
+    book: ref Book,
+    accounts: List[Account],
+    from: Int,
+    to: Int,
+    cents: Int,
+    day: ref Day,
+) -> Result[Int, Refusal] {
+    if cents <= 0 {
+        return Err(BadAmount(cents))
+    }
+    if from == to {
+        return Err(SameAccount(from))
+    }
+    let src = match find(accounts, from) {
+        Some(a) => a
+        None => {
+            return Err(NoAccount(from))
+        }
+    }
+    if find(accounts, to) == None {
+        return Err(NoAccount(to))
+    }
+    if cents > room(book, src) {
+        return Err(Overdrawn(from, cents))
+    }
+    add(book.balances, from, 0 - cents)
+    add(book.balances, to, cents)
+    add(book.moves, from, 1)
+    add(book.moves, to, 1)
+    record(day.transfers, cents)
+    Ok(amount(book.balances, from))
+}
+
+// A fee is taken whatever the balance: it may go past the overdraft limit, and the report says so.
+fn fee(
+    book: ref Book,
+    accounts: List[Account],
+    id: Int,
+    cents: Int,
+    day: ref Day,
+) -> Result[Int, Refusal] {
+    match find(accounts, id) {
+        Some(a) => {
+            add(book.balances, a.id, 0 - cents)
+            add(book.fees, a.id, cents)
+            record(day.fees, cents)
+            Ok(amount(book.balances, a.id))
+        }
+        None => Err(NoAccount(id))
+    }
+}
+
+fn credit(
+    book: ref Book,
+    accounts: List[Account],
+    id: Int,
+    bp: Int,
+    day: ref Day,
+) -> Result[Int, Refusal] {
+    match find(accounts, id) {
+        Some(a) => {
+            let i = interest_on(amount(book.balances, a.id), bp)
+            add(book.balances, a.id, i)
+            record(day.interest, i)
+            Ok(amount(book.balances, a.id))
+        }
+        None => Err(NoAccount(id))
+    }
+}
+
+fn apply(book: ref Book, accounts: List[Account], tx: Tx, day: ref Day) -> Result[Int, Refusal] {
+    match tx {
+        Deposit(id, c) => deposit(book, accounts, id, c, day)
+        Withdraw(id, c) => withdraw(book, accounts, id, c, day)
+        Transfer(from, to, c) => transfer(book, accounts, from, to, c, day)
+        Fee(id, c) => fee(book, accounts, id, c, day)
+        Interest(id, bp) => credit(book, accounts, id, bp, day)
+    }
+}
+
+fn describe_tx(tx: Tx) -> Str {
+    match tx {
+        Deposit(id, c) => "deposit " + money(c) + " to #" + str(id)
+        Withdraw(id, c) => "withdraw " + money(c) + " from #" + str(id)
+        Transfer(from, to, c) => "transfer " + money(c) + " #" + str(from) + " -> #" + str(to)
+        Fee(id, c) => "fee " + money(c) + " on #" + str(id)
+        Interest(id, bp) => "interest " + str(bp) + "bp on #" + str(id)
+    }
+}
+
+fn describe_refusal(r: Refusal) -> Str {
+    match r {
+        NoAccount(id) => "no account #" + str(id)
+        Overdrawn(id, c) => "#" + str(id) + " cannot cover " + money(c)
+        BadAmount(c) => "an amount of " + money(c) + " is not a payment"
+        SameAccount(id) => "#" + str(id) + " cannot pay itself"
+    }
+}
+
+fn total(book: ref Book, accounts: List[Account]) -> Int {
+    var sum = 0
+    for a in accounts {
+        sum += amount(book.balances, a.id)
+    }
+    sum
+}
+
+fn tally_line(name: Str, t: ref Tally) -> Str {
+    left(name, 12) + right(str(t.count), 3) + right(money(t.cents), 11)
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let accounts = [
+        Account { id: 1, owner: "ada", limit: 0 },
+        Account { id: 2, owner: "grace", limit: 10000 },
+        Account { id: 3, owner: "linus", limit: 2500 },
+        Account { id: 4, owner: "barbara", limit: 5000 },
+    ]
+    let book = Book { balances: Map(), fees: Map(), moves: Map() }
+    add(book.balances, 1, 125000)
+    add(book.balances, 2, 4300)
+    add(book.balances, 4, 98765)
+    let opening = total(book, accounts)
+    let day = new_day()
+    let txs = [
+        Deposit(3, 20000),
+        Withdraw(2, 12000),
+        Withdraw(2, 5000),
+        Transfer(1, 3, 15050),
+        Transfer(4, 4, 100),
+        Fee(2, 350),
+        Deposit(9, 500),
+        Withdraw(3, -10),
+        Interest(1, 125),
+        Interest(2, 125),
+        Transfer(3, 2, 30000),
+        Transfer(3, 2, 25000),
+        Fee(3, 3000),
+        Interest(4, 250),
+        Withdraw(4, 103000),
+        Deposit(2, 1),
+    ]
+    var line = 0
+    var external = 0
+    for tx in txs {
+        line += 1
+        let head = right(str(line), 2) + ". " + left(describe_tx(tx), 30)
+        match apply(book, accounts, tx, day) {
+            Ok(after) => {
+                out.println(head + " ok, balance " + money(after))
+            }
+            Err(r) => {
+                record(day.refused, 0)
+                out.println(head + " REFUSED: " + describe_refusal(r))
+            }
+        }
+    }
+    // Money that came from outside the bank or left it: deposits and interest in, withdrawals and fees out.
+    external += day.deposits.cents
+    external += day.interest.cents
+    external -= day.withdrawals.cents
+    external -= day.fees.cents
+    out.println("")
+    out.println(tally_line("deposits", day.deposits))
+    out.println(tally_line("withdrawals", day.withdrawals))
+    out.println(tally_line("transfers", day.transfers))
+    out.println(tally_line("fees", day.fees))
+    out.println(tally_line("interest", day.interest))
+    out.println(left("refused", 12) + right(str(day.refused.count), 3))
+    out.println("")
+    var overdrawn = 0
+    var moves = 0
+    for a in accounts {
+        moves += amount(book.moves, a.id)
+        let balance = amount(book.balances, a.id)
+        var flag = ""
+        if balance < 0 {
+            overdrawn += 1
+            flag = " overdrawn"
+            if balance < 0 - a.limit {
+                flag += ", past its limit"
+            }
+        }
+        let fees = money(amount(book.fees, a.id))
+        out.println(
+            "#" + str(a.id) + " " + left(a.owner, 8) + right(money(balance), 12) + "  fees " + fees + flag,
+        )
+    }
+    let closing = total(book, accounts)
+    out.println("")
+    out.println(
+        "opening " + money(opening) + ", closing " + money(closing) + ", moves " + str(moves),
+    )
+    var check = opening
+    check += external
+    if check == closing {
+        out.println("balanced: every cent is accounted for")
+    } else {
+        out.println("UNBALANCED by " + money(closing - check))
+    }
+    out.println(str(overdrawn) + " overdrawn")
+}

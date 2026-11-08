@@ -1,0 +1,36 @@
+// anchors: ref.grammar.stmt
+// RW 2.34: compound assignment — `+=`, `-=`, `*=`, `/=` and `%=` on a local, a record's field, a field of a record held
+// in another, and a list's index, each a statement that checks clean. `t op= e` means `t = t op e`, the place found
+// once, before `e` runs.
+module conf
+
+type Tally {
+  count: Int,
+  cents: Int,
+}
+
+type Day {
+  sales: ref Tally,
+}
+
+fn run_day(xs: ref List[Int], day: ref Day) -> Int {
+  var total = 0
+  var i = 0
+  while i < xs.len() {
+    total += xs[i]
+    xs[i] *= 2
+    day.sales.count += 1
+    day.sales.cents += xs[i]
+    i += 1
+  }
+  total -= 1
+  total /= 2
+  total %= 1000
+  total
+}
+
+fn label(n: Int) -> Str {
+  var s = "n="
+  s += str(n)
+  s
+}

@@ -1,0 +1,9 @@
+// anchors: ref.grammar.stmt
+// RW 2.34: a compound assignment whose target holds a call is refused — the target is read and written, so the call
+// would run twice. Bind the index first: `let i = xs.len() - 1`, then `xs[i] += 1`.
+module conf
+
+fn f(xs: ref List[Int]) -> Int {
+  xs[xs.len() - 1] += 1
+  0
+}

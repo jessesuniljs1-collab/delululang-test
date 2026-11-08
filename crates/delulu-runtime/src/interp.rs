@@ -344,6 +344,13 @@ pub struct Home {
 /// short scan beats two hash lookups, and most records are short.
 const SCAN_WIDTH: usize = 16;
 
+/// RW 2.34: an assignment's place, its target's sub-expressions already evaluated (`Interp::place`).
+enum Place<'t> {
+    Var(&'t Ident),
+    Field(Value, &'t Ident),
+    Index(Value, Value),
+}
+
 pub struct Interp {
     /// This interpreter's module, or — while a closure from another module runs — that closure's (see
     /// [`Home`]). Swapped only by `call_closure`, and restored before it returns.
@@ -1004,7 +1011,17 @@ impl Interp {
                 env.define(&name.name, v);
                 Ok(Value::Unit)
             }
-            Stmt::Assign { target, value, span, .. } => {
+            Stmt::Assign { target, value, span, compound } => {
+                // RW 2.34: a compound assignment fixes its place — the record or list it writes into, and the index —
+                // before its right side runs, so `ys[xs[0]] += bump(xs)` writes the slot it read even when `bump` moves
+                // `xs[0]`, and `ys[i] += f()` the slot `i` named even when `f` assigns `i`. A plain `=` runs its value
+                // first and then finds its place, as it always has.
+                if compound.is_some() {
+                    let place = self.place(target, env)?;
+                    let v = self.eval_expr(value, env)?;
+                    self.store(place, v, env, *span)?;
+                    return Ok(Value::Unit);
+                }
                 let v = self.eval_expr(value, env)?;
                 self.assign(target, v, env, *span)?;
                 Ok(Value::Unit)
@@ -1065,15 +1082,33 @@ impl Interp {
     }
 
     fn assign(&self, target: &LValue, value: Value, env: &Env, span: delulu_diag::Span) -> R<()> {
-        match target {
-            LValue::Var(name) => {
+        let place = self.place(target, env)?;
+        self.store(place, value, env, span)
+    }
+
+    /// Where an assignment writes, every sub-expression of its target evaluated: a name, a record and the field written,
+    /// or a list and the index (RW 2.34 — a compound assignment finds it before its right side runs).
+    fn place<'t>(&self, target: &'t LValue, env: &Env) -> R<Place<'t>> {
+        Ok(match target {
+            LValue::Var(name) => Place::Var(name),
+            LValue::Field(base, field) => Place::Field(self.eval_lvalue(base, env)?, field),
+            LValue::Index(base, idx) => {
+                let recv = self.eval_lvalue(base, env)?;
+                let i = self.eval_expr(idx, env)?;
+                Place::Index(recv, i)
+            }
+        })
+    }
+
+    fn store(&self, place: Place<'_>, value: Value, env: &Env, span: delulu_diag::Span) -> R<()> {
+        match place {
+            Place::Var(name) => {
                 if !env.assign(&name.name, value) {
                     return Err(Escape::Fault(Fault::at("DL0907", format!("assignment to unbound `{}`", name.name), span)));
                 }
                 Ok(())
             }
-            LValue::Field(base, field) => {
-                let recv = self.eval_lvalue(base, env)?;
+            Place::Field(recv, field) => {
                 if let Value::Record { name, fields } = recv {
                     let mut fields = fields.borrow_mut();
                     if let Some(i) = self.field_at(&name, &fields, &field.name) {
@@ -1083,9 +1118,7 @@ impl Interp {
                 }
                 Err(Escape::Fault(Fault::at("DL0907", "field assignment on non-record", span)))
             }
-            LValue::Index(base, idx) => {
-                let recv = self.eval_lvalue(base, env)?;
-                let i = self.eval_expr(idx, env)?;
+            Place::Index(recv, i) => {
                 if let (Value::List(l), Value::Int(n)) = (recv, i) {
                     let mut b = l.borrow_mut();
                     let n = n as usize;

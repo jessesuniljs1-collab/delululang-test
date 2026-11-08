@@ -1,4 +1,4 @@
-// engines: interp
+// engines: interp wasm
 // RW 2.34: an everyday utility — word, character and length statistics for a text, every running total kept with
 // compound assignment.
 module word_stats

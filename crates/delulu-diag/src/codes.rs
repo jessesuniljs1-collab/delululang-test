@@ -872,7 +872,10 @@ pub fn code_explain(code: &str) -> Option<String> {
              number. Write `a < b && b < c` and say what you meant.",
         "DL0207" => "The left of `=` must be something that can be assigned to: a `var` binding, a \
              field of one, or an index into one. A literal, a call result, or a `let` binding \
-             cannot be assigned — `let` is a binding, not a variable.",
+             cannot be assigned — `let` is a binding, not a variable. A compound assignment \
+             (`x += 1`, `-=`, `*=`, `/=`, `%=`) reads its target and then writes it, so its target \
+             may not hold a call, which would run twice: bind the index first (`let i = xs.len() - \
+             1`, then `xs[i] += 1`).",
         "DL0208" => "An ITEM was required at the top level of a module: `fn`, `type`, `effect`, \
              `actor`, `let` (a module constant), `foreign`, `test`, or `pub` in front of one. \
              Statements do not float at module level, because module-level mutable state is \

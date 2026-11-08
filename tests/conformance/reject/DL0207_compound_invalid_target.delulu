@@ -1,0 +1,8 @@
+// anchors: ref.grammar.stmt
+// RW 2.34: a compound assignment to something that is no place is refused as a plain assignment to it is.
+module conf
+
+fn f() -> Int {
+  1 += 2
+  3
+}

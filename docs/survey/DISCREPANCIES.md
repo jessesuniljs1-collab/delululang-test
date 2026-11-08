@@ -9,24 +9,30 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
-| warning | `prose-cites-missing-path` | 7 |
+| warning | `prose-cites-missing-path` | 6 |
+| warning | `stale-count` | 1 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
 | note | `dependency-never-used-in-source` | 3 |
 | note | `ruling-cited-without-its-stage` | 1 |
 
-## warning — `prose-cites-missing-path` (7)
+## warning — `prose-cites-missing-path` (6)
 
 **What to do:** correct the path, or say plainly that it no longer exists
 
-- `docs/CLOUD_SYNC_LOG.md:8712` — prose names `crates/delulu/tests/programs_cli.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delulu-p21-crossaccount.md:61` — prose names `tests/lib.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delulu-survey-map.md:64` — prose names `crates/.../ty.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delululang-project.md:309` — prose names `docs/playbooks/README+STAGE4..10_PLAYBOOK`, which is nowhere in the tree
 - `docs/assistant-memory/release-program-progress.md:105` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
+
+## warning — `stale-count` (1)
+
+**What to do:** update the number, or say plainly that it is a snapshot of a past moment
+
+- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 342
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

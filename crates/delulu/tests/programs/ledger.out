@@ -1,0 +1,32 @@
+ 1. deposit 200.00 to #3           ok, balance 200.00
+ 2. withdraw 120.00 from #2        ok, balance -77.00
+ 3. withdraw 50.00 from #2         REFUSED: #2 cannot cover 50.00
+ 4. transfer 150.50 #1 -> #3       ok, balance 1099.50
+ 5. transfer 1.00 #4 -> #4         REFUSED: #4 cannot pay itself
+ 6. fee 3.50 on #2                 ok, balance -80.50
+ 7. deposit 5.00 to #9             REFUSED: no account #9
+ 8. withdraw -0.10 from #3         REFUSED: an amount of -0.10 is not a payment
+ 9. interest 125bp on #1           ok, balance 1113.24
+10. interest 125bp on #2           ok, balance -80.50
+11. transfer 300.00 #3 -> #2       ok, balance 50.50
+12. transfer 250.00 #3 -> #2       REFUSED: #3 cannot cover 250.00
+13. fee 30.00 on #3                ok, balance 20.50
+14. interest 250bp on #4           ok, balance 1012.34
+15. withdraw 1030.00 from #4       ok, balance -17.66
+16. deposit 0.01 to #2             ok, balance 219.51
+
+deposits      2     200.01
+withdrawals   2    1150.00
+transfers     2     450.50
+fees          2      33.50
+interest      3      38.43
+refused       5
+
+#1 ada          1113.24  fees 0.00
+#2 grace         219.51  fees 3.50
+#3 linus          20.50  fees 30.00
+#4 barbara       -17.66  fees 0.00 overdrawn
+
+opening 2280.65, closing 1335.59, moves 8
+balanced: every cent is accounted for
+1 overdrawn

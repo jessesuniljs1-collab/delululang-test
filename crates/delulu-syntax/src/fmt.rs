@@ -1467,7 +1467,11 @@ fn f() -> Int { 1 }
             match r.below(6) {
                 0 => out.push_str(&format!("{indent}let x{} = {}\n", i, gen_expr(r, depth))),
                 1 => out.push_str(&format!("{indent}var x{} = {}\n", i, gen_expr(r, depth))),
-                2 => out.push_str(&format!("{indent}x{} = {}\n", r.below(4), gen_expr(r, depth))),
+                // RW 2.34: an assignment is plain or compound, so the laws hold over `x op= e` too.
+                2 => {
+                    let op = ["=", "+=", "-=", "*=", "/=", "%="][r.below(6) as usize];
+                    out.push_str(&format!("{indent}x{} {op} {}\n", r.below(4), gen_expr(r, depth)))
+                }
                 3 if depth > 0 => {
                     out.push_str(&format!("{indent}while {} {{\n", gen_expr(r, 1)));
                     gen_stmts(r, depth - 1, out, &format!("{indent}    "));
@@ -1540,6 +1544,34 @@ fn f() -> Int { 1 }
         // test beside it too little of the 40-minute wall to finish. See the note on `budget` in
         // `laws_hold_over_the_repository_corpus` for the arithmetic of the pair.
         run_fuzz_gate(if cfg!(miri) { 8 } else { 2_000 });
+    }
+
+    /// RW 2.34: a compound assignment prints as written — `op=` with one space each side, its right side alone (never the
+    /// parser's `target op rhs`) — on a local, a field and an index, and the laws hold over it.
+    #[test]
+    fn a_compound_assignment_prints_as_written() {
+        let src = "module m\nfn f(p: ref P, xs: ref List[Int]) -> Int {\n    var x = 1\n    x+=2\n    x -= 3 * 4\n    x  *=  x + 1\n    x /= 2\n    x %= 7\n    p.n += x\n    xs[x] -= 1\n    x\n}\n";
+        let out = laws(src);
+        for line in [
+            "    x += 2\n",
+            "    x -= 3 * 4\n",
+            "    x *= x + 1\n",
+            "    x /= 2\n",
+            "    x %= 7\n",
+            "    p.n += x\n",
+            "    xs[x] -= 1\n",
+        ] {
+            assert!(out.contains(line), "expected {line:?} in:\n{out}");
+        }
+        assert!(!out.contains("x = x"), "the parser's rewrite is never printed:\n{out}");
+        // Flat, inside an expression (`block_flat`): a lambda's body on one line keeps its statements as written.
+        let flat = laws(
+            "module m\nfn f(xs: List[Int]) -> List[Int] {\n    xs.map(fn(n: Int) -> Int { var m = n; m += 1; m *= 2; m })\n}\n",
+        );
+        assert!(flat.contains("{ var m = n; m += 1; m *= 2; m }"), "{flat}");
+        // A plain assignment of the same value stays plain: only what was written short prints short.
+        let plain = laws("module m\nfn f() -> Int {\n    var x = 1\n    x = x + 2\n    x\n}\n");
+        assert!(plain.contains("    x = x + 2\n") && !plain.contains("+="), "{plain}");
     }
 
     /// Criterion 4's full ≥100k gate. `cargo test -p delulu-syntax --release -- --ignored
