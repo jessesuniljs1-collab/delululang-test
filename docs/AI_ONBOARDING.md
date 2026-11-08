@@ -379,7 +379,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     except P1-6's answer bound (RW 6.62) and the rest of P1-7 (RW 6.60, 6.68);
   - **NOW, at the owner's word (2026-11-06, D-V2-220): the language basics first.** *"Build basics first for DeluluLang
     … After each build, write and run programs and softwares of varying complexities and test and verify and fix it."*
-    - The order: compound assignment (2.34) → math and the checked forms (2.38) → ranges (2.36) → strings (2.37) →
+    - The order: ~~compound assignment (2.34)~~ (done 2026-11-08 by on-demand routine run 21, D-V2-221; its programs
+      found RW 2.45, 2.46 and 3.32, and RW 3.31, fixed) → RW 2.46 → math and the checked forms (2.38) → ranges (2.36) →
+      strings (2.37) →
       bitwise (2.35) → methods on a program's own types (2.33) → tuples, sets, keyed sorting, comprehensions (2.39) →
       argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.
     - Each is built as surface syntax and prelude over the core, so no RFC period applies; one that would change

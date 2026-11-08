@@ -18,6 +18,16 @@ at `fcd2c2f`, unmodified — before the Skill gained its "`main` takes the `Root
 program needs" paragraphs, which were written FROM this result's findings. A later run with the
 current Skill measures whether they helped.
 
+**A verdict is the current toolchain's.** `score` checks and runs each program with the toolchain it is
+given, so a language change can move a verdict, and the record is then re-scored (the replay test
+requires it). **Re-scored 2026-11-08 (D-V2-222, RW 2.46):** a `let` binding had been reassignable,
+though DL0207's explanation always said it was not, and the checker now refuses that. The final
+programs of `c1__t1` and `c2__t1` reassign a `let`, so they no longer check. As first published, from
+the same evidence: c1 completed 50% (1 of 2) and c2 100% (2 of 2), with `c1__t1` and `c2__t1`
+completed, their authority, sandbox and security measures all 0. Re-scored: c1 0% and c2 50%, those
+two runs `not measured (does not check)`. Nothing else moved. Compile-first-try, repair iterations
+and tokens are as published. The Skill now says that `let` binds once.
+
 ## The five knowledge conditions
 
 | Id | Condition | What the model is given | Toolchain commands it may run |

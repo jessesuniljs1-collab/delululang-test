@@ -996,4 +996,25 @@ mod tests {
         assert!(k.contains(&TokenKind::Arrow));
         assert!(k.contains(&TokenKind::FatArrow));
     }
+
+    /// RW 2.34: an operator followed at once by `=` is one compound-assignment token. With a space between them, they stay
+    /// two (a parse error later, as before); `->`, `==`, `=-` and a comment that starts `//=` are unchanged.
+    #[test]
+    fn compound_assignment_lexes_as_one_token() {
+        for (src, op) in [
+            ("a+=b", TokenKind::PlusEq),
+            ("a-=b", TokenKind::MinusEq),
+            ("a*=b", TokenKind::StarEq),
+            ("a/=b", TokenKind::SlashEq),
+            ("a%=b", TokenKind::PercentEq),
+        ] {
+            assert_eq!(kinds(src)[..3], [ident("a"), op, ident("b")], "{src}");
+        }
+        assert_eq!(kinds("a + = b")[..4], [ident("a"), TokenKind::Plus, TokenKind::Eq, ident("b")]);
+        assert_eq!(kinds("a-=-b")[..4], [ident("a"), TokenKind::MinusEq, TokenKind::Minus, ident("b")]);
+        assert_eq!(kinds("a=-b")[..4], [ident("a"), TokenKind::Eq, TokenKind::Minus, ident("b")]);
+        assert_eq!(kinds("a->b")[..3], [ident("a"), TokenKind::Arrow, ident("b")]);
+        assert_eq!(kinds("a==b")[..3], [ident("a"), TokenKind::EqEq, ident("b")]);
+        assert_eq!(kinds("a //= b\nc")[..3], [ident("a"), TokenKind::Term, ident("c")], "`//=` begins a comment");
+    }
 }

@@ -209,6 +209,10 @@ is the run's first finding.
 **1. Orient.** Read `HANDOFF.md` §0, the newest entries of `docs/CLOUD_SYNC_LOG.md` (their "Open / next"
 lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE_STATUS.md`.
 `git log --oneline -15`. If `claude/cloud-dev` exists and is ahead of `master`, work from it (see above).
+**A push run red only in a download step is GitHub's, not the commit's** (on-demand run 21): `formal`'s *Fetch TLA+
+tools* and `microvm`'s *The pinned Firecracker* each read HTTP 504 five times from GitHub's release downloads while every
+test job was green. Read the step's log, re-run the failed jobs (`actions_run_trigger` `rerun_failed_jobs`), read them,
+and record both reads.
 **Then every branch (run 10):** a run can end after pushing its harness branch and before `master` moves — run 9's
 `f446bfa` sat on `claude/stoic-ptolemy-uyw9g4` for four days with no record, its OpenShell reading red. The clone is
 shallow, so first `git fetch --unshallow origin master` (else every branch looks hundreds of commits ahead); then, for each
@@ -307,7 +311,9 @@ another OS, and then takes about seven minutes itself (run 5).
      3. **the language basics, FIRST from 2026-11-06 at the owner's word** (D-V2-220: *"Build basics first for
         DeluluLang … After each build, write and run programs and softwares of varying complexities and test and verify
         and fix it"*):
-        - in this order: compound assignment (RW 2.34); math and the checked forms (2.38); ranges (2.36); strings
+        - in this order: ~~compound assignment (RW 2.34)~~ — done (on-demand routine run 21, D-V2-221); RW 2.46 (a `let`
+          reassigned, which DL0207's explanation forbids — found by 2.34's programs); math and the checked forms (2.38);
+          ranges (2.36); strings
           (2.37); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
           comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
           and RW 3.24;
@@ -553,6 +559,12 @@ it with its slice once the slice is read green, then dispatch it at `master` or 
 judge (a daemon, a host), holds a window open deterministically, where load only makes it likelier. Run 7's macOS red did
 not reproduce under load (6 of 6), and the daemon stopped for three periods was red 3 of 3 (DEADMAN-DEAF-1). Make the
 witness print what each party said (its `ended` line, `broker.log`) before sampling anything.
+**Push a witness branch without `-u`** (on-demand run 21): `git push -u origin HEAD:claude/…` from `master` re-points
+`master`'s upstream at the branch, and every later `git status` counts against it. Write `git push origin
+HEAD:claude/…`, or set it back with `git branch --set-upstream-to=origin/master master`. **A basic's programs probe the
+basic** (D-V2-220's step; run 21): run each program and each probe on both engines, check every answer by hand or
+against Python before saving its `.out`, and give a rewritten form a right side that changes what its copied side
+reads; that is how RW 2.34's split place was found.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
 — the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and

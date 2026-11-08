@@ -1,0 +1,17 @@
+// engines: interp wasm
+// RW 2.34: compound assignment, the smallest program — the sum 1..100 and a countdown.
+module counter
+
+fn main(root: Root) ! {Write} {
+    var total = 0
+    var n = 1
+    while n <= 100 {
+        total += n
+        n += 1
+    }
+    var left = 10
+    while left > 0 {
+        left -= 3
+    }
+    root.console().println(str(total) + " " + str(left))
+}

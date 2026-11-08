@@ -2505,3 +2505,160 @@ mod unread_binding_tests {
         }
     }
 }
+
+// ----- only a `var` binding is assigned (RW 2.46, D-V2-222) ----------------------------------------------------------
+
+#[cfg(test)]
+mod let_binding_tests {
+    use super::check_source;
+
+    const HEAD: &str = "module m\ntype P { x: Int }\n";
+
+    /// Each error's code and message.
+    fn errors(src: &str) -> Vec<(String, String)> {
+        check_source(0, src)
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error())
+            .map(|d| (d.code.to_string(), d.message.clone()))
+            .collect()
+    }
+
+    /// **RW 2.46.** The parser recorded `mutable` on every binding and no pass read it, so `let x = 1` then `x = 2`
+    /// checked clean and printed `2`, while DL0207's explanation said a `let` cannot be assigned. Each binding that is
+    /// not a `var` is refused by name, plainly and compound, and says what bound it.
+    #[test]
+    fn an_assignment_to_a_binding_that_is_not_a_var_is_dl0207_naming_what_bound_it() {
+        for (what, body, name, binder) in [
+            ("a `let`", "fn f() -> Int {\nlet x = 1\nx = 2\nx\n}\n", "x", "a `let` binding"),
+            ("a `let`, compound", "fn f() -> Int {\nlet x = 1\nx += 2\nx\n}\n", "x", "a `let` binding"),
+            ("a `let` of a string", "fn f() -> Str {\nlet s = \"a\"\ns += \"b\"\ns\n}\n", "s", "a `let` binding"),
+            ("a parameter", "fn f(n: Int) -> Int {\nn = n + 1\nn\n}\n", "n", "a parameter"),
+            ("a parameter, compound", "fn f(n: Int) -> Int {\nn -= 1\nn\n}\n", "n", "a parameter"),
+            ("a closure's parameter", "fn f() -> Int {\nlet g = fn(k: Int) -> Int {\nk = 2\nk\n}\ng(1)\n}\n", "k", "a parameter"),
+            ("a loop's variable", "fn f() -> Int {\nfor v in [1, 2] {\nv += 1\n}\n0\n}\n", "v", "a `for` loop's variable"),
+            (
+                "a pattern's binding",
+                "fn f() -> Int {\nmatch Some(3) {\nSome(k) => {\nk = 4\nk\n}\nNone => 0\n}\n}\n",
+                "k",
+                "a pattern's binding",
+            ),
+            (
+                "an inner `let` shadowing an outer `var`",
+                "fn f() -> Int {\nvar z = 0\nif z == 0 {\nlet z = 7\nz = 8\n}\nz\n}\n",
+                "z",
+                "a `let` binding",
+            ),
+        ] {
+            let found = errors(&format!("{HEAD}{body}"));
+            assert_eq!(
+                found,
+                vec![("DL0207".to_string(), format!("cannot assign to `{name}`: it is {binder}"))],
+                "{what}: one DL0207, naming the binding"
+            );
+        }
+    }
+
+    /// The twins: what assigns today and must go on checking clean. A `var`, plainly and compound; a `var` shadowing a
+    /// `let`; a field and an index written through a `let` (the reference capability decides that, not the binding);
+    /// a closure assigning a `var` it captured; an outer `var` assigned after an inner `let` of its name went out of
+    /// scope.
+    #[test]
+    fn a_var_and_a_place_reached_through_any_binding_are_assigned_as_before() {
+        for (what, body) in [
+            ("a `var`", "fn f() -> Int {\nvar x = 1\nx = 2\nx += 3\nx\n}\n"),
+            ("a `var` shadowing a `let`", "fn f() -> Int {\nlet y = 1\nvar y = y\ny *= 5\ny\n}\n"),
+            ("a field through a `let`", "fn f() -> Int {\nlet p = P { x: 1 }\np.x = 2\np.x += 3\np.x\n}\n"),
+            ("an index through a `let`", "fn f() -> Int {\nlet xs = [1, 2]\nxs[0] = 5\nxs[1] += 1\nxs[0]\n}\n"),
+            ("an index through a parameter", "fn f(xs: ref List[Int]) -> Int {\nxs[0] = 5\nxs[0]\n}\n"),
+            ("a captured `var`", "fn f() -> Int {\nvar t = 0\nlet add = fn(k: Int) -> Unit { t = t + k }\nadd(4)\nt\n}\n"),
+            ("an outer `var` after an inner `let`", "fn f() -> Int {\nvar z = 0\nif z == 0 {\nlet z = 7\n}\nz = 4\nz\n}\n"),
+            ("a `var` inside a loop", "fn f() -> Int {\nvar s = 0\nfor v in [1, 2] {\nvar w = v\nw *= 2\ns += w\n}\ns\n}\n"),
+        ] {
+            let found = errors(&format!("{HEAD}{body}"));
+            assert!(found.is_empty(), "{what}: checks clean, got {found:?}");
+        }
+    }
+
+    /// The repair `let-to-var` rewrites the keyword and nothing else, exact and widening nothing; applied, the program
+    /// checks clean. A parameter, a loop's variable and a pattern's binding are offered no edit: there is no keyword
+    /// to change, and which name to bind is the writer's.
+    #[test]
+    fn let_to_var_rewrites_the_keyword_and_the_program_then_checks() {
+        let src = format!("{HEAD}fn f(xs: List[Int]) -> Int {{\n  let total = 0\n  for x in xs {{\n    total += x\n  }}\n  total\n}}\n");
+        let c = check_source(0, &src);
+        let d = c.diagnostics.iter().find(|d| d.code == "DL0207").expect("DL0207");
+        assert_eq!(d.repairs.len(), 1, "one repair");
+        let r = &d.repairs[0];
+        assert_eq!(r.id, "let-to-var");
+        assert!(!r.requires_human && !r.authority_widening, "exact, widening nothing");
+        assert_eq!(r.edits.len(), 1);
+        let e = &r.edits[0];
+        assert_eq!(&src[e.start_byte as usize..e.end_byte as usize], "let", "the edit covers the keyword alone");
+        assert_eq!(e.insert, "var");
+        let mut fixed = src.clone();
+        fixed.replace_range(e.start_byte as usize..e.end_byte as usize, &e.insert);
+        assert!(fixed.contains("  var total = 0\n"));
+        assert!(errors(&fixed).is_empty(), "the repaired program checks clean: {:?}", errors(&fixed));
+
+        for body in [
+            "fn f(n: Int) -> Int {\nn = 2\nn\n}\n",
+            "fn f() -> Int {\nfor v in [1] {\nv = 2\n}\n0\n}\n",
+            "fn f() -> Int {\nmatch Some(3) {\nSome(k) => {\nk = 4\nk\n}\nNone => 0\n}\n}\n",
+        ] {
+            let c = check_source(0, &format!("{HEAD}{body}"));
+            let d = c.diagnostics.iter().find(|d| d.code == "DL0207").expect("DL0207");
+            assert!(d.repairs.is_empty(), "no edit is offered: {body}");
+        }
+    }
+}
+
+// ----- a pattern's binding of plain data is `val` (RW 2.47) ---------------------------------------------------------
+
+#[cfg(test)]
+mod pattern_binding_rcap_tests {
+    use super::check_source;
+
+    const HEAD: &str = "module m\ntype P { x: Int, s: Str }\ntype Two = Pair(Int, Str) | Nil\n";
+
+    fn errors(src: &str) -> Vec<String> {
+        check_source(0, src).diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
+    }
+
+    /// **RW 2.47.** The reference-capability pass gave every pattern-bound name no capability, so storing one into a
+    /// record's field was DL1603 *"cannot store an undetermined capability where `val` is required"*, even for an
+    /// `Int` out of `Some`. A value with no write surface at all is `val` however it was obtained: from `Some`, `Ok`,
+    /// `Err`, a program's own variant, a nested pattern.
+    #[test]
+    fn a_pattern_bound_int_or_str_is_stored_into_a_field() {
+        for (what, body) in [
+            ("`Some` of a literal", "match Some(3) {\nSome(v) => { p.x = v }\nNone => {}\n}"),
+            ("`Some` from parse_int", "match parse_int(\"4\") {\nSome(v) => { p.x = v }\nNone => {}\n}"),
+            ("through a `let`", "match Some(3) {\nSome(v) => {\nlet w = v\np.x = w\n}\nNone => {}\n}"),
+            (
+                "`Ok` and `Err`",
+                "let r: Result[Int, Str] = Err(\"e\")\nmatch r {\nOk(v) => { p.x = v }\nErr(e) => { p.s = e }\n}",
+            ),
+            ("a program's own variant", "match Pair(1, \"z\") {\nPair(a, b) => {\np.x = a\np.s = b\n}\nNil => {}\n}"),
+            ("nested", "match Some(Some(2)) {\nSome(Some(v)) => { p.x = v }\n_ => {}\n}"),
+        ] {
+            let src = format!("{HEAD}fn f() -> Int {{\nlet p = P {{ x: 0, s: \"\" }}\n{body}\np.x\n}}\n");
+            assert!(errors(&src).is_empty(), "{what}: checks clean, got {:?}", errors(&src));
+        }
+    }
+
+    /// The twins that must stay refused: a record or a list taken out of a pattern is not given a capability (its
+    /// type's default may be `val` while the value is a `ref` another name writes; RW 2.45 decides that), so writing
+    /// through it still fails closed.
+    #[test]
+    fn a_pattern_bound_record_or_list_stays_undetermined() {
+        for (what, body) in [
+            ("a record from `Some`", "let q = P { x: 0, s: \"\" }\nmatch Some(q) {\nSome(w) => { w.x = 5 }\nNone => {}\n}"),
+            ("a list from `Some`", "match Some([1]) {\nSome(w) => { w.push(2) }\nNone => {}\n}"),
+        ] {
+            let src = format!("{HEAD}fn f() -> Int {{\n{body}\n0\n}}\n");
+            let found = errors(&src);
+            assert!(found.iter().any(|c| c == "DL1604"), "{what}: still refused (DL1604), got {found:?}");
+        }
+    }
+}

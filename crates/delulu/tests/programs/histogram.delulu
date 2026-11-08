@@ -1,0 +1,68 @@
+// engines: interp
+// RW 2.34: a utility that writes into a list by index — the letters of a text counted into 26 slots with
+// `counts[i] += 1`, then a bar chart of the five most frequent. The interpreter only: an assignment to a list's index
+// is DL1201 on WASM (RW 3.32).
+module histogram
+
+fn letter_index(c: Str) -> Int {
+    let letters = "abcdefghijklmnopqrstuvwxyz".chars()
+    var i = 0
+    for l in letters {
+        if l == c {
+            return i
+        }
+        i += 1
+    }
+    -1
+}
+
+fn bar(n: Int) -> Str {
+    var out = ""
+    var k = 0
+    while k < n {
+        out += "#"
+        k += 1
+    }
+    out
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let text = "It was the best of times, it was the worst of times, it was the age of wisdom"
+    var counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    var letters = 0
+    var other = 0
+    for c in text.to_lower().chars() {
+        let i = letter_index(c)
+        if i >= 0 {
+            counts[i] += 1
+            letters += 1
+        } else {
+            other += 1
+        }
+    }
+    out.println(str(letters) + " letters, " + str(other) + " other characters")
+    let alphabet = "abcdefghijklmnopqrstuvwxyz".chars()
+    // The five most frequent, ties to the earlier letter: each round takes the largest count left and zeroes it.
+    var round = 0
+    while round < 5 {
+        var best = 0
+        var at = 0
+        var j = 0
+        while j < 26 {
+            if counts[j] > best {
+                best = counts[j]
+                at = j
+            }
+            j += 1
+        }
+        out.println(alphabet[at] + " " + bar(best) + " " + str(best))
+        counts[at] -= best
+        round += 1
+    }
+    var left = 0
+    for n in counts {
+        left += n
+    }
+    out.println(str(left) + " letters in the rest")
+}

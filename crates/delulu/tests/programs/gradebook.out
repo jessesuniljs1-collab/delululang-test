@@ -1,0 +1,13 @@
+ana 3 276 92 A best 97 worst 88
+ben 4 287 72 C best 80 worst 65
+chen 2 116 58 F best 61 worst 55
+dev 4 397 99 A best 100 worst 98
+eli 2 162 81 B best 83 worst 79
+A: 2 B: 1 C: 1 D: 0 F: 1
+A **
+B *
+C *
+D 
+F *
+bad entries: 1
+class mean: 83

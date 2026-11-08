@@ -563,6 +563,8 @@ struct FnCtx {
     /// Per scope, a name's newest binding when that binding is a `let` or `var`: its place in `lets`. A parameter or
     /// pattern binding of the same name, bound later, takes the name back out.
     let_index: Vec<HashMap<String, usize>>,
+    /// RW 2.46 (D-V2-222): per scope, what bound each local name, so `name = v` is refused unless a `var` bound it.
+    binders: Vec<HashMap<String, Binder>>,
     /// When each name was last met in this body, read, written or bound (D-V2-207): DL0414's repair renames `x` to
     /// `_x` only where no `_x` is met inside the binding's scope.
     names: NameClock,
@@ -595,6 +597,31 @@ impl NameClock {
     }
 }
 
+/// RW 2.46 (D-V2-222): what bound a local name. Only a `var` binding can be assigned (`x = v`, `x += v`); a field or an
+/// index reached through any binding is written as the reference capability allows (DL1604), not by the binding's kind.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Binder {
+    Var,
+    /// `let`, with its statement's span: the statement starts at the keyword, which the repair rewrites.
+    Let(Span),
+    Param,
+    Loop,
+    Pattern,
+}
+
+impl Binder {
+    /// What DL0207 calls the binding, and the label that says how to make the write possible.
+    fn refusal(self, name: &str) -> (&'static str, String) {
+        match self {
+            Binder::Var => unreachable!("a `var` binding is assignable"),
+            Binder::Let(_) => ("a `let` binding", format!("declare it `var {name}` to reassign it")),
+            Binder::Param => ("a parameter", format!("bind a `var` from it (`var {name}2 = {name}`) and assign that")),
+            Binder::Loop => ("a `for` loop's variable", format!("bind a `var` from it (`var {name}2 = {name}`) and assign that")),
+            Binder::Pattern => ("a pattern's binding", format!("bind a `var` from it (`var {name}2 = {name}`) and assign that")),
+        }
+    }
+}
+
 /// One `let` or `var` binding (DL0414): its name, where it is written, whether a read has reached it, and each
 /// assignment to it (`x = v`), which the repair renames with it.
 struct LetUse {
@@ -616,23 +643,28 @@ impl FnCtx {
         self.sync_lets();
         self.locals.pop();
         self.let_index.pop();
+        self.binders.pop();
         self.lets.pop().unwrap_or_default()
     }
     fn sync_lets(&mut self) {
         self.lets.resize_with(self.locals.len(), Vec::new);
         self.let_index.resize_with(self.locals.len(), HashMap::new);
+        self.binders.resize_with(self.locals.len(), HashMap::new);
     }
-    fn bind(&mut self, name: &str, ty: Type) {
+    fn bind(&mut self, name: &str, ty: Type, binder: Binder) {
         self.names.meet(name);
         self.locals.last_mut().unwrap().insert(name.to_string(), ty);
         self.sync_lets();
         if let Some(index) = self.let_index.last_mut() {
             index.remove(name);
         }
+        if let Some(binders) = self.binders.last_mut() {
+            binders.insert(name.to_string(), binder);
+        }
     }
     /// A `let` or `var` binding: bound as any other, and remembered so DL0414 can name it if nothing reads it.
-    fn bind_let(&mut self, name: &str, ty: Type, span: Span) {
-        self.bind(name, ty);
+    fn bind_let(&mut self, name: &str, ty: Type, span: Span, binder: Binder) {
+        self.bind(name, ty, binder);
         let (Some(lets), Some(index)) = (self.lets.last_mut(), self.let_index.last_mut()) else { return };
         index.insert(name.to_string(), lets.len());
         lets.push(LetUse {
@@ -672,10 +704,13 @@ impl FnCtx {
         }
         None
     }
-    /// The type of `name` for an assignment to it, which writes and does not read: the binding is not marked.
-    fn lookup_to_assign(&self, name: &str) -> Option<Type> {
+    /// The type of `name` for an assignment to it, which writes and does not read: the binding is not marked. With it,
+    /// what bound the name (RW 2.46): only a `var` binding may be assigned.
+    fn lookup_to_assign(&self, name: &str) -> Option<(Type, Binder)> {
         self.names.meet(name);
-        self.locals.iter().rev().find_map(|scope| scope.get(name).cloned())
+        let (i, ty) = self.locals.iter().enumerate().rev().find_map(|(i, scope)| scope.get(name).map(|t| (i, t.clone())))?;
+        let binder = self.binders.get(i).and_then(|b| b.get(name)).copied().unwrap_or(Binder::Param);
+        Some((ty, binder))
     }
 }
 
@@ -726,12 +761,13 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            binders: Vec::new(),
             names: NameClock::default(),
         };
         // Bind parameters, noting capability kinds they carry.
         for (p, ty) in f.params.iter().zip(&param_types) {
             self.note_caps_in(ty, &mut ctx.facts);
-            ctx.bind(&p.name.name, ty.clone());
+            ctx.bind(&p.name.name, ty.clone(), Binder::Param);
         }
 
         // Check the body; its value type must match the return type.
@@ -855,12 +891,13 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            binders: Vec::new(),
             names: NameClock::default(),
         };
-        ctx.bind("self", self_ty.clone());
+        ctx.bind("self", self_ty.clone(), Binder::Param);
         for (p, ty) in params.iter().zip(&param_types) {
             self.note_caps_in(ty, &mut ctx.facts);
-            ctx.bind(&p.name.name, ty.clone());
+            ctx.bind(&p.name.name, ty.clone(), Binder::Param);
         }
         let (body_ty, body_row) = self.check_block(body, &mut ctx);
         if ret.is_some() {
@@ -1287,6 +1324,7 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            binders: Vec::new(),
             names: NameClock::default(),
         };
         let (ty, row) = self.check_expr(&c.value, &mut ctx);
@@ -1339,11 +1377,12 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
             lets: Vec::new(),
             let_index: Vec::new(),
+            binders: Vec::new(),
             names: NameClock::default(),
         };
         // The runner (8g) scopes this Root by the test manifest; the TYPE is just Root.
         self.note_caps_in(&Type::Root, &mut ctx.facts);
-        ctx.bind("test_root", Type::Root);
+        ctx.bind("test_root", Type::Root, Binder::Param);
 
         let (body_ty, body_row) = self.check_block(&t.body, &mut ctx);
         self.expect_type(&Type::Unit, &body_ty, t.body.span, "a test body must produce `Unit`");
@@ -1517,19 +1556,20 @@ impl<'a> Checker<'a> {
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = i + 1 == n;
             match stmt {
-                Stmt::Let { name, ty, value, .. } => {
+                Stmt::Let { name, ty, value, mutable, span } => {
                     let (vt, vr) = self.check_expr(value, ctx);
                     acc.add_row_acc(&vr);
+                    let binder = if *mutable { Binder::Var } else { Binder::Let(*span) };
                     if let Some(ann) = ty {
                         let at = self.lower_type(ann, &ctx.genv, &mut ctx.facts);
                         self.expect_type(&at, &vt, value.span(), "let binding type mismatch");
-                        ctx.bind_let(&name.name, at, name.span);
+                        ctx.bind_let(&name.name, at, name.span, binder);
                     } else {
-                        ctx.bind_let(&name.name, vt, name.span);
+                        ctx.bind_let(&name.name, vt, name.span, binder);
                     }
                     value_ty = Type::Unit;
                 }
-                Stmt::Assign { target, value, span } => {
+                Stmt::Assign { target, value, span, .. } => {
                     let (tt, tr) = self.check_lvalue(target, ctx);
                     acc.add_row_acc(&tr);
                     let (vt, vr) = self.check_expr(value, ctx);
@@ -1570,7 +1610,7 @@ impl<'a> Checker<'a> {
                     // Bind the loop variable in a scope of its own so it does not leak past the loop,
                     // then check the body one loop level deeper so `break`/`continue` are legal in it.
                     ctx.push_scope();
-                    ctx.bind(&var.name, elem);
+                    ctx.bind(&var.name, elem, Binder::Loop);
                     ctx.loop_depth += 1;
                     let (_, br) = self.check_block(body, ctx);
                     ctx.loop_depth -= 1;
@@ -1667,10 +1707,39 @@ impl<'a> Checker<'a> {
     /// `xs[i] = v` is read: the binding is how the write reaches a record or a list another name may share.
     fn check_lvalue_at(&mut self, lv: &LValue, ctx: &mut FnCtx, whole: bool) -> (Type, RowAcc) {
         match lv {
-            LValue::Var(name) => match if whole { ctx.lookup_to_assign(&name.name) } else { ctx.lookup(&name.name) } {
-                Some(t) => {
+            LValue::Var(name) => match if whole {
+                ctx.lookup_to_assign(&name.name)
+            } else {
+                ctx.lookup(&name.name).map(|t| (t, Binder::Var))
+            } {
+                Some((t, binder)) => {
                     if whole {
                         ctx.note_write(&name.name, name.span);
+                        // RW 2.46 (D-V2-222): only a `var` binding is a variable. DL0207's explanation always said so;
+                        // until this the checker read `mutable` nowhere, and `let x = 1; x = 2` ran.
+                        if binder != Binder::Var {
+                            let (what, help) = binder.refusal(&name.name);
+                            let mut d = Diagnostic::error("DL0207", format!("cannot assign to `{}`: it is {what}", name.name))
+                                .with_span(name.span, help);
+                            // A `let` becomes a `var` by its keyword alone, and that changes nothing else the program
+                            // means: `mutable` is read only here. The program then runs as it did before this refusal.
+                            if let Binder::Let(stmt) = binder {
+                                d = d.with_secondary_span(stmt, "bound by `let` here").with_repair(Repair {
+                                    id: "let-to-var",
+                                    confidence: Confidence::Exact,
+                                    authority_widening: false,
+                                    requires_human: false,
+                                    edits: vec![Edit {
+                                        file: stmt.file,
+                                        start_byte: stmt.start,
+                                        end_byte: stmt.start + 3,
+                                        insert: "var".to_string(),
+                                    }],
+                                    reason: None,
+                                });
+                            }
+                            self.diags.push(d);
+                        }
                     }
                     (t, RowAcc::default())
                 }
@@ -3480,7 +3549,7 @@ impl<'a> Checker<'a> {
                     self.binding_spelled_like_a_constructor(name, scrut, arity);
                 }
                 *has_wildcard = true;
-                ctx.bind(&name.name, self.cx.apply_type(scrut));
+                ctx.bind(&name.name, self.cx.apply_type(scrut), Binder::Pattern);
             }
             Pattern::Lit(kind, s) => {
                 let lt = self.lit_type(kind);
@@ -3860,7 +3929,7 @@ impl<'a> Checker<'a> {
         // A lambda body is checked in the enclosing function's local scope plus its params.
         ctx.push_scope();
         for (p, ty) in params.iter().zip(&param_types) {
-            ctx.bind(&p.name.name, ty.clone());
+            ctx.bind(&p.name.name, ty.clone(), Binder::Param);
         }
         let (body_ty, body_row) = self.check_block(body, ctx);
         ctx.pop_scope();

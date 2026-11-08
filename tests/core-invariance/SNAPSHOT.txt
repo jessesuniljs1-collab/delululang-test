@@ -3174,6 +3174,75 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/30_map_p3.delulu`
 
+===== tests/conformance/accept/compound_assignment.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/compound_assignment.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/compound_assignment.delulu checked clean
+
+===== tests/conformance/accept/compound_assignment.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "label",
+      "run_day"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/compound_assignment.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     label, run_day
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/compound_assignment.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/compound_assignment.delulu`
+
 ===== tests/conformance/accept/for_loop_iteration.delulu :: check --json =====
 exit 0
 --- stdout ---
@@ -4470,6 +4539,110 @@ error[DL0401]: comparison expects Int or Float: expected `Int`, found `Bool`
   explain: delulu explain E-DL0401
 
 2 error(s)
+
+===== tests/conformance/reject/DL0207_compound_invalid_target.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0207",
+      "explanation_id": "E-DL0207",
+      "message": "invalid assignment target",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 168,
+            "col": 4,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0207_compound_invalid_target.delulu",
+          "label": "cannot assign to this expression",
+          "start": {
+            "byte": 167,
+            "col": 3,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0207_compound_invalid_target.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0207]: invalid assignment target
+  --> tests/conformance/reject/DL0207_compound_invalid_target.delulu:6:3
+   |
+ 6 |   1 += 2
+   |   ^ cannot assign to this expression
+  explain: delulu explain E-DL0207
+
+1 error(s)
+
+===== tests/conformance/reject/DL0207_compound_target_holds_a_call.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0207",
+      "explanation_id": "E-DL0207",
+      "message": "a compound assignment (`+=`) reads its target and then writes it, so a call inside the target would run twice — bind the index first (`let i = …`), then assign to `xs[i]`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 297,
+            "col": 19,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0207_compound_target_holds_a_call.delulu",
+          "label": "this target holds a call",
+          "start": {
+            "byte": 281,
+            "col": 3,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0207_compound_target_holds_a_call.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0207]: a compound assignment (`+=`) reads its target and then writes it, so a call inside the target would run twice — bind the index first (`let i = …`), then assign to `xs[i]`
+  --> tests/conformance/reject/DL0207_compound_target_holds_a_call.delulu:7:3
+   |
+ 7 |   xs[xs.len() - 1] += 1
+   |   ^^^^^^^^^^^^^^^^ this target holds a call
+  explain: delulu explain E-DL0207
+
+1 error(s)
 
 ===== tests/conformance/reject/DL0207_invalid_assignment_target.delulu :: check --json =====
 exit 1

@@ -1,0 +1,28 @@
+orders
+  1  receive A1 40
+  2  receive B2 15
+  3  ship A1 12
+  4  refused: no such item C3
+  5  refused: short of B2: wanted 20, have 15
+  6  price B2 1299
+  7  adjust A1 -3
+  8  refused: not a whole number in `receive C9`
+  9  ship B2 15
+  10 receive B2 30
+  11 refused: no such command `bogus`
+  12 ship A1 25
+  13 refused: a quantity must be positive, not 0
+  14 price A1 30
+  15 refused: short of A1: wanted 1, have 0
+  16 refused: short of C9: wanted 20, have 18
+stock
+  A1  bolts    0    $0.30   $0.00  REORDER
+  B2  hinges   30   $12.99  $389.70
+  C9  gaskets  18   $1.50   $27.00  REORDER
+summary
+  orders 16, refused 7, repriced 2
+  units in 85, out 52, adjusted -3
+  revenue $204.10, stock value $416.70
+  most shipped: bolts (37)
+  to reorder: 2
+  units balance: yes (48 on hand)

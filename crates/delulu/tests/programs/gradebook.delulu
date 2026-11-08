@@ -1,0 +1,121 @@
+// engines: interp wasm
+// RW 2.46 (D-V2-222's program step): an everyday utility — a class's gradebook from text. Each line is a name and
+// its scores; an entry that is not a whole number is counted and skipped. Every running number is a `var`, every
+// value named once is a `let`, and a parameter that is counted down is copied into a `var` first.
+module gradebook
+
+type Student {
+    name: Str,
+    count: Int,
+    total: Int,
+    best: Int,
+    worst: Int,
+}
+
+// `total / count` rounded half up, in whole points.
+fn rounded_mean(total: Int, count: Int) -> Int {
+    if count == 0 {
+        return 0
+    }
+    (total * 10 / count + 5) / 10
+}
+
+fn letter(mean: Int) -> Str {
+    if mean >= 90 {
+        "A"
+    } else if mean >= 80 {
+        "B"
+    } else if mean >= 70 {
+        "C"
+    } else if mean >= 60 {
+        "D"
+    } else {
+        "F"
+    }
+}
+
+// `n` stars, for the class's bar chart: the parameter is copied, then counted down.
+fn stars(n: Int) -> Str {
+    var left = n
+    var out = ""
+    while left > 0 {
+        out += "*"
+        left -= 1
+    }
+    out
+}
+
+fn bump(m: ref Map[Str, Int], key: Str) {
+    var v = match m.get(key) {
+        Some(n) => n
+        None => 0
+    }
+    v += 1
+    m.insert(key, v)
+}
+
+fn count_of(m: ref Map[Str, Int], key: Str) -> Int {
+    match m.get(key) {
+        Some(n) => n
+        None => 0
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let text = "ana: 91, 88, 97\nben: 72, 65, 80, 70\nchen: 55, 61\ndev: 100, 99, 98, 100\neli: 83, x, 79"
+    let letters: ref Map[Str, Int] = Map()
+    var bad = 0
+    var class_total = 0
+    var class_count = 0
+    for line in text.split("\n") {
+        let parts = line.split(":")
+        let name = match parts.get(0) {
+            Some(n) => n.trim()
+            None => ""
+        }
+        let scores = match parts.get(1) {
+            Some(s) => s.split(",")
+            None => []
+        }
+        let st = Student { name: name, count: 0, total: 0, best: 0, worst: 100 }
+        for raw in scores {
+            match parse_int(raw.trim()) {
+                Some(v) => {
+                    st.count += 1
+                    st.total += v
+                    if v > st.best {
+                        st.best = v
+                    }
+                    if v < st.worst {
+                        st.worst = v
+                    }
+                }
+                None => {
+                    bad += 1
+                }
+            }
+        }
+        class_total += st.total
+        class_count += st.count
+        let mean = rounded_mean(st.total, st.count)
+        let grade = letter(mean)
+        bump(letters, grade)
+        out.println(
+            st.name + " " + str(st.count) + " " + str(st.total) + " " + str(mean) + " " + grade + " best " + str(st.best) + " worst " + str(st.worst),
+        )
+    }
+    var summary = ""
+    for g in ["A", "B", "C", "D", "F"] {
+        if summary != "" {
+            summary += " "
+        }
+        summary += g + ": " + str(count_of(letters, g))
+    }
+    out.println(summary)
+    for g in ["A", "B", "C", "D", "F"] {
+        out.println(g + " " + stars(count_of(letters, g)))
+    }
+    out.println("bad entries: " + str(bad))
+    out.println("class mean: " + str(rounded_mean(class_total, class_count)))
+}

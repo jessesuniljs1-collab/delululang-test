@@ -361,8 +361,9 @@ pub enum Stmt {
         span: Span,
         /// RW 2.34: `Some(op)` when the source wrote `target op= rhs`. The parser has already rewritten it: `value` is
         /// `target op rhs`, with the target read by a copy of its own (fresh node ids), so every walk of an assignment
-        /// sees the read and the write without knowing the sugar exists. Only the formatter reads this, to print the
-        /// statement as it was written. Absent from DIR and from every program that does not use it.
+        /// sees the read and the write without knowing the sugar exists. The formatter reads this, to print the statement
+        /// as it was written, and both engines, to find the place before the value runs (`parser.rs`
+        /// `compound_assignment`). Absent from DIR and from every program that does not use it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         compound: Option<BinOp>,
     },

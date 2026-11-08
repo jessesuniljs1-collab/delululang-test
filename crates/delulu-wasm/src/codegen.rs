@@ -2873,7 +2873,7 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
         }
         // Stage 7 phase 7h: `self.field = …` lowers to the actor-state host import. Other
         // assignment targets (locals, indices) stay outside the subset (honest DL1201).
-        Stmt::Assign { target, value, .. } => compile_assign(target, value, cx),
+        Stmt::Assign { target, value, compound, .. } => compile_assign(target, value, compound.is_some(), cx),
         // RW 3.4: `while c { body }` is `block { loop { br_if 1 (!c); body; br 0 } }` — `break` leaves the block,
         // `continue` runs the loop again. The run's processor budget holds an endless one, as it holds the interpreter's.
         Stmt::While { cond, body, .. } => {
@@ -2912,7 +2912,10 @@ fn compile_stmt_unplaced(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Opti
 /// Compile an assignment: `self.field = …` (phase 7h: actor state lives host-side, reached through the
 /// `delulu:actors.field_set` import — an actor may write only its OWN fields, the checker's viewpoint/tag rules deny
 /// anything else), and `x = …` to a local (RW 3.4: the checker has already held it to a `let mut` of the value's type).
-fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+/// `place_first`: a compound assignment (RW 2.34) — the record a field is written into is found before the value runs, as
+/// the interpreter finds it (`Interp::place`), so a value that moves the record's name still writes the one it read. A
+/// local's and an actor field's place cannot move.
+fn compile_assign(target: &LValue, value: &Expr, place_first: bool, cx: &mut Cx) -> Result<Ty, CompileError> {
     if let LValue::Var(v) = target {
         let Some((depth, (idx, ty))) = cx.lookup_frame(&v.name) else {
             return Err(CompileError::Unsupported(format!("an assignment to `{}`, which is no local here", v.name)));
@@ -2944,7 +2947,7 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
         }
     }
     if let LValue::Field(base, name) = target {
-        return compile_field_assign(base, &name.name, value, cx);
+        return compile_field_assign(base, &name.name, value, place_first, cx);
     }
     Err(CompileError::Unsupported("an assignment target other than a local or a field (indices unsupported)".into()))
 }
@@ -3055,18 +3058,31 @@ fn lvalue_expr(lv: &LValue) -> Result<Expr, CompileError> {
 }
 
 /// `base.name = value`: the value first, then the record it goes into, as the interpreter evaluates them; then the store.
-fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+fn compile_field_assign(base: &LValue, name: &str, value: &Expr, place_first: bool, cx: &mut Cx) -> Result<Ty, CompileError> {
     let Ty::Record(id) = lvalue_ty(base, cx)? else {
         return Err(CompileError::Unsupported("a field assignment to a value that is not a record".into()));
     };
     let (k, t) = record_slot(cx, id, name)?;
+    // RW 2.34: the record's cell, held before the value runs.
+    let held = if place_first && t != Ty::Unit {
+        if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
+            return Err(CompileError::Unsupported("a field assignment whose record changed type".into()));
+        }
+        let cell = cx.alloc_local(Ty::I32)?;
+        cx.emit(Instruction::LocalSet(cell));
+        Some(cell)
+    } else {
+        None
+    };
     compile_expr_as(value, cx, t)?;
     if t == Ty::Unit {
         return Ok(Ty::Unit);
     }
     let v = cx.alloc_local(t)?;
     cx.emit(Instruction::LocalSet(v));
-    if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
+    if let Some(cell) = held {
+        cx.emit(Instruction::LocalGet(cell));
+    } else if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
         return Err(CompileError::Unsupported("a field assignment whose record changed type".into()));
     }
     cx.emit(Instruction::I32Const(k as i32 * 8));
@@ -5706,6 +5722,26 @@ fn compile_for(var: &Ident, iter: &Expr, body: &Block, cx: &mut Cx) -> Result<Ty
     Ok(Ty::Unit)
 }
 
+/// RW 3.31: the two sides of a binary operator, compiled; their types. In `==` and `!=`, a bare `None` takes the other
+/// side's `Option` type: the backend reads it from that side's code, where from the checker's type of the bare name alone
+/// it names no `Option` of a record (`checked_ty`), so `find(xs, id) == None` was DL1201 while `== Some(r)` compiled. A
+/// `None` written first is compiled second: it has no effect and cannot fault, so no run can tell, and both comparisons
+/// are symmetric.
+fn compile_operands(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<(Ty, Ty), CompileError> {
+    let none = |e: &Expr| matches!(e, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "None");
+    if matches!(op, BinOp::Eq | BinOp::Ne) && none(lhs) != none(rhs) && cx.lookup("None").is_none() {
+        let (first, bare) = if none(rhs) { (lhs, rhs) } else { (rhs, lhs) };
+        let t = compile_expr(first, cx)?;
+        if matches!(t, Ty::Option(_)) {
+            compile_expr_as(bare, cx, t)?;
+            return Ok((t, t));
+        }
+        let u = compile_expr(bare, cx)?;
+        return Ok((t, u));
+    }
+    Ok((compile_expr(lhs, cx)?, compile_expr(rhs, cx)?))
+}
+
 fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     // `&&` and `||` short-circuit, as the interpreter's do: the right side runs only when the left does not decide
     // the answer, so its fault or effect happens on exactly the runs it happens on there (WASM-SHORT-1: both sides
@@ -5731,8 +5767,7 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         }
         return Ok(Ty::I32);
     }
-    let lt = compile_expr(lhs, cx)?;
-    let rt = compile_expr(rhs, cx)?;
+    let (lt, rt) = compile_operands(op, lhs, rhs, cx)?;
     use BinOp::*;
     if lt == Ty::I64 && rt == Ty::I64 {
         // Checked arithmetic (parity with the interpreter, spec §3.3): +,-,*,% go through the

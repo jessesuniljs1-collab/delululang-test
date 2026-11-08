@@ -902,6 +902,16 @@ wins, and you should update the memory to match.
   - **A rule written and unit-tested is enforced only where a program's path calls it** (on-demand routine run 20, RW
     4.95, again). `r_get_verified` had tests since 2026-07-15 and no caller on a program's path; the device adapter
     called it, so a search for its name found a caller. Ask what each path that hands out the guarded thing calls.
+  - **A rewrite that copies an expression is right only where nothing runs between the copies** (on-demand routine
+    run 21, RW 2.34). The laptop's compound assignment read its target, ran the right side, then found the place again.
+    Its comment called the second walk unobservable while the target held no call. A right side that moved a name the
+    target reads made the read and the write two places: `bump(xs)` setting `xs[0]`, a closure assigning `i`. Probe a
+    rewrite with a right side that changes what the copied side reads, and fix the order where the code runs, never in
+    a comment.
+  - **A basic's programs find what its unit tests cannot** (run 21, D-V2-220's step). A 385-line ledger found that a
+    record held in a list cannot be written through its binding (RW 2.45), and that WASM refused `== None` on an
+    `Option` of a record (RW 3.31). Probing the refusals found a `let` that can be reassigned while DL0207's explanation
+    says it cannot (RW 2.46). Write the programs before closing the row, and check each answer by hand.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

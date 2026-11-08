@@ -1,0 +1,12 @@
+// anchors: ref.grammar.stmt
+// RW 2.46 (D-V2-222): a `let` binding names one value for its whole scope, so assigning it is refused, plainly or
+// compound. `var total = 0` is the variable; the `let-to-var` repair makes exactly that edit.
+module conf
+
+fn f(xs: List[Int]) -> Int {
+  let total = 0
+  for x in xs {
+    total += x
+  }
+  total
+}

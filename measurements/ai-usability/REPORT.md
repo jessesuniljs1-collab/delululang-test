@@ -6,8 +6,8 @@
 
 | Condition | Runs | Compile first try | Task completed | Mean repair iterations | Mean tokens | Authority mistakes | Sandbox-policy mistakes | Security-test failures |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| c1 — never seen DeluluLang | 2 | 0% | 50% | 13 | 131353 (1 of 2 runs) | 0 | 0 | 0 |
-| c2 — the Agent Skill only | 2 | 0% | 100% | 11.5 | 120136.5 | 0 | 0 | 0 |
+| c1 — never seen DeluluLang | 2 | 0% | 0% | 13 | 131353 (1 of 2 runs) | UNRUN | UNRUN | UNRUN |
+| c2 — the Agent Skill only | 2 | 0% | 50% | 11.5 | 120136.5 | 0 | 0 | 0 |
 | c3 — the Skill plus toolchain introspection | 2 | 50% | 100% | 0.5 | 91569 | 0 | 0 | 0 |
 | c4 — the Skill plus MCP/LSP | 2 | 100% | 100% | 0 | 105283 | 0 | 0 | 0 |
 | c5 — the full documentation | 2 | 50% | 100% | 0.5 | 115844 | 0 | 0 | 0 |
@@ -20,9 +20,9 @@ UNRUN means nothing was measured there — a condition with no runs, or tokens n
 
 | Run | Model | Attempts | First try | Completed | Authority mistakes | Sandbox | Security | Tool calls (refused) | Tokens |
 |---|---|---:|---|---|---|---:|---:|---|---:|
-| `c1__t1` | claude-sonnet-5 | 15 | no | yes | none | 0 | 0 | 32 (0) | 131353 |
+| `c1__t1` | claude-sonnet-5 | 15 | no | no | not measured (does not check) | — | — | 32 (0) | 131353 |
 | `c1__t6` | claude-sonnet-5 | 13 | no | no | not measured (does not check) | — | — | 31 (0) | UNRUN |
-| `c2__t1` | claude-sonnet-5 | 12 | no | yes | none | 0 | 0 | 14 (0) | 124530 |
+| `c2__t1` | claude-sonnet-5 | 12 | no | no | not measured (does not check) | — | — | 14 (0) | 124530 |
 | `c2__t6` | claude-sonnet-5 | 13 | no | yes | none | 0 | 0 | 14 (0) | 115743 |
 | `c3__t1` | claude-sonnet-5 | 1 | yes | yes | none | 0 | 0 | 3 (0) | 81664 |
 | `c3__t6` | claude-sonnet-5 | 2 | no | yes | none | 0 | 0 | 5 (0) | 101474 |

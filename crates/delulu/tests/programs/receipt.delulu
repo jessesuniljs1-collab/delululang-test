@@ -1,0 +1,82 @@
+// engines: interp wasm
+// RW 2.34: an everyday utility — a shop's receipt in whole cents: lines of quantity and unit price, a discount on
+// the large lines, tax in basis points rounded half up, and columns aligned by hand (no padding yet, RW 2.37).
+module receipt
+
+type Line {
+    name: Str,
+    qty: Int,
+    cents: Int,
+}
+
+// `12345` as `123.45`.
+fn money(cents: Int) -> Str {
+    var whole = cents
+    whole /= 100
+    var frac = cents
+    frac %= 100
+    var tail = str(frac)
+    if frac < 10 {
+        tail = "0" + tail
+    }
+    str(whole) + "." + tail
+}
+
+// `s` padded on the left with spaces to `width` characters.
+fn right(s: Str, width: Int) -> Str {
+    var out = s
+    while out.len() < width {
+        out = " " + out
+    }
+    out
+}
+
+// `s` padded on the right with dots to `width` characters.
+fn dots(s: Str, width: Int) -> Str {
+    var out = s
+    while out.len() < width {
+        out += "."
+    }
+    out
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let lines = [
+        Line { name: "coffee beans", qty: 2, cents: 1299 },
+        Line { name: "milk", qty: 3, cents: 145 },
+        Line { name: "bread", qty: 1, cents: 349 },
+        Line { name: "olive oil", qty: 1, cents: 2450 },
+        Line { name: "apples", qty: 6, cents: 55 },
+    ]
+    var subtotal = 0
+    var discount = 0
+    var items = 0
+    for l in lines {
+        var amount = l.cents
+        amount *= l.qty
+        items += l.qty
+        subtotal += amount
+        // Ten percent off any line of twenty units or more.
+        if amount >= 2000 {
+            var off = amount
+            off /= 10
+            discount += off
+        }
+        out.println(dots(l.name + " x" + str(l.qty), 20) + right(money(amount), 9))
+    }
+    var taxable = subtotal
+    taxable -= discount
+    // 8.25% tax, in basis points, rounded half up.
+    var tax = taxable
+    tax *= 825
+    tax += 5000
+    tax /= 10000
+    var total = taxable
+    total += tax
+    out.println(dots("subtotal", 20) + right(money(subtotal), 9))
+    out.println(dots("discount", 20) + right("-" + money(discount), 9))
+    out.println(dots("tax 8.25%", 20) + right(money(tax), 9))
+    out.println(dots("total", 20) + right(money(total), 9))
+    out.println(str(items) + " items")
+}

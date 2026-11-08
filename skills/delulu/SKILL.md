@@ -58,6 +58,12 @@ There is no `unwrap` — `match` the `Option` or `Result`, or use `?` inside a f
 `Result`. A match arm that does nothing is `None => {}`; one that assigns or `continue`s wraps it in
 braces: `Some(v) => { best = v }`, `_ => { continue }`.
 
+**`let` binds once; `var` is a variable.** `var total = 0`, then `total += x` (or `-=`, `*=`, `/=`,
+`%=`, or `total = total + x`). Assigning a `let`, a parameter, a `for` loop's variable or a pattern's
+binding is DL0207, and for a `let` it carries the exact repair `let-to-var` (measured: agents given
+only this file reassigned a `let` — `measurements/ai-usability/`). A field or an index is written
+through any binding the value allows: `let out = []` can still `push`, `p.x = 1` is a write to `p`.
+
 **Capability-relative paths.** `root.fs_read("./data")` mints a capability rooted at `./data`; every
 path used through it is relative to THAT root, not to the working directory. `w.write_text("out.txt", …)`
 writes `<root>/out.txt`. A path escaping its root is refused, and so is one that only looks like it

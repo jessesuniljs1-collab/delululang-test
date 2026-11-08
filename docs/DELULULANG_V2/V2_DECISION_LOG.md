@@ -6322,3 +6322,52 @@ whenever needed, Anyway history of code changes will be github."*
 
 **What does not change.** `launch/2.0.0` stays prepared, not launched. Whether 2.0 waits for the basics is still the
 owner's call. This decision orders the work, and building the basics first is consistent with either answer.
+
+## D-V2-221 — RW 2.34: compound assignment — `t op= e` is `t = t op e`, its place found once, before `e` runs; a target holding a call is refused — TAKEN (head chef, 2026-11-08, under the owner's delegation)
+
+**Context.** The first basic of D-V2-220's order. The laptop's work in progress (`2015f28`, 2026-11-06) lexed `+=`,
+`-=`, `*=`, `/=` and `%=`, and its parser rewrote `t op= e` into `t = t op e`. It read the target through a copy with
+fresh node ids, and kept `compound: Some(op)` for the formatter. Its comment called the second evaluation of the target
+unobservable while the target held no call. On-demand routine run 21 probed its binary, and that was false: the right
+side runs between the read and the write, so a right side that moves a name the target reads splits them.
+- `ys[xs[0]] += bump(xs)`, with `bump` setting `xs[0] = 5`, read `ys[0]` and wrote `ys[5]` (`10 11`; Python `11 60`).
+- `ys[i] += f()`, with a closure assigning `i = 3`, read `ys[0]` and wrote `ys[3]`.
+- `h.leaf.n += swap(h)`, with `swap` giving `h` a new leaf, read the old leaf and wrote the new one (`5 6`; Python
+  `6 100`), on both engines.
+
+**Decision.**
+1. **The meaning.** `t op= e` means `t = t op e`, with the place of `t` found once, before `e` runs. The place is the
+   record or list written into, and the index. Then `t` is read from that place, `e` runs, and the result is written
+   to the same place: Python's and C#'s order. A plain `=` is unchanged. Its value runs first and its place is found
+   after, as it always has been: `ys[xs[0]] = ys[xs[0]] + bump(xs)` still reads `ys[0]` and writes `ys[5]`.
+2. **How.** Surface syntax over the core, as D-V2-220 rules.
+   - The parser's rewrite stands. The checker, the reference-capability pass, `authority`, the atlas and every walk
+     of an assignment see an ordinary assignment, its read included. Its types, rows, faults and codes are the long
+     form's.
+   - Only the engines and the formatter read `Stmt::Assign::compound`. The interpreter finds the place before the
+     value (`Interp::place`, `store`). The WASM backend holds a field's record before the value (`compile_field_assign`,
+     `place_first`). A local's place and an actor field's cannot move.
+   - `DELULU_CORE.md` is untouched: an assignment is still one write of one value to one place.
+3. **A target holding a call is refused,** with DL0207 in words (*"bind the index first"*), not run once. The rewrite
+   reads the target as an expression, so a call in it would run twice. Running it once would need a hidden temporary,
+   which every walker, every diagnostic and the DIR would see. Refusing costs one line (`let i = xs.len() - 1`) and
+   keeps the rule simple: a compound target is names, fields, indices, literals and operators, which run the same twice
+   in a row. The code already exists, so no new code is needed.
+4. **What does not move.** A program that does not write `op=` lexes, parses, checks and runs as before, and its DIR
+   bytes are unchanged (`compound` is absent when `None`). No program that checked before can contain `op=`: each was
+   DL0202.
+5. **Programs (D-V2-220, step 2).** `crates/delulu/tests/programs/` holds six programs. `programs_cli` runs each on the
+   engines its first line names and checks it is canonically formatted:
+   - a one-liner, `counter` and `word_stats`;
+   - `receipt`, an everyday utility;
+   - `histogram`, on the interpreter only (RW 3.32);
+   - `ledger`, 385 lines, on both engines.
+
+   They found RW 3.31, fixed with this decision, and RW 2.45, 2.46 and 3.32, recorded.
+
+**Evidence.**
+- `x += 2`: DL0202 and DL0207 on `18ea4e4`; `3` now. The three probes above, on the work in progress's binary.
+- `compound_assign_cli` (5 tests), the syntax crate's six unit tests, the conformance accept file and two DL0207
+  rejects, `match_parity`'s RW 3.31 test and `programs_cli` (3 tests).
+- Mutants M1173–M1185, all red; the control green.
+- The full suite, and witness runs on macOS and Windows: the sync-log entry names them.

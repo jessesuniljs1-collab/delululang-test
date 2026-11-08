@@ -1598,10 +1598,12 @@ impl Parser {
     /// `target = target op rhs`, so the checker, both engines and every walk of an assignment see an ordinary one — the
     /// read of the target included — and only the formatter knows it was written short (`Stmt::Assign::compound`).
     ///
-    /// The target is evaluated twice by that rewrite: read for the value, then walked as the place. That is the same
-    /// result as once only while the place is names, fields, indices, literals and operators — nothing whose second
-    /// evaluation could be seen. An index holding a call (`xs[next()] += 1`, `xs[xs.len() - 1] += 1`) is refused, in words:
-    /// bind it first. Evaluating such an index once is the row's remainder.
+    /// The target is written twice by that rewrite: read for the value, and walked as the place. Both engines find the
+    /// place — the record or list written into, and the index — BEFORE the value runs (`Stmt::Assign::compound` tells
+    /// them; a plain `=` finds it after), so the read and the write name one place even when the right side moves a name
+    /// the target reads (`ys[xs[0]] += bump(xs)`, or a closure assigning `i` in `ys[i] += f()`). That holds because the
+    /// target is names, fields, indices, literals and operators, which run the same twice in a row: an index holding a call
+    /// (`xs[next()] += 1`, `xs[xs.len() - 1] += 1`) would run it twice, and is refused in words — bind it first.
     fn compound_assignment(&mut self, expr: Expr, op: BinOp) -> Option<Stmt> {
         let start = expr.span();
         let op_text = self.peek().describe();
@@ -1617,7 +1619,7 @@ impl Parser {
         let Some(read) = read else {
             self.error(
                 "DL0207",
-                &format!(
+                format!(
                     "a compound assignment ({op_text}) reads its target and then writes it, so a call inside the target would \
                      run twice — bind the index first (`let i = …`), then assign to `xs[i]`"
                 ),
@@ -3088,5 +3090,120 @@ mod tests_support {
 
     pub fn is_sum(m: &Module, name: &str) -> bool {
         matches!(kind_of(m, name), TypeDeclKind::Sum(_))
+    }
+}
+
+/// RW 2.34: compound assignment, `target op= rhs`, rewritten by the parser into `target = target op rhs`.
+#[cfg(test)]
+mod compound_assignment_tests {
+    use super::*;
+
+    fn parse_src(src: &str) -> (Module, Vec<Diagnostic>) {
+        let (tokens, ldiags) = crate::lexer::lex(0, src);
+        assert!(ldiags.is_empty(), "lex: {ldiags:?}");
+        parse(0, tokens)
+    }
+
+    /// The statements of the module's first function, which must parse clean.
+    fn body(stmts: &str) -> Vec<Stmt> {
+        let (m, d) = parse_src(&format!("module m\nfn f() -> Int {{\n{stmts}\n0\n}}\n"));
+        assert!(!d.iter().any(|d| d.is_error()), "parse: {d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!("expected a fn") };
+        f.body.stmts.clone()
+    }
+
+    fn errors(stmts: &str) -> Vec<Diagnostic> {
+        let (_, d) = parse_src(&format!("module m\nfn f() -> Int {{\n{stmts}\n0\n}}\n"));
+        d.into_iter().filter(|d| d.is_error()).collect()
+    }
+
+    /// Every operator stands for its binary operator, the target is read on the left and the whole right side is the
+    /// right operand: `x *= a + b` is `x = x * (a + b)`, never `x * a + b`.
+    #[test]
+    fn each_operator_rewrites_into_the_assignment_it_stands_for() {
+        for (op, bin) in [("+=", BinOp::Add), ("-=", BinOp::Sub), ("*=", BinOp::Mul), ("/=", BinOp::Div), ("%=", BinOp::Rem)] {
+            let stmts = body(&format!("x {op} a + b"));
+            let Stmt::Assign { target: LValue::Var(t), value, compound, .. } = &stmts[0] else {
+                panic!("{op}: expected an assignment, got {:?}", stmts[0])
+            };
+            assert_eq!(t.name, "x");
+            assert_eq!(*compound, Some(bin), "{op}");
+            let Expr::Binary { op: got, lhs, rhs, .. } = value else { panic!("{op}: value {value:?}") };
+            assert_eq!(*got, bin, "{op}");
+            assert!(matches!(&**lhs, Expr::Var { path, .. } if path.segs[0].name == "x"), "{op}: the target is read: {lhs:?}");
+            assert!(matches!(&**rhs, Expr::Binary { op: BinOp::Add, .. }), "{op}: the right side is whole: {rhs:?}");
+        }
+        // The control: a plain assignment is not compound, though its value is the same expression.
+        let stmts = body("x = x + 1");
+        assert!(matches!(&stmts[0], Stmt::Assign { compound: None, .. }), "{:?}", stmts[0]);
+    }
+
+    /// The read of the target is a copy with ids of its own: an id names one node, and the read and the place are two.
+    #[test]
+    fn the_read_of_the_target_has_fresh_node_ids() {
+        let stmts = body("xs[i + 1].n += 2");
+        let Stmt::Assign { target, value, .. } = &stmts[0] else { panic!("{:?}", stmts[0]) };
+        let Expr::Binary { lhs, .. } = value else { panic!("{value:?}") };
+        fn ids(e: &Expr, out: &mut Vec<NodeId>) {
+            out.push(e.id());
+            match e {
+                Expr::Field { recv, .. } => ids(recv, out),
+                Expr::Index { recv, index, .. } => {
+                    ids(recv, out);
+                    ids(index, out)
+                }
+                Expr::Binary { lhs, rhs, .. } => {
+                    ids(lhs, out);
+                    ids(rhs, out)
+                }
+                Expr::Unary { operand, .. } => ids(operand, out),
+                _ => {}
+            }
+        }
+        let mut read = Vec::new();
+        ids(lhs, &mut read);
+        assert_eq!(read.len(), 6, "the read is xs[i + 1].n — field, index, xs, +, i, 1: {lhs:?}");
+        let mut place = Vec::new();
+        for e in target.index_exprs() {
+            ids(e, &mut place);
+        }
+        assert_eq!(place.len(), 3, "the place's index is i + 1");
+        let mut all = read.clone();
+        all.extend(&place);
+        all.push(value.id());
+        let n = all.len();
+        all.sort_by_key(|id| id.0);
+        all.dedup();
+        assert_eq!(all.len(), n, "every id names one node: read {read:?}, place {place:?}");
+    }
+
+    /// A target holding a call would run it twice, and is refused in words with the fix; a target that is no place is
+    /// refused as a plain assignment's is. Each is DL0207, a code that already exists.
+    #[test]
+    fn a_target_holding_a_call_or_no_place_is_refused() {
+        for src in ["xs[next()] += 1", "xs[xs.len() - 1] -= 1", "p.items[pick(p)].n *= 2"] {
+            let e = errors(src);
+            assert_eq!(e.len(), 1, "{src}: {e:?}");
+            assert_eq!(e[0].code, "DL0207", "{src}");
+            assert!(e[0].message.contains("bind the index first"), "{src}: {}", e[0].message);
+        }
+        for src in ["f() += 1", "1 += 2", "a + b -= 1"] {
+            let e = errors(src);
+            assert_eq!(e.len(), 1, "{src}: {e:?}");
+            assert_eq!(e[0].code, "DL0207", "{src}");
+            assert!(e[0].message.contains("invalid assignment target"), "{src}: {}", e[0].message);
+        }
+        // The control: the index bound first is accepted.
+        let stmts = body("let i = xs.len() - 1\nxs[i] -= 1");
+        assert!(matches!(&stmts[1], Stmt::Assign { compound: Some(BinOp::Sub), .. }));
+    }
+
+    /// DIR's bytes: a plain assignment serializes exactly as before (no `compound` key); a compound one names its operator.
+    #[test]
+    fn a_plain_assignment_serializes_as_before() {
+        let plain = serde_json::to_string(&body("x = x + 1")[0]).unwrap();
+        assert!(!plain.contains("compound"), "{plain}");
+        let short = serde_json::to_string(&body("x += 1")[0]).unwrap();
+        assert!(short.contains(r#""compound":"Add""#), "{short}");
     }
 }

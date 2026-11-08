@@ -870,9 +870,16 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0206" => "Comparison operators are NON-ASSOCIATIVE: `a < b < c` is refused rather than \
              silently meaning `(a < b) < c`, which in most languages compares a boolean against a \
              number. Write `a < b && b < c` and say what you meant.",
-        "DL0207" => "The left of `=` must be something that can be assigned to: a `var` binding, a \
-             field of one, or an index into one. A literal, a call result, or a `let` binding \
-             cannot be assigned — `let` is a binding, not a variable.",
+        "DL0207" => "The left of `=` must be something that can be assigned to: a `var` binding, or \
+             a field or an index reached through a binding (`p.x = 1`, `xs[0] = 1`; whether that \
+             write is allowed is the value's reference capability, DL1604, not the binding's). A \
+             literal or a call result cannot be assigned, and neither can a `let` binding, a \
+             parameter, a `for` loop's variable or a pattern's binding: each names one value for \
+             its whole scope. `let` is a binding, not a variable; write `var x = …` to reassign \
+             `x` (the `let-to-var` repair does exactly that). A compound assignment \
+             (`x += 1`, `-=`, `*=`, `/=`, `%=`) reads its target and then writes it, so its target \
+             may not hold a call, which would run twice: bind the index first (`let i = xs.len() - \
+             1`, then `xs[i] += 1`).",
         "DL0208" => "An ITEM was required at the top level of a module: `fn`, `type`, `effect`, \
              `actor`, `let` (a module constant), `foreign`, `test`, or `pub` in front of one. \
              Statements do not float at module level, because module-level mutable state is \

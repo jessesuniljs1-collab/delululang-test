@@ -8677,3 +8677,183 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      their next red.
   5. Still the owner's: whether 2.0 waits for the basics; the reviews' open decisions. `launch/2.0.0` stays prepared,
      not launched.
+
+### 2026-11-06 — the laptop: the first language basic, compound assignment (RW 2.34), WORK IN PROGRESS; the session stops at the owner's word
+- Session: `https://claude.ai/code/session_01Deh6W8J1oEL2jHXY2PLdMv`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The owner: *"Head Chef, 97% current session usage used. Commit and push and record everything"*, so the
+  slice is committed as it stands, as work in progress. **Do not land it before the items below are done.**
+- Branch: `laptop/basics-compound`, WIP, no pull request yet. Base: `18ea4e4` (PR #142, RW 6.75).
+- **In flight on GitHub, to read first:**
+  - PR #141 (RW 6.74, run `42242082216`);
+  - PR #142 (RW 6.75 and D-V2-220, its run started at push);
+  - `master`'s push run on `e6d4785` (`42244557954`).
+
+  Land #141, then #142, by fast-forward on green, and read their push runs.
+- **The routine's prompt** (`trig_01HFG6usfzmDAPQigiDu9DLq`) was updated by the API at 15:44 UTC: its *WHAT TO BUILD
+  NOW* is the basics first (D-V2-220). It was read back `enabled: false`, still paused.
+- **What the WIP does (RW 2.34):**
+  - **Lexer.** `+=`, `-=`, `*=`, `/=` and `%=` are new tokens (`token.rs` `PlusEq`…`PercentEq`; `lexer.rs`
+    `op_or_compound`).
+  - **Parser.** `parser.rs` `compound_assignment` rewrites `t op= e` into `Stmt::Assign { target: t, value: t' op e }`.
+    `t'` is a re-read with fresh node ids (`reread`). The statement keeps `compound: Some(op)`, serde-default and
+    skipped when absent, so DIR bytes are unchanged for every other program.
+  - **Formatter.** `fmt.rs` prints it back as written.
+  - **Refusal.** A target whose index holds a call is refused with DL0207 *"bind the index first"*. Evaluating it once is
+    the row's remainder.
+  - **Walkers.** The three exhaustive walkers gained `..`.
+- **Verified so far (the laptop, by hand):**
+  - every operator, on a local, a field, a list index and a string;
+  - the interpreter equals Python's answer (`6 abc 42 6 21`);
+  - locals and fields agree on `--engine wasm` and as a built `.dwx` (`6 abc 6 385`);
+  - `fmt` keeps `+=` as written;
+  - the call-in-index refusal reads as above.
+- **The owner's program step, started:** `crates/delulu/tests/programs/` holds `counter.delulu` (interp and wasm) and
+  `word_stats.delulu` (interp), each with its `.out`. Both match by hand. Still to write: a few-hundred-line program
+  (a ledger was planned), and `crates/delulu/tests/programs_cli.rs`, which runs every program on its engines against
+  its `.out`.
+- **NOT done yet, in order:**
+  1. `programs_cli.rs`, and the large program;
+  2. parser, lexer and fmt unit tests (fresh ids unique; `a+=b` lexes as one token; `->` unchanged; the refusal; fmt
+     round trip);
+  3. witness red: the probe's `x += 2` was DL0202 on the old code;
+  4. mutants;
+  5. regenerate `docs/reference/tokens.md` (`delulu-conform --reference`, its `--check-reference` gate will fail
+     until then);
+  6. the suites `delulu-syntax`, `delulu-check`, `delulu-runtime` and `delulu-wasm`, core-invariance and the
+     conformance corpus;
+  7. records: the 2.34 row, a D-V2, CHANGELOG, the docs' language pages;
+  8. then the pull request.
+- **Found, to record as rows:**
+  - A list inside a record field cannot be written in place, even through a `var`: `p.ys[0] = …` and
+    `var ys = p.ys; ys[0] = …` are both DL1604 *"through a `val` receiver"*. Python and Java allow it, so this is a
+    basics gap.
+  - On `--engine wasm`, `range` and assignment to a list index are DL1201 (RW 3.25's parity).
+- Survey and doctor: run at the commit (the pre-commit hook requires the Survey fresh).
+- **Open / next:**
+  1. The CI and landings above.
+  2. Finish RW 2.34 by the list above, then the next basics in D-V2-220's order (2.38 math, 2.36 ranges, …), each with
+     programs of varying size.
+  3. Still the owner's: whether 2.0 waits for the basics. `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-08 — on-demand routine run 21: #141 and #142 landed; RW 2.34 closed — compound assignment, the place found before the right side runs (D-V2-221); RW 3.31 fixed
+- Session: `https://claude.ai/code/session_01Deh6WCA4RKRoMk3K5X98Ew`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh` (and `CLAUDE_CODE_EFFORT_LEVEL=xhigh`); the
+  transcript's replies, counted with step 0's command: 2 at the start of the run, 414 at the time of writing, all
+  `"effort":"xhigh"`. The setup script had run: the 1.96.1 toolchain was there before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*). The code also went to the session's
+  branch `claude/peaceful-carson-yjtqjc` for its runner reads. Pull request: none.
+- Base: `e6d4785` (`master` at the start; its push run `42244557954` and the nightly `42360205816` green). `gh` is
+  installed (`/usr/local/bin/gh`); CI was read with the MCP tools and `curl`.
+- **Housekeeping:**
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1636 nodes, 19845 edges)`; `ok: 26 check(s)
+    passed`.
+  - **PR #141** (RW 6.74, `4da14d5`) and **PR #142** (RW 6.75 and D-V2-220, `18ea4e4`): PR runs `42242082216` and
+    `42245539476`, each 14 + 2 skipped green. Their new targets were green in the VM (`mcp_cli` 5, `sandbox_run_cli` 23,
+    `schema_cli` 5). Both landed by one fast-forward of `master` to `18ea4e4`, and GitHub marked both merged.
+  - **That push run, `42466462209`, was red in two download steps**, every test job green: `formal`'s *Fetch TLA+ tools*
+    and `microvm`'s *The pinned Firecracker*, each HTTP 504 five times from GitHub's release downloads at 09:16 UTC.
+    The failed jobs were re-run once (attempt 2): `microvm` passed. `formal` passed the TLA+ fetch and got 504 on the
+    Lean toolchain's download (`github.com/leanprover/lean4/releases`, 09:38 UTC). It is GitHub's outage, not a commit's.
+  - `origin/autosave/laptop`'s newest snapshot (`edd469f`, 2026-11-06 15:47 UTC, on `laptop/sandbox-faults`) is the work
+    in progress's own early draft: its `lexer.rs` and `token.rs` are identical to `2015f28`'s, and its `parser.rs` and
+    `ast.rs` are a subset. Nothing unfinished.
+  - Merged branches: the git proxy deleted none (`Everything up-to-date`, and `fetch --prune` lists them still). On
+    `origin`, each in `master`'s history: `laptop/mcp-cancel`, `laptop/sandbox-faults`, `laptop/missing-grants`,
+    `laptop/package-fast-paths`, `laptop/stack-ladder`, `laptop/wasm-main-shapes`; and `laptop/basics-compound` once this
+    run's commits land. `laptop/stack-ladder-witness` holds only its superseded witness (`9471585`), and the laptop
+    meant to delete it. All are for the laptop, with this run's own `claude/peaceful-carson-yjtqjc` (in `master` since
+  `555f33d`; its deletion was refused the same way).
+- **The milestone, named before building:** RW 2.34 closed end to end. That meant finishing the laptop's work in progress
+  `2015f28`: witnessed red, unit tests, conformance witnesses, the program step's harness and programs on both engines,
+  mutants, the full suite, records, pushed to `master` and its push run read. **Delivered:**
+  - **A defect in the work in progress, found by probing it before building on it.** The rewrite `t op= e` → `t = t op e`
+    read the target, ran the right side, then walked the place again. Its comment called that unobservable while the
+    target held no call. On its binary, a right side that moved a name the target reads split the read from the write:
+    - `ys[xs[0]] += bump(xs)`, with `bump` setting `xs[0]`, read `ys[0]` and wrote `ys[5]` (`10 11`; Python `11 60`);
+    - a closure assigning `i` in `ys[i] += f()` behaved the same;
+    - so did `swap(h)` giving `h` a new leaf in `h.leaf.n += swap(h)` (`5 6`; Python `6 100`), on both engines.
+
+    Both engines now find the place before the right side runs: `Interp::place` and `store`, and `compile_field_assign`'s
+    `place_first`. A plain `=` is unchanged.
+  - **D-V2-221** records the meaning (Python's order) and its choice: a target holding a call is refused (DL0207, *bind
+    the index first*), not run once.
+  - **The program step (D-V2-220)** lives in `crates/delulu/tests/programs/`, run by the new `programs_cli`. Each program
+    runs on the engines its first line names, prints exactly its `.out`, and must be canonically formatted. The programs:
+    `oneliner`, `counter`, `word_stats` (now on both engines), `receipt` (an everyday utility), `histogram` (the
+    interpreter: RW 3.32), and `ledger` (385 lines, both engines). Each answer was checked by hand or against Python.
+    They found:
+    - **RW 3.31**, fixed: WASM refused `None` compared with an `Option` of a record (`compile_operands`);
+    - **RW 2.45**: a record held in a list or an `Option` cannot be written through its binding;
+    - **RW 2.46**: a `let` can be reassigned, while DL0207's explanation says it cannot;
+    - **RW 3.32**: WASM refuses an assignment to a list's index.
+  - **Tests.** Every new test was red before its fix, or under its mutant:
+    - `compound_assign_cli` (5: every operator on both engines, the moved place, the refusal, the long form's codes and
+      faults on both engines, `fmt`);
+    - the syntax crate's 6 (the lexer; the parser's operators, precedence, fresh ids, refusals and DIR bytes; `fmt` as
+      written, flat too). The formatter's fuzz gate now generates compound forms;
+    - conformance: `tests/conformance/accept/compound_assignment.delulu` and two DL0207 rejects;
+    - `match_parity`'s RW 3.31 test, and `programs_cli` (3).
+  - DL0207's explanation names the compound refusal. `docs/reference/tokens.md` was regenerated, and `core_invariance`
+    blessed: 9 NEW cases, 173 lines added, none removed.
+- Commits:
+  - `2015f28` RW 2.34 (work in progress), the laptop's, landed with this run's;
+  - `95610bd` RW 2.34: compound assignment finished — the place found before the right side runs; RW 3.31 (WASM None);
+  - the records commit after it: this entry, D-V2-221, the rows, CHANGELOG, V2_LOG, V2_PHASE_STATUS, README,
+    `AI_ONBOARDING.md` §10, `CLOUD_ROUTINE.md`, `HANDOFF.md` §11.2, the Stage 1 grammar, the core-invariance snapshot
+    and the regenerated map.
+- Files and folders (`git diff --name-status 18ea4e4..HEAD` once the records commit lands; the WIP's are with them):
+  M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/rcap_check.rs` (the WIP: the walkers' `..`),
+  `crates/delulu-diag/src/codes.rs` (DL0207's explanation), `crates/delulu-runtime/src/interp.rs` (`place`, `store`),
+  `crates/delulu-syntax/src/{ast,fmt,lexer,parser,token}.rs`, `crates/delulu-wasm/src/codegen.rs` (`place_first`,
+  `compile_operands`), `crates/delulu-wasm/tests/match_parity.rs`;
+  A `crates/delulu/tests/compound_assign_cli.rs`, `crates/delulu/tests/programs_cli.rs`, `crates/delulu/tests/programs/`
+  (six programs and their `.out`), `tests/conformance/accept/compound_assignment.delulu`,
+  `tests/conformance/reject/DL0207_compound_invalid_target.delulu`,
+  `tests/conformance/reject/DL0207_compound_target_holds_a_call.delulu`;
+  M `docs/reference/tokens.md`, `tests/core-invariance/SNAPSHOT.txt`, `CHANGELOG.md`, `HANDOFF.md`, `README.md`,
+  `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/design/STAGE1_SPECIFICATION.md` (not entrenched — the Survey's `query` names no ENTRENCHED),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`, `V2_PHASE_STATUS.md`, `docs/survey/*`. Nothing deleted or
+  renamed; no entrenched file; no new markdown file.
+- **Verified:**
+  - the witness: `x += 2` is DL0202 and DL0207 on `18ea4e4`'s binary and prints `3` now; the three moved-place probes
+    were red on the work in progress's binary;
+  - mutants M1173–M1185, all red, the control green;
+  - `scripts/clippy.sh -j 4` clean after the last `.rs` edit (stamp `192ad3e`);
+  - **the full suite** (`scripts/suite.sh`, on `95610bd`): 194 targets, 2,725 passed, 1 failed, 16 ignored. The one
+    failure was `core_invariance`, reading the nine NEW answers of the three new conformance files, and it was blessed
+    after the suite (additions only). It passes, and so do the document gates after the records (in the records
+    commit's message);
+  - `delulu-conform --coverage` 100%, `--check-reference` in sync;
+  - **witness runs on `95610bd`**, each read in its log:
+    - macOS `42468201660`: `compound_assign_cli` 5, `conformance` 4, `programs_cli` 3;
+    - Windows `42468199807`: the same three targets, 5, 4 and 3;
+    - Windows `42468203474`: `match_parity` 5, the RW 3.31 test among them;
+    - Windows `42468205288`: `delulu-syntax` lib `compound`, 6.
+- Survey and doctor (after the last edit): in the records commit's message.
+- Redo on the laptop: nothing for the milestone. Delete the merged branches listed above.
+- For the laptop's memory: `HANDOFF.md` §11.2 has two new lessons. *A rewrite that copies an expression is right only
+  where nothing runs between the copies*; and *a basic's programs find what its unit tests cannot*. `docs/CLOUD_ROUTINE.md`
+  gained three: a download-step red is GitHub's; push a witness branch without `-u`; a basic's programs probe the basic.
+- **Open / next:**
+  1. **CI of this run, read:** `master`'s push run `42469265379` on `555f33d` (the records commit; `95610bd` had no run of
+     its own, being pushed with it) had 12 jobs green at its first attempt, every test job among them (arm64 ping-pong
+     MEASURED 2.77x against a bar of 1.48x; macOS, Ubuntu and Windows NOT MEASURED, as always on those runners), and two
+     red in download steps, HTTP 504 from GitHub's release downloads. Re-run: `microvm` green at attempt 2 (its KVM tests
+     on this run's code); `formal` red again at attempt 2 (*Fetch TLA+ tools*, 504 at 10:17 UTC). So `formal` waits for
+     GitHub: re-run `42469265379`'s failed jobs and read `formal` green; it checks `docs/design/models`, which this run
+     did not touch. RW 7.31 (new) is why one outage can red it: its TLA+ jar is `latest`, unpinned and unverified. The
+     push run of the follow-up commit that wrote this item is unread here: read it first.
+  2. **RW 2.46 next** (a basic, and a defect). A `let` can be reassigned, while DL0207's explanation says it cannot.
+     First measure how many repository programs reassign a `let`; then refuse it with DL0207 (a D-V2, marked breaking if
+     any did), or correct the explanation.
+  3. Then the basics in D-V2-220's order: math and the checked forms (2.38), ranges (2.36), strings (2.37), bitwise (2.35),
+     methods (2.33), tuples and sets (2.39), argv and exit code (2.40), JSON (2.41). Each gets its programs in
+     `crates/delulu/tests/programs/`, run by `programs_cli` on both engines. RW 2.45 (records in a list) and RW 3.32
+     (WASM index stores) are basics too: take each when a basic's programs need it, or before methods (2.33), which will
+     lean on writing a record's fields.
+  4. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  5. RW 3.30: measure on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for
+     their next red.
+  6. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays prepared,
+     not launched. It does not hold D-V2-210 onward.

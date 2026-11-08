@@ -1,0 +1,9 @@
+// engines: interp wasm
+// RW 2.34: the one-liner — the answer, kept by one compound assignment.
+module oneliner
+
+fn main(root: Root) ! {Write} {
+    var answer = 6
+    answer *= 7
+    root.console().println(str(answer))
+}

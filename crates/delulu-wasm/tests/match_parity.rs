@@ -223,3 +223,34 @@ fn only_a_match_testing_inside_imports_the_match_interface() {
     assert!(!imports(plain), "a match testing nothing inside imports nothing new");
     assert!(imports(&nested), "a match testing inside carries `delulu:match`");
 }
+
+/// RW 3.31: `None` compared with an `Option` of a record, written on either side and with `!=` — DL1201 on WASM (*"the name
+/// `None` (not a local)"*) while `== Some(r)` compiled and the interpreter ran it; found by the ledger program
+/// (`crates/delulu/tests/programs/ledger.delulu`). An `Option[Int]` is the control: it compiled before.
+#[test]
+fn none_compares_with_an_option_of_a_record_on_both_engines() {
+    let src = r#"module m
+
+type P {
+  a: Int,
+}
+
+fn pick(k: Int) -> Option[P] {
+  if k > 0 {
+    return Some(P { a: k })
+  }
+  None
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let x = pick(0)
+  let y = pick(2)
+  out.println(str(x == None) + " " + str(y == None) + " " + str(None == x) + " " + str(None != y))
+  out.println(str(pick(1) == None) + " " + str(pick(0) != None))
+  let n: Option[Int] = Some(3)
+  out.println(str(n == None) + " " + str(None == n))
+}
+"#;
+    assert_eq!(assert_parity(src), "true false true true\nfalse false\nfalse false\n");
+}
