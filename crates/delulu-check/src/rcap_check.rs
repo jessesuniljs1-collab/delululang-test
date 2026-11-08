@@ -12,7 +12,9 @@
 //!
 //! v0.7 precision notes (recorded, not hidden):
 //! - Pattern-bound names have no tracked rcap (patterns carry no node types); writing through
-//!   one is refused as undeterminable. The corpus performs no such writes.
+//!   one is refused as undeterminable. The corpus performs no such writes. Since RW 2.47 a name
+//!   bound to plain data or a handle (`has_no_write_surface`, the type read from the scrutinee)
+//!   is `val`, so it may be stored where `val` is required; a composite stays undetermined.
 //! - Generic field types resolve to Unknown (no substitution here); a write's VALUE check is
 //!   skipped when the destination rcap is undeterminable — the receiver-writability check
 //!   (the race-relevant half) always runs.
@@ -1351,7 +1353,8 @@ impl<'a> Pass<'a> {
                 for arm in arms {
                     self.consumed_restore(&pre);
                     self.push_scope();
-                    self.bind_pattern(&arm.pattern);
+                    let scrut_ty = self.node_types.get(&scrutinee.id()).cloned();
+                    self.bind_pattern(&arm.pattern, scrut_ty.as_ref());
                     let k = self.walk_expr(&arm.body);
                     self.pop_scope();
                     arm_states.push(self.consumed_snapshot());
@@ -1472,18 +1475,41 @@ impl<'a> Pass<'a> {
         out
     }
 
-    /// Pattern-bound names: no tracked rcap in v0.7 (documented at module top).
-    fn bind_pattern(&mut self, p: &Pattern) {
+    /// Pattern-bound names (documented at module top). `ty` is the type the pattern matches, where it is known: the
+    /// scrutinee's checked type, then each variant field's. A name bound to a value with no write surface at all, an
+    /// `Int`, a `Str`, a handle (`has_no_write_surface`), is `val`: that is a fact about every such value, however
+    /// the program came by it. Any other pattern-bound name stays undetermined, so a write through it is refused and a
+    /// send of it fails closed; giving a record or a list its type's default here is RW 2.45's decision, not this.
+    /// RW 2.47: `Some(v) => { p.x = v }`, an `Int` stored in an `Int` field, was DL1603 "undetermined".
+    fn bind_pattern(&mut self, p: &Pattern, ty: Option<&Type>) {
         match p {
             Pattern::Bind(id) => {
+                let plain = ty.filter(|t| has_no_write_surface(t)).cloned();
+                let rcap = plain.as_ref().map(|_| Rcap::Val);
                 self.bind(
                     &id.name,
-                    Binding { rcap: None, ty: None, fresh_lift: None, consumed: None, rcap_written: false, why_val: None },
+                    Binding { rcap, ty: plain, fresh_lift: None, consumed: None, rcap_written: false, why_val: None },
                 );
             }
-            Pattern::Variant { fields, .. } => {
-                for f in fields {
-                    self.bind_pattern(f);
+            Pattern::Variant { path, fields, .. } => {
+                let name = path.segs.last().map(|s| s.name.as_str()).unwrap_or_default();
+                let field_types: Vec<Option<Type>> = match ty {
+                    Some(Type::Option(t)) if name == "Some" => vec![Some((**t).clone())],
+                    Some(Type::Result(o, _)) if name == "Ok" => vec![Some((**o).clone())],
+                    Some(Type::Result(_, e)) if name == "Err" => vec![Some((**e).clone())],
+                    Some(Type::Sum(id, _)) => match &self.table.type_def(*id).kind {
+                        TypeDefKind::Sum(variants) => variants
+                            .iter()
+                            .find(|(v, _)| v == name)
+                            .map(|(_, ts)| ts.iter().map(|te| lower_shallow(te, self.table)).collect())
+                            .unwrap_or_default(),
+                        _ => Vec::new(),
+                    },
+                    _ => Vec::new(),
+                };
+                for (i, f) in fields.iter().enumerate() {
+                    let fty = field_types.get(i).cloned().flatten();
+                    self.bind_pattern(f, fty.as_ref());
                 }
             }
             Pattern::Wildcard(_) | Pattern::Lit(_, _) => {}
@@ -1561,6 +1587,28 @@ fn fresh_composite(elems: &[K], spans: &[Span]) -> K {
 /// Component types of a user type for the default-rcap rule (records: field types; sums: all
 /// variant field types), resolved SHALLOWLY — generics unsubstituted resolve to `None`, which
 /// the default rule treats as undeterminable (fail closed).
+/// RW 2.47: a type none of whose values can be written, by anyone, through any reference: plain data and the
+/// unforgeable handles (`rcaps::default_rcap`'s unconditional `val`s). A value of such a type is `val` however it was
+/// obtained. A composite (a record, a list, an `Option`) is not here: its default may be `val` while the value bound is a
+/// `ref` someone else writes.
+fn has_no_write_surface(t: &Type) -> bool {
+    matches!(
+        t,
+        Type::Int
+            | Type::Float
+            | Type::Bool
+            | Type::Str
+            | Type::Unit
+            | Type::Cap(_)
+            | Type::Secret(_)
+            | Type::Plugin(_)
+            | Type::Root
+            | Type::Foreign(_)
+            | Type::Verified
+            | Type::Contained
+    )
+}
+
 fn components_of(table: &DeclTable, id: TypeDefId) -> Option<Vec<Type>> {
     let td = table.type_def(id);
     let tes: Vec<&TypeExpr> = match &td.kind {

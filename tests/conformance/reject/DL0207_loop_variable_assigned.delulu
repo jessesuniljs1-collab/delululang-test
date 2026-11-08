@@ -1,0 +1,13 @@
+// anchors: ref.grammar.stmt
+// RW 2.46 (D-V2-222): a `for` loop's variable names each element in turn, so assigning it is refused. Bind a `var`
+// from it (`var w = x`) and assign that.
+module conf
+
+fn f(xs: List[Int]) -> Int {
+  var sum = 0
+  for x in xs {
+    x *= 2
+    sum += x
+  }
+  sum
+}

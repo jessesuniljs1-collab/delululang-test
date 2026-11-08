@@ -1,0 +1,303 @@
+// engines: interp wasm
+// RW 2.46 and RW 2.47 (D-V2-222's program step): the larger program — a small warehouse's day. A catalog of items,
+// a day of orders read from text, refusals that leave the stock as it was, price changes, a reorder report, the
+// money in dollars and cents, and a check that every unit is accounted for. Every running number is a `var` or a
+// field written by compound assignment; every value named once is a `let`. A number taken out of an `Option` by a
+// pattern is stored straight into a record's field (RW 2.47). Each item's changing numbers live in maps keyed by its
+// SKU: a record taken out of a list cannot be written through its binding (RW 2.45).
+module inventory
+
+type Item {
+    sku: Str,
+    name: Str,
+    reorder_at: Int,
+}
+
+// Each item's units on hand, units shipped and price in cents, by SKU.
+type Stock {
+    on_hand: ref Map[Str, Int],
+    shipped: ref Map[Str, Int],
+    price: ref Map[Str, Int],
+}
+
+type Order = Receive(Str, Int) | Ship(Str, Int) | Adjust(Str, Int) | Price(Str, Int)
+
+type Refusal = UnknownSku(Str) | Short(Str, Int, Int) | BadNumber(Str) | UnknownCommand(Str) | NotPositive(Int)
+
+type Tally {
+    orders: Int,
+    received: Int,
+    shipped: Int,
+    adjusted: Int,
+    repriced: Int,
+    refused: Int,
+    revenue: Int,
+}
+
+type Parsed {
+    command: Str,
+    sku: Str,
+    number: Int,
+    ok: Bool,
+}
+
+fn catalog() -> List[Item] {
+    [
+        Item { sku: "A1", name: "bolts", reorder_at: 10 },
+        Item { sku: "B2", name: "hinges", reorder_at: 5 },
+        Item { sku: "C9", name: "gaskets", reorder_at: 20 },
+    ]
+}
+
+fn get(m: ref Map[Str, Int], sku: Str) -> Int {
+    match m.get(sku) {
+        Some(v) => v
+        None => 0
+    }
+}
+
+fn add(m: ref Map[Str, Int], sku: Str, delta: Int) {
+    var v = get(m, sku)
+    v += delta
+    m.insert(sku, v)
+}
+
+fn known(items: List[Item], sku: Str) -> Bool {
+    var found = false
+    for it in items {
+        if it.sku == sku {
+            found = true
+        }
+    }
+    found
+}
+
+// Whole cents as dollars: `$12.99`, `$0.05`. The parameter is copied before it is taken apart.
+fn money(cents: Int) -> Str {
+    var c = cents
+    var sign = ""
+    if c < 0 {
+        sign = "-"
+        c *= -1
+    }
+    let dollars = c / 100
+    var rest = str(c % 100)
+    if c % 100 < 10 {
+        rest = "0" + rest
+    }
+    sign + "$" + str(dollars) + "." + rest
+}
+
+// `s` padded on the right with spaces to `width` characters.
+fn pad(s: Str, width: Int) -> Str {
+    var out = s
+    var n = s.len()
+    while n < width {
+        out += " "
+        n += 1
+    }
+    out
+}
+
+// One line of text, `command SKU number`, read into its three parts; `ok` is false when the number is not a whole
+// number. The number is a pattern's binding stored straight into the record (RW 2.47).
+fn read_line(line: Str) -> Parsed {
+    let words = line.trim().split(" ")
+    let p = Parsed { command: "", sku: "", number: 0, ok: false }
+    match words.get(0) {
+        Some(w) => {
+            p.command = w
+        }
+        None => {
+        }
+    }
+    match words.get(1) {
+        Some(w) => {
+            p.sku = w
+        }
+        None => {
+        }
+    }
+    match words.get(2) {
+        Some(w) => {
+            match parse_int(w) {
+                Some(n) => {
+                    p.number = n
+                    p.ok = true
+                }
+                None => {
+                }
+            }
+        }
+        None => {
+        }
+    }
+    p
+}
+
+fn to_order(p: Parsed) -> Result[Order, Refusal] {
+    if !p.ok {
+        return Err(BadNumber(p.command + " " + p.sku))
+    }
+    if p.command == "receive" {
+        Ok(Receive(p.sku, p.number))
+    } else if p.command == "ship" {
+        Ok(Ship(p.sku, p.number))
+    } else if p.command == "adjust" {
+        Ok(Adjust(p.sku, p.number))
+    } else if p.command == "price" {
+        Ok(Price(p.sku, p.number))
+    } else {
+        Err(UnknownCommand(p.command))
+    }
+}
+
+fn explain(r: Refusal) -> Str {
+    match r {
+        UnknownSku(s) => "no such item " + s
+        Short(s, want, have) => "short of " + s + ": wanted " + str(want) + ", have " + str(have)
+        BadNumber(what) => "not a whole number in `" + what + "`"
+        UnknownCommand(c) => "no such command `" + c + "`"
+        NotPositive(n) => "a quantity must be positive, not " + str(n)
+    }
+}
+
+// Apply one order to the stock, or say why not; a refusal changes nothing.
+fn apply(items: List[Item], st: ref Stock, t: ref Tally, o: Order) -> Option[Refusal] {
+    match o {
+        Receive(sku, n) => {
+            if !known(items, sku) {
+                return Some(UnknownSku(sku))
+            }
+            if n <= 0 {
+                return Some(NotPositive(n))
+            }
+            add(st.on_hand, sku, n)
+            t.received += n
+            None
+        }
+        Ship(sku, n) => {
+            if !known(items, sku) {
+                return Some(UnknownSku(sku))
+            }
+            if n <= 0 {
+                return Some(NotPositive(n))
+            }
+            let have = get(st.on_hand, sku)
+            if n > have {
+                return Some(Short(sku, n, have))
+            }
+            add(st.on_hand, sku, 0 - n)
+            add(st.shipped, sku, n)
+            t.shipped += n
+            t.revenue += n * get(st.price, sku)
+            None
+        }
+        Adjust(sku, delta) => {
+            if !known(items, sku) {
+                return Some(UnknownSku(sku))
+            }
+            let have = get(st.on_hand, sku)
+            if have + delta < 0 {
+                return Some(Short(sku, 0 - delta, have))
+            }
+            add(st.on_hand, sku, delta)
+            t.adjusted += delta
+            None
+        }
+        Price(sku, cents) => {
+            if !known(items, sku) {
+                return Some(UnknownSku(sku))
+            }
+            if cents <= 0 {
+                return Some(NotPositive(cents))
+            }
+            st.price.insert(sku, cents)
+            t.repriced += 1
+            None
+        }
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let items = catalog()
+    let st = Stock { on_hand: Map(), shipped: Map(), price: Map() }
+    st.price.insert("A1", 25)
+    st.price.insert("B2", 899)
+    st.price.insert("C9", 150)
+    add(st.on_hand, "C9", 18)
+    let opening = 18
+    let t = Tally {
+        orders: 0,
+        received: 0,
+        shipped: 0,
+        adjusted: 0,
+        repriced: 0,
+        refused: 0,
+        revenue: 0,
+    }
+    let day = "receive A1 40\nreceive B2 15\nship A1 12\nship C3 1\nship B2 20\nprice B2 1299\nadjust A1 -3\nreceive C9 x\nship B2 15\nreceive B2 30\nbogus A1 1\nship A1 25\nship C9 0\nprice A1 30\nship A1 1\nadjust C9 -20"
+    out.println("orders")
+    for line in day.split("\n") {
+        t.orders += 1
+        let refusal = match to_order(read_line(line)) {
+            Ok(o) => apply(items, st, t, o)
+            Err(r) => Some(r)
+        }
+        match refusal {
+            Some(r) => {
+                t.refused += 1
+                out.println("  " + pad(str(t.orders), 3) + "refused: " + explain(r))
+            }
+            None => {
+                out.println("  " + pad(str(t.orders), 3) + line)
+            }
+        }
+    }
+    out.println("stock")
+    var value = 0
+    var reorders = 0
+    var most = ""
+    var most_units = 0
+    for it in items {
+        let have = get(st.on_hand, it.sku)
+        let worth = have * get(st.price, it.sku)
+        value += worth
+        var status = ""
+        if have <= it.reorder_at {
+            status = "  REORDER"
+            reorders += 1
+        }
+        let sold = get(st.shipped, it.sku)
+        if sold > most_units {
+            most_units = sold
+            most = it.name
+        }
+        out.println(
+            "  " + pad(it.sku, 4) + pad(it.name, 9) + pad(str(have), 5) + pad(money(get(st.price, it.sku)), 8) + money(worth) + status,
+        )
+    }
+    // Every unit is accounted for: what is on hand is what was there, plus what came in, less what went out, plus
+    // the adjustments.
+    var on_hand = 0
+    for it in items {
+        on_hand += get(st.on_hand, it.sku)
+    }
+    let expected = opening + t.received - t.shipped + t.adjusted
+    var balanced = "yes"
+    if on_hand != expected {
+        balanced = "NO"
+    }
+    out.println("summary")
+    out.println(
+        "  orders " + str(t.orders) + ", refused " + str(t.refused) + ", repriced " + str(t.repriced),
+    )
+    out.println(
+        "  units in " + str(t.received) + ", out " + str(t.shipped) + ", adjusted " + str(t.adjusted),
+    )
+    out.println("  revenue " + money(t.revenue) + ", stock value " + money(value))
+    out.println("  most shipped: " + most + " (" + str(most_units) + ")")
+    out.println("  to reorder: " + str(reorders))
+    out.println("  units balance: " + balanced + " (" + str(on_hand) + " on hand)")
+}

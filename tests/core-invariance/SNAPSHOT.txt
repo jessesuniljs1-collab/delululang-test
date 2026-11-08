@@ -3382,6 +3382,74 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/lowercase_constructor_call_form.delulu`
 
+===== tests/conformance/accept/var_and_let.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/var_and_let.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/var_and_let.delulu checked clean
+
+===== tests/conformance/accept/var_and_let.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "f"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/var_and_let.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     f
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/var_and_let.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/var_and_let.delulu`
+
 ===== tests/conformance/reject/DL0104_float_overflow.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -4692,6 +4760,200 @@ error[DL0207]: invalid assignment target
    |
  5 |   1 = 2
    |   ^ cannot assign to this expression
+  explain: delulu explain E-DL0207
+
+1 error(s)
+
+===== tests/conformance/reject/DL0207_let_reassigned.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0207",
+      "explanation_id": "E-DL0207",
+      "message": "cannot assign to `total`: it is a `let` binding",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "tests/conformance/reject/DL0207_let_reassigned.delulu",
+              "insert": "var",
+              "range": {
+                "end_byte": 286,
+                "start_byte": 283
+              }
+            }
+          ],
+          "id": "let-to-var",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 322,
+            "col": 10,
+            "line": 9
+          },
+          "file": "tests/conformance/reject/DL0207_let_reassigned.delulu",
+          "label": "declare it `var total` to reassign it",
+          "start": {
+            "byte": 317,
+            "col": 5,
+            "line": 9
+          }
+        },
+        {
+          "end": {
+            "byte": 296,
+            "col": 16,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0207_let_reassigned.delulu",
+          "label": "bound by `let` here",
+          "secondary": true,
+          "start": {
+            "byte": 283,
+            "col": 3,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0207_let_reassigned.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0207]: cannot assign to `total`: it is a `let` binding
+  --> tests/conformance/reject/DL0207_let_reassigned.delulu:9:5
+   |
+ 9 |     total += x
+   |     ^^^^^ declare it `var total` to reassign it
+  --- tests/conformance/reject/DL0207_let_reassigned.delulu:7:3
+   |
+ 7 |   let total = 0
+   |   ------------- bound by `let` here
+  repair: let-to-var (exact)
+  explain: delulu explain E-DL0207
+
+1 error(s)
+
+===== tests/conformance/reject/DL0207_loop_variable_assigned.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0207",
+      "explanation_id": "E-DL0207",
+      "message": "cannot assign to `x`: it is a `for` loop's variable",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 264,
+            "col": 6,
+            "line": 9
+          },
+          "file": "tests/conformance/reject/DL0207_loop_variable_assigned.delulu",
+          "label": "bind a `var` from it (`var x2 = x`) and assign that",
+          "start": {
+            "byte": 263,
+            "col": 5,
+            "line": 9
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0207_loop_variable_assigned.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0207]: cannot assign to `x`: it is a `for` loop's variable
+  --> tests/conformance/reject/DL0207_loop_variable_assigned.delulu:9:5
+   |
+ 9 |     x *= 2
+   |     ^ bind a `var` from it (`var x2 = x`) and assign that
+  explain: delulu explain E-DL0207
+
+1 error(s)
+
+===== tests/conformance/reject/DL0207_parameter_assigned.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0207",
+      "explanation_id": "E-DL0207",
+      "message": "cannot assign to `n`: it is a parameter",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 224,
+            "col": 4,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0207_parameter_assigned.delulu",
+          "label": "bind a `var` from it (`var n2 = n`) and assign that",
+          "start": {
+            "byte": 223,
+            "col": 3,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0207_parameter_assigned.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0207]: cannot assign to `n`: it is a parameter
+  --> tests/conformance/reject/DL0207_parameter_assigned.delulu:7:3
+   |
+ 7 |   n = n + 1
+   |   ^ bind a `var` from it (`var n2 = n`) and assign that
   explain: delulu explain E-DL0207
 
 1 error(s)

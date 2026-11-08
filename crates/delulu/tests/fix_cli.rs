@@ -610,3 +610,50 @@ fn a_repair_with_no_edits_says_a_human_must_decide_and_why() {
     );
     assert!(bad.is_empty(), "the repair channels must agree:\n  {}", bad.join("\n  "));
 }
+
+/// **RW 2.46 (D-V2-222).** A `let` was reassignable until DL0207 refused it, so a program written then must migrate with
+/// one command. `delulu fix` applies `let-to-var` (exact): the file becomes the program with `var` for each `let` it
+/// reassigns and nothing else changed, it checks clean, and it prints what the program printed before the refusal
+/// (computed by hand here: `sum: 12`, `3 2 1`). A parameter assigned has no keyword to change, so its DL0207 stands.
+#[test]
+fn let_to_var_migrates_a_program_that_reassigned_a_let() {
+    let dir = scratch("let-to-var");
+    let cases: &[(&str, &str)] = &[
+        (
+            "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    let total = 0\n    let label = \"sum\"\n    for v in [3, 4, 5] {\n        total += v\n    }\n    label = label + \":\"\n    out.println(label + \" \" + str(total))\n}\n",
+            "sum: 12\n",
+        ),
+        (
+            "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    let n = 3\n    let line = \"\"\n    while n > 0 {\n        line = line + str(n)\n        n -= 1\n        if n > 0 {\n            line += \" \"\n        }\n    }\n    out.println(line)\n}\n",
+            "3 2 1\n",
+        ),
+    ];
+    for (i, (src, printed)) in cases.iter().enumerate() {
+        let f = dir.join(format!("p{i}.delulu"));
+        write(&f, src);
+        let path = f.to_str().unwrap();
+        let before = delulu(&["check", path]);
+        assert!(!before.status.success(), "program {i}: reassigning a `let` is refused");
+        assert!(stderr(&before).contains("cannot assign to") && stderr(&before).contains("let-to-var"), "{}", stderr(&before));
+        let fix = delulu(&["fix", path]);
+        assert!(fix.status.success(), "program {i}: `delulu fix` applies the exact repairs: {}", stderr(&fix));
+        let fixed = read(&f);
+        let reassigned = ["total", "label", "n", "line"];
+        let expected =
+            reassigned.iter().fold(src.to_string(), |s, name| s.replace(&format!("let {name} = "), &format!("var {name} = ")));
+        assert_eq!(fixed, expected, "program {i}: each reassigned `let` became a `var`, nothing else moved");
+        assert!(delulu(&["check", path]).status.success(), "program {i}: the migrated program checks clean");
+        let run = delulu(&["run", "--grant", "console", path]);
+        assert!(run.status.success(), "program {i} runs: {}", stderr(&run));
+        assert_eq!(String::from_utf8_lossy(&run.stdout).replace("\r\n", "\n"), *printed, "program {i}: the same output");
+    }
+
+    let f = dir.join("param.delulu");
+    let src = "module m\n\nfn f(n: Int) -> Int {\n    let m = n\n    n = n + 1\n    m = m + n\n    m\n}\n";
+    write(&f, src);
+    let path = f.to_str().unwrap();
+    let _ = delulu(&["fix", path]);
+    assert_eq!(read(&f), src.replace("let m = n", "var m = n"), "only the `let` is rewritten");
+    let after = delulu(&["check", path]);
+    assert!(!after.status.success() && stderr(&after).contains("cannot assign to `n`: it is a parameter"), "{}", stderr(&after));
+}

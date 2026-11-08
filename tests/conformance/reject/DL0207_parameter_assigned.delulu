@@ -1,0 +1,9 @@
+// anchors: ref.grammar.stmt
+// RW 2.46 (D-V2-222): a parameter names its argument for the whole body, so assigning it is refused. Bind a `var`
+// from it (`var m = n`) and assign that.
+module conf
+
+fn f(n: Int) -> Int {
+  n = n + 1
+  n
+}
