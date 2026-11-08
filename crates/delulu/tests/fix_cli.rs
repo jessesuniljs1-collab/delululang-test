@@ -426,6 +426,11 @@ fn repair_corpus() -> Vec<(&'static str, &'static str)> {
             "binding_like_ctor.delulu",
             "module bindinglikector\n\ntype T = foo | bar\n\nfn f(t: T) -> Int {\n    match t {\n        foo => 1,\n        _ => 2,\n    }\n}\n",
         ),
+        // DL0207 `let-to-var` (RW 2.46, D-V2-222) — exact, with one edit (the keyword), applied by `delulu fix`.
+        (
+            "let_reassigned.delulu",
+            "module letreassigned\n\nfn f() -> Int {\n    let n = 0\n    n = 5\n    n\n}\n",
+        ),
     ]
 }
 
