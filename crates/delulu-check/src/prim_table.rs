@@ -151,6 +151,42 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "str", method: "to_lower", arity: 0 },
     PrimEntry { receiver: "str", method: "replace", arity: 2 },
     PrimEntry { receiver: "str", method: "chars", arity: 0 },
+    // Int (builtin) — RW 2.38, D-V2-223: the math methods, pure. `abs` and `pow` past the range are DL0901, a negative
+    // exponent and `clamp(lo, hi)` with `lo > hi` DL0908; each `checked_` form answers `None` where its operator faults.
+    PrimEntry { receiver: "int", method: "abs", arity: 0 },
+    PrimEntry { receiver: "int", method: "min", arity: 1 },
+    PrimEntry { receiver: "int", method: "max", arity: 1 },
+    PrimEntry { receiver: "int", method: "clamp", arity: 2 },
+    PrimEntry { receiver: "int", method: "pow", arity: 1 },
+    PrimEntry { receiver: "int", method: "checked_add", arity: 1 },
+    PrimEntry { receiver: "int", method: "checked_sub", arity: 1 },
+    PrimEntry { receiver: "int", method: "checked_mul", arity: 1 },
+    PrimEntry { receiver: "int", method: "checked_div", arity: 1 },
+    PrimEntry { receiver: "int", method: "checked_rem", arity: 1 },
+    // Float (builtin) — RW 2.38, D-V2-223: IEEE 754 binary64, a NaN or an infinity a value and never a fault; the
+    // transcendental functions are `libm`'s, so every OS prints the same digits.
+    PrimEntry { receiver: "float", method: "abs", arity: 0 },
+    PrimEntry { receiver: "float", method: "min", arity: 1 },
+    PrimEntry { receiver: "float", method: "max", arity: 1 },
+    PrimEntry { receiver: "float", method: "clamp", arity: 2 },
+    PrimEntry { receiver: "float", method: "sqrt", arity: 0 },
+    PrimEntry { receiver: "float", method: "floor", arity: 0 },
+    PrimEntry { receiver: "float", method: "ceil", arity: 0 },
+    PrimEntry { receiver: "float", method: "round", arity: 0 },
+    PrimEntry { receiver: "float", method: "trunc", arity: 0 },
+    PrimEntry { receiver: "float", method: "pow", arity: 1 },
+    PrimEntry { receiver: "float", method: "sin", arity: 0 },
+    PrimEntry { receiver: "float", method: "cos", arity: 0 },
+    PrimEntry { receiver: "float", method: "tan", arity: 0 },
+    PrimEntry { receiver: "float", method: "asin", arity: 0 },
+    PrimEntry { receiver: "float", method: "acos", arity: 0 },
+    PrimEntry { receiver: "float", method: "atan", arity: 0 },
+    PrimEntry { receiver: "float", method: "atan2", arity: 1 },
+    PrimEntry { receiver: "float", method: "exp", arity: 0 },
+    PrimEntry { receiver: "float", method: "ln", arity: 0 },
+    PrimEntry { receiver: "float", method: "log10", arity: 0 },
+    PrimEntry { receiver: "float", method: "is_nan", arity: 0 },
+    PrimEntry { receiver: "float", method: "is_finite", arity: 0 },
     // List (builtin).
     PrimEntry { receiver: "list", method: "len", arity: 0 },
     PrimEntry { receiver: "list", method: "get", arity: 1 },
@@ -211,7 +247,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            92,
+            124,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );
@@ -240,6 +276,8 @@ mod tests {
             "rand" => "let recv = root.rand();",
             "secret" => "let recv = root.secret(\"K\");",
             "str" => "let recv = \"x\";",
+            "int" => "let recv = 7;",
+            "float" => "let recv = 2.5;",
             "list" => "let recv = [1];",
             "map" => "let recv = Map();",
             // The three device receivers. They were NOT here until P3, and that omission is finding

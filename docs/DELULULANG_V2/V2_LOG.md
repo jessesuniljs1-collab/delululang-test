@@ -12669,3 +12669,22 @@ varying size are written, run and fixed (D-V2-220).
   (3).
 - Mutants M1173–M1185: all red, the control green.
 - `scripts/clippy.sh -j 4` clean; the full suite, and witness runs on macOS and Windows (the sync-log entry).
+
+## 2026-11-08 — the laptop: RW 7.31 closed (#143); RW 2.46 and 2.47 built — only a `var` is reassigned (D-V2-222)
+
+**What.** The second language basic (D-V2-220).
+- **RW 2.46.** Only a `var` binding is assigned. A `let`, a parameter, a loop's variable and a pattern's binding are
+  DL0207, naming which. A `let` carries the exact repair `let-to-var`.
+- **RW 2.47.** A pattern's binding of plain data is `val`. This basic's `gradebook` program found it.
+- **RW 7.31.** CI's TLA+ checker is pinned, checked and cached.
+
+**Why.** DL0207's explanation always said a `let` cannot be assigned, and no pass read `mutable`, so two keywords
+meant one thing.
+
+**Evidence.**
+- The measurement over 267 `.delulu` files. The re-scored AI pilot keeps its published numbers in `METHODOLOGY.md`.
+- The witness: `sum: 12` before, DL0207 now, `sum: 12` after `delulu fix`.
+- `let_binding_tests` 3, `pattern_binding_rcap_tests` 2, `fix_cli`'s migration test, four conformance files and two
+  programs on both engines.
+- Mutants M1186–M1200 (14 red; M1194 survives, an unreachable fallback). `core_invariance`: additions only.
+- The PR's CI run is unread at the stop: `docs/CLOUD_SYNC_LOG.md`'s entry.

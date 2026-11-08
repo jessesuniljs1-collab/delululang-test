@@ -11,6 +11,24 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — only a `var` is reassigned, 2026-11-08
+
+- **Changed (RW 2.46, D-V2-222) — breaking for a program that reassigned a `let`:** assigning a `let` binding, a
+  parameter, a `for` loop's variable or a pattern's binding (`x = …`, `x += …`) is now DL0207, naming which it is. Only
+  a `var` is a variable, as DL0207's explanation always said. The checker never read the difference.
+  - **To migrate:** `delulu fix <file>` applies the new exact repair `let-to-var`, which rewrites `let x` to `var x`
+    and nothing else, so the program runs as it did. For a parameter or a loop's variable, bind a `var` from it.
+  - A field or an index written through any binding (`p.x = 1`, `xs[0] = 1`, `out.push(x)` on a `let out = []`) is
+    unchanged: the value's reference capability decides that write, not the binding.
+  - No program in the repository's corpus, examples or Book did this. Two programs models wrote in the AI usability
+    pilot did, and its record is re-scored (`measurements/ai-usability/METHODOLOGY.md`). The Agent Skill now says it.
+- **Fixed (RW 2.47):** a name bound by a pattern to plain data could not be stored in a record's field:
+  `Some(v) => { p.x = v }` was DL1603 *"undetermined capability"*. An `Int`, `Str`, `Bool`, `Float` or handle bound by
+  `Some`, `Ok`, `Err` or a program's own variant is now `val`. A record or a list taken out of a pattern is still
+  refused there (RW 2.45).
+- **CI (RW 7.31):** the `formal` job's TLA+ checker is pinned (v1.7.4) and checked by SHA-256, and its downloads are
+  cached, so an outage of GitHub's release downloads no longer turns a push red.
+
 ## Unreleased — compound assignment, `x += 1`, 2026-11-08
 
 - **Added (RW 2.34, D-V2-221):** compound assignment, `+=`, `-=`, `*=`, `/=` and `%=`, on a local, a record's field and

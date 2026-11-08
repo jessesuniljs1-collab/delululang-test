@@ -2585,7 +2585,9 @@ mod let_binding_tests {
     /// to change, and which name to bind is the writer's.
     #[test]
     fn let_to_var_rewrites_the_keyword_and_the_program_then_checks() {
-        let src = format!("{HEAD}fn f(xs: List[Int]) -> Int {{\n  let total = 0\n  for x in xs {{\n    total += x\n  }}\n  total\n}}\n");
+        let src = format!(
+            "{HEAD}fn f(xs: List[Int]) -> Int {{\n  let total = 0\n  for x in xs {{\n    total += x\n  }}\n  total\n}}\n"
+        );
         let c = check_source(0, &src);
         let d = c.diagnostics.iter().find(|d| d.code == "DL0207").expect("DL0207");
         assert_eq!(d.repairs.len(), 1, "one repair");
@@ -2635,10 +2637,7 @@ mod pattern_binding_rcap_tests {
             ("`Some` of a literal", "match Some(3) {\nSome(v) => { p.x = v }\nNone => {}\n}"),
             ("`Some` from parse_int", "match parse_int(\"4\") {\nSome(v) => { p.x = v }\nNone => {}\n}"),
             ("through a `let`", "match Some(3) {\nSome(v) => {\nlet w = v\np.x = w\n}\nNone => {}\n}"),
-            (
-                "`Ok` and `Err`",
-                "let r: Result[Int, Str] = Err(\"e\")\nmatch r {\nOk(v) => { p.x = v }\nErr(e) => { p.s = e }\n}",
-            ),
+            ("`Ok` and `Err`", "let r: Result[Int, Str] = Err(\"e\")\nmatch r {\nOk(v) => { p.x = v }\nErr(e) => { p.s = e }\n}"),
             ("a program's own variant", "match Pair(1, \"z\") {\nPair(a, b) => {\np.x = a\np.s = b\n}\nNil => {}\n}"),
             ("nested", "match Some(Some(2)) {\nSome(Some(v)) => { p.x = v }\n_ => {}\n}"),
         ] {

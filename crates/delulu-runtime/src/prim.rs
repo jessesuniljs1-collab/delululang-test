@@ -1062,6 +1062,140 @@ pub fn call_str_method(s: &str, method: &str, args: &[Value], span: Span) -> Res
     }
 }
 
+/// The `Int` methods (RW 2.38, D-V2-223): pure, no effect row, on both engines — the WASM engine runs this same function
+/// host-side (`delulu:math.int_method`), so the two cannot answer differently. Arithmetic is checked as the operators
+/// are: `abs` and `pow` past the `Int` range fault DL0901, as `+` does. An argument the operation cannot take is
+/// DL0908 (`pow` of a negative exponent, `clamp` with `lo > hi`). The `checked_` forms are the way to ask first: each
+/// answers `None` where its operator would fault (DL0901 or DL0902) and `Some` of the operator's answer otherwise.
+pub fn call_int_method(n: i64, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+    let overflow = || Fault::at("DL0901", format!("integer overflow in `{method}`"), span);
+    let opt = |v: Option<i64>| match v {
+        Some(x) => Value::variant("Some", vec![Value::Int(x)]),
+        None => Value::variant("None", vec![]),
+    };
+    Ok(match method {
+        "abs" => Value::Int(n.checked_abs().ok_or_else(overflow)?),
+        "min" => Value::Int(n.min(int_arg(args, 0, span)?)),
+        "max" => Value::Int(n.max(int_arg(args, 0, span)?)),
+        "clamp" => {
+            let (lo, hi) = (int_arg(args, 0, span)?, int_arg(args, 1, span)?);
+            if lo > hi {
+                return Err(Fault::at(
+                    "DL0908",
+                    format!("`clamp({lo}, {hi})` names no value: the lower bound is above the upper"),
+                    span,
+                ));
+            }
+            Value::Int(n.clamp(lo, hi))
+        }
+        "pow" => {
+            let e = int_arg(args, 0, span)?;
+            if e < 0 {
+                return Err(Fault::at(
+                    "DL0908",
+                    format!("`pow({e})`: an `Int` power takes an exponent of 0 or more (use `Float.pow` for a fraction)"),
+                    span,
+                ));
+            }
+            Value::Int(int_pow(n, e).ok_or_else(overflow)?)
+        }
+        "checked_add" => opt(n.checked_add(int_arg(args, 0, span)?)),
+        "checked_sub" => opt(n.checked_sub(int_arg(args, 0, span)?)),
+        "checked_mul" => opt(n.checked_mul(int_arg(args, 0, span)?)),
+        // `None` for a zero divisor and for `Int::MIN / -1`, the two cases `/` and `%` fault on.
+        "checked_div" => opt(n.checked_div(int_arg(args, 0, span)?)),
+        "checked_rem" => opt(n.checked_rem(int_arg(args, 0, span)?)),
+        _ => return Err(Fault::at("DL0907", format!("unknown Int method `{method}`"), span)),
+    })
+}
+
+/// `n` to the power `e` (`e >= 0`), or `None` past the `Int` range. An exponent past `u32` overflows unless the base is
+/// -1, 0 or 1, whose powers stay in range for every exponent.
+fn int_pow(n: i64, e: i64) -> Option<i64> {
+    match u32::try_from(e) {
+        Ok(e) => n.checked_pow(e),
+        Err(_) => match n {
+            0 | 1 => Some(n),
+            -1 => Some(if e % 2 == 0 { 1 } else { -1 }),
+            _ => None,
+        },
+    }
+}
+
+/// The `Float` methods (RW 2.38, D-V2-223), run by the WASM engine host-side as `call_int_method` is. IEEE 754 binary64
+/// throughout: a NaN or an infinity is a value, as `1.0 / 0.0` already is, never a fault. The transcendental functions
+/// are the `libm` crate's (a port of musl's), not the platform's C library, so a program prints the same digits on
+/// Linux, macOS and Windows; `sqrt`, `floor`, `ceil`, `trunc` and `abs` are exact or correctly rounded everywhere.
+/// `round` rounds half away from zero (`2.5` → `3.0`, `-2.5` → `-3.0`). `min` and `max` are IEEE 754-2019's
+/// `minimumNumber` and `maximumNumber`: a NaN loses to a number, and `-0.0` is below `0.0`, so the answer never depends
+/// on the order of the operands. `clamp` with `lo > hi` or a NaN bound is DL0908; a NaN receiver stays NaN.
+pub fn call_float_method(x: f64, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+    let arg = |i: usize| match args.get(i) {
+        Some(Value::Float(y)) => Ok(*y),
+        _ => Err(Fault::at("DL0907", format!("expected a Float argument at position {i}"), span)),
+    };
+    let f = |y: f64| Ok(Value::Float(y));
+    match method {
+        "abs" => f(x.abs()),
+        "min" => f(float_min(x, arg(0)?)),
+        "max" => f(float_max(x, arg(0)?)),
+        "clamp" => {
+            let (lo, hi) = (arg(0)?, arg(1)?);
+            if lo.is_nan() || hi.is_nan() || lo > hi {
+                return Err(Fault::at(
+                    "DL0908",
+                    format!(
+                        "`clamp({}, {})` names no value: the bounds must be numbers with the lower not above the upper",
+                        Value::Float(lo).display(),
+                        Value::Float(hi).display()
+                    ),
+                    span,
+                ));
+            }
+            // A NaN stays a NaN: no bound is nearer to it than another.
+            f(if x.is_nan() { x } else { float_max(lo, float_min(x, hi)) })
+        }
+        "sqrt" => f(x.sqrt()),
+        "floor" => f(x.floor()),
+        "ceil" => f(x.ceil()),
+        "round" => f(x.round()),
+        "trunc" => f(x.trunc()),
+        "pow" => f(libm::pow(x, arg(0)?)),
+        "sin" => f(libm::sin(x)),
+        "cos" => f(libm::cos(x)),
+        "tan" => f(libm::tan(x)),
+        "asin" => f(libm::asin(x)),
+        "acos" => f(libm::acos(x)),
+        "atan" => f(libm::atan(x)),
+        // `y.atan2(x)`: the angle of the point `(x, y)`, as C's `atan2(y, x)` — the receiver is the `y`.
+        "atan2" => f(libm::atan2(x, arg(0)?)),
+        "exp" => f(libm::exp(x)),
+        "ln" => f(libm::log(x)),
+        "log10" => f(libm::log10(x)),
+        "is_nan" => Ok(Value::Bool(x.is_nan())),
+        "is_finite" => Ok(Value::Bool(x.is_finite())),
+        _ => Err(Fault::at("DL0907", format!("unknown Float method `{method}`"), span)),
+    }
+}
+
+/// IEEE 754-2019 `minimumNumber`: a NaN loses to a number, and `-0.0` is below `0.0`.
+fn float_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b < a || (b == a && b.is_sign_negative()) {
+        b
+    } else {
+        a
+    }
+}
+
+/// IEEE 754-2019 `maximumNumber`: a NaN loses to a number, and `0.0` is above `-0.0`.
+fn float_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b > a || (b == a && a.is_sign_negative()) {
+        b
+    } else {
+        a
+    }
+}
+
 /// The ordered projection `List.sort` compares by. Deliberately NOT an `Ord` on `Value`: that would
 /// define an order for every variant at once, including the opaque handles and `Float`, which is the
 /// blanket answer D-V2-29 refused. `Bool` sorts false-before-true.

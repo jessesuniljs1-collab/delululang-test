@@ -8857,3 +8857,56 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      their next red.
   6. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays prepared,
      not launched. It does not hold D-V2-210 onward.
+
+### 2026-11-08 — the laptop: RW 7.31 closed (#143 landed); RW 2.46 and RW 2.47 built — only a `var` is reassigned (D-V2-222); stopped at the owner's word, its PR's CI unread
+- Session: `https://claude.ai/code/session_01Deh6WBwz9UFPRQQi19Ruym`   Model: Claude Opus 5.5 (no fallback notice; no
+  sous-chef). The session stopped at the owner's word: *"Head Chef, 97% current session usage used. Commit and push
+  and record everything"*.
+- **Start.** On-demand routine run 21's commits (`95610bd`, `555f33d`, `459e410`) came in, and the master was
+  fast-forwarded to them. They are Claude's, from the routine. It is `enabled: false` again, and its last run
+  `SUCCEEDED` at 10:25 UTC. `master` was red only in `formal`'s *Fetch TLA+ tools* (GitHub's 504s). Re-running push run
+  `42471331754`'s failed job turned it green at attempt 2.
+- **RW 7.31, closed. PR #143 (`9697738`)** pins the TLA+ jar to v1.7.4 and checks it by SHA-256. It caches the jar and
+  the Lean tarball by version. PR run `42481037795`: 14 jobs green, 2 skipped, `formal`'s new steps green. It landed by
+  fast-forward of `master` to `9697738`, and GitHub marked it merged. **`master`'s push run on `9697738` is unread.**
+- **RW 2.46 and RW 2.47, built. Branch `laptop/basics-let-var`, a pull request into `master`.** D-V2-222 has the
+  meaning, the measurement, the classification and the evidence.
+  - **2.46.** Only a `var` is assigned. A `let`, a parameter, a loop's variable and a pattern's binding are DL0207,
+    naming which. A `let` carries the exact repair `let-to-var`, which `delulu fix` applies. DL0207's explanation and
+    the Skill are corrected.
+  - **The measurement.** No product program reassigns a `let`. Models' programs in the AI pilot did, so that record is
+    re-scored (c1 50% → 0%, c2 100% → 50%), with the published numbers kept in `METHODOLOGY.md`.
+  - **2.47.** A pattern's binding of plain data is `val`, so `Some(v) => { p.x = v }` checks. The new `gradebook`
+    program found it.
+  - **Programs:** `gradebook` (an everyday utility) and `inventory` (303 lines). Both run on both engines, and their
+    answers were checked against Python and by hand.
+- **Verified (laptop):**
+  - the witness, red before and green after;
+  - `delulu-check` 273 tests;
+  - the targets `fix_cli` (new test), `programs_cli` 3, `ai_usability` 3, `skill` 5 and `core_invariance` (blessed: 11
+    NEW cases, 262 lines added, none removed);
+  - `delulu-conform --check-reference` in sync, `--coverage` 100%;
+  - mutants M1186–M1200: 14 red, M1194 survives (an unreachable fallback, which refuses), the control green;
+  - a scan of every Rust string literal: no other embedded program reassigns a `let`;
+  - the `delulu-syntax`, `-diag`, `-runtime`, `-wasm` and `-conform` suites: exit 0, every result `ok`, 0 failed.
+- **NOT verified here:** the `delulu` crate's other targets were not run on the laptop.
+
+  The PR's CI runs everything. **Land only on its green.**
+- Files: M `crates/delulu-check/src/{check,lib,rcap_check}.rs`, `crates/delulu-diag/src/codes.rs`,
+  `crates/delulu/tests/fix_cli.rs`, `skills/delulu/SKILL.md`,
+  `measurements/ai-usability/{METHODOLOGY.md,REPORT.md,results.json}`, `tests/core-invariance/SNAPSHOT.txt`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`,
+  `docs/survey/*`; A `crates/delulu/tests/programs/{gradebook,inventory}.{delulu,out}`,
+  `tests/conformance/accept/var_and_let.delulu`,
+  `tests/conformance/reject/DL0207_{let_reassigned,parameter_assigned,loop_variable_assigned}.delulu`. Nothing deleted;
+  no entrenched file.
+- **Open / next:**
+  1. Read `master`'s push run on `9697738` (#143) and this branch's PR run. On green, land the PR by fast-forward and
+     read its push run. On red, fix (an embedded test program reassigning a `let` gets `var`).
+  2. Records still to write once it lands:
+     - `AI_ONBOARDING.md` counters: D-V2-222, M1200, #143 last merged;
+     - the `V2_PHASE_STATUS.md` line;
+     - `HANDOFF.md` §11.2, the lesson: *a rule the documentation states and no pass reads is a defect in both*.
+  3. The next basics in D-V2-220's order: 2.38 math, 2.36 ranges, 2.37 strings, 2.35 bitwise, 2.33 methods. RW 3.32
+     (WASM index stores) and RW 2.45 (records in a list) when a basic's programs need them.
+  4. Still the owner's: whether 2.0 waits for the basics. `launch/2.0.0` stays prepared, not launched.

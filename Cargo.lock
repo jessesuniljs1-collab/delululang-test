@@ -698,6 +698,7 @@ dependencies = [
  "libc",
  "libffi",
  "libloading",
+ "libm",
  "ml-dsa",
  "ml-kem",
  "pyo3",

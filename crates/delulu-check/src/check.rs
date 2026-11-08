@@ -1709,50 +1709,49 @@ impl<'a> Checker<'a> {
     /// `xs[i] = v` is read: the binding is how the write reaches a record or a list another name may share.
     fn check_lvalue_at(&mut self, lv: &LValue, ctx: &mut FnCtx, whole: bool) -> (Type, RowAcc) {
         match lv {
-            LValue::Var(name) => match if whole {
-                ctx.lookup_to_assign(&name.name)
-            } else {
-                ctx.lookup(&name.name).map(|t| (t, Binder::Var))
-            } {
-                Some((t, binder)) => {
-                    if whole {
-                        ctx.note_write(&name.name, name.span);
-                        // RW 2.46 (D-V2-222): only a `var` binding is a variable. DL0207's explanation always said so;
-                        // until this the checker read `mutable` nowhere, and `let x = 1; x = 2` ran.
-                        if binder != Binder::Var {
-                            let (what, help) = binder.refusal(&name.name);
-                            let mut d = Diagnostic::error("DL0207", format!("cannot assign to `{}`: it is {what}", name.name))
-                                .with_span(name.span, help);
-                            // A `let` becomes a `var` by its keyword alone, and that changes nothing else the program
-                            // means: `mutable` is read only here. The program then runs as it did before this refusal.
-                            if let Binder::Let(stmt) = binder {
-                                d = d.with_secondary_span(stmt, "bound by `let` here").with_repair(Repair {
-                                    id: "let-to-var",
-                                    confidence: Confidence::Exact,
-                                    authority_widening: false,
-                                    requires_human: false,
-                                    edits: vec![Edit {
-                                        file: stmt.file,
-                                        start_byte: stmt.start,
-                                        end_byte: stmt.start + 3,
-                                        insert: "var".to_string(),
-                                    }],
-                                    reason: None,
-                                });
+            LValue::Var(name) => {
+                match if whole { ctx.lookup_to_assign(&name.name) } else { ctx.lookup(&name.name).map(|t| (t, Binder::Var)) } {
+                    Some((t, binder)) => {
+                        if whole {
+                            ctx.note_write(&name.name, name.span);
+                            // RW 2.46 (D-V2-222): only a `var` binding is a variable. DL0207's explanation always said so;
+                            // until this the checker read `mutable` nowhere, and `let x = 1; x = 2` ran.
+                            if binder != Binder::Var {
+                                let (what, help) = binder.refusal(&name.name);
+                                let mut d =
+                                    Diagnostic::error("DL0207", format!("cannot assign to `{}`: it is {what}", name.name))
+                                        .with_span(name.span, help);
+                                // A `let` becomes a `var` by its keyword alone, and that changes nothing else the program
+                                // means: `mutable` is read only here. The program then runs as it did before this refusal.
+                                if let Binder::Let(stmt) = binder {
+                                    d = d.with_secondary_span(stmt, "bound by `let` here").with_repair(Repair {
+                                        id: "let-to-var",
+                                        confidence: Confidence::Exact,
+                                        authority_widening: false,
+                                        requires_human: false,
+                                        edits: vec![Edit {
+                                            file: stmt.file,
+                                            start_byte: stmt.start,
+                                            end_byte: stmt.start + 3,
+                                            insert: "var".to_string(),
+                                        }],
+                                        reason: None,
+                                    });
+                                }
+                                self.diags.push(d);
                             }
-                            self.diags.push(d);
                         }
+                        (t, RowAcc::default())
                     }
-                    (t, RowAcc::default())
+                    None => {
+                        self.diags.push(
+                            Diagnostic::error("DL0301", format!("unknown name `{}`", name.name))
+                                .with_span(name.span, "not found in this scope"),
+                        );
+                        (self.fresh_poisoned(), RowAcc::default())
+                    }
                 }
-                None => {
-                    self.diags.push(
-                        Diagnostic::error("DL0301", format!("unknown name `{}`", name.name))
-                            .with_span(name.span, "not found in this scope"),
-                    );
-                    (self.fresh_poisoned(), RowAcc::default())
-                }
-            },
+            }
             LValue::Field(base, field) => {
                 let (bt, acc) = self.check_lvalue_at(base, ctx, false);
                 (self.field_type(&bt, field, ctx), acc)
@@ -2988,6 +2987,42 @@ impl<'a> Checker<'a> {
                 // `chars_agrees_with_split_on_the_empty_separator` holds the two together so the
                 // second spelling cannot drift from the first.
                 "chars" => Some((Type::List(Box::new(Type::Str)), None, None)),
+                _ => None,
+            },
+            // RW 2.38 (D-V2-223): the math methods, pure (no effect row). Methods rather than free functions, because a
+            // prelude name is refused as a declaration (C11) and programs already declare `fn max` and `fn abs` and bind
+            // `foreign` functions named `sqrt` and `cos`. `prim.rs`'s `call_int_method` and `call_float_method` say
+            // what each answers and where it faults.
+            Type::Int => match method {
+                "abs" => Some((Type::Int, None, None)),
+                "min" | "max" | "pow" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Int, None, None))
+                }
+                "clamp" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    self.expect_arg(args, 1, &Type::Int, span);
+                    Some((Type::Int, None, None))
+                }
+                "checked_add" | "checked_sub" | "checked_mul" | "checked_div" | "checked_rem" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Option(Box::new(Type::Int)), None, None))
+                }
+                _ => None,
+            },
+            Type::Float => match method {
+                "abs" | "sqrt" | "floor" | "ceil" | "round" | "trunc" | "sin" | "cos" | "tan" | "asin" | "acos"
+                | "atan" | "exp" | "ln" | "log10" => Some((Type::Float, None, None)),
+                "min" | "max" | "pow" | "atan2" => {
+                    self.expect_arg(args, 0, &Type::Float, span);
+                    Some((Type::Float, None, None))
+                }
+                "clamp" => {
+                    self.expect_arg(args, 0, &Type::Float, span);
+                    self.expect_arg(args, 1, &Type::Float, span);
+                    Some((Type::Float, None, None))
+                }
+                "is_nan" | "is_finite" => Some((Type::Bool, None, None)),
                 _ => None,
             },
             Type::Map(kt, vt) => {
@@ -4764,6 +4799,8 @@ fn prim_receiver_label(recv: &Type) -> Option<&'static str> {
         Type::PyObj => "pyobj",
         Type::Secret(_) => "secret",
         Type::Str => "str",
+        Type::Int => "int",
+        Type::Float => "float",
         Type::List(_) => "list",
         Type::Map(_, _) => "map",
         Type::Plugin(_) => "plugin",

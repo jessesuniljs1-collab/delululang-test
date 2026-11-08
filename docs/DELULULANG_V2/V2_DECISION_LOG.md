@@ -6371,3 +6371,67 @@ side runs between the read and the write, so a right side that moves a name the 
   rejects, `match_parity`'s RW 3.31 test and `programs_cli` (3 tests).
 - Mutants M1173–M1185, all red; the control green.
 - The full suite, and witness runs on macOS and Windows: the sync-log entry names them.
+
+## D-V2-222 — RW 2.46: only a `var` binding is assigned; a `let`, a parameter, a loop's variable and a pattern's binding are DL0207, a `let` with the exact repair `let-to-var` — TAKEN (head chef, 2026-11-08, under the owner's delegation)
+
+**Context.** The second basic in D-V2-220's order, recorded by on-demand routine run 21 while it probed compound
+assignment. `let x = 1`, then `x = 2` (or `x += 1`), checked clean and printed `2`. The parser recorded `mutable` on
+every binding, and no pass read it. Yet DL0207's explanation said *"a `let` binding cannot be assigned — `let` is a
+binding, not a variable"*, and the Getting Started guide teaches `var i = 0` for a counter and `let out = []` for a list
+that is pushed to. The language had two keywords that meant the same thing, and documentation that said otherwise.
+
+**Measured before deciding.** The refusal was built first and run over every `.delulu` file in the repository: 267
+files, among them the conformance corpus, the examples, the Book's samples and the program step's programs.
+- **Product programs:** none reassigns a `let`. Nothing a user was shown breaks.
+- **The AI usability pilot:** 29 files reassign one, every one in `measurements/ai-usability/runs/`, the programs models
+  wrote. Two runs' final programs do it: `c1__t1` (never seen DeluluLang) and `c2__t1` (the Agent Skill only). The
+  Skill never said which keyword is a variable. No run with toolchain introspection, the MCP server or the full
+  documentation did.
+
+**Decision.**
+1. **The meaning.** Only a `var` binding is a variable. An assignment `x = v` or `x op= v` whose `x` is a `let`
+   binding, a parameter (`self` among them), a `for` loop's variable or a pattern's binding is refused with DL0207.
+   The message names which (*"cannot assign to `x`: it is a `let` binding"*). Swift's `let` and `var` are the model,
+   and so are Kotlin's `val` and Rust's `let`. JavaScript's `let` is not.
+2. **A field or an index is not the binding.** `p.x = 1` and `xs[0] = 1` through any binding stay as they were. Whether
+   that write is allowed is the value's reference capability (DL1604), not the binding's keyword: `let out = []` can
+   still `push`. DL0207's explanation said such a write needed a `var`, and that is corrected.
+3. **The repair.** For a `let`, DL0207 carries `let-to-var`: one edit rewriting the keyword, `exact`, widening nothing,
+   needing no human. `mutable` is read only by this check, so `var` changes nothing else the program means: the
+   repaired program runs exactly as it ran before the refusal. `delulu fix` applies it. A parameter, a loop's variable
+   and a pattern's binding are offered no edit. There is no keyword to change, and which name to bind is the writer's.
+4. **Its classification.** `STABILITY.md` §5: *"Fixing a diagnostic to fire where the spec always said it should —
+   minor, and it must be in the release notes."* DL0207's explanation is the spec's own word on it, so this is that
+   row. The CHANGELOG entry calls it out as **breaking for a program that reassigned a `let`**, with the one-command
+   migration. No new code is needed: DL0207 already meant an invalid assignment target.
+5. **The pilot is re-scored, not rewritten.** The models' programs are evidence and are not edited. The record's
+   method is to score with the toolchain it is given, and its replay test requires the committed numbers. So it is
+   re-scored: `c1__t1` and `c2__t1` no longer check, c1's completion goes from 50% to 0% and c2's from 100% to 50%,
+   and nothing else moves. `METHODOLOGY.md` records the published numbers beside the new ones and why.
+6. **The Skill teaches it.** `skills/delulu/SKILL.md` now says `let` binds once and `var` is a variable, and names
+   the repair, the pilot's finding in one paragraph.
+7. **RW 2.47, found by this basic's programs and fixed with it.** The gradebook program stored a score taken out of
+   `Some` into a record's field, `Some(v) => { st.best = v }`. That was DL1603 *"cannot store an undetermined
+   capability where `val` is required"*, though `st.total += v` passed. The reference-capability pass gave every
+   pattern-bound name no capability, even an `Int`. Now a name bound to a value with no write surface at all (plain
+   data and the handles, `has_no_write_surface`) is `val`, its type read from the scrutinee through `Some`, `Ok`, `Err`
+   and a program's own variants. A record or a list out of a pattern stays undetermined: its type's default may be
+   `val` while the value is a `ref` another name writes. Deciding that is RW 2.45's, and a test holds it (a `ref` list
+   out of `Some` stored in a `val` field is still DL1603).
+
+**What does not move.** A program that checked before and assigns only `var` bindings checks and runs as before.
+`tests/core-invariance/SNAPSHOT.txt` gained 11 NEW cases (262 lines) and changed none. No DIR bytes change. The parser
+is untouched.
+
+**Evidence.**
+- **The witness.** On `459e410`'s binary, `let total = 0` then `total += v` checks and prints `sum: 12`. Now it is
+  DL0207. After `delulu fix` it is `var total = 0` and prints `sum: 12` again.
+- **Tests:**
+  - `delulu-check` `let_binding_tests` (3) and `pattern_binding_rcap_tests` (2);
+  - `fix_cli` `let_to_var_migrates_a_program_that_reassigned_a_let`;
+  - conformance: `accept/var_and_let.delulu`, plus the rejects `DL0207_let_reassigned`, `DL0207_parameter_assigned`
+    and `DL0207_loop_variable_assigned`;
+  - `programs_cli` with two new programs, `gradebook` (an everyday utility) and `inventory` (303 lines). Both run on
+    both engines, and their answers were checked against Python and by hand.
+- **Mutants M1186–M1200:** 15 in all, 14 red. M1194 survived: it mutates `lookup_to_assign`'s fallback, which no program
+  reaches, because `bind` writes the binder beside the type. The fallback refuses. The control is green.
