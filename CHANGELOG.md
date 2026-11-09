@@ -11,6 +11,29 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — math and the checked forms, 2026-11-09
+
+- **Added (RW 2.38, D-V2-223):** math, written as methods, pure, on both engines.
+  - `Int`: `abs`, `min`, `max`, `clamp(lo, hi)`, `pow(e)`, and the checked forms `checked_add`, `checked_sub`,
+    `checked_mul`, `checked_div` and `checked_rem`. Each is an `Option[Int]` that is `None` exactly where the operator
+    would stop the program (DL0901 overflow, DL0902 a zero divisor).
+  - `Float`: `abs`, `min`, `max`, `clamp`, `sqrt`, `floor`, `ceil`, `round` (half away from zero), `trunc`, `pow`, `sin`,
+    `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `ln`, `log10`, `is_nan`, `is_finite`, and `to_int`, the checked
+    way to an `Int` (`None` for a NaN, an infinity or a value past the range; `int(x)` still saturates).
+  - The transcendental functions are the `libm` crate's, so every OS prints the same digits. They are not always the
+    correctly rounded digits: `1.0.exp()` is one ulp above e.
+  - `abs` of `Int`'s minimum and a `pow` past the range are DL0901. A negative `Int` exponent, and `clamp` with
+    `lo > hi` or a NaN bound, are DL0908. A `Float` never faults: a NaN or an infinity is its answer.
+  - Methods, not functions, so a program's own `fn abs` or `fn max` keeps its meaning. `abs(x)` is DL0301, and its
+    message says to write `x.abs()`; `n.sqrt()` on an `Int` is DL0405, and its message says `float(n).sqrt()`.
+- **Fixed:** the WASM engine refused every math method in a module compiled without the checker's types, as a
+  Verified plugin is recompiled from its DIR.
+- **Fixed (`delulu fmt`, FMT-MATCH-ARM-1):** a `match` that is another `match` arm's value was printed on one line,
+  its block arms and their statements joined by `;`. It is laid out on its own lines now, so `fmt` reformats a file
+  holding one; five in the repository were.
+- **Fixed (`delulu fmt`, FMT-FLOAT-EXP-1):** a `Float` literal below 1e-4 or from 1e16 up is printed with an exponent
+  (`1.0e-300`), not with every digit. Its value is unchanged.
+
 ## Unreleased — only a `var` is reassigned, 2026-11-08
 
 - **Changed (RW 2.46, D-V2-222) — breaking for a program that reassigned a `let`:** assigning a `let` binding, a

@@ -311,8 +311,9 @@ another OS, and then takes about seven minutes itself (run 5).
      3. **the language basics, FIRST from 2026-11-06 at the owner's word** (D-V2-220: *"Build basics first for
         DeluluLang … After each build, write and run programs and softwares of varying complexities and test and verify
         and fix it"*):
-        - in this order: ~~compound assignment (RW 2.34)~~ — done (on-demand routine run 21, D-V2-221); RW 2.46 (a `let`
-          reassigned, which DL0207's explanation forbids — found by 2.34's programs); math and the checked forms (2.38);
+        - in this order: ~~compound assignment (RW 2.34)~~ — done (on-demand routine run 21, D-V2-221); ~~RW 2.46~~ —
+          done (the laptop, 2026-11-08, D-V2-222); ~~math and the checked forms (2.38)~~ — done (on-demand routine run 22,
+          D-V2-223);
           ranges (2.36); strings
           (2.37); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
           comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
@@ -564,7 +565,11 @@ witness print what each party said (its `ended` line, `broker.log`) before sampl
 HEAD:claude/…`, or set it back with `git branch --set-upstream-to=origin/master master`. **A basic's programs probe the
 basic** (D-V2-220's step; run 21): run each program and each probe on both engines, check every answer by hand or
 against Python before saving its `.out`, and give a rewritten form a right side that changes what its copied side
-reads; that is how RW 2.34's split place was found.
+reads; that is how RW 2.34's split place was found. **Run `delulu fmt` on each new program and read what it changed**
+(run 22): the formatter is part of what a program tests, and `loan.delulu` found it squashing a nested `match` onto
+one 700-character line (FMT-MATCH-ARM-1). **A new primitive the WASM engine compiles is tested through both compile
+entries** (run 22): `compile_checked` carries the checker's types and `compile_module` does not (a Verified plugin's DIR
+recompile); the math import was decided from the types, and the untyped entry refused every math method.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
 — the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and

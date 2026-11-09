@@ -842,3 +842,42 @@ methods allows GET alone, so no grant written before widens. `PRIM_TABLE_VERSION
 git checkout <this-commit>^ -- tests/conformance/witnesses.toml
 ```
 — together with the six primitive-table entries, or the coverage gate fails on six unwitnessed anchors.
+
+## 2026-11-09 — `tests/conformance/witnesses.toml`: the math methods' rejecting witnesses
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: thirty-three `[[witness]]` rows, one rejecting witness for each new anchor `ref.prim.int.*` (ten) and `ref.prim.float.*` (twenty-three), before `ref.prim.list.len`'s, under a comment naming the decision. No other row changes. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | on-demand routine run 22 (2026-11-09); `REMAINING_WORK.md` 2.38; decision D-V2-223 |
+| Approved by | **the head chef, 2026-11-09, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+D-V2-223 adds 33 primitives to the primitive table. The coverage law (invariant 42) demands an accepting and a
+rejecting witness for every anchor. The accepting one is a conformance program, `tests/conformance/accept/31_math.delulu`,
+which uses every method and names all 33 anchors in its header, so it needs no row here. The rejecting one is the
+table's own `arity_column_matches_the_checker_gate`: it calls each listed primitive with one argument more than its
+arity and asserts the arity gate's own DL0403 by its exact message, and with exactly its arity and asserts the gate does
+not fire. Three anchors (`int.pow`, `float.max`, `float.sqrt`) also have hand-written reject programs.
+
+**Why this is not an RFC**
+
+The primitives are additive (`STABILITY.md` §1): no program that checked changes its answer, and a method takes no name
+from a program. `PRIM_TABLE_VERSION` moves from 9 to 10 by its own rule.
+
+**Verified before the change**
+
+1. `delulu-conform --coverage` without these rows: 32 gaps (`to_int` was added after), each *"no accepting test, no
+   rejecting test"*. With the accepting program and these rows: *PASS: 100% anchor coverage*, 399 of 399.
+2. Mutants M1201–M1219 turn the new tests red (`V2_LOG.md`); `--reference` regenerated the reference (125 of 125 in the
+   primitive chapter).
+
+**How to revert**
+
+```
+git checkout 79431e4^ -- tests/conformance/witnesses.toml
+```
+— together with the 33 primitive-table entries, or the coverage gate fails on 33 unwitnessed anchors.

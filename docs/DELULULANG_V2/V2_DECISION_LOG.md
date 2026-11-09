@@ -6435,3 +6435,75 @@ is untouched.
     both engines, and their answers were checked against Python and by hand.
 - **Mutants M1186–M1200:** 15 in all, 14 red. M1194 survived: it mutates `lookup_to_assign`'s fallback, which no program
   reaches, because `bind` writes the binder beside the type. The fallback refuses. The control is green.
+
+## D-V2-223 — RW 2.38: math as pure methods on `Int` and `Float`, on both engines; each checked form is `None` exactly where its operator faults; `Float.to_int` is the checked conversion; the transcendental functions are `libm`'s — TAKEN (head chef, 2026-11-09, under the owner's delegation)
+
+**Context.** The third basic in D-V2-220's order. RW 2.38, measured 2026-11-02: `abs(-3)` and `sqrt(2.0)` were DL0301,
+and an `Int` overflow or a zero divisor stopped the program with no way to ask first. The laptop built the methods on
+both engines on 2026-11-08 (`ee207ce`, a work in progress: no witness rows, parity tests, mutants, suite or records).
+On-demand routine run 22 finished it.
+
+**Decision.**
+1. **Methods, not prelude functions.** RW 2.38 asked for prelude functions, but a prelude name is refused as a
+   declaration (C11, `PRELUDE_BUILTINS`). Four of the repository's programs declare or bind `abs`, `max`, `sqrt` or
+   `cos` (`tests/conformance/accept/01_pure.delulu`, `22_module_items.delulu`, `23_foreign_block.delulu`,
+   `docs/book/samples/08_foreign.delulu`), and the Getting Started guide declares `to_int`. Functions would have
+   refused them. A method takes no name from a program, so each still means what it did.
+2. **The surface, 33 primitives.** `Int`: `abs`, `min`, `max`, `clamp`, `pow`, `checked_add`, `checked_sub`,
+   `checked_mul`, `checked_div` and `checked_rem`. `Float`: `abs`, `min`, `max`, `clamp`, `sqrt`, `floor`, `ceil`,
+   `round`, `trunc`, `pow`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `ln`, `log10`, `is_nan`,
+   `is_finite` and `to_int`. All are pure (no effect row). `PRIM_TABLE` goes from 92 to 125 entries and
+   `PRIM_TABLE_VERSION` from 9 to 10, additive by its own rule.
+3. **Faults.** `Int` arithmetic is checked as the operators are: `abs` of `Int`'s minimum and a `pow` past the range
+   are DL0901. A value no answer exists for is DL0908, which already meant an argument outside what the operation
+   accepts: a negative `Int` exponent (`2.0.pow(-1.0)` is the fraction), and `clamp(lo, hi)` with `lo > hi` or a NaN
+   bound. A `Float` never faults: a NaN or an infinity is a value, as `1.0 / 0.0` already was.
+4. **The law of the checked forms.** `n.checked_op(m)` is `None` exactly where `n op m` stops the program, and otherwise
+   `Some` of the operator's own answer: `MIN / -1` and `MIN % -1` overflow, a zero divisor is DL0902.
+5. **The conversion.** `int(x)` keeps its meaning: it saturates, so a NaN is `0` and an infinity `Int`'s limit.
+   Changing it would move what a program that checks today prints. `x.to_int()` is the way to ask first: `Some` of `x`
+   truncated toward zero, and `None` for a NaN, an infinity, or a magnitude of 2^63 or more (except -2^63 itself).
+6. **Exact meanings.** `round` is half away from zero (C's `round`, Rust's `f64::round`), not Python's half to even:
+   `2.5.round()` is `3.0`. `min` and `max` are IEEE 754-2019's `minimumNumber` and `maximumNumber`: a NaN loses to a
+   number, and `-0.0` is below `0.0`, so the order of the operands never changes the answer, which Rust's `f64::min`
+   does not promise. `y.atan2(x)` is C's `atan2(y, x)`: the receiver is `y`.
+7. **The same digits everywhere.** The transcendental functions are the `libm` crate (a port of musl's), already in the
+   tree through Wasmtime, not the platform's C library. So Linux, macOS and Windows print the same digits, and so do
+   both engines. They are not always the correctly rounded digits: `1.0.exp()` is `2.7182818284590455`, one ulp above
+   e, where glibc prints `2.718281828459045`. The agents' reference says to compare a transcendental answer within a
+   tolerance.
+8. **Both engines run one implementation.** The WASM engine calls the interpreter's own `call_int_method` and
+   `call_float_method` host-side (`delulu:math`), so their answers and faults are the interpreter's, word for word.
+   `is_nan`, `is_finite` and `to_int` compile in the guest, `to_int` with the same two exact comparisons as
+   `prim::float_to_int`. A module compiled without the checker's types (a Verified plugin recompiled from its DIR)
+   decides the math import by the method's name; it refused every math method until this run.
+9. **The refusals teach the spelling.** `abs(x)` is DL0301, whose message says `x.abs()`, which types have it, and for
+   a `Float`-only method the conversion an `Int` needs. `n.sqrt()` on an `Int` is DL0405 saying `float(n).sqrt()`. Both
+   are read from the primitive table, so a method added later is named too. No new code.
+10. **Two formatter defects, found by this basic's programs and fixed with it.** FMT-MATCH-ARM-1: a `match` that is
+    another `match` arm's value printed on one line, its block arms joined by `;`; five gated files had it. FMT-FLOAT-EXP-1:
+    a `Float` literal printed with every digit (`1.0e-300` as 300 of them); one below 1e-4 or from 1e16 up now prints
+    with an exponent, Python's `repr` threshold. A program's meaning never moved; the files were reformatted.
+
+**Classification.** Additive (`STABILITY.md` §1): new primitives, a refusal's words, and the formatter's canonical form
+of two shapes. No program that checked changes its answer, its code or its exit.
+
+**What does not move.** `tests/core-invariance/SNAPSHOT.txt`: 15 NEW cases (the new conformance files), 333 lines
+added, and one line changed. That one is `why Write`'s citation of `examples/guide/03_errors.delulu`'s `main`, moved
+from line 47 to 50 by the reformat. No answer moved. The DIR's bytes for a program that checked before are unchanged.
+
+**Evidence.**
+- **Witnessed red before the fix:** the untyped compile (`math_methods_compile_without_the_checkers_types`, *"an `Int`
+  method in a module compiled without the math interface"*), FMT-MATCH-ARM-1 and FMT-FLOAT-EXP-1, each in its test. The
+  methods' absence is RW 2.38's probe of 2026-11-02; it was not re-run this run on a pre-WIP binary.
+- **Tests:** `delulu-runtime` `math_tests` (7: the checked-form law over 11 × 11 edges, `pow` and `abs` at the range,
+  `clamp`, `min`/`max` symmetric over signed zeros and NaN, `round`, `to_int` at every boundary, `libm`'s digits);
+  `delulu-wasm` `math_parity` (5: 57 answers and 8 faults on both engines against hand-worked values, the law over a
+  7 × 7 grid of both engines' runs, evaluation order, the untyped compile); `delulu-check` `math_spelling_tests` (3);
+  `fmt` (2); conformance `accept/31_math.delulu` and five rejects, 33 witness rows (`ENTRENCHED_CHANGE_RECORD.md`), the
+  reference at 399 of 399 anchors.
+- **Programs (D-V2-220's step), on both engines:** `math_table` (the laptop's, every method over edge values),
+  `hypotenuse` (a one-liner), `loan` (an everyday utility: an annuity schedule in whole cents) and `weather` (303
+  lines: statistics, wind vectors, great-circle distances, a least-squares trend). `loan` and `weather` match an
+  independent Python implementation line for line.
+- **Mutants M1201–M1219 and M1206b:** 20, all red; each control green.

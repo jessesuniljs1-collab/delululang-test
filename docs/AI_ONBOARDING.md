@@ -380,7 +380,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - **NOW, at the owner's word (2026-11-06, D-V2-220): the language basics first.** *"Build basics first for DeluluLang
     … After each build, write and run programs and softwares of varying complexities and test and verify and fix it."*
     - The order: ~~compound assignment (2.34)~~ (done 2026-11-08 by on-demand routine run 21, D-V2-221; its programs
-      found RW 2.45, 2.46 and 3.32, and RW 3.31, fixed) → RW 2.46 → math and the checked forms (2.38) → ranges (2.36) →
+      found RW 2.45, 2.46 and 3.32, and RW 3.31, fixed) → ~~RW 2.46~~ (done 2026-11-08 by the laptop, D-V2-222, with
+      RW 2.47) → ~~math and the checked forms (2.38)~~ (done 2026-11-09 by on-demand routine run 22, D-V2-223; its
+      programs found two formatter defects, fixed, and RW 2.48 and 2.49) → ranges (2.36) →
       strings (2.37) →
       bitwise (2.35) → methods on a program's own types (2.33) → tuples, sets, keyed sorting, comprehensions (2.39) →
       argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.
@@ -393,11 +395,10 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the OpenShell pin bump (RW 7.28);
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-220;
-  - the last mutant is M1172;
-  - there are 157 DL codes and 366 reference anchors;
-  - pull requests are numbered on GitHub, and #140 was the last merged (#139 and #140 together, by fast-forward, the
-    laptop, 2026-11-06).
+  - the last decision is D-V2-223;
+  - the last mutant is M1219 (with M1206b, a re-run of M1206 on clippy's form of its line);
+  - there are 157 DL codes and 399 reference anchors;
+  - pull requests are numbered on GitHub, and #144 was the last merged (by fast-forward, the laptop, 2026-11-08).
 
 ## 11. Keep this file true
 

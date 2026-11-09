@@ -12688,3 +12688,45 @@ meant one thing.
   programs on both engines.
 - Mutants M1186–M1200 (14 red; M1194 survives, an unreachable fallback). `core_invariance`: additions only.
 - The PR's CI run is unread at the stop: `docs/CLOUD_SYNC_LOG.md`'s entry.
+
+## 2026-11-09 — on-demand routine run 22: RW 2.38 closed — math and the checked forms (D-V2-223); FMT-MATCH-ARM-1 and FMT-FLOAT-EXP-1 fixed
+
+**Start.** `master` was `10ba5d7`: PR #144 (RW 2.46 and 2.47) landed by the laptop, its push run `42502667684` green on
+every job. The nightly `42468762269` on `18ea4e4` was red only in `formal`'s *Fetch TLA+ tools* (GitHub's 504s), which
+RW 7.31 has since pinned and cached. The laptop's work in progress `ee207ce` on `laptop/basics-math` (RW 2.38) was the
+slice in progress. `origin/autosave/laptop`'s newest snapshot (`4271780`, 16:57 UTC) is older than it and a subset of it.
+The Survey: `ok` (1661 nodes, 20052 edges); `doctor --check`: 26 passed.
+
+**What.** RW 2.38, the third language basic (D-V2-220), finished from `ee207ce`.
+- **Probed before building on.** Every answer and fault of the laptop's methods agreed on both engines, through
+  closures, generics, record fields, chains and effectful arguments. Two gaps were found:
+  - `int(x)` saturates silently (a NaN is `0`), so `Float.to_int()` was added, the checked conversion;
+  - the untyped WASM compile (`compile_module`, a Verified plugin's DIR recompile) refused every math method.
+    Its import was decided from checker types it does not have. Witnessed red, fixed.
+- **The refusals teach the spelling.** DL0301 for `abs(x)` says `x.abs()`; DL0405 for `n.sqrt()` says
+  `float(n).sqrt()`.
+- **The programs** (D-V2-220's step): `hypotenuse` (a one-liner), `loan` (an annuity schedule in whole cents) and
+  `weather` (303 lines, every basic so far), on both engines. `loan` and `weather` match an independent Python
+  implementation line for line. They found:
+  - **FMT-MATCH-ARM-1**, fixed: `fmt` printed a `match` that is an arm's value on one line, its block arms joined by
+    `;`. Five gated files carried it, and were reformatted;
+  - **FMT-FLOAT-EXP-1**, the laptop's finding, fixed: a `Float` literal printed with every digit;
+  - **RW 2.48**: `1e300` is refused with errors that never say `1.0e300`;
+  - **RW 2.49**, the laptop's finding, re-run: a line beginning with `+` does not continue, even in parentheses;
+  - **RW 2.37**'s number formatting: `str` of a tiny or huge `Float` prints every digit.
+- **Measured and documented:** `libm`'s `1.0.exp()` is one ulp above e, where glibc rounds correctly.
+
+**Evidence.**
+- Tests: `math_tests` 7, `math_parity` 5, `math_spelling_tests` 3, `fmt` 2 new, conformance (`accept/31_math.delulu`,
+  five rejects, 33 witness rows), `programs_cli` over four new programs. `delulu-conform --coverage` 399 of 399.
+- Mutants M1201–M1219 and M1206b: 20, all red; each control green.
+- `scripts/clippy.sh -j 4` clean; `scripts/check-other-os.sh` clean on all five targets.
+- The touched crates' suites: 57 targets, 1,151 passed, 0 failed. **The full suite** (`scripts/suite.sh`, on `79431e4`):
+  195 targets, 2,749 passed, 0 failed, 16 ignored, `EXIT=0`, the tree unmoved.
+- The two-engine differential (50,000 programs, `--release`, by hand since `codegen.rs` changed): green, 126 s.
+- `core_invariance` blessed: 15 NEW cases, 333 lines added, one line changed (the reformatted guide example's `main`,
+  line 47 to 50).
+- Witness runs on `79431e4`, each read in its log:
+  - macOS `42573357598` and Windows `42573361021`: `conformance` 4, `core_invariance` 1, `programs_cli` 3;
+  - macOS `42573364076` and Windows `42573366942`: `math_parity` 5;
+  - Windows `42573369648` and macOS `42573372582`: `delulu-runtime` `math_tests` 7, `libm`'s digits among them.

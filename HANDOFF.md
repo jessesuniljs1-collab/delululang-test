@@ -912,6 +912,17 @@ wins, and you should update the memory to match.
     record held in a list cannot be written through its binding (RW 2.45), and that WASM refused `== None` on an
     `Option` of a record (RW 3.31). Probing the refusals found a `let` that can be reassigned while DL0207's explanation
     says it cannot (RW 2.46). Write the programs before closing the row, and check each answer by hand.
+  - **A rule the documentation states and no pass reads is a defect in both** (the laptop, 2026-11-08, RW 2.46).
+    DL0207's explanation said a `let` cannot be assigned; the parser recorded `mutable` on every binding and no pass
+    read it. Where an explanation states a rule, find the pass that enforces it before trusting either.
+  - **A feature decided by the checker's types needs its untyped path tested** (on-demand routine run 22, RW 2.38). The
+    WASM compile has two entries: `compile_checked`, with the checker's node types, and `compile_module`, without them,
+    which recompiles a Verified plugin from its DIR. The math import was decided from the node types, so the untyped
+    entry refused every math method, and every test went through the typed one. Grep a new feature's decision for
+    `node_types`, and test the entry that passes none.
+  - **A basic's programs test the toolchain as well as the basic** (run 22). `delulu fmt` on the new `loan.delulu`
+    squashed a nested `match` onto one 700-character line. Five gated files in the repository had carried the same
+    flattening for weeks, canonical by definition, and nothing flagged it. Format every new program and read the diff.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

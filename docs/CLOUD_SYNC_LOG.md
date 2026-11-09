@@ -8952,3 +8952,106 @@ and `docs/book/samples/08_foreign.delulu` declare `fn abs`, `fn max`, `fn sqrt`,
 4. Then the basics: 2.36 ranges, 2.37 strings, 2.35 bitwise, 2.33 methods, 2.39, 2.40, 2.41.
 
 Survey and doctor: in the commit below.
+
+### 2026-11-09 — on-demand routine run 22: RW 2.38 closed — math and the checked forms, finishing the laptop's work in progress (D-V2-223); FMT-MATCH-ARM-1 and FMT-FLOAT-EXP-1 fixed
+- Session: `https://claude.ai/code/session_01Deh6WA4md6A8ZzhJsUXfRf`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with
+  step 0's command, were 2 at the start, all `"effort":"xhigh"`. The setup script had run: the 1.96.1 toolchain was there
+  before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*). The code also went to the session's
+  branch `claude/peaceful-carson-r464uq` for its runner reads. Pull request: none.
+- Base: `10ba5d7` (`master` at the start). `gh` is installed (`/usr/local/bin/gh`);
+  CI was read with the MCP tools and `curl`.
+- **Housekeeping:**
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1661 nodes, 20052 edges)`; `ok: 26 check(s)
+    passed`.
+  - CI: `master`'s push run `42502667684` on `10ba5d7` (#144) green on every job. The nightly `42468762269` on `18ea4e4`
+    was red only in `formal`'s *Fetch TLA+ tools* (HTTP 504 from GitHub's release downloads), which RW 7.31 (`9697738`)
+    has since pinned and cached.
+  - Branches ahead of `master`: `laptop/basics-math` (`ee207ce`, the laptop's work in progress on RW 2.38 — this run's
+    milestone, landed with its commits); `laptop/stack-ladder-witness` (`9471585`, its superseded witness, recorded
+    before); `autosave/laptop`'s newest snapshot `4271780` (16:57 UTC on 2026-11-08, on `laptop/basics-math`) is older
+    than `ee207ce` and its code a subset of it, so nothing was unfinished beyond the commit.
+- **The milestone, named before building:** RW 2.38 closed end to end — the laptop's math methods finished: witness rows
+  and the reference, parity tests on both engines, unit tests, mutants, the programs of D-V2-220's step, the full suite,
+  records, pushed to `master` and its push run read. **Delivered:**
+  - **Probed before building on.** Every answer and fault of `ee207ce` agreed on both engines, through closures,
+    generics, record fields, chains and effectful arguments (evaluated in order). Two gaps, both fixed:
+    - `int(x)` saturates silently (a NaN is `0`), so `Float.to_int()`, the checked conversion, was added (`None` for a
+      NaN, an infinity or a magnitude of 2^63 or more), the same two exact comparisons on both engines;
+    - **the untyped WASM compile** (`compile_module`, how a Verified plugin is recompiled from its DIR) refused every math
+      method: its import was decided from the checker's node types, which that entry does not pass. Witnessed red; a
+      receiver with no type is now decided by the method's name.
+  - **The refusals teach the spelling** (AI-first): `abs(x)`, `max(a, b)` and `sqrt(x)` are DL0301 saying `x.abs()`,
+    `a.max(b)`, `x.sqrt()`; `n.sqrt()` on an `Int` is DL0405 saying `float(n).sqrt()`. Both read the primitive table.
+  - **D-V2-223** records the meanings: methods rather than prelude functions (C11, and four repository programs declare
+    `abs`, `max`, `sqrt` or `cos`); the law of the checked forms; `round` half away from zero; IEEE 754-2019
+    `minimumNumber`/`maximumNumber`; `libm`'s digits on every OS, which are not always the correctly rounded ones
+    (`1.0.exp()` is one ulp above e).
+  - **The program step (D-V2-220):** `hypotenuse` (a one-liner), `loan` (an everyday utility: an annuity schedule in
+    whole cents, `checked_mul` and `to_int` guarding it) and `weather` (303 lines: statistics, wind vectors,
+    great-circle distances, a least-squares trend, fixed-point output) on both engines, with the laptop's `math_table`.
+    `loan` and `weather` match an independent Python implementation line for line. They found:
+    - **FMT-MATCH-ARM-1**, fixed: `delulu fmt` printed a `match` that is another arm's value on one line, its block arms
+      joined by `;` (700 characters in `loan.delulu`). Five gated files carried it and were reformatted, and the
+      Getting Started guide's quotation of one;
+    - **FMT-FLOAT-EXP-1** (the laptop's finding), fixed: a literal below 1e-4 or from 1e16 up prints with an exponent;
+    - **RW 2.48** (new): `1e300` is refused with errors that never say `1.0e300`;
+    - **RW 2.49** (new; the laptop's finding, re-run): a line beginning with `+` does not continue, even in parentheses;
+    - **RW 2.37**: `str` of a tiny or huge `Float` prints every digit (added to its evidence).
+  - **Docs:** the Skill (and its stale *"no collection method compiles to WebAssembly"*, which RW 3.4 overtook),
+    `docs/for-agents.md` and `GETTING_STARTED.md` teach the math surface; DL0908's explanation names `pow` and `clamp`.
+- Commits: `ee207ce` (the laptop's work in progress, landed with this run's); `79431e4` RW 2.38 finished (the code, the
+  tests, the programs, the reformatted files); the records commit after it (this entry, D-V2-223, the entrenched record,
+  the rows, CHANGELOG, V2_LOG, V2_PHASE_STATUS, README, `AI_ONBOARDING.md`, `CLOUD_ROUTINE.md`, `HANDOFF.md` §11.2, the
+  regenerated map).
+- Files and folders (`git diff --name-status 10ba5d7..HEAD`, the work in progress's among them):
+  A `crates/delulu-wasm/tests/math_parity.rs`, `crates/delulu/tests/programs/{hypotenuse,loan,math_table,weather}.{delulu,out}`,
+  `tests/conformance/accept/31_math.delulu`, `tests/conformance/reject/{DL0301_math_function_spelling,
+  DL0401_float_max_int_argument,DL0401_int_pow_float_exponent,DL0403_float_sqrt_extra_arg,DL0405_int_has_no_float_method}.delulu`;
+  M `Cargo.lock`, `crates/delulu-runtime/Cargo.toml`, `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/prim.rs`, `crates/delulu-check/src/{check,dir,lib,prim_table}.rs`,
+  `crates/delulu-diag/src/codes.rs`, `crates/delulu-syntax/src/fmt.rs`, `crates/delulu-wasm/src/{codegen,host}.rs`,
+  `docs/book/samples/10_actuate_errors.delulu`, `examples/guide/03_errors.delulu`, `examples/numpy_mean.delulu`,
+  `examples/plugin_shout/host.delulu`, `measurements/federation-demo/sat-federated.delulu`, `skills/delulu/SKILL.md`,
+  `tests/conformance/witnesses.toml` (**entrenched**: `ENTRENCHED_CHANGE_RECORD.md`'s 2026-11-09 entry),
+  `tests/core-invariance/SNAPSHOT.txt`, `docs/reference/{README,coverage,primitives}.md`, `docs/for-agents.md`,
+  `docs/GETTING_STARTED.md`, `CHANGELOG.md`, `HANDOFF.md`, `README.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/REMAINING_WORK.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`,
+  `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG,V2_PHASE_STATUS}.md`, `docs/survey/*`. Nothing deleted or renamed; no new
+  markdown file.
+- **Verified:**
+  - witnessed red before each fix: the untyped compile, FMT-MATCH-ARM-1, FMT-FLOAT-EXP-1;
+  - mutants M1201–M1219 and M1206b (M1206 re-run on clippy's form of its line): 20, all red, each control green;
+  - `scripts/clippy.sh -j 4` clean after the last `.rs` edit; `scripts/check-other-os.sh` clean on all five targets;
+  - the touched crates' suites: 57 targets, 1,151 passed, 0 failed;
+  - **the full suite** (`scripts/suite.sh`, on `79431e4`): 195 targets, 2,749 passed, 0 failed, 16 ignored, `EXIT=0`,
+    the tree unmoved;
+  - `delulu-conform --coverage` 100% (399 of 399), `--check-reference` in sync; `core_invariance` blessed (15 NEW cases,
+    333 lines added; one line changed, a citation the reformat moved);
+  - the two-engine differential (`cargo test -p delulu-wasm --release --test differential -- --ignored`, 50,000
+    programs): green, 126 s;
+  - **witness runs on `79431e4`**, each read in its log: macOS `42573357598` and Windows `42573361021` (`conformance`
+    4, `core_invariance` 1, `programs_cli` 3); macOS `42573364076` and Windows `42573366942` (`math_parity` 5); Windows
+    `42573369648` and macOS `42573372582` (`delulu-runtime` `math_tests` 7, `libm`'s digits among them).
+- Survey and doctor (after the last edit): in the records commit's message.
+- Redo on the laptop: nothing for the milestone. Delete the merged branches: `laptop/basics-math` (in `master` once this
+  lands), `laptop/basics-let-var`, `laptop/basics-compound`, `laptop/rw-7-31-formal-pin`, `laptop/mcp-cancel`,
+  `laptop/sandbox-faults`, `laptop/missing-grants`, `laptop/package-fast-paths`, `laptop/stack-ladder`,
+  `laptop/wasm-main-shapes`, `laptop/stack-ladder-witness` (superseded), `claude/peaceful-carson-yjtqjc` and this run's
+  `claude/peaceful-carson-r464uq`, if the git proxy refuses this run's deletions.
+- For the laptop's memory: `HANDOFF.md` §11.2 has three new lessons (*a rule the documentation states and no pass reads
+  is a defect in both*, #144's; *a feature decided by the checker's types needs its untyped path tested*; *a basic's
+  programs test the toolchain as well as the basic*). `docs/CLOUD_ROUTINE.md`'s program-step paragraph gained the last
+  two as steps.
+- **Open / next:**
+  1. **CI of this run:** `master`'s push run on the records commit (it carries `ee207ce` and `79431e4`) — read in the
+     follow-up commit below, or unread if this entry is the last word.
+  2. **The next basics, in D-V2-220's order:** ranges (2.36), strings (2.37, with the `Float` formatting in its
+     evidence), bitwise (2.35), methods on a program's own types (2.33), tuples and sets (2.39), argv and exit code
+     (2.40), JSON (2.41). RW 2.48 and 2.49 (both small, the lexer and the parser) fit beside strings. RW 3.32 (WASM index
+     stores) and RW 2.45 (records in a list) when a basic's programs need them, or before methods (2.33).
+  3. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  4. RW 3.30: measure on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for
+     their next red.
+  5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
+     prepared, not launched; it does not hold D-V2-210 onward.
