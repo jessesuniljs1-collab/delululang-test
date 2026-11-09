@@ -9044,8 +9044,11 @@ Survey and doctor: in the commit below.
   programs test the toolchain as well as the basic*). `docs/CLOUD_ROUTINE.md`'s program-step paragraph gained the last
   two as steps.
 - **Open / next:**
-  1. **CI of this run:** `master`'s push run on the records commit (it carries `ee207ce` and `79431e4`) — read in the
-     follow-up commit below, or unread if this entry is the last word.
+  1. **CI of this run, read:** `master`'s push run `42575366656` on the records commit `0213077` (it carries `ee207ce` and
+     `79431e4`): success, 14 jobs green and `heavy-gates` and `miri-slow` skipped as on every push; arm64's ping-pong
+     MEASURED 2.88x against a bar of 1.48x, macOS, Ubuntu and Windows NOT MEASURED, as always on those runners. The push
+     run of the follow-up commit that wrote this item is unread here: read it first. Branch deletion: this session's
+     permission policy refused `git push origin --delete` as destructive, so every merged branch above is the laptop's.
   2. **The next basics, in D-V2-220's order:** ranges (2.36), strings (2.37, with the `Float` formatting in its
      evidence), bitwise (2.35), methods on a program's own types (2.33), tuples and sets (2.39), argv and exit code
      (2.40), JSON (2.41). RW 2.48 and 2.49 (both small, the lexer and the parser) fit beside strings. RW 3.32 (WASM index

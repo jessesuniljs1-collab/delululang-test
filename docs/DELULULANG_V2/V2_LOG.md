@@ -12730,3 +12730,5 @@ The Survey: `ok` (1661 nodes, 20052 edges); `doctor --check`: 26 passed.
   - macOS `42573357598` and Windows `42573361021`: `conformance` 4, `core_invariance` 1, `programs_cli` 3;
   - macOS `42573364076` and Windows `42573366942`: `math_parity` 5;
   - Windows `42573369648` and macOS `42573372582`: `delulu-runtime` `math_tests` 7, `libm`'s digits among them.
+- `master`'s push run `42575366656` on the records commit `0213077`: success, 14 jobs green, 2 skipped (`heavy-gates`,
+  `miri-slow`); arm64's ping-pong MEASURED 2.88x against 1.48x.

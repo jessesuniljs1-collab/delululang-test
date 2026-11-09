@@ -662,7 +662,9 @@ whose tip is in `master`'s history — checked with `git merge-base --is-ancesto
 before `git push origin --delete BRANCH` — and at step 9 this run's own the same way. Never one with a commit `master`
 lacks (land it or record it first), and never `master`, `launch/*`, `rc/*`, `archive/*` or `autosave/*`. If the git proxy
 refuses a deletion, name the branch in *Open / next* for the laptop (on-demand run 20: the push answered `Everything
-up-to-date` and deleted nothing — fetch with `--prune` and list the branches again to know).
+up-to-date` and deleted nothing — fetch with `--prune` and list the branches again to know). On-demand run 22's session
+refused the command itself: its auto-mode permission policy named `git push origin --delete` destructive. Do not work
+around such a refusal; list the branches for the laptop.
 **A repeated `witness.yml` run (`repeat` > 1) is read by its verdict, then its red's block** (on-demand run 20): a green one
 had no red (the step exits nonzero on any); for a red one, save the whole log to a file (`tail_lines` above its
 `original_length`) and find `... FAILED`: the failure's message is the next 15 lines, and `run N of M FAILED` follows it.
