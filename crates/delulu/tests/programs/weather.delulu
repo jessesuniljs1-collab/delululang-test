@@ -1,0 +1,303 @@
+// engines: interp wasm
+// RW 2.38 (D-V2-220's program step): the few-hundred-line program — a week of readings from three weather stations,
+// summarised. It uses every basic built so far: compound assignment (RW 2.34) for every running total, `let` for what
+// never changes and `var` for what does (RW 2.46), and the math methods with their checked forms (RW 2.38) —
+// statistics (mean, median, standard deviation, percentiles), wind as vectors (speed by `sqrt`, bearing by `atan2`),
+// great-circle distances between the stations (haversine: `sin`, `cos`, `asin`), a least-squares trend, and every
+// printed number rounded to fixed decimals through `Float.to_int`. Temperatures are kept in tenths of a degree as an
+// `Int`, so they sort; a `List[Float]` has no `sort` (no total order — NaN).
+module weather
+
+type Station {
+    name: Str,
+    lat: Float,
+    lon: Float,
+    elevation_m: Int,
+}
+
+type Reading {
+    station: Int,
+    day: Int,
+    temp10: Int,
+    rain_mm: Int,
+    wind_east: Float,
+    wind_north: Float,
+}
+
+type Summary {
+    count: Int,
+    mean: Float,
+    median: Float,
+    stddev: Float,
+    low: Int,
+    high: Int,
+}
+
+fn stations() -> List[Station] {
+    [
+        Station { name: "Harbour", lat: 51.5072, lon: -0.1276, elevation_m: 11 },
+        Station { name: "Ridge", lat: 53.4808, lon: -2.2426, elevation_m: 38 },
+        Station { name: "Moor", lat: 55.9533, lon: -3.1883, elevation_m: 47 },
+    ]
+}
+
+fn readings() -> List[Reading] {
+    [
+        Reading { station: 0, day: 1, temp10: 142, rain_mm: 0, wind_east: 3.0, wind_north: 4.0 },
+        Reading { station: 0, day: 2, temp10: 155, rain_mm: 2, wind_east: -1.5, wind_north: 2.0 },
+        Reading { station: 0, day: 3, temp10: 161, rain_mm: 0, wind_east: 0.0, wind_north: -6.0 },
+        Reading { station: 0, day: 4, temp10: 149, rain_mm: 11, wind_east: -4.2, wind_north: -4.2 },
+        Reading { station: 0, day: 5, temp10: 170, rain_mm: 0, wind_east: 5.5, wind_north: 0.5 },
+        Reading { station: 0, day: 6, temp10: 178, rain_mm: 0, wind_east: 2.0, wind_north: -1.0 },
+        Reading { station: 0, day: 7, temp10: 183, rain_mm: 4, wind_east: 0.8, wind_north: 3.1 },
+        Reading { station: 1, day: 1, temp10: 118, rain_mm: 6, wind_east: -2.0, wind_north: 7.5 },
+        Reading { station: 1, day: 2, temp10: 104, rain_mm: 14, wind_east: -6.1, wind_north: 2.2 },
+        Reading { station: 1, day: 3, temp10: 97, rain_mm: 21, wind_east: -8.0, wind_north: -1.0 },
+        Reading { station: 1, day: 4, temp10: 121, rain_mm: 3, wind_east: 1.0, wind_north: 1.0 },
+        Reading { station: 1, day: 5, temp10: 133, rain_mm: 0, wind_east: 4.0, wind_north: -3.0 },
+        Reading { station: 1, day: 6, temp10: 126, rain_mm: 1, wind_east: 0.5, wind_north: 0.0 },
+        Reading { station: 2, day: 1, temp10: 88, rain_mm: 9, wind_east: -9.5, wind_north: 4.0 },
+        Reading { station: 2, day: 2, temp10: 71, rain_mm: 17, wind_east: -12.0, wind_north: -2.5 },
+        Reading { station: 2, day: 3, temp10: -12, rain_mm: 0, wind_east: 0.0, wind_north: 0.0 },
+        Reading { station: 2, day: 4, temp10: 25, rain_mm: 2, wind_east: 3.3, wind_north: -7.7 },
+        Reading { station: 2, day: 5, temp10: 64, rain_mm: 5, wind_east: -0.4, wind_north: 9.9 },
+    ]
+}
+
+// ----- formatting -----------------------------------------------------------------------------------------------------
+
+// `x` to `places` decimals, rounded half away from zero: the scaled value is rounded, taken to an `Int` by the checked
+// conversion, and its digits split at the point. A value no `Int` holds (a NaN, an infinity) prints as `n/a`.
+fn fixed(x: Float, places: Int) -> Str {
+    let scale = 10.pow(places)
+    match (x * float(scale)).round().to_int() {
+        None => "n/a"
+        Some(n) => {
+            let sign = if n < 0 { "-" } else { "" }
+            let a = n.abs()
+            if places == 0 {
+                sign + str(a)
+            } else {
+                var frac = str(a % scale)
+                while frac.len() < places {
+                    frac = "0" + frac
+                }
+                sign + str(a / scale) + "." + frac
+            }
+        }
+    }
+}
+
+fn tenths(t10: Int) -> Str {
+    fixed(float(t10) / 10.0, 1)
+}
+
+fn pad(s: Str, width: Int) -> Str {
+    var out = s
+    while out.len() < width {
+        out += " "
+    }
+    out
+}
+
+// ----- statistics -----------------------------------------------------------------------------------------------------
+fn mean(xs: List[Int]) -> Float {
+    var total = 0
+    for x in xs {
+        total += x
+    }
+    float(total) / float(xs.len())
+}
+
+// The median of a sorted list: the middle value, or the mean of the two middle ones.
+fn median(sorted: List[Int]) -> Float {
+    let n = sorted.len()
+    let mid = n / 2
+    if n % 2 == 1 { float(sorted[mid]) } else { float(sorted[mid - 1] + sorted[mid]) / 2.0 }
+}
+
+// The population standard deviation.
+fn stddev(xs: List[Int]) -> Float {
+    let m = mean(xs)
+    var sum_sq = 0.0
+    for x in xs {
+        sum_sq += (float(x) - m).pow(2.0)
+    }
+    (sum_sq / float(xs.len())).sqrt()
+}
+
+// The nearest-rank percentile `p` (1 to 100) of a sorted list: the value at rank `ceil(p / 100 * n)`.
+fn percentile(sorted: List[Int], p: Int) -> Int {
+    let n = sorted.len()
+    let rank = match (float(p.clamp(1, 100)) / 100.0 * float(n)).ceil().to_int() {
+        Some(r) => r.clamp(1, n)
+        None => n
+    }
+    sorted[rank - 1]
+}
+
+fn summarise(xs: List[Int]) -> Summary {
+    let sorted = xs.sort()
+    let low = sorted.fold(sorted[0], fn(acc: Int, x: Int) -> Int { acc.min(x) })
+    let high = sorted.fold(sorted[0], fn(acc: Int, x: Int) -> Int { acc.max(x) })
+    Summary {
+        count: xs.len(),
+        mean: mean(xs),
+        median: median(sorted),
+        stddev: stddev(xs),
+        low: low,
+        high: high,
+    }
+}
+
+// The least-squares line through `(x, y)`: its slope, its intercept, and the correlation `r`.
+fn trend(xs: List[Int], ys: List[Int]) -> List[Float] {
+    let mx = mean(xs)
+    let my = mean(ys)
+    var sxy = 0.0
+    var sxx = 0.0
+    var syy = 0.0
+    var i = 0
+    while i < xs.len() {
+        let dx = float(xs[i]) - mx
+        let dy = float(ys[i]) - my
+        sxy += dx * dy
+        sxx += dx * dx
+        syy += dy * dy
+        i += 1
+    }
+    let slope = sxy / sxx
+    [slope, my - slope * mx, sxy / (sxx * syy).sqrt()]
+}
+
+// ----- wind and distance ----------------------------------------------------------------------------------------------
+fn speed(east: Float, north: Float) -> Float {
+    (east.pow(2.0) + north.pow(2.0)).sqrt()
+}
+
+// The compass bearing the wind blows TOWARD, in degrees clockwise from north, in [0, 360).
+fn bearing(east: Float, north: Float) -> Float {
+    let pi = 1.0.atan() * 4.0
+    let deg = east.atan2(north) * 180.0 / pi
+    if deg < 0.0 { deg + 360.0 } else { deg }
+}
+
+fn compass(deg: Float) -> Str {
+    let points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    let i = match (deg / 45.0).round().to_int() {
+        Some(k) => k % 8
+        None => 0
+    }
+    points[i]
+}
+
+// The great-circle distance in km between two points (the haversine formula, a mean Earth radius of 6371 km).
+fn distance_km(a: Station, b: Station) -> Float {
+    let rad = 1.0.atan() / 45.0
+    let dlat = (b.lat - a.lat) * rad
+    let dlon = (b.lon - a.lon) * rad
+    let h = (dlat / 2.0).sin().pow(2.0) + (a.lat * rad).cos() * (b.lat * rad).cos() * (dlon / 2.0).sin().pow(2.0)
+    2.0 * 6371.0 * h.sqrt().min(1.0).asin()
+}
+
+// ----- the report -----------------------------------------------------------------------------------------------------
+fn temps_of(rs: List[Reading], station: Int) -> List[Int] {
+    rs.filter(fn(r: Reading) -> Bool { r.station == station }).map(
+        fn(r: Reading) -> Int { r.temp10 },
+    )
+}
+
+fn days_of(rs: List[Reading], station: Int) -> List[Int] {
+    rs.filter(fn(r: Reading) -> Bool { r.station == station }).map(fn(r: Reading) -> Int { r.day })
+}
+
+fn station_report(out: Cap[Console], st: Station, index: Int, rs: List[Reading]) ! {Write} {
+    let temps = temps_of(rs, index)
+    let s = summarise(temps)
+    out.println("== " + st.name + " (" + str(st.elevation_m) + " m), " + str(s.count) + " days")
+    var line = "  temperature: mean " + fixed(s.mean / 10.0, 2) + " median " + fixed(s.median / 10.0, 2)
+    line += " sd " + fixed(s.stddev / 10.0, 2) + " range " + tenths(s.low) + " to " + tenths(s.high)
+    out.println(line)
+    let sorted = temps.sort()
+    out.println(
+        "  p25 " + tenths(percentile(sorted, 25)) + " p50 " + tenths(percentile(sorted, 50)) + " p90 " + tenths(percentile(sorted, 90)),
+    )
+    let t = trend(days_of(rs, index), temps)
+    out.println(
+        "  trend " + fixed(t[0] / 10.0, 3) + " C/day from " + fixed(t[1] / 10.0, 2) + ", r " + fixed(t[2], 3),
+    )
+    var rain = 0
+    var wet_days = 0
+    var gust = 0.0
+    var sum_east = 0.0
+    var sum_north = 0.0
+    var heating = 0
+    for r in rs {
+        if r.station == index {
+            match rain.checked_add(r.rain_mm) {
+                Some(total) => {
+                    rain = total
+                }
+                None => out.println("  rain total overflowed")
+            }
+            if r.rain_mm > 0 {
+                wet_days += 1
+            }
+            gust = gust.max(speed(r.wind_east, r.wind_north))
+            sum_east += r.wind_east
+            sum_north += r.wind_north
+            // Heating degree-days below 15.5 C, in tenths of a degree-day.
+            heating += (155 - r.temp10).max(0)
+        }
+    }
+    let n = float(s.count)
+    let mean_speed = speed(sum_east / n, sum_north / n)
+    var wind = "  wind: strongest " + fixed(gust, 1) + " m/s, mean vector " + fixed(mean_speed, 2) + " m/s toward "
+    wind += fixed(bearing(sum_east, sum_north), 1) + " (" + compass(bearing(sum_east, sum_north)) + ")"
+    out.println(wind)
+    let intensity = if rain == 0 { "dry" } else { "log10 " + fixed(float(rain).log10(), 3) }
+    out.println(
+        "  rain " + str(rain) + " mm on " + str(wet_days) + " days (" + intensity + "), heating " + tenths(heating) + " degree-days",
+    )
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let sts = stations()
+    let rs = readings()
+    var i = 0
+    for st in sts {
+        station_report(out, st, i, rs)
+        i += 1
+    }
+    out.println("== distances")
+    var a = 0
+    while a < sts.len() {
+        var b = a + 1
+        while b < sts.len() {
+            out.println(
+                "  " + pad(sts[a].name, 8) + " to " + pad(sts[b].name, 8) + fixed(distance_km(sts[a], sts[b]), 1) + " km",
+            )
+            b += 1
+        }
+        a += 1
+    }
+    let all = rs.map(fn(r: Reading) -> Int { r.temp10 })
+    let s = summarise(all)
+    out.println(
+        "== all stations: " + str(s.count) + " readings, mean " + fixed(s.mean / 10.0, 2) + " C, sd " + fixed(s.stddev / 10.0, 2),
+    )
+    var fahrenheit = ""
+    for t in [s.low, s.high] {
+        fahrenheit += " " + fixed(float(t) / 10.0 * 9.0 / 5.0 + 32.0, 1) + "F"
+    }
+    out.println("  coldest and warmest:" + fahrenheit)
+    let checks = [
+        fixed(2.5, 0),
+        fixed(-2.5, 0),
+        fixed(0.125, 2),
+        fixed(0.0 / 0.0, 2),
+        fixed(1.0 / 0.0, 1),
+    ]
+    out.println("  rounding: " + checks.join(" "))
+}

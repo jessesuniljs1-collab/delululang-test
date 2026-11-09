@@ -8,7 +8,7 @@ Every primitive operation, by receiver. **Arity is normative**: the checker refu
 
 Capability operations are the only source of primitive effects (T-CapOp), which is why this table is the checker's single source of truth rather than prose.
 
-> **Coverage (invariant 42):** 92 of 92 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 125 of 125 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 
 ## `root`
@@ -164,6 +164,49 @@ Capability operations are the only source of primitive effects (T-CapOp), which 
 | `to_lower` | 0 | `ref.prim.str.to_lower` | covered |
 | `replace` | 2 | `ref.prim.str.replace` | covered |
 | `chars` | 0 | `ref.prim.str.chars` | covered |
+
+## `int`
+
+| Method | Arity | Anchor | Coverage |
+|---|---|---|---|
+| `abs` | 0 | `ref.prim.int.abs` | covered |
+| `min` | 1 | `ref.prim.int.min` | covered |
+| `max` | 1 | `ref.prim.int.max` | covered |
+| `clamp` | 2 | `ref.prim.int.clamp` | covered |
+| `pow` | 1 | `ref.prim.int.pow` | covered |
+| `checked_add` | 1 | `ref.prim.int.checked_add` | covered |
+| `checked_sub` | 1 | `ref.prim.int.checked_sub` | covered |
+| `checked_mul` | 1 | `ref.prim.int.checked_mul` | covered |
+| `checked_div` | 1 | `ref.prim.int.checked_div` | covered |
+| `checked_rem` | 1 | `ref.prim.int.checked_rem` | covered |
+
+## `float`
+
+| Method | Arity | Anchor | Coverage |
+|---|---|---|---|
+| `abs` | 0 | `ref.prim.float.abs` | covered |
+| `min` | 1 | `ref.prim.float.min` | covered |
+| `max` | 1 | `ref.prim.float.max` | covered |
+| `clamp` | 2 | `ref.prim.float.clamp` | covered |
+| `sqrt` | 0 | `ref.prim.float.sqrt` | covered |
+| `floor` | 0 | `ref.prim.float.floor` | covered |
+| `ceil` | 0 | `ref.prim.float.ceil` | covered |
+| `round` | 0 | `ref.prim.float.round` | covered |
+| `trunc` | 0 | `ref.prim.float.trunc` | covered |
+| `pow` | 1 | `ref.prim.float.pow` | covered |
+| `sin` | 0 | `ref.prim.float.sin` | covered |
+| `cos` | 0 | `ref.prim.float.cos` | covered |
+| `tan` | 0 | `ref.prim.float.tan` | covered |
+| `asin` | 0 | `ref.prim.float.asin` | covered |
+| `acos` | 0 | `ref.prim.float.acos` | covered |
+| `atan` | 0 | `ref.prim.float.atan` | covered |
+| `atan2` | 1 | `ref.prim.float.atan2` | covered |
+| `exp` | 0 | `ref.prim.float.exp` | covered |
+| `ln` | 0 | `ref.prim.float.ln` | covered |
+| `log10` | 0 | `ref.prim.float.log10` | covered |
+| `is_nan` | 0 | `ref.prim.float.is_nan` | covered |
+| `is_finite` | 0 | `ref.prim.float.is_finite` | covered |
+| `to_int` | 0 | `ref.prim.float.to_int` | covered |
 
 ## `list`
 

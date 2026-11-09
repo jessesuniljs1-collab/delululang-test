@@ -1,0 +1,97 @@
+// engines: interp wasm
+// RW 2.38 (D-V2-220's program step): the everyday utility — a loan's monthly payment and its schedule. The payment is
+// the annuity formula, `P * r / (1 - (1 + r)^-n)`, rounded half up to a cent; every amount after that is kept in whole
+// cents as an `Int`, so the schedule adds up exactly and the last payment takes what rounding left. `Float.to_int` is
+// the checked way from the formula to cents; `checked_mul` guards a principal too large to hold in cents.
+module loan
+
+type Row {
+    month: Int,
+    payment: Int,
+    interest: Int,
+    principal: Int,
+    balance: Int,
+}
+
+fn cents(c: Int) -> Str {
+    let sign = if c < 0 { "-" } else { "" }
+    let a = c.abs()
+    let rest = a % 100
+    let pad = if rest < 10 { "0" } else { "" }
+    sign + str(a / 100) + "." + pad + str(rest)
+}
+
+fn monthly_payment(principal: Int, annual_rate_bp: Int, months: Int) -> Option[Int] {
+    let p = float(principal)
+    let r = float(annual_rate_bp) / 10000.0 / 12.0
+    let pay = if annual_rate_bp == 0 {
+        p / float(months)
+    } else {
+        p * r / (1.0 - (1.0 + r).pow(-float(months)))
+    }
+    pay.round().to_int()
+}
+
+fn schedule(principal: Int, annual_rate_bp: Int, months: Int, pay: Int) -> List[Row] {
+    let rows: ref List[Row] = []
+    var balance = principal
+    var m = 1
+    while m <= months {
+        // Interest on the balance for one month, rounded half up to a cent: `balance * bp / 120000`, in Float only to
+        // round it.
+        let interest = (float(balance) * float(annual_rate_bp) / 120000.0).round().to_int()
+        let i = match interest {
+            Some(v) => v
+            None => 0
+        }
+        var payment = pay
+        if m == months || payment > balance + i {
+            payment = balance + i
+        }
+        let principal_part = payment - i
+        balance -= principal_part
+        rows.push(
+            Row { month: m, payment: payment, interest: i, principal: principal_part, balance: balance },
+        )
+        m += 1
+    }
+    rows
+}
+
+fn report(out: Cap[Console], name: Str, amount: Int, rate_bp: Int, months: Int) ! {Write} {
+    out.println(
+        "== " + name + ": $" + str(amount) + " at " + str(rate_bp) + " bp for " + str(months) + " months",
+    )
+    match amount.checked_mul(100) {
+        None => out.println("refused: the principal does not fit in cents")
+        Some(principal) => match monthly_payment(principal, rate_bp, months) {
+            None => out.println("refused: no payment pays this loan off")
+            Some(pay) => {
+                out.println("payment " + cents(pay))
+                let rows = schedule(principal, rate_bp, months, pay)
+                var total_interest = 0
+                var total_paid = 0
+                for row in rows {
+                    total_interest += row.interest
+                    total_paid += row.payment
+                    if row.month <= 3 || row.month > months - 2 {
+                        var line = "  " + str(row.month) + ": pay " + cents(row.payment) + " interest " + cents(row.interest)
+                        line += " principal " + cents(row.principal) + " left " + cents(row.balance)
+                        out.println(line)
+                    }
+                }
+                out.println("paid " + cents(total_paid) + ", interest " + cents(total_interest))
+                out.println("balanced: " + str(total_paid - total_interest == principal))
+            }
+        }
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    report(out, "car", 18000, 649, 60)
+    report(out, "house", 250000, 425, 360)
+    report(out, "laptop", 1200, 0, 12)
+    report(out, "short", 1000, 1200, 1)
+    report(out, "too big", 922337203685477581, 500, 12)
+}

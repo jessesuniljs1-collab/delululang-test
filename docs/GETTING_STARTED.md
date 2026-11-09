@@ -181,6 +181,14 @@ anything that is not a list is `DL0411`.
 > `to_upper`/`to_lower` are full Unicode and are **not a security normalization** — never case-fold
 > to compare a path, a host name or a capability. `str(x)` still exists, and a `for` loop over an
 > accumulator is still the right answer when no method fits.
+>
+> **Math is written as methods** (RW 2.38): `(-3).abs()`, `a.max(b)`, `n.clamp(0, 10)`, `2.pow(10)`,
+> `2.0.sqrt()`, `x.round()`, `x.pow(1.5)`, `angle.sin()`, `y.atan2(x)`, `x.ln()`. An `Int` that
+> overflows, or a division by zero, stops the program on purpose (DL0901, DL0902); to ask first, use
+> the checked forms — `n.checked_div(d)` is an `Option[Int]`, `None` exactly where `n / d` would stop.
+> A `Float` never stops: `(-1.0).sqrt()` is `NaN`, which `x.is_nan()` tells you. And `x.to_int()` is
+> the careful way from a `Float` to an `Int` (`None` for a NaN or an infinity), where `int(x)` would
+> quietly answer `0` or `Int`'s limit.
 
 ## 4. Errors
 
@@ -209,7 +217,10 @@ fn to_int(s: Str) -> Result[Int, ParseErr] {
 fn describe(s: Str) -> Str {
     match to_int(s) {
         Ok(n) => "parsed " + str(n)
-        Err(e) => match e { Empty => "empty input", NotANumber(bad) => "not a number: " + bad }
+        Err(e) => match e {
+            Empty => "empty input"
+            NotANumber(bad) => "not a number: " + bad
+        }
     }
 }
 ```

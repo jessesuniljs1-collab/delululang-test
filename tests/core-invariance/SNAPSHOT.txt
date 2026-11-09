@@ -599,7 +599,7 @@ Authority of `guide.errors` — what this program can do to your system:
 ===== examples/guide/03_errors.delulu :: why Write =====
 exit 0
 --- stdout ---
-main (examples/guide/03_errors.delulu:47) — Write
+main (examples/guide/03_errors.delulu:50) — Write
 --- stderr ---
 
 ===== examples/guide/04_effects.delulu :: check --json =====
@@ -3174,6 +3174,78 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/30_map_p3.delulu`
 
+===== tests/conformance/accept/31_math.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/31_math.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/31_math.delulu checked clean
+
+===== tests/conformance/accept/31_math.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "float_ops",
+      "int_ops",
+      "main",
+      "usable",
+      "whole"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/31_math.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     float_ops, int_ops, main, usable, whole
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/31_math.delulu :: why Write =====
+exit 0
+--- stdout ---
+program cannot perform `Write`
+--- stderr ---
+
 ===== tests/conformance/accept/compound_assignment.delulu :: check --json =====
 exit 0
 --- stdout ---
@@ -5390,6 +5462,58 @@ error[DL0213]: block nests deeper than 128 levels
 
 1 error(s)
 
+===== tests/conformance/reject/DL0301_math_function_spelling.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `abs`: math is written as a method of `Int` and `Float` — `x.abs()`, not `abs(x)`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 264,
+            "col": 8,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0301_math_function_spelling.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 261,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0301_math_function_spelling.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0301]: unknown name `abs`: math is written as a method of `Int` and `Float` — `x.abs()`, not `abs(x)`
+  --> tests/conformance/reject/DL0301_math_function_spelling.delulu:6:5
+   |
+ 6 |     abs(x)
+   |     ^^^ not found in this scope
+  explain: delulu explain E-DL0301
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0301_unknown_name.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -5767,6 +5891,110 @@ error[DL0307]: `Bogus` is not a capability resource kind
  4 | fn f(c: Cap[Bogus]) {
    |             ^^^^^ unknown resource kind
   explain: delulu explain E-DL0307
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_float_max_int_argument.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `Float`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 275,
+            "col": 12,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0401_float_max_int_argument.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 274,
+            "col": 11,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_float_max_int_argument.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: expected `Float`, found `Int`
+  --> tests/conformance/reject/DL0401_float_max_int_argument.delulu:7:11
+   |
+ 7 |     x.max(0)
+   |           ^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_int_pow_float_exponent.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `Int`, found `Float`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 188,
+            "col": 14,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0401_int_pow_float_exponent.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 185,
+            "col": 11,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_int_pow_float_exponent.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: expected `Int`, found `Float`
+  --> tests/conformance/reject/DL0401_int_pow_float_exponent.delulu:6:11
+   |
+ 6 |     n.pow(0.5)
+   |           ^^^ type mismatch here
+  explain: delulu explain E-DL0401
 
 1 error(s)
 
@@ -6394,6 +6622,58 @@ error[DL0403]: expected 2 argument(s), found 1
 
 1 error(s)
 
+===== tests/conformance/reject/DL0403_float_sqrt_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`float.sqrt` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 187,
+            "col": 16,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0403_float_sqrt_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 176,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_float_sqrt_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `float.sqrt` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_float_sqrt_extra_arg.delulu:6:5
+   |
+ 6 |     x.sqrt(3.0)
+   |     ^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0403_list_fold_callback_arity.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -6963,6 +7243,58 @@ error[DL0404]: value of type `Int` is not callable
  6 |   x(1)
    |   ^ not a function
   explain: delulu explain E-DL0404
+
+1 error(s)
+
+===== tests/conformance/reject/DL0405_int_has_no_float_method.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `Int` has no method `sqrt`: `sqrt` is a `Float` method — convert first, `float(n).sqrt()`, or write a `Float` literal (`2.0`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 164,
+            "col": 11,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0405_int_has_no_float_method.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 160,
+            "col": 7,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0405_int_has_no_float_method.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0405]: type `Int` has no method `sqrt`: `sqrt` is a `Float` method — convert first, `float(n).sqrt()`, or write a `Float` literal (`2.0`)
+  --> tests/conformance/reject/DL0405_int_has_no_float_method.delulu:5:7
+   |
+ 5 |     n.sqrt()
+   |       ^^^^ unknown method
+  explain: delulu explain E-DL0405
 
 1 error(s)
 

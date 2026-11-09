@@ -1,0 +1,55 @@
+// anchors: ref.prim.int.abs ref.prim.int.min ref.prim.int.max ref.prim.int.clamp ref.prim.int.pow ref.prim.int.checked_add ref.prim.int.checked_sub ref.prim.int.checked_mul ref.prim.int.checked_div ref.prim.int.checked_rem ref.prim.float.abs ref.prim.float.min ref.prim.float.max ref.prim.float.clamp ref.prim.float.sqrt ref.prim.float.floor ref.prim.float.ceil ref.prim.float.round ref.prim.float.trunc ref.prim.float.pow ref.prim.float.sin ref.prim.float.cos ref.prim.float.tan ref.prim.float.asin ref.prim.float.acos ref.prim.float.atan ref.prim.float.atan2 ref.prim.float.exp ref.prim.float.ln ref.prim.float.log10 ref.prim.float.is_nan ref.prim.float.is_finite ref.prim.float.to_int
+// RW 2.38 (D-V2-223): positive witnesses for the math methods — every one used at least once, each pure (no function
+// here declares an effect). Math is written as methods (`x.abs()`, `a.max(b)`), so a program's own `fn abs` or
+// `fn max` (as `01_pure.delulu` declares) still means what it did.
+module conf
+
+fn int_ops(n: Int, m: Int) -> Int {
+    let a = n.abs() + n.min(m) + n.max(m) + n.clamp(-10, 10) + m.pow(2)
+    let sum = match n.checked_add(m) {
+        Some(v) => v
+        None => 0
+    }
+    let diff = match n.checked_sub(m) {
+        Some(v) => v
+        None => 0
+    }
+    let prod = match n.checked_mul(m) {
+        Some(v) => v
+        None => 0
+    }
+    let quot = match n.checked_div(m) {
+        Some(v) => v
+        None => 0
+    }
+    let rest = match n.checked_rem(m) {
+        Some(v) => v
+        None => 0
+    }
+    a + sum + diff + prod + quot + rest
+}
+
+fn float_ops(x: Float, y: Float) -> Float {
+    let rounding = x.abs() + x.floor() + x.ceil() + x.round() + x.trunc()
+    let bounds = x.min(y) + x.max(y) + x.clamp(0.0, 1.0)
+    let powers = y.sqrt() + x.pow(y) + y.exp() + y.ln() + y.log10()
+    let angles = x.sin() + x.cos() + x.tan() + x.atan() + y.atan2(x)
+    let inverse = 0.5.asin() + 0.5.acos()
+    rounding + bounds + powers + angles + inverse
+}
+
+fn usable(x: Float) -> Bool {
+    !x.is_nan() && x.is_finite()
+}
+
+fn whole(x: Float) -> Int {
+    match x.to_int() {
+        Some(n) => n
+        None => 0
+    }
+}
+
+fn main() -> Int {
+    let f = float_ops(0.25, 2.0)
+    if usable(f) { int_ops(7, -3) + whole(f) } else { 0 }
+}

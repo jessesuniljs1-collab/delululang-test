@@ -1,0 +1,34 @@
+== car: $18000 at 649 bp for 60 months
+payment 352.11
+  1: pay 352.11 interest 97.35 principal 254.76 left 17745.24
+  2: pay 352.11 interest 95.97 principal 256.14 left 17489.10
+  3: pay 352.11 interest 94.59 principal 257.52 left 17231.58
+  59: pay 352.11 interest 3.78 principal 348.33 left 350.01
+  60: pay 351.90 interest 1.89 principal 350.01 left 0.00
+paid 21126.39, interest 3126.39
+balanced: true
+== house: $250000 at 425 bp for 360 months
+payment 1229.85
+  1: pay 1229.85 interest 885.42 principal 344.43 left 249655.57
+  2: pay 1229.85 interest 884.20 principal 345.65 left 249309.92
+  3: pay 1229.85 interest 882.97 principal 346.88 left 248963.04
+  359: pay 1229.85 interest 8.67 principal 1221.18 left 1225.49
+  360: pay 1229.83 interest 4.34 principal 1225.49 left 0.00
+paid 442745.98, interest 192745.98
+balanced: true
+== laptop: $1200 at 0 bp for 12 months
+payment 100.00
+  1: pay 100.00 interest 0.00 principal 100.00 left 1100.00
+  2: pay 100.00 interest 0.00 principal 100.00 left 1000.00
+  3: pay 100.00 interest 0.00 principal 100.00 left 900.00
+  11: pay 100.00 interest 0.00 principal 100.00 left 100.00
+  12: pay 100.00 interest 0.00 principal 100.00 left 0.00
+paid 1200.00, interest 0.00
+balanced: true
+== short: $1000 at 1200 bp for 1 months
+payment 1010.00
+  1: pay 1010.00 interest 10.00 principal 1000.00 left 0.00
+paid 1010.00, interest 10.00
+balanced: true
+== too big: $922337203685477581 at 500 bp for 12 months
+refused: the principal does not fit in cents

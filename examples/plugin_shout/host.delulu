@@ -46,6 +46,13 @@ fn main(root: Root) ! {Load, Read, Write} {
     let h = root.plugin_host()
     match shouted(h) {
         Ok(s) => out.println(s)
-        Err(e) => match e { NotGranted(m) => out.println("not granted: " + m), VerifyFailed(m) => out.println("verification failed: " + m), BadArtifact(m) => out.println("bad artifact: " + m), Revoked(n) => out.println("this plugin's authority was revoked"), LimitExceeded(m) => out.println("a resource limit fired: " + m), ApiMismatch(m) => out.println("plugin ABI mismatch: " + m) }
+        Err(e) => match e {
+            NotGranted(m) => out.println("not granted: " + m)
+            VerifyFailed(m) => out.println("verification failed: " + m)
+            BadArtifact(m) => out.println("bad artifact: " + m)
+            Revoked(n) => out.println("this plugin's authority was revoked")
+            LimitExceeded(m) => out.println("a resource limit fired: " + m)
+            ApiMismatch(m) => out.println("plugin ABI mismatch: " + m)
+        }
     }
 }

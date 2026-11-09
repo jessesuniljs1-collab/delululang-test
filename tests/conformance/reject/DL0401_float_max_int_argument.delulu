@@ -1,0 +1,8 @@
+// anchors: ref.prim.float.max
+// RW 2.38 (D-V2-223): a `Float` method takes `Float` arguments — `x.max(0.0)`, not `x.max(0)`. Numbers are not mixed
+// implicitly anywhere (DL0402), and a method's argument is no exception.
+module conf
+
+fn f(x: Float) -> Float {
+    x.max(0)
+}

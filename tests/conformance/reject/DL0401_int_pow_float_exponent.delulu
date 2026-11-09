@@ -1,0 +1,7 @@
+// anchors: ref.prim.int.pow
+// RW 2.38 (D-V2-223): an `Int` power takes an `Int` exponent; a fraction is a `Float` power (`2.0.pow(0.5)`).
+module conf
+
+fn f(n: Int) -> Int {
+    n.pow(0.5)
+}

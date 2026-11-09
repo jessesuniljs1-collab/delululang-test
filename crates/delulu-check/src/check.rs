@@ -1906,9 +1906,13 @@ impl<'a> Checker<'a> {
                 return self.cx.fresh_type();
             }
         }
-        self.diags.push(
-            Diagnostic::error("DL0301", format!("unknown name `{}`", path.dotted())).with_span(span, "not found in this scope"),
-        );
+        // RW 2.38 (D-V2-223): math is written as methods (`x.abs()`, `a.max(b)`), so `abs(x)` — the spelling most
+        // languages use — names nothing. Say how it is written instead.
+        let message = match math_method_spelling(path) {
+            Some(how) => format!("unknown name `{}`: {how}", path.dotted()),
+            None => format!("unknown name `{}`", path.dotted()),
+        };
+        self.diags.push(Diagnostic::error("DL0301", message).with_span(span, "not found in this scope"));
         self.fresh_poisoned()
     }
 
@@ -2520,6 +2524,10 @@ impl<'a> Checker<'a> {
                 name.name,
                 name.name
             )
+        } else if let Some(other) = other_numeric_method(&rt, &name.name) {
+            // RW 2.38 (D-V2-223): a math method of the other number type (`n.sqrt()` on an `Int`). Say which, and the
+            // conversion that reaches it.
+            format!("type `{}` has no method `{}`: {other}", self.ty(&rt), name.name)
         } else {
             format!("type `{}` has no method `{}`", self.ty(&rt), name.name)
         };
@@ -3023,6 +3031,8 @@ impl<'a> Checker<'a> {
                     Some((Type::Float, None, None))
                 }
                 "is_nan" | "is_finite" => Some((Type::Bool, None, None)),
+                // The checked conversion: `None` for a NaN, an infinity or a value past `Int`'s range.
+                "to_int" => Some((Type::Option(Box::new(Type::Int)), None, None)),
                 _ => None,
             },
             Type::Map(kt, vt) => {
@@ -4786,6 +4796,51 @@ fn capability_mismatch(a: &Type, b: &Type) -> bool {
 /// The `prim_table` receiver label for a checked receiver type (the §7.3 arity gate). `None` for
 /// receivers whose methods are not primitive-table entries: foreign lib handles carry their own
 /// DL0403 fence in `method_sig`, and non-primitive surfaces have their own typing rules.
+/// RW 2.38 (D-V2-223): how a math method is written, for an unknown name that is one (`abs`, `max`, `sqrt`) — `None`
+/// for any other name. Read from the primitive table, so a method added there is named here too.
+fn math_method_spelling(path: &delulu_syntax::ast::Path) -> Option<String> {
+    let [seg] = path.segs.as_slice() else { return None };
+    let name = seg.name.as_str();
+    let on = |r: &str| crate::prim_table::PRIM_TABLE.iter().find(|e| e.receiver == r && e.method == name);
+    let (int, float) = (on("int"), on("float"));
+    let arity = int.or(float)?.arity;
+    let call = match arity {
+        0 => format!("`x.{name}()`, not `{name}(x)`"),
+        1 => format!("`a.{name}(b)`, not `{name}(a, b)`"),
+        _ => format!("`x.{name}(lo, hi)`, not `{name}(x, lo, hi)`"),
+    };
+    Some(match (int, float) {
+        (Some(_), Some(_)) => format!("math is written as a method of `Int` and `Float` — {call}"),
+        (Some(_), None) => format!("math is written as a method of `Int` — {call}"),
+        _ if name == "to_int" => format!("math is written as a method of `Float` — {call}"),
+        _ => {
+            let args = if arity == 0 { "()" } else { "(…)" };
+            format!("math is written as a method of `Float` — {call} (an `Int` converts first: `float(n).{name}{args}`)")
+        }
+    })
+}
+
+/// RW 2.38 (D-V2-223): for `n.sqrt()` on an `Int` (or `x.checked_add(1)` on a `Float`), what the other number type's
+/// method of that name is and how to reach it — `None` when neither number type has it, or `recv` is not a number.
+fn other_numeric_method(recv: &Type, name: &str) -> Option<String> {
+    let entry = |r: &str| crate::prim_table::PRIM_TABLE.iter().find(|e| e.receiver == r && e.method == name);
+    let has = |r: &str| entry(r).is_some();
+    match recv {
+        Type::Int if name == "to_int" => Some("an `Int` is already an `Int`: no conversion is needed".to_string()),
+        Type::Int if has("float") => {
+            let args = if entry("float").is_some_and(|e| e.arity == 0) { "()" } else { "(…)" };
+            Some(format!(
+                "`{name}` is a `Float` method — convert first, `float(n).{name}{args}`, or write a `Float` literal (`2.0`)"
+            ))
+        }
+        Type::Float if has("int") => Some(format!(
+            "`{name}` is an `Int` method — `x.to_int()` gives an `Option[Int]` to call it on (`Float` arithmetic never \
+             faults: a NaN or an infinity is its answer)"
+        )),
+        _ => None,
+    }
+}
+
 fn prim_receiver_label(recv: &Type) -> Option<&'static str> {
     Some(match recv {
         Type::Root => "root",

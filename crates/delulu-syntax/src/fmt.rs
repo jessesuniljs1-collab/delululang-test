@@ -604,9 +604,14 @@ impl<'a> Printer<'a> {
                             self.block_body(b);
                             self.line("}");
                         }
+                        // FMT-MATCH-ARM-1: an arm whose value is block-shaped (an inner `match`, an `if` that does not
+                        // fit flat) is laid out as any block-shaped value is, not squashed onto the arm's line.
                         e => {
-                            let body = expr_flat(e, 0, false);
-                            self.line(&format!("{pat} => {body}"));
+                            let head = format!("{pat} => ");
+                            if self.try_block_value(&head, e).is_none() {
+                                let body = expr_flat(e, 0, false);
+                                self.line(&format!("{head}{body}"));
+                            }
                         }
                     }
                     self.attach_same_line(arm.span.end);
@@ -867,12 +872,16 @@ fn lit_text(k: &LitKind) -> String {
     match k {
         LitKind::Int(v) => v.to_string(),
         LitKind::Float(v) => {
-            let s = format!("{v}");
-            // A float literal must stay a float literal when reparsed.
-            if s.contains('.') || s.contains('e') || s.contains('E') {
-                s
-            } else {
-                format!("{s}.0")
+            // FMT-FLOAT-EXP-1: `{:?}` is the shortest digits that read back as `v`, and switches to an exponent below
+            // 1e-4 and from 1e16 up, where `{}` would print every digit (300 of them for `1.0e-300`).
+            let s = format!("{v:?}");
+            // A float literal must stay a float literal when reparsed, and the lexer reads an exponent only after a
+            // fraction (`1.0e-300`, never `1e-300`).
+            match s.split_once('e') {
+                Some((mant, exp)) if !mant.contains('.') => format!("{mant}.0e{exp}"),
+                Some(_) => s,
+                None if s.contains('.') => s,
+                None => format!("{s}.0"),
             }
         }
         LitKind::Str(s) => escape_str(s),
@@ -1223,6 +1232,33 @@ fn f() -> Int { 1 }
             "the own-line comment survives:
 {out}"
         );
+    }
+
+    /// **FMT-FLOAT-EXP-1** (2026-11-08, found by RW 2.38's math programs on the laptop). A `Float` literal was printed with
+    /// Rust's `{}`, which never uses an exponent, so `1.0e-300` came back as a 300-digit decimal and `6.02e23` as 24
+    /// digits. A magnitude below 1e-4 or from 1e16 up now prints with an exponent (`1.0e-300`), the shortest digits that
+    /// read back as the same value; everything between prints as before, so no ordinary literal moves.
+    #[test]
+    fn a_float_literal_of_extreme_magnitude_keeps_an_exponent() {
+        let out =
+            laws("module m\nfn f() -> Float {\n  1.0e-300 + 6.02e23 + 0.00001 + 1.0e16 + 2.5e10 + 0.0001 + 0.5 + 123.0\n}\n");
+        assert!(out.contains("1.0e-300 + 6.02e23 + 1.0e-5 + 1.0e16 + 25000000000.0 + 0.0001 + 0.5 + 123.0"), "{out}");
+    }
+
+    /// **FMT-MATCH-ARM-1** (2026-11-09, found by RW 2.38's `loan.delulu`). A multiline `match` printed every arm body that
+    /// was not a block with `expr_flat`, so an arm whose value is itself a `match` — which this printer always lays out on
+    /// several lines — came out as one line holding the inner match, its block arms and their statements joined by `;`
+    /// (about 700 characters in `loan.delulu`). Such an arm body is now laid out as any block-shaped value is: an inner
+    /// `match` on its own lines, and an `if` that does not fit flat as a multiline `if`.
+    #[test]
+    fn a_match_as_an_arm_body_is_laid_out_on_its_own_lines() {
+        let out = laws(
+            "module m\nfn f(a: Option[Int], b: Option[Int]) -> Int {\n  match a {\n    None => 0\n    Some(x) => match b {\n      \
+             None => x\n      Some(y) => {\n        let s = x + y\n        s * 2\n      }\n    }\n  }\n}\n",
+        );
+        assert!(out.contains("        Some(x) => match b {\n            None => x\n            Some(y) => {\n"), "{out}");
+        assert!(out.lines().all(|l| l.len() <= 100), "no line squashed flat:\n{out}");
+        assert!(!out.contains(';'), "no statements joined by `;`:\n{out}");
     }
 
     /// **FMT-CTOR-1** (2026-11-01, found by `laws_hold_over_the_repository_corpus` on RW 2.26's accepting program). A

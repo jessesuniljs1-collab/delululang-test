@@ -1174,7 +1174,26 @@ pub fn call_float_method(x: f64, method: &str, args: &[Value], span: Span) -> Re
         "log10" => f(libm::log10(x)),
         "is_nan" => Ok(Value::Bool(x.is_nan())),
         "is_finite" => Ok(Value::Bool(x.is_finite())),
+        // The checked conversion: the builtin `int(x)` saturates (a NaN is 0, an infinity `Int`'s limit) and keeps that
+        // meaning; `to_int` asks first, `None` where no `Int` is the truncated value.
+        "to_int" => Ok(match float_to_int(x) {
+            Some(n) => Value::variant("Some", vec![Value::Int(n)]),
+            None => Value::variant("None", vec![]),
+        }),
         _ => Err(Fault::at("DL0907", format!("unknown Float method `{method}`"), span)),
+    }
+}
+
+/// `x` truncated toward zero, when that is an `Int`: `None` for a NaN, an infinity, and every value at or past
+/// 2^63 in magnitude except -2^63 itself, which is `Int`'s minimum. Both bounds are exact in binary64, so the two
+/// comparisons the range makes (`-2^63 <= x && x < 2^63`) decide it without rounding (a NaN fails both). The WASM engine
+/// compiles the same two comparisons (`codegen.rs`, `compile_float_to_int`).
+pub fn float_to_int(x: f64) -> Option<i64> {
+    const TWO_63: f64 = 9_223_372_036_854_775_808.0;
+    if (-TWO_63..TWO_63).contains(&x) {
+        Some(x as i64)
+    } else {
+        None
     }
 }
 
@@ -2320,5 +2339,161 @@ mod remedy_tests {
             );
             assert!(!leased.contains("pass `--grant"), "a lease run is never told to pass a `--grant` (`{method}`): {leased}");
         }
+    }
+}
+
+/// RW 2.38 (D-V2-223): the math methods' laws, at the edges where a hand-written answer goes wrong. The WASM engine runs
+/// these same functions host-side, so these laws hold on both engines; `math_parity.rs` checks the two agree.
+#[cfg(test)]
+mod math_tests {
+    use super::*;
+
+    fn sp() -> Span {
+        Span::new(0, 0, 0)
+    }
+
+    fn int(n: i64, m: &str, args: &[i64]) -> Result<Value, Fault> {
+        let args: Vec<Value> = args.iter().map(|a| Value::Int(*a)).collect();
+        call_int_method(n, m, &args, sp())
+    }
+
+    fn float(x: f64, m: &str, args: &[f64]) -> f64 {
+        let args: Vec<Value> = args.iter().map(|a| Value::Float(*a)).collect();
+        match call_float_method(x, m, &args, sp()) {
+            Ok(Value::Float(y)) => y,
+            other => panic!("`{x}.{m}({args:?})` answered {other:?}"),
+        }
+    }
+
+    fn some(v: &Value) -> Option<i64> {
+        match v {
+            Value::Variant { name, fields } if &**name == "Some" => match fields.first() {
+                Some(Value::Int(n)) => Some(*n),
+                _ => panic!("a `Some` of no `Int`: {v:?}"),
+            },
+            Value::Variant { name, .. } if &**name == "None" => None,
+            other => panic!("not an `Option[Int]`: {other:?}"),
+        }
+    }
+
+    const EDGES: [i64; 11] = [0, 1, -1, 2, -2, 7, -7, i64::MAX, i64::MIN, i64::MAX - 1, i64::MIN + 1];
+
+    /// The law the checked forms exist for: `n.checked_op(m)` is `None` exactly where `n op m` faults (the
+    /// interpreter's operators fault on Rust's `checked_` answering `None`), and otherwise the operator's answer.
+    #[test]
+    fn a_checked_form_is_none_exactly_where_its_operator_faults() {
+        for &n in &EDGES {
+            for &m in &EDGES {
+                for (method, op) in [
+                    ("checked_add", n.checked_add(m)),
+                    ("checked_sub", n.checked_sub(m)),
+                    ("checked_mul", n.checked_mul(m)),
+                    ("checked_div", n.checked_div(m)),
+                    ("checked_rem", n.checked_rem(m)),
+                ] {
+                    let got = some(&int(n, method, &[m]).expect("a checked form never faults"));
+                    assert_eq!(got, op, "{n}.{method}({m})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn abs_and_pow_fault_past_the_range_and_nowhere_else() {
+        assert!(matches!(int(i64::MIN, "abs", &[]), Err(f) if f.code == "DL0901"));
+        assert!(matches!(int(i64::MIN + 1, "abs", &[]), Ok(Value::Int(i64::MAX))));
+        assert!(matches!(int(2, "pow", &[62]), Ok(Value::Int(4_611_686_018_427_387_904))));
+        assert!(matches!(int(2, "pow", &[63]), Err(f) if f.code == "DL0901"));
+        assert!(matches!(int(-2, "pow", &[63]), Ok(Value::Int(i64::MIN))));
+        assert!(matches!(int(-2, "pow", &[64]), Err(f) if f.code == "DL0901"));
+        assert!(matches!(int(0, "pow", &[0]), Ok(Value::Int(1))));
+        // An exponent past `u32`: only -1, 0 and 1 stay in range.
+        assert!(matches!(int(1, "pow", &[i64::MAX]), Ok(Value::Int(1))));
+        assert!(matches!(int(0, "pow", &[i64::MAX]), Ok(Value::Int(0))));
+        assert!(matches!(int(-1, "pow", &[i64::MAX]), Ok(Value::Int(-1))));
+        assert!(matches!(int(-1, "pow", &[i64::MAX - 1]), Ok(Value::Int(1))));
+        assert!(matches!(int(2, "pow", &[1 << 40]), Err(f) if f.code == "DL0901"));
+        assert!(matches!(int(3, "pow", &[-1]), Err(f) if f.code == "DL0908"));
+    }
+
+    #[test]
+    fn clamp_refuses_bounds_that_name_no_value() {
+        assert!(matches!(int(9, "clamp", &[1, 5]), Ok(Value::Int(5))));
+        assert!(matches!(int(-9, "clamp", &[1, 5]), Ok(Value::Int(1))));
+        assert!(matches!(int(3, "clamp", &[3, 3]), Ok(Value::Int(3))));
+        assert!(matches!(int(3, "clamp", &[4, 3]), Err(f) if f.code == "DL0908"));
+        let nan = f64::NAN;
+        assert_eq!(float(9.0, "clamp", &[1.0, 5.0]), 5.0);
+        assert!(float(nan, "clamp", &[1.0, 5.0]).is_nan(), "a NaN receiver stays NaN");
+        for (lo, hi) in [(2.0, 1.0), (nan, 1.0), (0.0, nan)] {
+            let r = call_float_method(1.5, "clamp", &[Value::Float(lo), Value::Float(hi)], sp());
+            assert!(matches!(r, Err(ref f) if f.code == "DL0908"), "clamp({lo}, {hi}) answered {r:?}");
+        }
+        // `-0.0` is below `0.0`, so a clamp to `[0.0, 1.0]` lifts it.
+        assert!(float(-0.0, "clamp", &[0.0, 1.0]).is_sign_positive());
+    }
+
+    /// `min` and `max` are IEEE 754-2019's `minimumNumber` and `maximumNumber`: the answer never depends on the order of
+    /// the operands, which Rust's `f64::min` does not promise for `0.0` and `-0.0`.
+    #[test]
+    fn min_and_max_are_symmetric_with_signed_zeros_and_nans() {
+        let vals = [0.0, -0.0, 1.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.5];
+        for &a in &vals {
+            for &b in &vals {
+                for m in ["min", "max"] {
+                    let (ab, ba) = (float(a, m, &[b]), float(b, m, &[a]));
+                    assert!(ab.to_bits() == ba.to_bits(), "{a}.{m}({b}) = {ab} but {b}.{m}({a}) = {ba}");
+                    if a.is_nan() && !b.is_nan() {
+                        assert_eq!(ab.to_bits(), b.to_bits(), "a NaN loses to a number: {a}.{m}({b})");
+                    }
+                }
+            }
+        }
+        assert!(float(0.0, "min", &[-0.0]).is_sign_negative());
+        assert!(float(-0.0, "max", &[0.0]).is_sign_positive());
+    }
+
+    #[test]
+    fn round_is_half_away_from_zero() {
+        for (x, want) in [(0.5, 1.0), (-0.5, -1.0), (1.5, 2.0), (2.5, 3.0), (-2.5, -3.0), (0.49999999999999994, 0.0)] {
+            assert_eq!(float(x, "round", &[]), want, "{x}.round()");
+        }
+    }
+
+    #[test]
+    fn to_int_is_none_exactly_where_no_int_is_the_truncated_value() {
+        let two63 = 9_223_372_036_854_775_808.0_f64;
+        for (x, want) in [
+            (0.0, Some(0)),
+            (-0.0, Some(0)),
+            (2.9, Some(2)),
+            (-2.9, Some(-2)),
+            (-two63, Some(i64::MIN)),
+            (two63, None),
+            // The largest binary64 below 2^63.
+            (9_223_372_036_854_774_784.0, Some(9_223_372_036_854_774_784)),
+            (-9_223_372_036_854_777_856.0, None),
+            (f64::NAN, None),
+            (f64::INFINITY, None),
+            (f64::NEG_INFINITY, None),
+            (1e300, None),
+        ] {
+            assert_eq!(float_to_int(x), want, "{x}.to_int()");
+            let v = call_float_method(x, "to_int", &[], sp()).expect("to_int never faults");
+            assert_eq!(some(&v), want, "{x}.to_int() through the method");
+        }
+    }
+
+    /// The transcendental functions are `libm`'s, so these digits are the same on every OS; a platform `libm` would
+    /// differ in the last place for some of them.
+    #[test]
+    fn transcendentals_answer_libm_digits() {
+        assert_eq!(float(1.0, "exp", &[]).to_bits(), 2.718_281_828_459_045_5_f64.to_bits());
+        assert_eq!(float(2.0, "pow", &[0.5]), std::f64::consts::SQRT_2);
+        assert_eq!(float(1.0, "atan", &[]) * 4.0, std::f64::consts::PI);
+        assert_eq!(float(100.0, "log10", &[]), 2.0);
+        assert_eq!(float(1.0, "atan2", &[0.0]), std::f64::consts::FRAC_PI_2, "the receiver is the `y`");
+        assert_eq!(float(0.0, "ln", &[]), f64::NEG_INFINITY);
+        assert!(float(-1.0, "sqrt", &[]).is_nan());
     }
 }

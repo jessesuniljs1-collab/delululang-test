@@ -9,7 +9,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
-| warning | `prose-cites-missing-path` | 8 |
+| warning | `prose-cites-missing-path` | 7 |
 | warning | `stale-count` | 1 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
@@ -17,12 +17,11 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 | note | `dependency-never-used-in-source` | 3 |
 | note | `ruling-cited-without-its-stage` | 1 |
 
-## warning — `prose-cites-missing-path` (8)
+## warning — `prose-cites-missing-path` (7)
 
 **What to do:** correct the path, or say plainly that it no longer exists
 
 - `docs/CLOUD_SYNC_LOG.md:8897` — prose names `measurements/ai-usability/{METHODOLOGY.md`, which is nowhere in the tree
-- `docs/CLOUD_SYNC_LOG.md:8944` — prose names `crates/delulu-wasm/tests/math_parity.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delulu-p21-crossaccount.md:61` — prose names `tests/lib.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delulu-survey-map.md:64` — prose names `crates/.../ty.rs`, which is nowhere in the tree
 - `docs/assistant-memory/delululang-project.md:309` — prose names `docs/playbooks/README+STAGE4..10_PLAYBOOK`, which is nowhere in the tree
@@ -34,7 +33,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 342
+- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 343
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

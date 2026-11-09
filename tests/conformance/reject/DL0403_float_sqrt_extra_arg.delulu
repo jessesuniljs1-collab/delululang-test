@@ -1,0 +1,7 @@
+// anchors: ref.prim.float.sqrt
+// RW 2.38 (D-V2-223): `x.sqrt()` takes no argument; a root of another degree is `x.pow(1.0 / 3.0)`.
+module conf
+
+fn f(x: Float) -> Float {
+    x.sqrt(3.0)
+}

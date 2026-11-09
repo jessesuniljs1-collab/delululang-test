@@ -2665,3 +2665,77 @@ mod pattern_binding_rcap_tests {
         assert_eq!(errors(src), vec!["DL1603".to_string()], "a `ref` list out of a pattern is not stored as `val`");
     }
 }
+
+#[cfg(test)]
+mod math_spelling_tests {
+    use super::check_source;
+
+    /// Each error's code and message.
+    fn errors(src: &str) -> Vec<(String, String)> {
+        check_source(0, src)
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error())
+            .map(|d| (d.code.to_string(), d.message.clone()))
+            .collect()
+    }
+
+    fn body(stmt: &str) -> String {
+        format!("module m\nfn f(n: Int, x: Float) -> Float {{\n  {stmt}\n}}\n")
+    }
+
+    /// **RW 2.38 (D-V2-223).** Math is written as methods, so `abs(x)` — the spelling most languages use, and the one a
+    /// model reaches for first — names nothing. The refusal stays DL0301, alone, and says how the call is written, with
+    /// the receiver types that have it and, for a `Float`-only one, the conversion an `Int` needs.
+    #[test]
+    fn a_math_function_spelling_is_dl0301_saying_how_the_method_is_written() {
+        for (stmt, says) in [
+            ("float(abs(n))", "math is written as a method of `Int` and `Float` — `x.abs()`, not `abs(x)`"),
+            ("float(max(n, 2))", "a method of `Int` and `Float` — `a.max(b)`, not `max(a, b)`"),
+            ("float(clamp(n, 0, 9))", "`x.clamp(lo, hi)`, not `clamp(x, lo, hi)`"),
+            ("sqrt(x)", "a method of `Float` — `x.sqrt()`, not `sqrt(x)` (an `Int` converts first: `float(n).sqrt()`)"),
+            ("atan2(x, 1.0)", "`a.atan2(b)`, not `atan2(a, b)` (an `Int` converts first: `float(n).atan2(…)`)"),
+            ("float(checked_add(n, 1))", "math is written as a method of `Int` — `a.checked_add(b)`"),
+        ] {
+            let e = errors(&body(stmt));
+            assert_eq!(e.len(), 1, "`{stmt}`: one error, no cascade: {e:?}");
+            assert_eq!(e[0].0, "DL0301", "`{stmt}`: {e:?}");
+            assert!(e[0].1.contains(says), "`{stmt}` should say {says:?}: {}", e[0].1);
+        }
+        // A name that is no math method keeps the plain message.
+        let e = errors(&body("float(absolute(n))"));
+        assert_eq!(e, vec![("DL0301".to_string(), "unknown name `absolute`".to_string())]);
+    }
+
+    /// A program's own `fn abs` is still its own: the methods take no name from a program (C11's reason for methods).
+    #[test]
+    fn a_program_may_still_declare_its_own_abs() {
+        let src = "module m\nfn abs(n: Int) -> Int {\n  if n < 0 { 0 - n } else { n }\n}\n\
+                   fn f(n: Int) -> Int {\n  abs(n) + n.abs()\n}\n";
+        assert!(errors(src).is_empty(), "{:?}", errors(src));
+    }
+
+    /// A math method of the OTHER number type: DL0405, saying which type has it and how to reach it.
+    #[test]
+    fn a_method_of_the_other_number_type_says_how_to_reach_it() {
+        for (stmt, says) in [
+            ("n.sqrt()", "`sqrt` is a `Float` method — convert first, `float(n).sqrt()`"),
+            ("n.pow(2.0)", ""),
+            ("n.atan2(x)", "convert first, `float(n).atan2(…)`"),
+            ("float(n.to_int())", "an `Int` is already an `Int`: no conversion is needed"),
+            ("x.checked_add(1.0)", "`checked_add` is an `Int` method — `x.to_int()` gives an `Option[Int]`"),
+        ] {
+            let e = errors(&body(stmt));
+            if says.is_empty() {
+                // `pow` is a method of both: its refusal is the argument's type, DL0401.
+                assert_eq!(e.first().map(|d| d.0.as_str()), Some("DL0401"), "`{stmt}`: {e:?}");
+                continue;
+            }
+            assert_eq!(e.first().map(|d| d.0.as_str()), Some("DL0405"), "`{stmt}`: {e:?}");
+            assert!(e[0].1.contains(says), "`{stmt}` should say {says:?}: {}", e[0].1);
+        }
+        // A method no number type has keeps the plain message.
+        let e = errors(&body("n.frobnicate()"));
+        assert_eq!(e.first().map(|d| d.1.as_str()), Some("type `Int` has no method `frobnicate`"));
+    }
+}

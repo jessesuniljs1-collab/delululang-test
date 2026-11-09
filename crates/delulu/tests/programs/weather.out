@@ -1,0 +1,25 @@
+== Harbour (11 m), 7 days
+  temperature: mean 16.26 median 16.10 sd 1.40 range 14.2 to 18.3
+  p25 14.9 p50 16.1 p90 18.3
+  trend 0.636 C/day from 13.71, r 0.906
+  wind: strongest 6.0 m/s, mean vector 0.83 m/s toward 105.9 (E)
+  rain 17 mm on 3 days (log10 1.230), heating 1.9 degree-days
+== Ridge (38 m), 6 days
+  temperature: mean 11.65 median 11.95 sd 1.24 range 9.7 to 13.3
+  p25 10.4 p50 11.8 p90 13.3
+  trend 0.431 C/day from 10.14, r 0.595
+  wind: strongest 8.1 m/s, mean vector 2.09 m/s toward 302.3 (NW)
+  rain 45 mm on 5 days (log10 1.653), heating 23.1 degree-days
+== Moor (47 m), 5 days
+  temperature: mean 4.72 median 6.40 sd 3.61 range -1.2 to 8.8
+  p25 2.5 p50 6.4 p90 8.8
+  trend -0.940 C/day from 7.54, r -0.368
+  wind: strongest 12.3 m/s, mean vector 3.79 m/s toward 281.3 (W)
+  rain 33 mm on 4 days (log10 1.519), heating 53.9 degree-days
+== distances
+  Harbour  to Ridge   262.0 km
+  Harbour  to Moor    533.7 km
+  Ridge    to Moor    281.6 km
+== all stations: 18 readings, mean 11.52 C, sd 5.15
+  coldest and warmest: 29.8F 64.9F
+  rounding: 3 -3 0.13 n/a n/a

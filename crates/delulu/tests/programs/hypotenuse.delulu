@@ -1,0 +1,7 @@
+// engines: interp wasm
+// RW 2.38: the one-liner — a ladder's reach, Pythagoras by the math methods.
+module hypotenuse
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str((3.0.pow(2.0) + 4.0.pow(2.0)).sqrt()))
+}

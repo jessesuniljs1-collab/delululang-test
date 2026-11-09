@@ -26,7 +26,10 @@ fn main(root: Root) ! {ForeignCall, Write} {
     // `root.python(load)` is pure (deriving the handle is not an effect); a missing interpreter is a
     // `ForeignErr::Unavailable` value here (DL1307), never a crash.
     match root.python(load) {
-        Ok(py) => match mean_of(py) { Ok(v) => c.println("mean = " + str(v)), Err(e) => c.println("python error [" + e.kind + "]: " + e.message) }
+        Ok(py) => match mean_of(py) {
+            Ok(v) => c.println("mean = " + str(v))
+            Err(e) => c.println("python error [" + e.kind + "]: " + e.message)
+        }
         Err(_) => c.println("embedded Python is unavailable")
     }
 }

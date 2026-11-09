@@ -867,6 +867,27 @@ overstate it downstream:
     gives — use `Secret.verify`, which is constant-time and carries `Declassify`); a `Map` key that is
     not one of the three scalars. Do not work around these by reaching for a flag; there is none, and
     the refusal is the answer.
+  - **Math is written as methods** (RW 2.38, D-V2-223), so a program's own `fn abs` or `fn max` keeps its meaning.
+    `Int`: `abs`, `min`, `max`, `clamp(lo, hi)`, `pow(e)`, and the checked forms `checked_add`, `checked_sub`,
+    `checked_mul`, `checked_div`, `checked_rem`. `Float`: `abs`, `min`, `max`, `clamp`, `sqrt`, `floor`, `ceil`,
+    `round`, `trunc`, `pow`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `ln`, `log10`, `is_nan`,
+    `is_finite`, and the checked conversion `to_int`. All are pure (no effect row) and run on both engines with the same
+    answers — the WASM engine calls the interpreter's own functions, and the transcendental ones are the `libm` crate's,
+    so the digits do not depend on the OS. They are not always the correctly rounded digits: `1.0.exp()` is
+    `2.7182818284590455`, one ulp above e (Python on Linux prints `2.718281828459045`), so compare a transcendental
+    answer within a tolerance, not digit for digit with another language. What a generator needs to know:
+    - **`abs(x)` names nothing** (DL0301, whose message says `x.abs()`); `n.sqrt()` on an `Int` is DL0405, whose
+      message says `float(n).sqrt()`. Numbers never mix implicitly: `x.max(0)` on a `Float` is DL0401 — write `0.0`.
+    - **`n.checked_op(m)` is `None` exactly where `n op m` stops the program** (DL0901 overflow, DL0902 a zero divisor;
+      `Int`'s minimum `/ -1` and `% -1` overflow). `abs` of `Int`'s minimum and a `pow` past the range are DL0901.
+    - **DL0908** is a value no answer exists for: `n.pow(e)` with `e < 0` (write `2.0.pow(-1.0)`), `clamp(lo, hi)` with
+      `lo > hi` or a NaN bound.
+    - **A `Float` never faults:** a NaN or an infinity is a value (`(-1.0).sqrt()` is `NaN`, `0.0.ln()` is `-inf`).
+      `min`/`max` are IEEE 754-2019's `minimumNumber`/`maximumNumber` (a NaN loses; `-0.0` is below `0.0`), so the
+      order of the operands never changes the answer. `round` is half away from zero (`2.5.round()` is `3.0`, not
+      Python's `2`). `y.atan2(x)` is C's `atan2(y, x)`: the receiver is `y`.
+    - **`int(x)` saturates and keeps that meaning** (a NaN is `0`, an infinity `Int`'s limit); `x.to_int()` asks
+      first — `Some` of `x` truncated toward zero, `None` for a NaN, an infinity or a value past the range.
   - **`to_upper`/`to_lower` are full Unicode and are not a security normalization.** They do not
     round-trip (`ß` uppercases to `SS`). **Never case-fold to compare a path, a host name, or
     anything that decides an authority question** — four defects in this project's own P22 campaign

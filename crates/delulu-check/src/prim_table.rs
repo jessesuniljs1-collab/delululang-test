@@ -187,6 +187,7 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "float", method: "log10", arity: 0 },
     PrimEntry { receiver: "float", method: "is_nan", arity: 0 },
     PrimEntry { receiver: "float", method: "is_finite", arity: 0 },
+    PrimEntry { receiver: "float", method: "to_int", arity: 0 },
     // List (builtin).
     PrimEntry { receiver: "list", method: "len", arity: 0 },
     PrimEntry { receiver: "list", method: "get", arity: 1 },
@@ -247,7 +248,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            124,
+            125,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

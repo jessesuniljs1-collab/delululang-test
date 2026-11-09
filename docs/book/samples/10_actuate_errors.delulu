@@ -27,6 +27,10 @@ fn stopped(reason: Str) -> Str {
 fn drive(a: Cap[Actuator]) -> Str ! {Actuate} {
     match a.command(Cmd { angle_deg: 12.0, velocity_dps: 4.0, torque_nm: 1.4 }) {
         Ok(u) => "commanded"
-        Err(e) => match e { Envelope(reason) => clamped(reason), LeaseRevoked(reason) => stopped(reason), NoDevice => "no adapter is bound to this device" }
+        Err(e) => match e {
+            Envelope(reason) => clamped(reason)
+            LeaseRevoked(reason) => stopped(reason)
+            NoDevice => "no adapter is bound to this device"
+        }
     }
 }

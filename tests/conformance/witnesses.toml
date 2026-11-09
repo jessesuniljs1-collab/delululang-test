@@ -2639,6 +2639,209 @@ file = "crates/delulu-check/src/prim_table.rs"
 test = "every_listed_primitive_rejects_a_five_argument_call"
 kind = "negative"
 
+# RW 2.38 (D-V2-223): the math methods' rejecting witnesses, one row per anchor. `arity_column_matches_the_checker_gate`
+# calls each listed primitive with one argument more than its arity and asserts the arity gate's own DL0403 (its exact
+# message), and with exactly its arity and asserts the gate does not fire. The accepting witnesses are
+# `tests/conformance/accept/31_math.delulu`, which uses every one; `int.pow`, `float.max` and `float.sqrt` have
+# hand-written reject programs beside these rows.
+[[witness]]
+anchor = "ref.prim.int.abs"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.min"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.max"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.clamp"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.pow"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.checked_add"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.checked_sub"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.checked_mul"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.checked_div"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.int.checked_rem"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.abs"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.min"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.max"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.clamp"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.sqrt"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.floor"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.ceil"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.round"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.trunc"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.pow"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.sin"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.cos"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.tan"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.asin"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.acos"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.atan"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.atan2"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.exp"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.ln"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.log10"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.is_nan"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.is_finite"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.to_int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.list.len"
 file = "crates/delulu-check/src/prim_table.rs"

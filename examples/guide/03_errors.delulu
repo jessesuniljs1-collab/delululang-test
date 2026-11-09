@@ -28,7 +28,10 @@ fn to_int(s: Str) -> Result[Int, ParseErr] {
 fn describe(s: Str) -> Str {
     match to_int(s) {
         Ok(n) => "parsed " + str(n)
-        Err(e) => match e { Empty => "empty input", NotANumber(bad) => "not a number: " + bad }
+        Err(e) => match e {
+            Empty => "empty input"
+            NotANumber(bad) => "not a number: " + bad
+        }
     }
 }
 

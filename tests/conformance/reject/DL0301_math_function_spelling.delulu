@@ -1,0 +1,7 @@
+// RW 2.38 (D-V2-223): math is written as methods, so `abs(x)` names nothing — the refusal says to write `x.abs()`. A
+// program may still declare its own `fn abs` (`01_pure.delulu` does), which then means what it says.
+module conf
+
+fn f(x: Int) -> Int {
+    abs(x)
+}

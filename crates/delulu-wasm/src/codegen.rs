@@ -1165,7 +1165,10 @@ fn module_calls_str_methods(env: &EnumEnv, module: &Module) -> bool {
 }
 
 /// Does any compilable function call a method on a receiver the checker typed `want` (`Int` or `Float`) whose name is
-/// one the host runs? Then the module carries that `delulu:math` import.
+/// one the host runs? Then the module carries that `delulu:math` import. A receiver the compile has no type for — every
+/// receiver, when a module is compiled without the checker's types, as a Verified plugin's DIR is recompiled
+/// (`verified_executable_wasm`) — is decided by the name alone: an import the module never calls costs nothing, since
+/// the host defines both, while one it lacks refused the program.
 fn module_calls_num_methods(
     env: &EnumEnv,
     module: &Module,
@@ -1175,7 +1178,7 @@ fn module_calls_num_methods(
 ) -> bool {
     let hit = |e: &Expr| {
         matches!(e, Expr::Method { recv, name, .. }
-            if names.contains(&name.name.as_str()) && node_types.get(&recv.id()) == Some(want))
+            if names.contains(&name.name.as_str()) && node_types.get(&recv.id()).is_none_or(|t| t == want))
     };
     module_any(env, module, &hit, false)
 }
@@ -4660,6 +4663,9 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 }
                 return Ok(Ty::I32);
             }
+            if recv_ty == Ty::F64 && args.is_empty() && name.name == "to_int" {
+                return compile_float_to_int(cx);
+            }
             if let (Ty::F64, Some((id, n))) = (recv_ty, float_method_sig(&name.name)) {
                 if n == args.len() {
                     return compile_float_method(id, args, cx);
@@ -4975,6 +4981,12 @@ fn compile_int_method(id: u32, checked: bool, args: &[Expr], cx: &mut Cx) -> Res
         cx.emit(Instruction::LocalGet(value));
         return Ok(Ty::I64);
     }
+    build_option_i64(answered, value, cx)
+}
+
+/// An `Option[Int]` cell built from two locals: `Some(value)` when `answered` is 1, `None` when it is 0 — as
+/// `compile_parse` builds its answer. Left on the stack.
+fn build_option_i64(answered: u32, value: u32, cx: &mut Cx) -> Result<Ty, CompileError> {
     let opt = Ty::Option(Scalar::I64);
     let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
     let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
@@ -5000,6 +5012,30 @@ fn compile_int_method(id: u32, checked: bool, args: &[Expr], cx: &mut Cx) -> Res
     cx.emit(Instruction::End);
     cx.emit(Instruction::LocalGet(cell));
     Ok(opt)
+}
+
+/// `x.to_int()`, the receiver on the stack, compiled in the guest: `Some` of `x` truncated toward zero when
+/// `-2^63 <= x < 2^63`, `None` otherwise — a NaN fails both comparisons. Both bounds are exact in binary64, and the
+/// interpreter's `prim::float_to_int` makes the same two comparisons, so the engines cannot disagree on a boundary.
+fn compile_float_to_int(cx: &mut Cx) -> Result<Ty, CompileError> {
+    const TWO_63: f64 = 9_223_372_036_854_775_808.0;
+    let x = cx.alloc_local(Ty::F64)?;
+    cx.emit(Instruction::LocalSet(x));
+    let (answered, value) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I64)?);
+    cx.emit(Instruction::LocalGet(x));
+    cx.emit(Instruction::F64Const(-TWO_63));
+    cx.emit(Instruction::F64Ge);
+    cx.emit(Instruction::LocalGet(x));
+    cx.emit(Instruction::F64Const(TWO_63));
+    cx.emit(Instruction::F64Lt);
+    cx.emit(Instruction::I32And);
+    cx.emit(Instruction::LocalTee(answered));
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(x));
+    cx.emit(Instruction::I64TruncF64S);
+    cx.emit(Instruction::LocalSet(value));
+    cx.emit(Instruction::End);
+    build_option_i64(answered, value, cx)
 }
 
 /// A `Float` method run host-side (`delulu:math.float_method`), as `compile_int_method` runs an `Int` one.

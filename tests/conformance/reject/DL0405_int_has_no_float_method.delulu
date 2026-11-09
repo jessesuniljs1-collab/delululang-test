@@ -1,0 +1,6 @@
+// RW 2.38 (D-V2-223): `sqrt` is a `Float` method. An `Int` converts first (`float(n).sqrt()`); the refusal says so.
+module conf
+
+fn f(n: Int) -> Float {
+    n.sqrt()
+}

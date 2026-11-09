@@ -56,7 +56,7 @@ fn j2() -> Float {
 }
 
 fn omega_earth() -> Float {
-    0.000072921159  // Earth rotation rate, rad/s
+    7.2921159e-5  // Earth rotation rate, rad/s
 }
 
 fn pi() -> Float {
@@ -148,7 +148,7 @@ fn asin_iter(v: Float, y: Float, n: Int) -> Float {
         y
     } else {
         let c = cos(y)
-        if abs(c) < 0.000001 { y } else { asin_iter(v, y - (sin(y) - v) / c, n - 1) }
+        if abs(c) < 1.0e-6 { y } else { asin_iter(v, y - (sin(y) - v) / c, n - 1) }
     }
 }
 
@@ -314,7 +314,11 @@ fn rng_at(t: Float) -> Float {
 fn say(who: Str, r: Result[Unit, ActuateErr]) -> Str {
     match r {
         Ok(u) => who + " COMMANDED"
-        Err(e) => match e { Envelope(reason) => who + " REFUSED", LeaseRevoked(reason) => who + " REVOKED", NoDevice => who + " NODEVICE" }
+        Err(e) => match e {
+            Envelope(reason) => who + " REFUSED"
+            LeaseRevoked(reason) => who + " REVOKED"
+            NoDevice => who + " NODEVICE"
+        }
     }
 }
 

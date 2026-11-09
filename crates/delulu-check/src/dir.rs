@@ -63,7 +63,7 @@ pub const DIR_VERSION: u32 = 1;
 /// 9 = V2 phase **P9-05 (d)** (D-V2-208): `Cap[Http].put(url, headers, body)`, `patch(url, headers, body)` and
 /// `delete(url, headers)`, and a `_with_secret` form of each. Additive; bumped for the same rule.
 /// 10 = **RW 2.38** (D-V2-223): the math methods on `Int` (`abs`, `min`, `max`, `clamp`, `pow` and the five `checked_`
-/// forms) and on `Float` (`abs` … `is_finite`, twenty-two). Additive; bumped for the same rule.
+/// forms) and on `Float` (`abs` … `is_finite` and the checked `to_int`, twenty-three). Additive; bumped for the same rule.
 pub const PRIM_TABLE_VERSION: u32 = 10;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504

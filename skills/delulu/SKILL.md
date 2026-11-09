@@ -165,8 +165,16 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
   `contains` on secrets or capabilities (`DL0605`, same as `==` — use `Secret.verify`), and a `Map`
   key that is not `Str`/`Int`/`Bool`. **`to_upper`/`to_lower` are not a security normalization** —
   never case-fold to compare a path, a host name or a capability.
-- None of the collection methods compile to WebAssembly. `--target wasm` answers `DL1201`; run those
-  programs on the interpreter.
+- **Math is methods, not functions** (RW 2.38): `n.abs()`, `a.max(b)`, `n.clamp(lo, hi)`, `n.pow(e)` on `Int`;
+  `x.sqrt()`, `x.floor()`, `x.round()` (half away from zero), `x.pow(y)`, `x.sin()` … `y.atan2(x)`, `x.exp()`,
+  `x.ln()`, `x.log10()`, `x.is_nan()` on `Float`. `abs(x)` is DL0301 and its message says `x.abs()`. An `Int`
+  overflow or a zero divisor stops the program (DL0901, DL0902); **ask first** with `n.checked_add(m)` (and `_sub`,
+  `_mul`, `_div`, `_rem`), each an `Option[Int]` that is `None` exactly where the operator would stop. `int(x)`
+  saturates (a NaN is `0`); `x.to_int()` is the checked form. Every one runs on both engines with the same digits on
+  every OS.
+- Most of the collection methods compile to WebAssembly too (RW 3.4, `docs/for-agents.md`). A construct the WASM
+  backend does not support is refused by `--engine wasm` with DL1201 before the program runs; omit the flag and the
+  interpreter runs it.
 
 ## References
 
