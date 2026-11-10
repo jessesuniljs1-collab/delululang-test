@@ -12784,3 +12784,5 @@ jobs; arm64 2.85x, macOS 1.96x against 1.32x), the release dry run `42623379628`
 - Witness runs on `7a6f5f2`, each read in its log: macOS `42770837951` and Windows `42770841584` (`conformance` 4,
   `programs_cli` 3, `ranges_cli` 5); macOS `42770845536` and Windows `42770849696` (`range_parity` 5,
   `refusal_trace_parity` 3).
+- `master`'s push run `42776213089` on the records commit `d572c9c`: success, 14 jobs green, 2 skipped (`heavy-gates`,
+  `miri-slow`); arm64's ping-pong MEASURED 2.79x against 1.48x.

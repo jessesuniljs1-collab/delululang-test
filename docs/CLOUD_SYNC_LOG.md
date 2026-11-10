@@ -9062,8 +9062,8 @@ Survey and doctor: in the commit below.
 ### 2026-11-10 — on-demand routine run 23: RW 2.36 closed — ranges, a `for` that counts without a list, and every free builtin reads its arguments (D-V2-224)
 - Session: `https://claude.ai/code/session_01Deh6W9FSJH8uDnwDHLfofA`   Model: Claude Opus 5.5 (the routine; no fallback
   notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with
-  step 0's command at the start, were 2, both `"effort":"xhigh"`. The setup script had run: the 1.96.1 toolchain was
-  there before the first command.
+  step 0's command at the start, were 2, both `"effort":"xhigh"`, and at the close 611, every one `"effort":"xhigh"`.
+  The setup script had run: the 1.96.1 toolchain was there before the first command.
 - Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*). The code also went to the session's
   branch `claude/peaceful-carson-klplez` for its runner reads. Pull request: none.
 - Base: `0ff6f5c` (`master` at the start). `gh` is installed (`/usr/local/bin/gh`); CI was read with the MCP tools and
@@ -9135,16 +9135,22 @@ Survey and doctor: in the commit below.
     `programs_cli` 3, `ranges_cli` 5); macOS `42770845536` and Windows `42770849696` (`range_parity` 5,
     `refusal_trace_parity` 3).
 - Survey and doctor (after the last edit): in the records commit's message.
-- Redo on the laptop: nothing for the milestone. Delete the merged branches if this session's policy refuses it again:
-  `laptop/basics-math`, `laptop/basics-let-var`, `laptop/basics-compound`, `laptop/rw-7-31-formal-pin`, `laptop/mcp-cancel`,
-  `laptop/sandbox-faults`, `laptop/missing-grants`, `laptop/package-fast-paths`, `laptop/stack-ladder`,
-  `laptop/wasm-main-shapes`, `laptop/rw-4-98-*`, `laptop/rw-7-25-ci-evidence`, `laptop/stack-ladder-witness`
-  (superseded), `claude/peaceful-carson-yjtqjc`, `-qprliy`, `-r464uq` and this run's `claude/peaceful-carson-klplez`.
+- Redo on the laptop: nothing for the milestone. Delete the merged branches (each checked in `master`'s history with
+  `git merge-base --is-ancestor` at the end of this run; the proxy refused this run's deletion): `laptop/basics-compound`,
+  `laptop/basics-let-var`, `laptop/basics-math`, `laptop/mcp-cancel`, `laptop/missing-grants`, `laptop/package-fast-paths`,
+  `laptop/rw-7-31-formal-pin`, `laptop/sandbox-faults`, `laptop/stack-ladder`, `laptop/wasm-main-shapes`,
+  `claude/peaceful-carson-r464uq`, `claude/peaceful-carson-yjtqjc` and this run's `claude/peaceful-carson-klplez`; and
+  `laptop/stack-ladder-witness` (one commit `master` lacks, superseded, recorded before).
 - For the laptop's memory: `HANDOFF.md` §11.2 has two new lessons (*a builtin whose arguments no pass reads gives wrong
   answers, not refusals*; *a basic's programs find the engine's gaps, not only the basic's*). `docs/CLOUD_ROUTINE.md`'s
   program-step paragraph gained them as steps, with how a mutant that could hang or fill the VM is written.
 - **Open / next:**
-  1. **CI of this run:** `master`'s push run on the records commit (it carries `7a6f5f2` and `3329c00`) is read in the follow-up commit that records it; that follow-up's own push run is the next session's first read.
+  1. **CI of this run, read:** `master`'s push run `42776213089` on the records commit `d572c9c` (it carries `7a6f5f2` and
+     `3329c00`): success, 14 jobs green and `heavy-gates` and `miri-slow` skipped as on every push; arm64's ping-pong
+     MEASURED 2.79x against a bar of 1.48x, macOS, Ubuntu and Windows NOT MEASURED, as always on those runners. The push
+     run of the follow-up commit that wrote this item is unread here: read it first. Branch deletion: the git proxy
+     refused `git push origin --delete laptop/basics-compound` (*the remote end hung up unexpectedly*, the branch still
+     there), so every merged branch below is the laptop's.
   2. **The next basics, in D-V2-220's order:** strings (2.37, with RW 2.48 and 2.49 beside them and the unquoted
      strings in a list's text), bitwise (2.35), methods on a program's own types (2.33), tuples and sets (2.39), argv
      and exit code (2.40), JSON (2.41). RW 2.50 (`Option`/`Result` methods, its own D-V2 first) and RW 2.51 (a builder's
