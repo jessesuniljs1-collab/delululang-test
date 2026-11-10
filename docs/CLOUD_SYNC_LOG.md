@@ -9219,3 +9219,22 @@ Survey and doctor: in the commit below.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** unchanged from the entry above — read this commit's push run first; then the next basic, strings
   (RW 2.37), in D-V2-220's order. For the owner: whether to restore `/dev/kvm` in WSL (a Windows-side setting).
+
+### 2026-11-10 — the laptop: `1c2d85c`'s push run read green; WSL's `/dev/kvm` restored (Windows update KB5127936)
+- Session: `https://claude.ai/code/session_01Deh6W8XoWUPrjihjND5NtX`   Model: Claude Opus 5.5 (the laptop, after a
+  Windows restart; no fallback notice; no sous-chef).
+- Branch: `master`, pushed directly (records only). Pull request: none.
+- Base: `1c2d85c` = `origin/master` after `git fetch origin --prune`; nothing new had landed.
+- **CI read:** the push run `42826851198` on `1c2d85c` (the entry above's commit) — success, 14 jobs green and 2
+  skipped (`heavy-gates` and `miri-slow`, as on every push).
+- **`/dev/kvm`:** the owner, *"Fix the /dev/kvm issue in WSL"*. Cause: Windows' 2026-10 cumulative update KB5127648
+  (here since 2026-10-19) breaks nested virtualization for WSL on AMD (microsoft/WSL#41917); not Memory Integrity, which
+  was on while KVM worked. Fix: KB5127936 (2026-10-28 Preview, 25H2 → 26200.9818) from the Microsoft Update Catalog,
+  hash- and signature-checked, installed with DISM; after the owner's restart WSL shows `svm` on 4 of 4 CPUs, `Nested
+  features: 0x4a0000`, `/dev/kvm`, and the ordinary user's `KVM_CREATE_VM` succeeds. Recorded in full in
+  `docs/maintenance/DISK-CLEANUP-2026-11-10.md`. The `--cfg delulu_kvm` tests can run in WSL again; its microVM images
+  are still stale (rebuild before the gated microVM tests).
+- Files and folders (`git diff --name-status 1c2d85c..HEAD`): M `docs/maintenance/DISK-CLEANUP-2026-11-10.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing added, deleted or renamed.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** read this commit's push run first; then the next basic, strings (RW 2.37), in D-V2-220's order.

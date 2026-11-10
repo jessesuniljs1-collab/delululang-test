@@ -133,6 +133,22 @@ their scratch behind when a run is cut short, and Windows never empties its temp
   `/dev/kvm` was present before the cleanup was not checked. The microVM tests (`--cfg delulu_kvm`) cannot run in WSL
   until it returns. Separately, WSL 2.6.1 warns that `autoMemoryReclaim` and `sparseVhd` are unknown keys under
   `[wsl2]` (they belong under `[experimental]`), so the disk image does not shrink by itself.
+- **`/dev/kvm` restored the same evening, at the owner's word** (*"Fix the /dev/kvm issue in WSL"*). The cause was a
+  Windows regression, not the laptop's settings: the 2026-10 cumulative update **KB5127648** (installed here on
+  2026-10-19, build 26200.9711) breaks the Host Compute Service's `ProcessorCapabilities` query on AMD processors, and
+  WSL, catching the error silently, starts its VM without nested virtualization — the guest's `Hyper-V: Nested features:
+  0x0`, no `svm`, no warning ([microsoft/WSL#41917](https://github.com/microsoft/WSL/issues/41917); its maintainer, on
+  2026-11-02, names the fix **KB5127936**). Memory Integrity was ruled out: the boot log shows VBS with HVCI enabled on
+  every boot since 2026-09-19, and KVM worked on 2026-09-26 and on 2026-10-17 all the same. KB5127936 (the 2026-10-28 *Preview* cumulative
+  update for 25H2, build 26200.9818) was not offered by Windows Update here, so its two packages were taken from the
+  Microsoft Update Catalog (`windows11.0-kb5043080-x64_9534…83e8.msu`, 533,761,740 bytes, and
+  `windows11.0-kb5127936-x64_50ca…830b.msu`, 4,898,703,157 bytes), each checked before use — SHA-1 equal to the hash in
+  its file name, Authenticode signature *Valid*, signer Microsoft Corporation — and installed elevated with `DISM /Online
+  /Add-Package /NoRestart` (*"The operation completed successfully"*, exit 3010). After the owner's restart the build
+  read 26200.9818, and in WSL: `Hyper-V: Nested features: 0x4a0000`, `svm` on 4 of 4 CPUs, `kvm_amd: Nested
+  Virtualization enabled`, `/dev/kvm` `crw-rw---- root kvm` (the `/etc/wsl.conf` boot command, unchanged), and as the
+  ordinary user `KVM_GET_API_VERSION` = 12 and `KVM_CREATE_VM` returning a descriptor. The 5.4 GB of packages were then
+  deleted. The microVM images in WSL are still stale (the 2026-10-17 note above); KVM itself works.
 
 ## Result
 
