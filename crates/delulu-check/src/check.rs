@@ -45,6 +45,24 @@ pub const PRELUDE_BUILTINS: &[&str] = &[
     "Map",
 ];
 
+/// RW 2.36: the argument count of each prelude builtin that has no refusal of its own for it, and its usage as the refusal
+/// writes it. `load`, `assert`, `assert_eq`, `range` and `Map` say their own; `None` is not called.
+pub fn builtin_arity(name: &str) -> Option<(usize, &'static str)> {
+    Some(match name {
+        "Ok" => (1, "Ok(value)"),
+        "Err" => (1, "Err(error)"),
+        "Some" => (1, "Some(value)"),
+        "str" => (1, "str(value)"),
+        "len" => (1, "len(text_list_or_map)"),
+        "int" => (1, "int(float)"),
+        "float" => (1, "float(int)"),
+        "parse_int" => (1, "parse_int(text)"),
+        "parse_float" => (1, "parse_float(text)"),
+        "push" => (2, "push(list, value)"),
+        _ => return None,
+    })
+}
+
 /// The builtin TYPE names [`Checker::lower_type`] intercepts before it ever consults user scope.
 ///
 /// This list must stay in lockstep with the `match name.as_str()` arm in `lower_type`; the test
@@ -2078,6 +2096,17 @@ impl<'a> Checker<'a> {
         ctx: &mut FnCtx,
     ) -> Option<(Type, RowAcc)> {
         let mut acc = RowAcc::default();
+        // RW 2.36: a builtin's argument count, said once and before its arguments are judged. Eleven of them never read
+        // it: `str(1, 2)` printed `1`, `Some()` was `Some(())`, `len("ab", "c")` was 2, `push(xs)` pushed nothing. `load`,
+        // `assert`, `assert_eq`, `range` and `Map` say their own count, in words of their own.
+        if let Some((n, usage)) = builtin_arity(name) {
+            if args.len() != n {
+                self.diags.push(
+                    Diagnostic::error("DL0403", format!("`{name}` expects {n} argument(s), found {}: `{usage}`", args.len()))
+                        .with_span(span, "wrong number of arguments"),
+                );
+            }
+        }
         let check_args = |slf: &mut Self, ctx: &mut FnCtx, acc: &mut RowAcc| -> Vec<Type> {
             args.iter()
                 .map(|a| {
@@ -2197,8 +2226,22 @@ impl<'a> Checker<'a> {
                 }
                 Some((Type::Str, acc))
             }
+            // RW 2.36: `len` counts a `Str` (its characters), a `List` or a `Map`. Its argument was never read: `len(5)`
+            // was 0, and so was `len(m)` of a `Map` holding pairs — a wrong answer, not a refusal.
             "len" => {
-                check_args(self, ctx, &mut acc);
+                let ts = check_args(self, ctx, &mut acc);
+                if let (Some(t), Some(a)) = (ts.first(), args.first()) {
+                    let t = self.cx.apply_type(t);
+                    if !matches!(t, Type::Str | Type::List(_) | Type::Map(..) | Type::Var(_)) {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                format!("`len` counts a `Str`, a `List` or a `Map`, and this is `{}`", self.ty(&t)),
+                            )
+                            .with_span(a.span(), "not a `Str`, a `List` or a `Map`"),
+                        );
+                    }
+                }
                 Some((Type::Int, acc))
             }
             "int" => {
@@ -2215,16 +2258,40 @@ impl<'a> Checker<'a> {
                 }
                 Some((Type::Float, acc))
             }
+            // RW 2.36: each reads a `Str`; `parse_int(5)` was `None`.
             "parse_int" => {
-                check_args(self, ctx, &mut acc);
+                let ts = check_args(self, ctx, &mut acc);
+                if let Some(t) = ts.first() {
+                    self.expect_type(&Type::Str, t, span, "parse_int() reads a Str");
+                }
                 Some((Type::Option(Box::new(Type::Int)), acc))
             }
             "parse_float" => {
-                check_args(self, ctx, &mut acc);
+                let ts = check_args(self, ctx, &mut acc);
+                if let Some(t) = ts.first() {
+                    self.expect_type(&Type::Str, t, span, "parse_float() reads a Str");
+                }
                 Some((Type::Option(Box::new(Type::Float)), acc))
             }
+            // RW 2.36: `range(lo, hi)` is `lo..hi`. Its arguments were never read, so `range(1.5, "x")` and `range(1)` were
+            // an empty list and `range(0, 3, 9)` ignored its third; each is refused now, and a step is said how to write.
             "range" => {
-                check_args(self, ctx, &mut acc);
+                let ts = check_args(self, ctx, &mut acc);
+                if ts.len() == 2 {
+                    for (t, a) in ts.iter().zip(args) {
+                        self.range_bound(t, a.span(), "range(lo, hi)");
+                    }
+                } else {
+                    let help = if ts.len() == 3 {
+                        ": a range has no step — `(lo..hi).step_by(k)` counts in steps of `k`"
+                    } else {
+                        ": `range(lo, hi)`, or `lo..hi`"
+                    };
+                    self.diags.push(
+                        Diagnostic::error("DL0403", format!("`range` expects 2 argument(s), found {}{help}", ts.len()))
+                            .with_span(span, "wrong number of arguments"),
+                    );
+                }
                 Some((Type::List(Box::new(Type::Int)), acc))
             }
             // `Map()` — the empty map (P3, D-V2-29). A free builtin rather than a literal or a
@@ -2247,10 +2314,29 @@ impl<'a> Checker<'a> {
             }
             "push" => {
                 let ts = check_args(self, ctx, &mut acc);
+                // RW 2.36: the first argument is the list. Anything else was let through, and the interpreter then faulted
+                // DL0907, "a checker bug" — which it was.
+                if let (Some(t), Some(a)) = (ts.first(), args.first()) {
+                    match self.cx.apply_type(t) {
+                        Type::List(_) => {}
+                        Type::Var(_) => {
+                            let elem = self.cx.fresh_type();
+                            self.expect_type(&Type::List(Box::new(elem)), t, a.span(), "push(list, value) pushes onto a List");
+                        }
+                        other => self.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                format!("`push(list, value)` pushes onto a `List`, and this is `{}`", self.ty(&other)),
+                            )
+                            .with_span(a.span(), "not a `List`"),
+                        ),
+                    }
+                }
                 // Unify the element into the list, then yield Unit (push mutates in place).
-                if let (Some(Type::List(elem)), Some(v)) = (ts.first(), ts.get(1)) {
-                    let elem = (**elem).clone();
-                    self.expect_type(&elem, v, span, "pushed element type must match the list");
+                if let (Some(t), Some(v)) = (ts.first(), ts.get(1)) {
+                    if let Type::List(elem) = self.cx.apply_type(t) {
+                        self.expect_type(&elem, v, span, "pushed element type must match the list");
+                    }
                 }
                 Some((Type::Unit, acc))
             }
@@ -3128,6 +3214,12 @@ impl<'a> Checker<'a> {
                     self.expect_arg(args, 1, &Type::Int, span);
                     Some((Type::List(elem.clone()), None, None))
                 }
+                // RW 2.36: every `k`th element from the first — `(0..10).step_by(3)` is `[0, 3, 6, 9]`. A step below 1 is
+                // DL0908 when it runs.
+                "step_by" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::List(elem.clone()), None, None))
+                }
                 // `contains` is `==` in a loop, so it answers to the SAME rule and the SAME code
                 // (DL0605). If it did not, one of the two would be wrong: `Value::eq` returns
                 // `false` for two `Secret`s, so an admitted `xs.contains(k)` over secrets would hand
@@ -3496,8 +3588,33 @@ impl<'a> Checker<'a> {
                 self.expect_type(&Type::Bool, &rt, rhs.span(), "logical operator expects Bool");
                 Type::Bool
             }
+            // RW 2.36: `lo..hi` and `lo..=hi` are the prelude's `range` written as operators — the `Int`s between two
+            // `Int` bounds, as a `List[Int]`.
+            Range | RangeInclusive => {
+                let form = if op == Range { "lo..hi" } else { "lo..=hi" };
+                self.range_bound(&lt, lhs.span(), form);
+                self.range_bound(&rt, rhs.span(), form);
+                Type::List(Box::new(Type::Int))
+            }
         };
         (out, acc)
+    }
+
+    /// RW 2.36: a bound of `lo..hi`, `lo..=hi` or `range(lo, hi)` is an `Int`. A `Float` is the likely mistake (a range
+    /// in steps of a fraction), and its refusal says how that is written.
+    fn range_bound(&mut self, t: &Type, span: Span, form: &str) {
+        if self.cx.apply_type(t) == Type::Float {
+            self.diags.push(
+                Diagnostic::error("DL0401", format!("a range counts in `Int`s, and this bound of `{form}` is a `Float`"))
+                    .with_span(
+                        span,
+                        "a `Float` bound: for fractional steps count in `Int`s and scale, \
+                         `(0..n).map(fn(i: Int) -> Float { float(i) * 0.5 })`",
+                    ),
+            );
+        } else {
+            self.expect_type(&Type::Int, t, span, &format!("a bound of `{form}` is an `Int`"));
+        }
     }
 
     fn numeric_binop(&mut self, lt: &Type, rt: &Type, ls: Span, rs: Span, span: Span) -> Type {

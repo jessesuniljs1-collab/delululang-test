@@ -470,6 +470,12 @@ pub enum BinOp {
     Ge,
     And,
     Or,
+    /// RW 2.36: `lo..hi`, the `Int`s from `lo` up to but not including `hi` — a `List[Int]`, the prelude's
+    /// `range(lo, hi)` written as an operator. Empty when `lo >= hi`.
+    Range,
+    /// RW 2.36: `lo..=hi`, the `Int`s from `lo` up to and including `hi`. Empty when `lo > hi`; `hi` may be
+    /// `Int`'s largest value.
+    RangeInclusive,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

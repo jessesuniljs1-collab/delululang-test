@@ -1,0 +1,6 @@
+// RW 2.36 (D-V2-224): a prelude builtin reads its argument count. `str(1, 2)` checked clean and printed `1`.
+module conf
+
+fn f() -> Str {
+    str(1, 2)
+}

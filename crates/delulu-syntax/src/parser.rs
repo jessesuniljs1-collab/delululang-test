@@ -1528,7 +1528,16 @@ impl Parser {
                 // body, and a struct literal there would swallow it.
                 let start = self.span();
                 self.bump();
-                let var = self.expect_decl_name();
+                // RW 2.36's programs: `for _ in 0..n` repeats a body `n` times, the idiom Python and Rust share. `_` was
+                // refused here ("expected a name") as `let _` was before C61; it is bound as `let _` binds it, the
+                // ordinary name `_`, which no expression can name (a bare `_` lexes as `Underscore`).
+                let var = if self.at(&TokenKind::Underscore) {
+                    let span = self.span();
+                    self.bump();
+                    Ident { name: "_".into(), span }
+                } else {
+                    self.expect_decl_name()
+                };
                 self.expect(TokenKind::KwIn);
                 let iter = self.parse_expr_no_struct();
                 let body = self.parse_block();
@@ -1702,6 +1711,21 @@ impl Parser {
             }
             let span = lhs.span().to(rhs.span());
             lhs = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), id: self.node_id(), span };
+            // RW 2.36: a range has one start and one end. `a..b..c` would otherwise read as `(a..b)..c`, a list
+            // given as a bound, and be refused a second time for its type, far from what was written: the extra
+            // `..c` is refused here and read past, so the mistake is said once.
+            while matches!(op, BinOp::Range | BinOp::RangeInclusive)
+                && matches!(self.peek(), TokenKind::DotDot | TokenKind::DotDotEq)
+            {
+                self.error(
+                    "DL0201",
+                    "a range has one `..`: `a..b..c` is not a range — write the one you mean, `a..c`",
+                    self.span(),
+                    "a second range operator",
+                );
+                self.bump();
+                let _ = self.parse_bin(prec + 1, allow_struct);
+            }
         }
         lhs
     }
@@ -1716,11 +1740,16 @@ impl Parser {
             TokenKind::Le => (BinOp::Le, 4, true),
             TokenKind::Gt => (BinOp::Gt, 4, true),
             TokenKind::Ge => (BinOp::Ge, 4, true),
-            TokenKind::Plus => (BinOp::Add, 5, false),
-            TokenKind::Minus => (BinOp::Sub, 5, false),
-            TokenKind::Star => (BinOp::Mul, 6, false),
-            TokenKind::Slash => (BinOp::Div, 6, false),
-            TokenKind::Percent => (BinOp::Rem, 6, false),
+            // RW 2.36: a range binds looser than arithmetic and tighter than comparison (Swift's and Kotlin's
+            // level), so `0..n + 1` is `0..(n + 1)` and `xs == 0..3` compares two lists. It does not chain
+            // (`parse_bin`).
+            TokenKind::DotDot => (BinOp::Range, 5, false),
+            TokenKind::DotDotEq => (BinOp::RangeInclusive, 5, false),
+            TokenKind::Plus => (BinOp::Add, 6, false),
+            TokenKind::Minus => (BinOp::Sub, 6, false),
+            TokenKind::Star => (BinOp::Mul, 7, false),
+            TokenKind::Slash => (BinOp::Div, 7, false),
+            TokenKind::Percent => (BinOp::Rem, 7, false),
             _ => return None,
         })
     }
@@ -3205,5 +3234,108 @@ mod compound_assignment_tests {
         assert!(!plain.contains("compound"), "{plain}");
         let short = serde_json::to_string(&body("x += 1")[0]).unwrap();
         assert!(short.contains(r#""compound":"Add""#), "{short}");
+    }
+}
+
+/// RW 2.36: the range operators, `lo..hi` and `lo..=hi` — a binary operator below arithmetic and above comparison, which
+/// does not chain.
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    fn parse_src(src: &str) -> (Module, Vec<Diagnostic>) {
+        let (tokens, ldiags) = crate::lexer::lex(0, src);
+        assert!(ldiags.is_empty(), "lex: {ldiags:?}");
+        parse(0, tokens)
+    }
+
+    /// The value of `let v = <src>` in a function that must parse clean.
+    fn value(src: &str) -> Expr {
+        let (m, d) = parse_src(&format!("module m\nfn f() -> Int {{\nlet v = {src}\n0\n}}\n"));
+        assert!(!d.iter().any(|d| d.is_error()), "{src}: {d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!("expected a fn") };
+        let Stmt::Let { value, .. } = &f.body.stmts[0] else { panic!("{:?}", f.body.stmts[0]) };
+        value.clone()
+    }
+
+    fn errors(src: &str) -> Vec<Diagnostic> {
+        let (_, d) = parse_src(&format!("module m\nfn f() -> Int {{\nlet v = {src}\n0\n}}\n"));
+        d.into_iter().filter(|d| d.is_error()).collect()
+    }
+
+    fn top(e: &Expr) -> Option<BinOp> {
+        match e {
+            Expr::Binary { op, .. } => Some(*op),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn each_range_operator_is_a_binary_operator() {
+        for (src, op) in [("0..3", BinOp::Range), ("0..=3", BinOp::RangeInclusive), ("a..b", BinOp::Range)] {
+            let e = value(src);
+            let Expr::Binary { op: got, lhs, rhs, .. } = &e else { panic!("{src}: {e:?}") };
+            assert_eq!(*got, op, "{src}");
+            assert!(!matches!(&**lhs, Expr::Binary { .. }) && !matches!(&**rhs, Expr::Binary { .. }), "{src}: {e:?}");
+        }
+    }
+
+    /// Looser than arithmetic: `0..n + 1` is `0..(n + 1)`, `a * 2..b - 1` is `(a * 2)..(b - 1)`, `-3..3` is `(-3)..3`.
+    /// Tighter than comparison and logic: `xs == 0..3` is `xs == (0..3)`, and `a..b == c..d` compares two ranges.
+    #[test]
+    fn a_range_binds_below_arithmetic_and_above_comparison() {
+        let e = value("0..n + 1");
+        let Expr::Binary { op: BinOp::Range, rhs, .. } = &e else { panic!("{e:?}") };
+        assert_eq!(top(rhs), Some(BinOp::Add));
+        let e = value("a * 2..=b - 1");
+        let Expr::Binary { op: BinOp::RangeInclusive, lhs, rhs, .. } = &e else { panic!("{e:?}") };
+        assert_eq!((top(lhs), top(rhs)), (Some(BinOp::Mul), Some(BinOp::Sub)));
+        let e = value("-3..3");
+        let Expr::Binary { op: BinOp::Range, lhs, .. } = &e else { panic!("{e:?}") };
+        assert!(matches!(&**lhs, Expr::Unary { op: UnOp::Neg, .. }), "{lhs:?}");
+        for (src, outer) in [("xs == 0..3", BinOp::Eq), ("a..b == c..d", BinOp::Eq), ("0..3 != xs || t", BinOp::Or)] {
+            assert_eq!(top(&value(src)), Some(outer), "{src}");
+        }
+        let e = value("xs == 0..3");
+        let Expr::Binary { rhs, .. } = &e else { panic!() };
+        assert_eq!(top(rhs), Some(BinOp::Range));
+    }
+
+    /// A range is an operand of a method call only in parentheses (postfix binds tighter), and a `for` header reads
+    /// `0..n {` with `n` a name, not a record literal.
+    #[test]
+    fn a_range_in_parentheses_takes_a_method_and_a_for_reads_its_header() {
+        let e = value("(0..3).reverse()");
+        let Expr::Method { recv, name, .. } = &e else { panic!("{e:?}") };
+        assert_eq!(name.name, "reverse");
+        assert_eq!(top(recv), Some(BinOp::Range));
+        let e = value("0..xs.len()");
+        let Expr::Binary { op: BinOp::Range, rhs, .. } = &e else { panic!("{e:?}") };
+        assert!(matches!(&**rhs, Expr::Method { .. }), "{rhs:?}");
+        let (m, d) = parse_src("module m\nfn f(n: Int) -> Int {\nfor i in 0..n {\nprintln(str(i))\n}\n0\n}\n");
+        assert!(!d.iter().any(|d| d.is_error()), "{d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        let Stmt::For { iter, .. } = &f.body.stmts[0] else { panic!("{:?}", f.body.stmts[0]) };
+        assert_eq!(top(iter), Some(BinOp::Range));
+    }
+
+    /// `for _ in 0..n` repeats its body: `_` is the loop's write-only name, as it is `let _`'s.
+    #[test]
+    fn a_for_may_discard_its_variable() {
+        let (m, d) = parse_src("module m\nfn f(n: Int) -> Int {\nfor _ in 0..n {\nprintln(\"x\")\n}\n0\n}\n");
+        assert!(!d.iter().any(|d| d.is_error()), "{d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        let Stmt::For { var, .. } = &f.body.stmts[0] else { panic!("{:?}", f.body.stmts[0]) };
+        assert_eq!(var.name, "_");
+    }
+
+    /// `a..b..c` is refused where it is written, naming the one range it could have meant; one range is clean.
+    #[test]
+    fn a_range_does_not_chain() {
+        for src in ["0..3..5", "0..=3..5", "0..3..=5"] {
+            let e = errors(src);
+            assert!(e.iter().any(|d| d.code == "DL0201" && d.message.contains("a range has one `..`")), "{src}: {e:?}");
+        }
+        assert!(errors("(0..3).concat(3..5)").is_empty());
     }
 }

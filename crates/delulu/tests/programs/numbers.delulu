@@ -1,0 +1,367 @@
+// engines: interp wasm
+// RW 2.36 (D-V2-220's program step): the few-hundred-line program, a number-theory notebook using every basic built
+// so far — `var` and `let` (RW 2.46), compound assignment (2.34), the math methods and their checked forms (2.38), and
+// ranges (2.36): `lo..hi`, `lo..=hi`, `range`, `step_by`, `reverse` and `for _ in`. Every answer is checked against an
+// independent Python implementation.
+module numbers
+
+type Kind = Prime | Perfect | Square | Plain
+
+type Tally {
+    primes: Int,
+    perfect: Int,
+    squares: Int,
+    plain: Int,
+}
+
+// An `Option[Int]`'s value, or 0 (an `Option` has no `unwrap_or` yet: RW 2.50).
+fn or_zero(o: Option[Int]) -> Int {
+    match o {
+        Some(v) => v
+        None => 0
+    }
+}
+
+// The largest `r` with `r * r <= n`: `sqrt` gives a start, and two loops put it right where a `Float` rounds.
+fn isqrt(n: Int) -> Int {
+    var r = or_zero(float(n).sqrt().floor().to_int())
+    while r * r > n {
+        r -= 1
+    }
+    // `(r + 1) * (r + 1)` overflows near `Int`'s end (isqrt of its largest value is 3037000499), so it is asked first.
+    var going = true
+    while going {
+        match (r + 1).checked_mul(r + 1) {
+            Some(sq) => {
+                if sq <= n {
+                    r += 1
+                } else {
+                    going = false
+                }
+            }
+            None => {
+                going = false
+            }
+        }
+    }
+    r
+}
+
+fn is_prime(n: Int) -> Bool {
+    if n < 2 {
+        return false
+    }
+    if n % 2 == 0 {
+        return n == 2
+    }
+    for d in (3..=isqrt(n)).step_by(2) {
+        if n % d == 0 {
+            return false
+        }
+    }
+    true
+}
+
+fn primes_below(n: Int) -> List[Int] {
+    let out: ref List[Int] = []
+    if n > 2 { out.push(2) }
+    for c in (3..n).step_by(2) {
+        if is_prime(c) { out.push(c) }
+    }
+    out
+}
+
+fn gcd(a: Int, b: Int) -> Int {
+    var x = a.abs()
+    var y = b.abs()
+    while y != 0 {
+        let t = x % y
+        x = y
+        y = t
+    }
+    x
+}
+
+// The least common multiple of 1..=n, or `None` once it no longer fits an `Int`.
+fn lcm_upto(n: Int) -> Option[Int] {
+    var acc = 1
+    for k in 2..=n {
+        match (acc / gcd(acc, k)).checked_mul(k) {
+            Some(v) => {
+                acc = v
+            }
+            None => {
+                return None
+            }
+        }
+    }
+    Some(acc)
+}
+
+// How many factorials fit an `Int`: 0! through the last one `checked_mul` can make.
+fn factorials_that_fit() -> Int {
+    var f = 1
+    var n = 0
+    var going = true
+    while going {
+        match f.checked_mul(n + 1) {
+            Some(v) => {
+                f = v
+                n += 1
+            }
+            None => {
+                going = false
+            }
+        }
+    }
+    n + 1
+}
+
+fn last_fibonacci() -> Str {
+    var a = 0
+    var b = 1
+    var index = 1
+    var going = true
+    while going {
+        match a.checked_add(b) {
+            Some(c) => {
+                a = b
+                b = c
+                index += 1
+            }
+            None => {
+                going = false
+            }
+        }
+    }
+    "F(" + str(index) + ") = " + str(b)
+}
+
+fn collatz_steps(start: Int) -> Int {
+    var n = start
+    var steps = 0
+    while n != 1 {
+        if n % 2 == 0 {
+            n /= 2
+        } else {
+            n = 3 * n + 1
+        }
+        steps += 1
+    }
+    steps
+}
+
+fn digit_sum(n: Int) -> Int {
+    var rest = n.abs()
+    var sum = 0
+    while rest > 0 {
+        sum += rest % 10
+        rest /= 10
+    }
+    sum
+}
+
+fn divisor_sum(n: Int) -> Int {
+    if n < 2 {
+        return 0
+    }
+    var sum = 1
+    for d in 2..=isqrt(n) {
+        if n % d == 0 {
+            sum += d
+            let other = n / d
+            if other != d {
+                sum += other
+            }
+        }
+    }
+    sum
+}
+
+fn kind_of(n: Int) -> Kind {
+    if is_prime(n) {
+        Prime
+    } else if n > 1 && divisor_sum(n) == n {
+        Perfect
+    } else if isqrt(n).pow(2) == n {
+        Square
+    } else {
+        Plain
+    }
+}
+
+// Row `n` of Pascal's triangle, each entry from the one before it: C(n, k) = C(n, k - 1) * (n - k + 1) / k. (A row built
+// from the row above by reassigning a `var` to each new list cannot be returned as a `List[Int]`: DL1603, RW 2.51.)
+fn pascal_row(n: Int) -> List[Int] {
+    let row: ref List[Int] = [1]
+    var c = 1
+    for k in 1..=n {
+        c = c * (n - k + 1) / k
+        row.push(c)
+    }
+    row
+}
+
+// `x` to `places` decimals, rounded half away from zero, every digit written.
+fn fixed(x: Float, places: Int) -> Str {
+    let scale = 10.pow(places)
+    let scaled = or_zero((x * float(scale)).round().to_int())
+    let sign = if scaled < 0 { "-" } else { "" }
+    let whole = scaled.abs() / scale
+    var frac = str(scaled.abs() % scale)
+    while len(frac) < places {
+        frac = "0" + frac
+    }
+    sign + str(whole) + "." + frac
+}
+
+fn bar(n: Int) -> Str {
+    var s = ""
+    for _ in 0..n {
+        s += "#"
+    }
+    s
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    out.println("== primes below 1000")
+    let ps = primes_below(1000)
+    var total = 0
+    var widest = 0
+    var widest_at = 0
+    var twins = 0
+    for i in 0..len(ps) {
+        total += ps[i]
+        if i > 0 {
+            let gap = ps[i] - ps[i - 1]
+            if gap > widest {
+                widest = gap
+                widest_at = ps[i - 1]
+            }
+            if gap == 2 {
+                twins += 1
+            }
+        }
+    }
+    out.println(
+        "count " + str(len(ps)) + ", sum " + str(total) + ", mean " + fixed(float(total) / float(len(ps)), 3),
+    )
+    out.println(
+        "widest gap " + str(widest) + " after " + str(widest_at) + ", twin pairs " + str(twins),
+    )
+    out.println("the last five, largest first: " + str(ps.slice(len(ps) - 5, len(ps)).reverse()))
+    out.println("every 40th: " + str(ps.step_by(40)))
+    out.println("== last digits of those primes")
+    let last = Map()
+    for p in ps {
+        let d = p % 10
+        let seen = match last.get(d) {
+            Some(v) => v
+            None => 0
+        }
+        last.insert(d, seen + 1)
+    }
+    for d in 0..=9 {
+        match last.get(d) {
+            Some(n) => {
+                out.print(str(d) + " ")
+                out.print(bar(n / 2))
+                out.println(" " + str(n))
+            }
+            None => {
+            }
+        }
+    }
+    out.println("== divisibility")
+    out.println(
+        "gcd(1071, 462) = " + str(gcd(1071, 462)) + ", gcd(-48, 180) = " + str(gcd(-48, 180)),
+    )
+    for n in [10, 20, 40, 50] {
+        let shown = match lcm_upto(n) {
+            Some(v) => str(v)
+            None => "too large for an Int"
+        }
+        out.println("lcm(1..=" + str(n) + ") = " + shown)
+    }
+    out.println(str(factorials_that_fit()) + " factorials fit an Int (0! to 20!)")
+    out.println("the last Fibonacci number an Int holds: " + last_fibonacci())
+    out.println("== Collatz")
+    var best = 1
+    var best_steps = 0
+    for s in 1..10000 {
+        let k = collatz_steps(s)
+        if k > best_steps {
+            best = s
+            best_steps = k
+        }
+    }
+    out.println("below 10000 the longest start is " + str(best) + ", " + str(best_steps) + " steps")
+    var shown = ""
+    for s in (1..=9).reverse() {
+        shown += str(collatz_steps(s)) + " "
+    }
+    out.println("steps from 9 down to 1: " + shown.trim())
+    out.println("== kinds of 1..=100")
+    var t = Tally { primes: 0, perfect: 0, squares: 0, plain: 0 }
+    var perfect_seen = ""
+    for n in range(1, 101) {
+        match kind_of(n) {
+            Prime => {
+                t.primes += 1
+            }
+            Perfect => {
+                t.perfect += 1
+                perfect_seen += str(n) + " "
+            }
+            Square => {
+                t.squares += 1
+            }
+            Plain => {
+                t.plain += 1
+            }
+        }
+    }
+    out.println(
+        "primes " + str(t.primes) + ", perfect " + str(t.perfect) + " (" + perfect_seen.trim() + "), squares " + str(t.squares) + ", plain " + str(t.plain),
+    )
+    var perfect_below = ""
+    for n in 2..10000 {
+        if divisor_sum(n) == n {
+            perfect_below += str(n) + " "
+        }
+    }
+    out.println("perfect numbers below 10000: " + perfect_below.trim())
+    out.println("== Pascal")
+    for n in (0..=12).step_by(4) {
+        out.println("row " + str(n) + ": " + str(pascal_row(n)))
+    }
+    let row = pascal_row(20)
+    var row_sum = 0
+    for v in row {
+        row_sum += v
+    }
+    out.println(
+        "row 20 sums to " + str(row_sum) + " = 2^20 = " + str(2.pow(20)) + ", middle " + str(row[10]),
+    )
+    out.println("== digits and roots")
+    var digits = 0
+    for n in 1..=1000 {
+        digits += digit_sum(n)
+    }
+    out.println("the digits of 1..=1000 sum to " + str(digits))
+    var roots = ""
+    for n in [0, 1, 15, 16, 17, 99, 100, 9223372036854775807] {
+        roots += str(isqrt(n)) + " "
+    }
+    out.println("isqrt: " + roots.trim())
+    let angles = (0..=4).map(
+        fn(k: Int) -> Str { fixed((float(k) * 3.141592653589793 / 8.0).sin(), 4) },
+    )
+    out.println("sin(k * pi / 8) for k in 0..=4: " + angles.join(" "))
+    var clamped = ""
+    for v in (0 - 20..=20).step_by(10) {
+        clamped += str(v.clamp(0 - 15, 15)) + " "
+    }
+    out.println("clamped to -15..=15: " + clamped.trim())
+}

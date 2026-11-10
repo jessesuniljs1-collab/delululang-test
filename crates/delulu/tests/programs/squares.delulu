@@ -1,0 +1,9 @@
+// engines: interp wasm
+// RW 2.36: the one-liner — the sum of the first ten squares, a range mapped and folded.
+module squares
+
+fn main(root: Root) ! {Write} {
+    root.console().println(
+        str((1..=10).map(fn(i: Int) -> Int { i * i }).fold(0, fn(a: Int, b: Int) -> Int { a + b })),
+    )
+}

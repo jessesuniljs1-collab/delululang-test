@@ -45,6 +45,8 @@ be added, renamed or removed without this chapter changing with it.
 | `RBracket` | `]` | `]` |
 | `Comma` | `,` | `,` |
 | `Dot` | `.` | `.` |
+| `DotDot` | `..` | `..` |
+| `DotDotEq` | `..=` | `..=` |
 | `Colon` | `:` | `:` |
 | `Arrow` | `->` | `->` |
 | `FatArrow` | `=>` | `=>` |

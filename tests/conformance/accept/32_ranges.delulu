@@ -1,0 +1,25 @@
+// anchors: ref.grammar.expr ref.prim.list.step_by
+// RW 2.36 (D-V2-224): ranges — `lo..hi` (up to but not including `hi`) and `lo..=hi` (up to and including it), the
+// prelude's `range(lo, hi)` written as operators. Each is a `List[Int]`: a `for` counts it without a list, and every
+// list method takes one, `step_by(k)` among them. A range binds looser than arithmetic and tighter than comparison.
+module conf
+
+fn sum_to(n: Int) -> Int {
+    var total = 0
+    for i in 1..=n {
+        total += i
+    }
+    total
+}
+
+fn evens_below(n: Int) -> List[Int] {
+    (0..n).step_by(2)
+}
+
+fn countdown(n: Int) -> List[Int] {
+    (1..=n).reverse()
+}
+
+fn same(n: Int) -> Bool {
+    0..n + 1 == range(0, n + 1) && len(0..n) == n
+}

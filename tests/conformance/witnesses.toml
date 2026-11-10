@@ -2842,6 +2842,15 @@ file = "crates/delulu-check/src/prim_table.rs"
 test = "arity_column_matches_the_checker_gate"
 kind = "negative"
 
+# RW 2.36 (D-V2-224): `List.step_by(k)`'s rejecting witness. `arity_column_matches_the_checker_gate` calls it with one
+# argument more than its arity and asserts the gate's own DL0403, and with exactly its arity and asserts the gate does not
+# fire. The accepting witness is `tests/conformance/accept/32_ranges.delulu`.
+[[witness]]
+anchor = "ref.prim.list.step_by"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.list.len"
 file = "crates/delulu-check/src/prim_table.rs"

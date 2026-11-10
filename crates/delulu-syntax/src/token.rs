@@ -52,6 +52,10 @@ pub enum TokenKind {
     RBracket,
     Comma,
     Dot,
+    /// RW 2.36: `lo..hi`, the half-open range (`lo` up to but not including `hi`).
+    DotDot,
+    /// RW 2.36: `lo..=hi`, the closed range (`lo` up to and including `hi`).
+    DotDotEq,
     Colon,
     Arrow,    // ->
     FatArrow, // =>
@@ -183,6 +187,8 @@ impl TokenKind {
             TokenKind::RBracket => "`]`".into(),
             TokenKind::Comma => "`,`".into(),
             TokenKind::Dot => "`.`".into(),
+            TokenKind::DotDot => "`..`".into(),
+            TokenKind::DotDotEq => "`..=`".into(),
             TokenKind::Colon => "`:`".into(),
             TokenKind::Arrow => "`->`".into(),
             TokenKind::FatArrow => "`=>`".into(),
@@ -338,6 +344,8 @@ pub fn token_index() -> Vec<TokenInfo> {
         ("RBracket", TokenKind::RBracket),
         ("Comma", TokenKind::Comma),
         ("Dot", TokenKind::Dot),
+        ("DotDot", TokenKind::DotDot),
+        ("DotDotEq", TokenKind::DotDotEq),
         ("Colon", TokenKind::Colon),
         ("Arrow", TokenKind::Arrow),
         ("FatArrow", TokenKind::FatArrow),
@@ -388,6 +396,8 @@ fn punctuation_lexeme(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::RBracket => "]",
         TokenKind::Comma => ",",
         TokenKind::Dot => ".",
+        TokenKind::DotDot => "..",
+        TokenKind::DotDotEq => "..=",
         TokenKind::Colon => ":",
         TokenKind::Arrow => "->",
         TokenKind::FatArrow => "=>",

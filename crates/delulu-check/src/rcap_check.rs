@@ -1322,6 +1322,13 @@ impl<'a> Pass<'a> {
                 self.walk_expr(operand);
                 K::Known(Rcap::Val)
             }
+            // RW 2.36: a range is the prelude's `range(lo, hi)` written as an operator, and its list is judged as that
+            // call's is (its type's default), not as an arithmetic result's `val`.
+            Expr::Binary { op: BinOp::Range | BinOp::RangeInclusive, lhs, rhs, .. } => {
+                self.walk_expr(lhs);
+                self.walk_expr(rhs);
+                self.default_k(e)
+            }
             Expr::Binary { lhs, rhs, .. } => {
                 self.walk_expr(lhs);
                 self.walk_expr(rhs);

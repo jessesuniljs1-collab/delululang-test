@@ -829,6 +829,16 @@ struct Imports {
     /// `delulu:match.no_arm` — a `match` testing inside a constructor that no arm matched records the interpreter's fault
     /// here, then the guest traps. `u32::MAX` when no `match` of the module tests inside a constructor.
     match_no_arm: u32,
+    /// `delulu:list.range_len` — how many `Int`s a range used as a list holds, counted by the interpreter's own
+    /// `prim::range_len`, or its DL0908 recorded and -1 (the guest then traps). After every other import, so a module
+    /// without a range is unchanged (RW 2.36). `u32::MAX` when the module has no range.
+    range_len: u32,
+    /// `delulu:list.step_by` — `List.step_by(k)`, every `k`th slot copied host-side into a new list, or the interpreter's
+    /// DL0908 for a step below 1 (RW 2.36). After `range_len`. `u32::MAX` when the module calls no `step_by`.
+    list_step_by: u32,
+    /// `delulu:cap.console_print` — `Cap[Console].print(s)`, `println` without the line's end. After `step_by`, so a
+    /// module that never calls `print` is unchanged. `u32::MAX` when it never does.
+    console_print: u32,
     /// Does the module `pop` a list? Then every walk that runs code per element (`for`, `map`, `filter`, `find`, `fold`)
     /// walks a private copy of the slots, taken when it begins: a `pop` and then a `push` reuse the popped slot, which a
     /// walk of the list's own slots could still reach, where the interpreter's walk — a copy — never sees the change.
@@ -1118,6 +1128,15 @@ fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<Node
 fn module_uses_lists(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
     let hit = |e: &Expr| match e {
         Expr::List { .. } | Expr::Index { .. } => true,
+        // RW 2.36: a range used as a value is a list (one a `for` counts builds none, but walks the same helpers' way);
+        // the free `push(xs, v)` writes one.
+        e if is_range(e) => true,
+        Expr::Call { callee, args, .. }
+            if args.len() == 2
+                && matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "push") =>
+        {
+            true
+        }
         Expr::Method { name, .. } if matches!(name.name.as_str(), "split" | "push" | "map") => true,
         // A list method that makes a list or walks one, on a receiver the checker typed a `List` (`contains` and `slice`
         // are `Str` methods too, so the name alone does not say).
@@ -1125,6 +1144,23 @@ fn module_uses_lists(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId
         _ => false,
     };
     module_any(env, module, &hit, true)
+}
+
+/// RW 2.36: is `e` a range — `lo..hi`, `lo..=hi`, or a call of the prelude's `range` with its two bounds? Read from the
+/// syntax alone, so the untyped compile entry (`compile_module`, a Verified plugin's DIR) decides as the typed one does.
+fn is_range(e: &Expr) -> bool {
+    match e {
+        Expr::Binary { op: BinOp::Range | BinOp::RangeInclusive, .. } => true,
+        Expr::Call { callee, args, .. } => {
+            args.len() == 2 && matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "range")
+        }
+        _ => false,
+    }
+}
+
+/// RW 2.36: does any compiled body hold a range? Then the module imports `delulu:list.range_len`.
+fn module_uses_ranges(env: &EnumEnv, module: &Module) -> bool {
+    module_any(env, module, &is_range, false)
 }
 
 /// Does any compiled body call the list method `name` on a receiver the checker typed a `List`?
@@ -1351,7 +1387,7 @@ fn module_any(env: &EnumEnv, module: &Module, hit: &dyn Fn(&Expr) -> bool, fors:
 /// Does the module perform console output (so it needs the console host imports)? Public helper;
 /// builds its own enum environment for callers that don't have one.
 pub fn uses_console(module: &Module) -> bool {
-    module_calls_method(&build_enum_env(module), module, &["console", "println"])
+    module_calls_method(&build_enum_env(module), module, &["console", "println", "print"])
 }
 
 /// Compile a checked module's compilable functions to a WASM module exporting each by name. A
@@ -1426,7 +1462,7 @@ fn compile_module_typed(
         }
     }
 
-    let needs_console = module_calls_method(&env, module, &["console", "println"]);
+    let needs_console = module_calls_method(&env, module, &["console", "println", "print"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
     // A21: `r.float()` imports `rand_float` only where it is called, so a module drawing only `int`s keeps its imports.
@@ -1490,6 +1526,9 @@ fn compile_module_typed(
         list_sort: u32::MAX,
         list_join: u32::MAX,
         match_no_arm: u32::MAX,
+        range_len: u32::MAX,
+        list_step_by: u32::MAX,
+        console_print: u32::MAX,
         pops_lists: false,
     };
     if needs_console {
@@ -1672,6 +1711,24 @@ fn compile_module_typed(
     let needs_no_arm = module_matches_inside(&env, module);
     if needs_no_arm {
         imp.match_no_arm = n_imports;
+        n_imports += 1;
+    }
+    // RW 2.36: after every other import, so a module without a range is unchanged.
+    let needs_range_len = module_uses_ranges(&env, module);
+    if needs_range_len {
+        imp.range_len = n_imports;
+        n_imports += 1;
+    }
+    // By the method's name alone (no other receiver has a `step_by`), so the untyped compile entry decides as the typed
+    // one does (RW 2.38's lesson).
+    let needs_step_by = module_any(&env, module, &|e| matches!(e, Expr::Method { name, .. } if name.name == "step_by"), false);
+    if needs_step_by {
+        imp.list_step_by = n_imports;
+        n_imports += 1;
+    }
+    let needs_console_print = needs_console && module_calls_method(&env, module, &["print"]);
+    if needs_console_print {
+        imp.console_print = n_imports;
         n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -1968,6 +2025,25 @@ fn compile_module_typed(
         types.ty().function([], []); // no_arm(): records DL0907, then the guest traps
         next_type += 1;
     }
+    let mut range_len_ty = 0;
+    if needs_range_len {
+        range_len_ty = next_type;
+        // range_len(lo, hi, inclusive) -> the count, or -1 with DL0908 recorded (the guest then traps)
+        types.ty().function([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
+        next_type += 1;
+    }
+    let mut step_by_ty = 0;
+    if needs_step_by {
+        step_by_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I64], [ValType::I32]); // step_by(list, k) -> list; DL0908 traps
+        next_type += 1;
+    }
+    let mut console_print_ty = 0;
+    if needs_console_print {
+        console_print_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], []); // console_print(cap, ptr, file, start, end)
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -2148,6 +2224,15 @@ fn compile_module_typed(
     }
     if needs_no_arm {
         imports.import("delulu:match", "no_arm", EntityType::Function(no_arm_ty));
+    }
+    if needs_range_len {
+        imports.import("delulu:list", "range_len", EntityType::Function(range_len_ty));
+    }
+    if needs_step_by {
+        imports.import("delulu:list", "step_by", EntityType::Function(step_by_ty));
+    }
+    if needs_console_print {
+        imports.import("delulu:cap", "console_print", EntityType::Function(console_print_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -4195,7 +4280,14 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             // Phase 3b: Cap[Console].println(str) -> host import; Unit result. The `(file,start,end)`
             // span is passed so the host records the Write `TraceRecord` (phase 4g).
-            if name.name == "println" && args.len() == 1 {
+            // RW 2.36's programs: `print(str)`, the same without the line's end, through `delulu:cap.console_print`.
+            if (name.name == "println" || name.name == "print") && args.len() == 1 {
+                let import = if name.name == "println" { cx.imp.console_println } else { cx.imp.console_print };
+                if import == u32::MAX {
+                    return Err(CompileError::Unsupported(
+                        "print in a module compiled without `delulu:cap.console_print`".into(),
+                    ));
+                }
                 let rt = compile_expr(recv, cx)?;
                 if rt != Ty::Cap {
                     return Err(CompileError::Unsupported("println on a non-Console receiver".into()));
@@ -4205,7 +4297,7 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     return Err(CompileError::Unsupported("println of a non-Str argument".into()));
                 }
                 emit_span(cx, *span);
-                cx.emit(Instruction::Call(cx.imp.console_println));
+                cx.emit(Instruction::Call(import));
                 return Ok(Ty::Unit);
             }
             // Phase 3k: Cap[Clock].now_ms() -> host import returning the (fixed or wall) clock as Int.
@@ -4709,6 +4801,34 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if name == "parse_float" && args.len() == 1 {
                 return compile_parse_float(&args[0], cx);
             }
+            // RW 2.36: `len(x)` is `x.len()` — a `Str`'s characters as `__str_len` counts them, a `List`'s or a `Map`'s length
+            // from its header (the two share its layout). It was DL1201: "a call to `len` (not a compilable function)".
+            if name == "len" && args.len() == 1 {
+                return match compile_expr(&args[0], cx)? {
+                    Ty::Str => {
+                        cx.emit(Instruction::Call(cx.str_len_fn));
+                        Ok(Ty::I64)
+                    }
+                    Ty::List(_) | Ty::Map(..) => {
+                        cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+                        cx.emit(Instruction::I64ExtendI32U);
+                        Ok(Ty::I64)
+                    }
+                    t => Err(CompileError::Unsupported(format!("`len` of {t:?}"))),
+                };
+            }
+            // RW 2.36's programs: the free `push(xs, v)` is `xs.push(v)` — the list, then the value. It was DL1201.
+            if name == "push" && args.len() == 2 {
+                let Ty::List(s) = compile_expr(&args[0], cx)? else {
+                    return Err(CompileError::Unsupported("`push` onto a value that is not a List".into()));
+                };
+                return compile_list_method(s, "push", &args[1..], cx);
+            }
+            // RW 2.36: `range(lo, hi)` is `lo..hi` (its arguments are evaluated in order, as the interpreter's are).
+            if name == "range" && args.len() == 2 {
+                compile_range_bounds(&args[0], &args[1], cx)?;
+                return compile_range_list(false, cx);
+            }
             // `float(x)` and `int(x)` as the interpreter's `as` casts: an `Int` rounded to the nearest `Float`
             // (`f64.convert_i64_s`), and a `Float` truncated toward zero and saturated at the `Int` range, a NaN to 0
             // (`i64.trunc_sat_f64_s` — exactly Rust's `as i64`).
@@ -5093,6 +5213,75 @@ fn list_helpers(cx: &Cx) -> Result<(), CompileError> {
     Ok(())
 }
 
+/// RW 2.36: a range's two bounds, each an `Int`, left on the stack in order: `lo`, then `hi`.
+fn compile_range_bounds(lo: &Expr, hi: &Expr, cx: &mut Cx) -> Result<(), CompileError> {
+    for b in [lo, hi] {
+        if compile_expr(b, cx)? != Ty::I64 {
+            return Err(CompileError::Unsupported("a range whose bounds are not `Int`s".into()));
+        }
+    }
+    Ok(())
+}
+
+/// RW 2.36: the list a range stands for, its bounds on the stack (`lo`, `hi`). The host counts it by the interpreter's own
+/// rule (`prim::range_len`) — or records DL0908, in the interpreter's words, for a range longer than a list holds, and the
+/// guest traps — then the guest fills `lo`, `lo + 1`, … into a list of exactly that many slots. `lo + k` is at most `hi`, so
+/// the fill never overflows.
+fn compile_range_list(inclusive: bool, cx: &mut Cx) -> Result<Ty, CompileError> {
+    list_helpers(cx)?;
+    if cx.imp.range_len == u32::MAX {
+        return Err(CompileError::Unsupported("a range in a module compiled without `delulu:list.range_len`".into()));
+    }
+    let (lo, hi, n, k) = (cx.alloc_local(Ty::I64)?, cx.alloc_local(Ty::I64)?, cx.alloc_local(Ty::I64)?, cx.alloc_local(Ty::I64)?);
+    let (list, data) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+    cx.emit(Instruction::LocalSet(hi));
+    cx.emit(Instruction::LocalSet(lo));
+    cx.emit(Instruction::LocalGet(lo));
+    cx.emit(Instruction::LocalGet(hi));
+    cx.emit(Instruction::I32Const(i32::from(inclusive)));
+    cx.emit(Instruction::Call(cx.imp.range_len));
+    cx.emit(Instruction::LocalTee(n));
+    cx.emit(Instruction::I64Const(0));
+    cx.emit(Instruction::I64LtS);
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::Unreachable);
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(n));
+    cx.emit(Instruction::I32WrapI64);
+    cx.emit(Instruction::Call(cx.imp.list_new));
+    cx.emit(Instruction::LocalTee(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+    cx.emit(Instruction::LocalSet(data));
+    cx.emit(Instruction::I64Const(0));
+    cx.emit(Instruction::LocalSet(k));
+    cx.emit(Instruction::Block(BlockType::Empty));
+    cx.emit(Instruction::Loop(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(k));
+    cx.emit(Instruction::LocalGet(n));
+    cx.emit(Instruction::I64GeU);
+    cx.emit(Instruction::BrIf(1));
+    // data + k * 8 ← lo + k
+    cx.emit(Instruction::LocalGet(data));
+    cx.emit(Instruction::LocalGet(k));
+    cx.emit(Instruction::I32WrapI64);
+    cx.emit(Instruction::I32Const(8));
+    cx.emit(Instruction::I32Mul);
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalGet(lo));
+    cx.emit(Instruction::LocalGet(k));
+    cx.emit(Instruction::I64Add);
+    cx.emit(Instruction::I64Store(i64_at()));
+    cx.emit(Instruction::LocalGet(k));
+    cx.emit(Instruction::I64Const(1));
+    cx.emit(Instruction::I64Add);
+    cx.emit(Instruction::LocalSet(k));
+    cx.emit(Instruction::Br(0));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(list));
+    Ok(Ty::List(Scalar::I64))
+}
+
 /// `[a, b, …]`: a list of the items, each at the element type (the first item's, or `want`, the annotation's).
 fn compile_list_literal(items: &[Expr], cx: &mut Cx, want: Option<Scalar>) -> Result<Ty, CompileError> {
     list_helpers(cx)?;
@@ -5395,6 +5584,18 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             emit_copy_slots(cx, out_data, None, data, None, n);
             emit_copy_slots(cx, out_data, Some(n), odata, None, m);
             cx.emit(Instruction::LocalGet(out));
+            Ok(Ty::List(s))
+        }
+        // RW 2.36: every `k`th element from the first, host-side over the slots (a slot is copied whole, whatever it
+        // holds); a step below 1 is the interpreter's DL0908, and a trap.
+        ("step_by", [k]) => {
+            if cx.imp.list_step_by == u32::MAX {
+                return Err(CompileError::Unsupported("`step_by` in a module compiled without `delulu:list.step_by`".into()));
+            }
+            if compile_expr(k, cx)? != Ty::I64 {
+                return Err(CompileError::Unsupported("`step_by` with a step that is not an Int".into()));
+            }
+            cx.emit(Instruction::Call(cx.imp.list_step_by));
             Ok(Ty::List(s))
         }
         // A new list of the elements from `lo` up to `hi`, clamped as the interpreter clamps: a bound below 0 is 0, one
@@ -5904,6 +6105,16 @@ fn compile_map_method(k: Scalar, v: Scalar, method: &str, args: &[Expr], cx: &mu
 /// `push` in the body neither extends the walk nor moves it (the interpreter iterates a snapshot). `break` leaves the
 /// walk; `continue` goes on to the next element.
 fn compile_for(var: &Ident, iter: &Expr, body: &Block, cx: &mut Cx) -> Result<Ty, CompileError> {
+    // RW 2.36: a range is counted, never built, as the interpreter's `for` counts it.
+    match iter {
+        Expr::Binary { op: op @ (BinOp::Range | BinOp::RangeInclusive), lhs, rhs, .. } => {
+            return compile_for_range(var, lhs, rhs, *op == BinOp::RangeInclusive, body, cx);
+        }
+        Expr::Call { args, .. } if is_range(iter) && cx.lookup_callable("range").is_none() && cx.lookup("range").is_none() => {
+            return compile_for_range(var, &args[0], &args[1], false, body, cx);
+        }
+        _ => {}
+    }
     let Ty::List(s) = compile_expr(iter, cx)? else {
         return Err(CompileError::Unsupported("`for` over a value that is not a List".into()));
     };
@@ -5955,6 +6166,54 @@ fn compile_for(var: &Ident, iter: &Expr, body: &Block, cx: &mut Cx) -> Result<Ty
     Ok(Ty::Unit)
 }
 
+/// RW 2.36: `for v in lo..hi` (or `lo..=hi`, or `range(lo, hi)`): the bounds read once, in order, then an `Int` counted from
+/// `lo` while it is below `hi` (at most `hi`, for `..=`), with no list made — the interpreter's loop, instruction for step.
+/// A closed range stops at `hi` before its step, so `..=` reaches `Int`'s largest value without overflowing. `continue`
+/// leaves the body's block to the step, `break` the loop's.
+fn compile_for_range(var: &Ident, lo: &Expr, hi: &Expr, inclusive: bool, body: &Block, cx: &mut Cx) -> Result<Ty, CompileError> {
+    compile_range_bounds(lo, hi, cx)?;
+    let (cur, end, x) = (cx.alloc_local(Ty::I64)?, cx.alloc_local(Ty::I64)?, cx.alloc_local(Ty::I64)?);
+    cx.emit(Instruction::LocalSet(end));
+    cx.emit(Instruction::LocalSet(cur));
+    cx.emit(Instruction::Block(BlockType::Empty));
+    let brk = cx.depth;
+    cx.emit(Instruction::Loop(BlockType::Empty));
+    let top = cx.depth;
+    cx.emit(Instruction::LocalGet(cur));
+    cx.emit(Instruction::LocalGet(end));
+    cx.emit(if inclusive { Instruction::I64GtS } else { Instruction::I64GeS });
+    cx.emit(Instruction::BrIf(cx.depth - brk));
+    cx.emit(Instruction::LocalGet(cur));
+    cx.emit(Instruction::LocalSet(x));
+    cx.emit(Instruction::Block(BlockType::Empty));
+    let cont = cx.depth;
+    cx.loops.push((brk, cont));
+    cx.scopes.push(HashMap::from([(var.name.clone(), (x, Ty::I64))]));
+    cx.callables.push(HashMap::new());
+    let body_ty = compile_block(body, cx);
+    cx.callables.pop();
+    cx.scopes.pop();
+    cx.loops.pop();
+    if body_ty? != Ty::Unit {
+        cx.emit(Instruction::Drop);
+    }
+    cx.emit(Instruction::End);
+    if inclusive {
+        cx.emit(Instruction::LocalGet(cur));
+        cx.emit(Instruction::LocalGet(end));
+        cx.emit(Instruction::I64Eq);
+        cx.emit(Instruction::BrIf(cx.depth - brk));
+    }
+    cx.emit(Instruction::LocalGet(cur));
+    cx.emit(Instruction::I64Const(1));
+    cx.emit(Instruction::I64Add);
+    cx.emit(Instruction::LocalSet(cur));
+    cx.emit(Instruction::Br(cx.depth - top));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::End);
+    Ok(Ty::Unit)
+}
+
 /// RW 3.31: the two sides of a binary operator, compiled; their types. In `==` and `!=`, a bare `None` takes the other
 /// side's `Option` type: the backend reads it from that side's code, where from the checker's type of the bare name alone
 /// it names no `Option` of a record (`checked_ty`), so `find(xs, id) == None` was DL1201 while `== Some(r)` compiled. A
@@ -6000,6 +6259,11 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         }
         return Ok(Ty::I32);
     }
+    // RW 2.36: `lo..hi` and `lo..=hi`, the list of the `Int`s between them.
+    if matches!(op, BinOp::Range | BinOp::RangeInclusive) {
+        compile_range_bounds(lhs, rhs, cx)?;
+        return compile_range_list(op == BinOp::RangeInclusive, cx);
+    }
     let (lt, rt) = compile_operands(op, lhs, rhs, cx)?;
     use BinOp::*;
     if lt == Ty::I64 && rt == Ty::I64 {
@@ -6020,6 +6284,7 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Eq => (Instruction::I64Eq, Ty::I32),
             Ne => (Instruction::I64Ne, Ty::I32),
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
+            Range | RangeInclusive => unreachable!("a range is compiled above, before either operand"),
         };
         cx.emit(ins);
         return Ok(ty);
@@ -6042,6 +6307,7 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Eq => (Instruction::F64Eq, Ty::I32),
             Ne => (Instruction::F64Ne, Ty::I32),
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
+            Range | RangeInclusive => unreachable!("a range is compiled above, before either operand"),
         };
         cx.emit(ins);
         return Ok(ty);

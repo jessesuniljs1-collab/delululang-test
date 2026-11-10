@@ -8,7 +8,7 @@ Every primitive operation, by receiver. **Arity is normative**: the checker refu
 
 Capability operations are the only source of primitive effects (T-CapOp), which is why this table is the checker's single source of truth rather than prose.
 
-> **Coverage (invariant 42):** 125 of 125 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 126 of 126 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 
 ## `root`
@@ -221,6 +221,7 @@ Capability operations are the only source of primitive effects (T-CapOp), which 
 | `reverse` | 0 | `ref.prim.list.reverse` | covered |
 | `concat` | 1 | `ref.prim.list.concat` | covered |
 | `slice` | 2 | `ref.prim.list.slice` | covered |
+| `step_by` | 1 | `ref.prim.list.step_by` | covered |
 | `contains` | 1 | `ref.prim.list.contains` | covered |
 | `join` | 1 | `ref.prim.list.join` | covered |
 | `sort` | 0 | `ref.prim.list.sort` | covered |

@@ -847,6 +847,76 @@ fn guest_alloc(caller: &mut Caller<'_, HostState>, n: i32) -> Result<i32, ()> {
     Ok(base)
 }
 
+/// `Cap[Console].println(s)` (`method` "println") or `print(s)` (`method` "print", no line's end): the string read from the
+/// guest's memory, its `Write` trace recorded at dispatch, the custody asked, then the output — as the interpreter's
+/// `emit_console` writes it.
+fn console_write(caller: &mut Caller<'_, HostState>, (cap, ptr): (i32, i32), (file, start, end): (i32, i32, i32), method: &str) {
+    let newline = method == "println";
+    if caller.data().refused.is_some() {
+        return; // a prior refusal stands as the root cause; don't clobber it with a use-site error
+    }
+    let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
+    if !ok {
+        caller.refuse(format!("DL0904: handle {cap} is not a granted Console capability"));
+        return;
+    }
+    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+        caller.refuse("guest exports no `memory`".into());
+        return;
+    };
+    let s = {
+        let data = mem.data(&caller);
+        // A wasm pointer is an UNSIGNED 32-bit offset; interpret it that way and use checked
+        // arithmetic so a hostile `ptr` (e.g. -1 / near u32::MAX) can never overflow `usize`
+        // and panic the host — a host panic inside a wasm callback would abort the process.
+        let p = ptr as u32 as usize;
+        let header_end = match p.checked_add(4) {
+            Some(e) if e <= data.len() => e,
+            _ => {
+                caller.refuse(format!("DL0903: string header at {p} is out of bounds (memory is {} bytes)", data.len()));
+                return;
+            }
+        };
+        let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
+        let body_end = match header_end.checked_add(len) {
+            Some(e) if e <= data.len() => e,
+            _ => {
+                caller.refuse(format!(
+                    "DL0903: string of {len} bytes at {header_end} runs past the end of memory ({} bytes)",
+                    data.len()
+                ));
+                return;
+            }
+        };
+        String::from_utf8_lossy(&data[header_end..body_end]).to_string()
+    };
+    // Record the Write `TraceRecord` (detail = the printed string, matching the interpreter's
+    // `trace_detail`) at DISPATCH — before the custody decides, as the interpreter records it (RW 4.64:
+    // reading the guest's string performs nothing, so the order costs nothing and the traces agree).
+    caller.data_mut().push_trace("Write", method, "Console", Some(s.clone()), file, start, end);
+    // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5) — and
+    // followed in the trace by its refusal (D-V2-129).
+    if !caller.custody_allows(CustodyOp::Console, None) {
+        caller.data_mut().push_refusal_trace("Write", method, "Console", file, start, end);
+        return;
+    }
+    if caller.data().stream_console {
+        if newline {
+            println!("{s}");
+        } else {
+            use std::io::Write as _;
+            print!("{s}");
+            let _ = std::io::stdout().flush();
+        }
+        return;
+    }
+    let out = &mut caller.data_mut().output;
+    out.push_str(&s);
+    if newline {
+        out.push('\n');
+    }
+}
+
 /// What an access outside the guest's memory, or a memory that could not grow, is reported as (WASM-OOM-1).
 const MEMORY_EXHAUSTED: &str =
     "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)";
@@ -1110,7 +1180,30 @@ fn link_list_host(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
             },
         )
         .map_err(instantiate)?;
+    // RW 2.36: `List.step_by(k)` — a step below 1 is the interpreter's DL0908 in its words, then a trap.
+    linker
+        .func_wrap(
+            "delulu:list",
+            "step_by",
+            move |mut caller: Caller<'_, HostState>, list: i32, k: i64| -> wasmtime::Result<i32> {
+                if k < 1 {
+                    let m = format!("DL0908: {}", delulu_runtime::prim::step_by_fault(k));
+                    caller.refuse_first(|| m.clone());
+                    return Err(wasmtime::Error::msg(m));
+                }
+                step_by_list(&mut caller, list, k as u64).ok_or_else(|| fault(&mut caller))
+            },
+        )
+        .map_err(instantiate)?;
     Ok(())
+}
+
+/// `List.step_by(k)` (RW 2.36): a new list of every `k`th slot from the first, each copied whole — `k >= 1`.
+fn step_by_list(caller: &mut Caller<'_, HostState>, list: i32, k: u64) -> Option<i32> {
+    let (n, data) = list_header(caller, list)?;
+    let slots = guest_read(caller, data, (n as usize).checked_mul(8)?)?;
+    let out: Vec<u8> = slots.chunks_exact(8).step_by(usize::try_from(k).unwrap_or(usize::MAX)).flatten().copied().collect();
+    write_slot_list(caller, (out.len() / 8) as u32, &out)
 }
 
 /// The `delulu:map` interface (RW 3.4): a `Map` lives in the guest's memory, its values the guest's own, and the host
@@ -1362,64 +1455,18 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             "delulu:cap",
             "console_println",
             |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32, file: i32, start: i32, end: i32| {
-                if caller.data().refused.is_some() {
-                    return; // a prior refusal stands as the root cause; don't clobber it with a use-site error
-                }
-                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
-                if !ok {
-                    caller.refuse(format!("DL0904: handle {cap} is not a granted Console capability"));
-                    return;
-                }
-                let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
-                    caller.refuse("guest exports no `memory`".into());
-                    return;
-                };
-                let s = {
-                    let data = mem.data(&caller);
-                    // A wasm pointer is an UNSIGNED 32-bit offset; interpret it that way and use checked
-                    // arithmetic so a hostile `ptr` (e.g. -1 / near u32::MAX) can never overflow `usize`
-                    // and panic the host — a host panic inside a wasm callback would abort the process.
-                    let p = ptr as u32 as usize;
-                    let header_end = match p.checked_add(4) {
-                        Some(e) if e <= data.len() => e,
-                        _ => {
-                            caller.refuse(format!(
-                                "DL0903: string header at {p} is out of bounds (memory is {} bytes)",
-                                data.len()
-                            ));
-                            return;
-                        }
-                    };
-                    let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
-                    let body_end = match header_end.checked_add(len) {
-                        Some(e) if e <= data.len() => e,
-                        _ => {
-                            caller.refuse(format!(
-                                "DL0903: string of {len} bytes at {header_end} runs past the end of memory ({} bytes)",
-                                data.len()
-                            ));
-                            return;
-                        }
-                    };
-                    String::from_utf8_lossy(&data[header_end..body_end]).to_string()
-                };
-                // Record the Write `TraceRecord` (detail = the printed string, matching the interpreter's
-                // `trace_detail`) at DISPATCH — before the custody decides, as the interpreter records it (RW 4.64:
-                // reading the guest's string performs nothing, so the order costs nothing and the traces agree).
-                caller.data_mut().push_trace("Write", "println", "Console", Some(s.clone()), file, start, end);
-                // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5) — and
-                // followed in the trace by its refusal (D-V2-129).
-                if !caller.custody_allows(CustodyOp::Console, None) {
-                    caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
-                    return;
-                }
-                if caller.data().stream_console {
-                    println!("{s}");
-                    return;
-                }
-                let out = &mut caller.data_mut().output;
-                out.push_str(&s);
-                out.push('\n');
+                console_write(&mut caller, (cap, ptr), (file, start, end), "println")
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // RW 2.36's programs: `Cap[Console].print(s)`, `println` without the line's end — the same trace, custody and
+    // refusals. It was DL1201 on `--engine wasm`.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "console_print",
+            |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32, file: i32, start: i32, end: i32| {
+                console_write(&mut caller, (cap, ptr), (file, start, end), "print")
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
@@ -2488,6 +2535,19 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     linker
         .func_wrap("delulu:list", "index_fault", |mut caller: Caller<'_, HostState>, index: i64, len: i32| {
             caller.refuse_first(|| format!("DL0903: index {index} out of bounds (len {len})"));
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // RW 2.36: how many `Int`s a range used as a list holds, by the interpreter's own count — or, for one longer than a
+    // list holds, its DL0908 in the interpreter's words, recorded, and -1: the guest then traps.
+    linker
+        .func_wrap("delulu:list", "range_len", |mut caller: Caller<'_, HostState>, lo: i64, hi: i64, inclusive: i32| -> i64 {
+            match delulu_runtime::prim::range_len(lo, hi, inclusive != 0) {
+                Ok(n) => n as i64,
+                Err(m) => {
+                    caller.refuse_first(|| format!("DL0908: {m}"));
+                    -1
+                }
+            }
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     // A `match` testing inside a constructor that no arm matched (`codegen.rs`'s `compile_match_ordered`): the guest calls

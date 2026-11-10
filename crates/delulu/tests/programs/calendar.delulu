@@ -1,0 +1,109 @@
+// engines: interp wasm
+// RW 2.36 (D-V2-220's program step): the everyday utility — a month's calendar, as `cal` prints one. Each day's weekday
+// is Sakamoto's method; each week is a row of seven cells, and `print` writes a row a cell at a time. The months are
+// a range, the weeks a range in steps of seven, and every count a compound assignment.
+module calendar
+
+fn is_leap(y: Int) -> Bool {
+    y % 4 == 0 && y % 100 != 0 || y % 400 == 0
+}
+
+fn days_in(y: Int, m: Int) -> Int {
+    if m == 2 {
+        if is_leap(y) { 29 } else { 28 }
+    } else if m == 4 || m == 6 || m == 9 || m == 11 {
+        30
+    } else {
+        31
+    }
+}
+
+// 0 = Sunday. Sakamoto's method: a month's offset, the year shifted back for January and February.
+fn weekday(year: Int, m: Int, d: Int) -> Int {
+    let offsets = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+    let y = if m < 3 { year - 1 } else { year }
+    let off = match offsets.get(m - 1) {
+        Some(v) => v
+        None => 0
+    }
+    (y + y / 4 - y / 100 + y / 400 + off + d) % 7
+}
+
+fn month_name(m: Int) -> Str {
+    let names = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
+    match names.get(m - 1) {
+        Some(n) => n
+        None => "?"
+    }
+}
+
+fn pad2(n: Int) -> Str {
+    if n < 10 { " " + str(n) } else { str(n) }
+}
+
+fn centred(s: Str, width: Int) -> Str {
+    var out = ""
+    for _ in 0..(width - len(s)) / 2 {
+        out += " "
+    }
+    out + s
+}
+
+fn print_month(out: Cap[Console], year: Int, m: Int) -> Int ! {Write} {
+    out.println(centred(month_name(m) + " " + str(year), 20))
+    out.println("Su Mo Tu We Th Fr Sa")
+    let first = weekday(year, m, 1)
+    let n = days_in(year, m)
+    // The cells: `first` blanks, then the days; the rows start every seven cells.
+    let cells = first + n
+    var weeks = 0
+    for start in (0..cells).step_by(7) {
+        for c in start..(start + 7).min(cells) {
+            let day = c - first + 1
+            let cell = if day < 1 { "  " } else { pad2(day) }
+            out.print(cell)
+            if c < (start + 6).min(cells - 1) { out.print(" ") }
+        }
+        out.println("")
+        weeks += 1
+    }
+    weeks
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    var rows = 0
+    for m in [2, 9] {
+        rows += print_month(out, 2026, m)
+        out.println("")
+    }
+    rows += print_month(out, 2024, 2)
+    var leap_years = 0
+    for y in (1900..=2100).step_by(4) {
+        if is_leap(y) {
+            leap_years += 1
+        }
+    }
+    out.println("")
+    out.println("week rows printed: " + str(rows) + ", leap years 1900-2100: " + str(leap_years))
+    var total = 0
+    for m in 1..=12 {
+        total += days_in(2026, m)
+    }
+    out.println(
+        "days in 2026: " + str(total) + ", 2026-11-10 is weekday " + str(weekday(2026, 11, 10)),
+    )
+}

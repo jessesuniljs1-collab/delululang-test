@@ -64,7 +64,8 @@ pub const DIR_VERSION: u32 = 1;
 /// `delete(url, headers)`, and a `_with_secret` form of each. Additive; bumped for the same rule.
 /// 10 = **RW 2.38** (D-V2-223): the math methods on `Int` (`abs`, `min`, `max`, `clamp`, `pow` and the five `checked_`
 /// forms) and on `Float` (`abs` … `is_finite` and the checked `to_int`, twenty-three). Additive; bumped for the same rule.
-pub const PRIM_TABLE_VERSION: u32 = 10;
+/// 11 = **RW 2.36** (D-V2-224): `List.step_by(k)`, every `k`th element, a range's step. Additive; bumped for the same rule.
+pub const PRIM_TABLE_VERSION: u32 = 11;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

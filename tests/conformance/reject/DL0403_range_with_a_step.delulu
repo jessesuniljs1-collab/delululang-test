@@ -1,0 +1,6 @@
+// RW 2.36 (D-V2-224): `range` takes two bounds. A third, Python's step, is refused, naming `(lo..hi).step_by(k)`.
+module conf
+
+fn f() -> List[Int] {
+    range(0, 10, 2)
+}

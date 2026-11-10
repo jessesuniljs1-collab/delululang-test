@@ -701,14 +701,14 @@ impl<'a> Printer<'a> {
     fn try_break_outermost(&mut self, head: &str, value: &Expr) -> Option<()> {
         match value {
             Expr::Call { callee, args, .. } if !args.is_empty() => {
-                let c = expr_flat(callee, 7, false);
+                let c = expr_flat(callee, 8, false);
                 self.line(&format!("{head}{c}("));
                 self.break_args(args);
                 self.line(")");
                 Some(())
             }
             Expr::Method { recv, name, args, .. } if !args.is_empty() => {
-                let r = expr_flat(recv, 7, false);
+                let r = expr_flat(recv, 8, false);
                 self.line(&format!("{head}{r}.{}(", name.name));
                 self.break_args(args);
                 self.line(")");
@@ -909,16 +909,17 @@ fn escape_str(s: &str) -> String {
     out
 }
 
-/// Operator precedence, mirroring the parser: `||` < `&&` < comparisons < `+ -` < `* / %`
-/// < unary < postfix.
+/// Operator precedence, mirroring the parser: `||` < `&&` < comparisons < ranges (RW 2.36) < `+ -` < `* / %`
+/// < unary (7) < postfix (8) < atoms (9).
 fn bin_prec(op: BinOp) -> u8 {
     use BinOp::*;
     match op {
         Or => 1,
         And => 2,
         Eq | Ne | Lt | Le | Gt | Ge => 3,
-        Add | Sub => 4,
-        Mul | Div | Rem => 5,
+        Range | RangeInclusive => 4,
+        Add | Sub => 5,
+        Mul | Div | Rem => 6,
     }
 }
 
@@ -938,6 +939,8 @@ fn bin_text(op: BinOp) -> &'static str {
         Ge => ">=",
         And => "&&",
         Or => "||",
+        Range => "..",
+        RangeInclusive => "..=",
     }
 }
 
@@ -947,10 +950,10 @@ fn bin_text(op: BinOp) -> &'static str {
 /// condition/scrutinee restriction: a record literal there must print parenthesized.
 fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
     let (text, prec) = match e {
-        Expr::Lit { kind, .. } => (lit_text(kind), 8),
-        Expr::Var { path, .. } => (path.dotted(), 8),
+        Expr::Lit { kind, .. } => (lit_text(kind), 9),
+        Expr::Var { path, .. } => (path.dotted(), 9),
         Expr::List { items, .. } => {
-            (format!("[{}]", items.iter().map(|i| expr_flat(i, 0, false)).collect::<Vec<_>>().join(", ")), 8)
+            (format!("[{}]", items.iter().map(|i| expr_flat(i, 0, false)).collect::<Vec<_>>().join(", ")), 9)
         }
         Expr::Record { path, fields, .. } => {
             let body =
@@ -960,25 +963,33 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
             if no_struct {
                 return format!("({s})");
             }
-            (s, 8)
+            (s, 9)
         }
         Expr::Call { callee, args, .. } => {
-            let c = expr_flat(callee, 7, no_struct);
-            (format!("{c}({})", args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 7)
+            let c = expr_flat(callee, 8, no_struct);
+            (format!("{c}({})", args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 8)
         }
         Expr::Method { recv, name, args, .. } => {
-            let r = expr_flat(recv, 7, no_struct);
-            (format!("{r}.{}({})", name.name, args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 7)
+            let r = expr_flat(recv, 8, no_struct);
+            (format!("{r}.{}({})", name.name, args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 8)
         }
-        Expr::Field { recv, name, .. } => (format!("{}.{}", expr_flat(recv, 7, no_struct), name.name), 7),
-        Expr::Index { recv, index, .. } => (format!("{}[{}]", expr_flat(recv, 7, no_struct), expr_flat(index, 0, false)), 7),
-        Expr::Try { inner, .. } => (format!("{}?", expr_flat(inner, 7, no_struct)), 7),
+        Expr::Field { recv, name, .. } => (format!("{}.{}", expr_flat(recv, 8, no_struct), name.name), 8),
+        Expr::Index { recv, index, .. } => (format!("{}[{}]", expr_flat(recv, 8, no_struct), expr_flat(index, 0, false)), 8),
+        Expr::Try { inner, .. } => (format!("{}?", expr_flat(inner, 8, no_struct)), 8),
         Expr::Unary { op, operand, .. } => {
             let o = match op {
                 UnOp::Neg => "-",
                 UnOp::Not => "!",
             };
-            (format!("{o}{}", expr_flat(operand, 6, no_struct)), 6)
+            (format!("{o}{}", expr_flat(operand, 7, no_struct)), 7)
+        }
+        // RW 2.36: a range is printed close, `0..n`, as Rust's and Kotlin's formatters print it; it does not chain,
+        // so a range on its left keeps its parentheses too.
+        Expr::Binary { op: op @ (BinOp::Range | BinOp::RangeInclusive), lhs, rhs, .. } => {
+            let p = bin_prec(*op);
+            let l = expr_flat(lhs, p + 1, no_struct);
+            let r = expr_flat(rhs, p + 1, no_struct);
+            (format!("{l}{}{r}", bin_text(*op)), p)
         }
         Expr::Binary { op, lhs, rhs, .. } => {
             let p = bin_prec(*op);
@@ -1028,15 +1039,15 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
         Expr::Block(b) => (block_flat(b), 0),
         Expr::Spawn { actor, args, .. } => (
             format!("spawn {}({})", actor.dotted(), args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")),
-            6,
+            7,
         ),
-        Expr::Consume { name, .. } => (format!("consume {}", name.name), 6),
+        Expr::Consume { name, .. } => (format!("consume {}", name.name), 7),
         Expr::Recover { target, body, .. } => {
             let t = match target {
                 Some(r) => format!("{} ", r.name()),
                 None => String::new(),
             };
-            (format!("recover {t}{}", block_flat(body)), 6)
+            (format!("recover {t}{}", block_flat(body)), 7)
         }
     };
     if prec < min_prec {
@@ -1459,7 +1470,9 @@ fn f() -> Int { 1 }
         let d = depth - 1;
         match r.below(12) {
             0 => {
-                let op = ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||"][r.below(13) as usize];
+                // RW 2.36: the range operators too, so the laws hold over `a..b` and `a..=b`.
+                let op =
+                    ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "..", "..="][r.below(15) as usize];
                 format!("{} {op} {}", gen_expr(r, d), gen_expr(r, d))
             }
             1 => format!("-{}", gen_expr(r, d)),
@@ -1608,6 +1621,25 @@ fn f() -> Int { 1 }
         // A plain assignment of the same value stays plain: only what was written short prints short.
         let plain = laws("module m\nfn f() -> Int {\n    var x = 1\n    x = x + 2\n    x\n}\n");
         assert!(plain.contains("    x = x + 2\n") && !plain.contains("+="), "{plain}");
+    }
+
+    /// RW 2.36: a range prints close, `lo..hi` and `lo..=hi`, with exactly the parentheses its level needs: none around
+    /// arithmetic operands, none in a comparison, one pair as a method's receiver or around a comparison operand.
+    #[test]
+    fn a_range_prints_close_with_the_parentheses_it_needs() {
+        let src = "module m\nfn f(n: Int, xs: List[Int], a: Bool) -> Bool {\n    for i in 0 .. n {\n        println(str(i))\n    }\n    let r = 1 ..= n + 1\n    let s = (0..3).reverse()\n    let t = -3..n * 2\n    let u = (0..n).concat(n..=(n + 2))\n    let w = (if a { 1 } else { 2 })..3\n    xs == (0..3)\n}\n";
+        let out = laws(src);
+        for line in [
+            "    for i in 0..n {\n",
+            "    let r = 1..=n + 1\n",
+            "    let s = (0..3).reverse()\n",
+            "    let t = -3..n * 2\n",
+            "    let u = (0..n).concat(n..=n + 2)\n",
+            "    let w = (if a { 1 } else { 2 })..3\n",
+            "    xs == 0..3\n",
+        ] {
+            assert!(out.contains(line), "expected {line:?} in:\n{out}");
+        }
     }
 
     /// Criterion 4's full ≥100k gate. `cargo test -p delulu-syntax --release -- --ignored

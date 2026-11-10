@@ -33,7 +33,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 343
+- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 345
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

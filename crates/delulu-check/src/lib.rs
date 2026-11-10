@@ -196,6 +196,37 @@ mod tests {
         );
     }
 
+    /// RW 2.36: every prelude builtin's argument count is read — by `builtin_arity`'s gate, or by an arm's own refusal
+    /// (`load`, `assert`, `assert_eq`, `range`, `Map`). A builtin added to the prelude with neither would take any number of
+    /// arguments again, as eleven did: so each is called with one argument too many and must be DL0403.
+    #[test]
+    fn every_prelude_builtin_reads_its_argument_count() {
+        let own = ["load", "assert", "assert_eq", "range", "Map"];
+        for name in crate::check::PRELUDE_BUILTINS.iter().copied().filter(|n| *n != "None") {
+            let n = match crate::check::builtin_arity(name) {
+                Some((n, _)) => {
+                    assert!(!own.contains(&name), "`{name}` is counted twice: by the gate and by its own arm");
+                    n
+                }
+                None => {
+                    assert!(own.contains(&name), "`{name}` has no count: add it to `builtin_arity`, or give its arm one");
+                    match name {
+                        "load" => 3,
+                        "assert" => 1,
+                        "assert_eq" | "range" => 2,
+                        _ => 0,
+                    }
+                }
+            };
+            let args = vec!["1"; n + 1].join(", ");
+            let c = check(&format!("module m\nfn f() -> Int {{\n    let v = {name}({args})\n    0\n}}\n"));
+            let wrong_count = |d: &&delulu_diag::Diagnostic| {
+                matches!(d.code, "DL0403" | "DL0401") && (d.message.contains("argument") || d.message.contains("takes"))
+            };
+            assert!(c.diagnostics.iter().any(|d| wrong_count(&d)), "`{name}` with {} argument(s): {:?}", n + 1, c.diagnostics);
+        }
+    }
+
     #[test]
     fn pure_function_checks_clean_and_is_pure() {
         let c = check("module m\nfn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\n");

@@ -1046,6 +1046,26 @@ impl Interp {
                 Ok(Value::Unit)
             }
             Stmt::For { var, iter, body, .. } => {
+                // RW 2.36: a range is counted, never built — `for i in 0..1000000000000` holds no list — and its bounds
+                // are read once, before the first pass, as the list's were.
+                if let Some((lo, hi, inclusive)) = self.for_range(iter, env)? {
+                    let mut i = lo;
+                    while if inclusive { i <= hi } else { i < hi } {
+                        let loop_env = Scope::child_sized(env, 1);
+                        loop_env.define(&var.name, Value::Int(i));
+                        match self.exec_block_value(body, &loop_env) {
+                            Ok(_) | Err(Escape::Continue) => {}
+                            Err(Escape::Break) => break,
+                            Err(other) => return Err(other),
+                        }
+                        // `i == hi` ends an inclusive range before the step, so `..=` reaches `Int`'s largest value.
+                        if i == hi {
+                            break;
+                        }
+                        i += 1;
+                    }
+                    return Ok(Value::Unit);
+                }
                 let iterable = self.eval_expr(iter, env)?;
                 let Value::List(items) = iterable else {
                     // The checker (DL0411) guarantees a `List` here; anything else is a checker bug.
@@ -1385,6 +1405,15 @@ impl Interp {
                     let v = self.load_plugin(&argvals, node_id, span).map_err(Escape::Fault)?;
                     self.note_alloc(&v);
                     return Ok(v);
+                }
+                // RW 2.36: `range(lo, hi)` is `lo..hi`, charged to the run's memory budget as the operator is.
+                if name == "range" {
+                    return self.range_value(
+                        argvals.first().unwrap_or(&Value::Unit),
+                        argvals.get(1).unwrap_or(&Value::Unit),
+                        false,
+                        span,
+                    );
                 }
                 // Prelude builtins/constructors.
                 if let Some(res) = prim::call_builtin(name, &argvals, span) {
@@ -2572,6 +2601,44 @@ impl Interp {
         }
     }
 
+    /// RW 2.36: the list a range stands for — `lo..hi`, `lo..=hi` or `range(lo, hi)` — counted against the run's memory
+    /// budget like a list literal (spec §5.4) before it is built, and DL0908 when it is longer than a list holds.
+    fn range_value(&self, l: &Value, r: &Value, inclusive: bool, span: delulu_diag::Span) -> R<Value> {
+        let (Value::Int(lo), Value::Int(hi)) = (l, r) else {
+            return Err(Escape::Fault(Fault::at("DL0907", "a range's bounds were not `Int`s", span)));
+        };
+        let n = prim::range_len(*lo, *hi, inclusive).map_err(|m| Escape::Fault(Fault::at("DL0908", m, span)))?;
+        self.charge_alloc(n.saturating_mul(16).saturating_add(16))?;
+        let v = prim::range_list(*lo, *hi, inclusive, span).map_err(Escape::Fault)?;
+        self.note_alloc(&v); // 10d
+        Ok(v)
+    }
+
+    /// RW 2.36: the bounds of a `for` loop's range — `lo..hi`, `lo..=hi`, or a call of the prelude's `range` (no local
+    /// of that name) — evaluated as the list's would be: one step for the node, then `lo`, then `hi`. `None` for any
+    /// other iterable, which is evaluated as before.
+    fn for_range(&self, iter: &Expr, env: &Env) -> R<Option<(i64, i64, bool)>> {
+        let (lo, hi, inclusive) = match iter {
+            Expr::Binary { op: op @ (BinOp::Range | BinOp::RangeInclusive), lhs, rhs, .. } => {
+                (lhs.as_ref(), rhs.as_ref(), *op == BinOp::RangeInclusive)
+            }
+            Expr::Call { callee, args, .. }
+                if args.len() == 2
+                    && matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "range")
+                    && env.get("range").is_none() =>
+            {
+                (&args[0], &args[1], false)
+            }
+            _ => return Ok(None),
+        };
+        self.charge_step()?;
+        let span = iter.span();
+        match (self.eval_expr(lo, env)?, self.eval_expr(hi, env)?) {
+            (Value::Int(lo), Value::Int(hi)) => Ok(Some((lo, hi, inclusive))),
+            _ => Err(Escape::Fault(Fault::at("DL0907", "a range's bounds were not `Int`s", span))),
+        }
+    }
+
     fn binary(&self, op: BinOp, lhs: &Expr, rhs: &Expr, span: delulu_diag::Span, env: &Env) -> R<Value> {
         // Short-circuit logical operators.
         if matches!(op, BinOp::And | BinOp::Or) {
@@ -2598,6 +2665,7 @@ impl Interp {
                 Ok(Value::str(format!("{ls}{rs}")))
             }
             Add | Sub | Mul | Div | Rem => self.arith(op, l, r, span),
+            Range | RangeInclusive => self.range_value(&l, &r, op == RangeInclusive, span),
             Lt | Le | Gt | Ge => self.compare(op, l, r, span),
             // Unreachable because the `matches!(op, And | Or)` branch at the top of this function
             // returns unconditionally for exactly these two operators. That guard is twenty-five

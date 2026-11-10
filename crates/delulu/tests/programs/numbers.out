@@ -1,0 +1,37 @@
+== primes below 1000
+count 168, sum 76127, mean 453.137
+widest gap 20 after 887, twin pairs 35
+the last five, largest first: [997, 991, 983, 977, 971]
+every 40th: [2, 179, 419, 661, 947]
+== last digits of those primes
+1 #################### 40
+2  1
+3 ##################### 42
+5  1
+7 ####################### 46
+9 ################### 38
+== divisibility
+gcd(1071, 462) = 21, gcd(-48, 180) = 12
+lcm(1..=10) = 2520
+lcm(1..=20) = 232792560
+lcm(1..=40) = 5342931457063200
+lcm(1..=50) = too large for an Int
+21 factorials fit an Int (0! to 20!)
+the last Fibonacci number an Int holds: F(92) = 7540113804746346429
+== Collatz
+below 10000 the longest start is 6171, 261 steps
+steps from 9 down to 1: 19 3 16 8 5 2 7 1 0
+== kinds of 1..=100
+primes 25, perfect 2 (6 28), squares 10, plain 63
+perfect numbers below 10000: 6 28 496 8128
+== Pascal
+row 0: [1]
+row 4: [1, 4, 6, 4, 1]
+row 8: [1, 8, 28, 56, 70, 56, 28, 8, 1]
+row 12: [1, 12, 66, 220, 495, 792, 924, 792, 495, 220, 66, 12, 1]
+row 20 sums to 1048576 = 2^20 = 1048576, middle 184756
+== digits and roots
+the digits of 1..=1000 sum to 13501
+isqrt: 0 1 3 4 4 9 10 3037000499
+sin(k * pi / 8) for k in 0..=4: 0.0000 0.3827 0.7071 0.9239 1.0000
+clamped to -15..=15: -15 -10 0 10 15

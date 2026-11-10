@@ -1,0 +1,7 @@
+// RW 2.36 (D-V2-224): `...` is a range in other languages, which disagree about whether it holds its end. It is
+// refused, naming both of DeluluLang's spellings.
+module conf
+
+fn f() -> List[Int] {
+    0...3
+}

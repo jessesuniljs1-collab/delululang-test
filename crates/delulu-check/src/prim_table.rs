@@ -200,6 +200,8 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "list", method: "reverse", arity: 0 },
     PrimEntry { receiver: "list", method: "concat", arity: 1 },
     PrimEntry { receiver: "list", method: "slice", arity: 2 },
+    // RW 2.36 (D-V2-224): every `k`th element, a range's step.
+    PrimEntry { receiver: "list", method: "step_by", arity: 1 },
     PrimEntry { receiver: "list", method: "contains", arity: 1 },
     PrimEntry { receiver: "list", method: "join", arity: 1 },
     PrimEntry { receiver: "list", method: "sort", arity: 0 },
@@ -248,7 +250,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            125,
+            126,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

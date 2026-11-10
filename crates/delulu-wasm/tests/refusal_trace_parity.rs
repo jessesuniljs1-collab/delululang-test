@@ -102,6 +102,15 @@ fn a_refused_console_clock_or_rand_use_is_traced_the_same_by_both_engines() {
         "println",
         "DL1403",
     );
+    // RW 2.36's programs: `print`, which WASM compiles since then, is traced and refused as `println` is.
+    assert_refusal_parity(
+        "console print",
+        "module m\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.print(\"never\")\n}\n",
+        true,
+        None,
+        "print",
+        "DL1403",
+    );
     assert_refusal_parity(
         "clock",
         "module m\nfn main(root: Root) ! {Write, Clock} {\n    let out = root.console()\n    let c = root.clock()\n    out.println(str(c.now_ms()))\n}\n",
@@ -140,4 +149,27 @@ fn an_operation_its_effect_refuses_is_traced_the_same_by_both_engines() {
         "read_text",
         "DL0904",
     );
+}
+
+/// RW 2.36's programs: `Cap[Console].print` on the WASM engine (it was DL1201) writes what the interpreter writes — no
+/// line's end — and the two traces are byte-identical, `print` and `println` records in order.
+#[test]
+fn a_print_runs_and_is_traced_the_same_by_both_engines() {
+    let src = "module m\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.print(\"a\")\n    out.print(\"b \")\n    out.println(\"c\")\n    out.print(\"d\")\n}\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let wasm = compile_module(&checked.module).expect("the program compiles to WASM");
+    let wsink = TraceSink::new();
+    let cfg = HostConfig { console: true, trace: Some(wsink.clone()), ..HostConfig::default() };
+    let wout = run_main(&wasm, &cfg).expect("the WASM run succeeds");
+    let isink = TraceSink::new();
+    set_capture(true);
+    let g = Grants { console: true, ..Default::default() };
+    Interp::new(&checked.module).with_trace(isink.clone()).run_main(Value::Root(Rc::new(g.build_root()))).expect("runs");
+    let iout = take_capture().unwrap_or_default();
+    assert_eq!(wout, "ab c\nd");
+    assert_eq!(wout, iout);
+    let ops: Vec<String> = isink.records().iter().map(|r| r.op.clone()).collect();
+    assert_eq!(ops, ["print", "print", "println", "print"]);
+    assert_eq!(wsink.records(), isink.records(), "the two engines' traces are byte-identical");
 }

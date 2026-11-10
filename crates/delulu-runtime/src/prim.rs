@@ -1275,6 +1275,15 @@ pub fn call_list_method(
             let hi = hi.min(items.len()).max(lo);
             Ok(Value::List(Rc::new(std::cell::RefCell::new(items[lo..hi].to_vec()))))
         }
+        // RW 2.36: every `k`th element from the first; a step below 1 names no list (DL0908).
+        "step_by" => {
+            let k = int_arg(args, 0, span)?;
+            if k < 1 {
+                return Err(Fault::at("DL0908", step_by_fault(k), span));
+            }
+            let out: Vec<Value> = list.borrow().iter().step_by(usize::try_from(k).unwrap_or(usize::MAX)).cloned().collect();
+            Ok(Value::List(Rc::new(std::cell::RefCell::new(out))))
+        }
         // `Value::eq`, the same comparison `==` performs. The checker has already refused an opaque
         // element type with DL0605, which is what keeps `contains` and `==` from disagreeing.
         "contains" => {
@@ -1386,7 +1395,9 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
         "len" => Ok(match args.first() {
             Some(Value::Str(s)) => Value::Int(s.chars().count() as i64),
             Some(Value::List(l)) => Value::Int(l.borrow().len() as i64),
-            _ => Value::Int(0),
+            // RW 2.36: a `Map`'s pairs — it answered 0 for every map, the checker letting `len(m)` through.
+            Some(Value::Map(m)) => Value::Int(m.borrow().len() as i64),
+            _ => return Some(Err(Fault::at("DL0907", "len expects a Str, a List or a Map", span))),
         }),
         "int" => Ok(match args.first() {
             Some(Value::Float(f)) => Value::Int(*f as i64),
@@ -1417,12 +1428,11 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
             },
             _ => Value::variant("None", vec![]),
         }),
-        "range" => {
-            let lo = args.first().and_then(as_int).unwrap_or(0);
-            let hi = args.get(1).and_then(as_int).unwrap_or(0);
-            let items: Vec<Value> = (lo..hi).map(Value::Int).collect();
-            Ok(Value::List(Rc::new(std::cell::RefCell::new(items))))
-        }
+        // RW 2.36: `range(lo, hi)` is `lo..hi` (the checker holds it to two `Int`s), built by the one bounded builder.
+        "range" => match (args.first(), args.get(1)) {
+            (Some(Value::Int(lo)), Some(Value::Int(hi))) => range_list(*lo, *hi, false, span),
+            _ => Err(Fault::at("DL0907", "range expects (Int, Int)", span)),
+        },
         "push" => {
             if let (Some(Value::List(l)), Some(v)) = (args.first(), args.get(1)) {
                 l.borrow_mut().push(v.clone());
@@ -1487,6 +1497,51 @@ pub(crate) fn str_arg(args: &[Value], i: usize, span: Span) -> Result<String, Fa
         _ => Err(Fault::at("DL0907", format!("expected a Str argument at position {i}"), span)),
     }
 }
+/// RW 2.36: the most values a range built as a list holds, on both engines: 2^28, a list of 2 GiB in the WASM engine's
+/// memory (WebAssembly's is at most 4 GiB). A longer range is DL0908 before anything is allocated — iterated by `for`,
+/// a range builds no list and has no such limit. Without it, `range(0, 1000000000000)` aborted the interpreter
+/// (`memory allocation of 40000000000000 bytes failed`, SIGABRT) and `range(-9223372036854775807, 9223372036854775807)`
+/// panicked (`capacity overflow`): a process ended without a code.
+pub const RANGE_LIST_MAX: u64 = 1 << 28;
+
+/// RW 2.36: how many `Int`s `lo..hi` (`inclusive`: `lo..=hi`) names, or the DL0908 text — the same on both engines —
+/// for one longer than a list holds. Counted in `i128`, so no pair of bounds overflows.
+pub fn range_len(lo: i64, hi: i64, inclusive: bool) -> Result<u64, String> {
+    let n = i128::from(hi) - i128::from(lo) + i128::from(inclusive);
+    let n = n.max(0) as u128;
+    if n > u128::from(RANGE_LIST_MAX) {
+        let op = if inclusive { "..=" } else { ".." };
+        return Err(format!(
+            "`{lo}{op}{hi}` names {n} values, more than a list holds ({RANGE_LIST_MAX}) — iterate it with `for`, which \
+             builds no list"
+        ));
+    }
+    Ok(n as u64)
+}
+
+/// RW 2.36: the list `lo..hi` (or `lo..=hi`) stands for, or DL0908 — for a range longer than a list holds, or one whose
+/// memory the process could not have (a capped address space). Never an abort.
+pub fn range_list(lo: i64, hi: i64, inclusive: bool, span: Span) -> Result<Value, Fault> {
+    let n = range_len(lo, hi, inclusive).map_err(|m| Fault::at("DL0908", m, span))?;
+    let mut items: Vec<Value> = Vec::new();
+    if items.try_reserve_exact(n as usize).is_err() {
+        let op = if inclusive { "..=" } else { ".." };
+        return Err(Fault::at(
+            "DL0908",
+            format!("`{lo}{op}{hi}` names {n} values, and memory for them could not be had — iterate it with `for`, which builds no list"),
+            span,
+        ));
+    }
+    // `n` values from `lo`: the last is `lo + n - 1`, which is `hi - 1` or `hi` and so never overflows.
+    items.extend((0..n as i64).map(|k| Value::Int(lo + k)));
+    Ok(Value::List(Rc::new(std::cell::RefCell::new(items))))
+}
+
+/// RW 2.36: the text of `step_by`'s DL0908, the one both engines report for a step below 1.
+pub fn step_by_fault(k: i64) -> String {
+    format!("`step_by(k)` keeps every `k`th element, so it needs a step of 1 or more; it was given {k} — to count down, `reverse()` first")
+}
+
 /// The text of `rand.int`'s DL0908, the one both engines report for a range with no value in it (A15, D-V2-190).
 pub fn rand_int_range_fault(lo: i64, hi: i64) -> String {
     format!("rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = {lo}, hi = {hi}")
@@ -1504,13 +1559,6 @@ fn list_str_arg(args: &[Value], i: usize, span: Span) -> Result<Vec<String>, Fau
         _ => Err(Fault::at("DL0907", "expected a List[Str] argument", span)),
     }
 }
-fn as_int(v: &Value) -> Option<i64> {
-    match v {
-        Value::Int(n) => Some(*n),
-        _ => None,
-    }
-}
-
 fn io_err(variant: &str) -> Value {
     Value::variant(variant, if variant == "Other" { vec![Value::str("error")] } else { vec![] })
 }
@@ -2344,6 +2392,59 @@ mod remedy_tests {
 
 /// RW 2.38 (D-V2-223): the math methods' laws, at the edges where a hand-written answer goes wrong. The WASM engine runs
 /// these same functions host-side, so these laws hold on both engines; `math_parity.rs` checks the two agree.
+/// RW 2.36: the bounded range builder and `step_by`, which both engines' answers and faults come from.
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    fn ints(v: &Value) -> Vec<i64> {
+        let Value::List(l) = v else { panic!("a list: {v:?}") };
+        l.borrow().iter().map(|x| if let Value::Int(n) = x { *n } else { panic!("an Int: {x:?}") }).collect()
+    }
+
+    #[test]
+    fn a_range_holds_exactly_its_values_and_never_overflows_counting_them() {
+        let sp = Span::new(0, 0, 1);
+        assert_eq!(ints(&range_list(0, 3, false, sp).unwrap()), [0, 1, 2]);
+        assert_eq!(ints(&range_list(0, 3, true, sp).unwrap()), [0, 1, 2, 3]);
+        assert_eq!(ints(&range_list(3, 3, false, sp).unwrap()), Vec::<i64>::new());
+        assert_eq!(ints(&range_list(3, 3, true, sp).unwrap()), [3]);
+        assert_eq!(ints(&range_list(5, 2, true, sp).unwrap()), Vec::<i64>::new());
+        assert_eq!(ints(&range_list(i64::MAX - 1, i64::MAX, true, sp).unwrap()), [i64::MAX - 1, i64::MAX]);
+        assert_eq!(ints(&range_list(i64::MIN, i64::MIN + 1, false, sp).unwrap()), [i64::MIN]);
+        // The count of every extreme pair, in `i128`: none overflows, and each past the bound is refused by its length.
+        assert_eq!(
+            range_len(i64::MIN, i64::MAX, false).unwrap_err().split(" values").next().unwrap().rsplit(' ').next(),
+            Some("18446744073709551615")
+        );
+        assert!(range_len(i64::MIN, i64::MAX, true).unwrap_err().contains("names 18446744073709551616 values"));
+        assert!(range_len(i64::MAX, i64::MIN, true).is_ok_and(|n| n == 0));
+        // The bound itself: exactly `RANGE_LIST_MAX` values are a list; one more is DL0908's words.
+        assert_eq!(range_len(0, RANGE_LIST_MAX as i64, false), Ok(RANGE_LIST_MAX));
+        assert_eq!(range_len(1, RANGE_LIST_MAX as i64, true), Ok(RANGE_LIST_MAX));
+        let e = range_len(0, RANGE_LIST_MAX as i64, true).unwrap_err();
+        assert!(e.contains("`0..=268435456` names 268435457 values, more than a list holds (268435456)"), "{e}");
+        let f = range_list(0, RANGE_LIST_MAX as i64 + 1, false, sp).unwrap_err();
+        assert_eq!(f.code, "DL0908");
+    }
+
+    #[test]
+    fn step_by_keeps_every_kth_element_from_the_first_and_refuses_a_step_below_one() {
+        let sp = Span::new(0, 0, 1);
+        let list = |n: i64| Rc::new(std::cell::RefCell::new((0..n).map(Value::Int).collect::<Vec<_>>()));
+        let step = |n: i64, k: i64| call_list_method(&list(n), "step_by", &[Value::Int(k)], sp);
+        assert_eq!(ints(&step(10, 3).unwrap()), [0, 3, 6, 9]);
+        assert_eq!(ints(&step(10, 1).unwrap()), (0..10).collect::<Vec<_>>());
+        assert_eq!(ints(&step(3, i64::MAX).unwrap()), [0]);
+        assert_eq!(ints(&step(0, 2).unwrap()), Vec::<i64>::new());
+        for k in [0, -1, i64::MIN] {
+            let f = step(5, k).unwrap_err();
+            assert_eq!(f.code, "DL0908");
+            assert!(f.message.contains(&format!("it was given {k}")), "{}", f.message);
+        }
+    }
+}
+
 #[cfg(test)]
 mod math_tests {
     use super::*;

@@ -1,0 +1,6 @@
+// RW 2.36 (D-V2-224): `len` counts a `Str`, a `List` or a `Map`. `len(5)` checked clean and answered 0.
+module conf
+
+fn f() -> Int {
+    len(5)
+}

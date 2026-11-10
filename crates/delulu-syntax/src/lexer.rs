@@ -387,6 +387,32 @@ impl<'a> Lexer<'a> {
             ';' => self.push(TokenKind::Term, start),
             '@' => self.push(TokenKind::At, start),
             '?' => self.push(TokenKind::Question, start),
+            // RW 2.36: `..` and `..=` are the range operators. A number's `.` was decided in `number` (a float only
+            // when a digit follows), so `0..3` reaches here as `0`, then `..`.
+            '.' if self.peek() == Some('.') => {
+                self.bump();
+                match self.peek() {
+                    Some('=') => {
+                        self.bump();
+                        self.push(TokenKind::DotDotEq, start);
+                    }
+                    // `...` is a range in other languages, and they disagree about whether it holds its end (Ruby's
+                    // does not, Swift's does). Refused, with both of DeluluLang's spellings, rather than guessed.
+                    Some('.') => {
+                        self.bump();
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0101",
+                                "unexpected `...` — a range is `lo..hi` (up to `hi`, not including it) or `lo..=hi` \
+                                 (up to and including `hi`)",
+                            )
+                            .with_bare_span(self.span_from(start)),
+                        );
+                        self.push(TokenKind::DotDot, start);
+                    }
+                    _ => self.push(TokenKind::DotDot, start),
+                }
+            }
             '.' => self.push(TokenKind::Dot, start),
             // RW 2.34: an operator followed at once by `=` is its compound assignment.
             '+' => self.op_or_compound(TokenKind::Plus, TokenKind::PlusEq, start),
@@ -1016,5 +1042,25 @@ mod tests {
         assert_eq!(kinds("a->b")[..3], [ident("a"), TokenKind::Arrow, ident("b")]);
         assert_eq!(kinds("a==b")[..3], [ident("a"), TokenKind::EqEq, ident("b")]);
         assert_eq!(kinds("a //= b\nc")[..3], [ident("a"), TokenKind::Term, ident("c")], "`//=` begins a comment");
+    }
+
+    /// RW 2.36: `..` and `..=` are one token each, and a number before them stays an `Int` — a float needs a digit after
+    /// its `.` — so `0..3` is `0`, `..`, `3`, and `1.5..2` is a `Float` then `..`. `...` is refused with both spellings.
+    #[test]
+    fn range_operators_lex_as_one_token() {
+        assert_eq!(kinds("0..3")[..3], [TokenKind::Int(0), TokenKind::DotDot, TokenKind::Int(3)]);
+        assert_eq!(kinds("0..=3")[..3], [TokenKind::Int(0), TokenKind::DotDotEq, TokenKind::Int(3)]);
+        assert_eq!(kinds("a..b")[..3], [ident("a"), TokenKind::DotDot, ident("b")]);
+        assert_eq!(kinds("1.5..2")[..3], [TokenKind::Float(1.5), TokenKind::DotDot, TokenKind::Int(2)]);
+        assert_eq!(kinds("0..-1")[..4], [TokenKind::Int(0), TokenKind::DotDot, TokenKind::Minus, TokenKind::Int(1)]);
+        assert_eq!(kinds("x.len()")[..2], [ident("x"), TokenKind::Dot], "one `.` is still a member access");
+        assert_eq!(kinds("3.abs()")[..2], [TokenKind::Int(3), TokenKind::Dot]);
+        let (_, d) = lex(0, "0...3");
+        assert!(
+            d.iter().any(|d| d.code == "DL0101" && d.message.contains("`lo..hi`") && d.message.contains("`lo..=hi`")),
+            "{d:?}"
+        );
+        // A range at a line's end continues onto the next line; one at a line's start does not begin a statement.
+        assert_eq!(kinds("0..\n3")[..3], [TokenKind::Int(0), TokenKind::DotDot, TokenKind::Int(3)]);
     }
 }

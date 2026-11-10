@@ -1,0 +1,7 @@
+// RW 2.36 (D-V2-224): a range counts in `Int`s. A `Float` bound is refused, and the refusal says how fractional steps
+// are written: count in `Int`s and scale.
+module conf
+
+fn f() -> List[Int] {
+    0..2.5
+}
