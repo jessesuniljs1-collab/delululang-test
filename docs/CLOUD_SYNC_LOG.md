@@ -9192,3 +9192,30 @@ Survey and doctor: in the commit below.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** run 23's list above stands, its item 1 now done (the push run read, the branches deleted). Read this
   commit's push run first; then the next basic, strings (RW 2.37), in D-V2-220's order.
+
+### 2026-11-10 — the laptop: `c0a6802`'s push run read green; the disks cleaned at the owner's word (`D:\nelan` 234 → 5.3 GB, WSL's disk 37.9 → 13.4 GB)
+- Session: `https://claude.ai/code/session_01Deh6WAAasPJsutd663um69`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `master`, pushed directly (records only). Pull request: none.
+- Base: `c0a6802` = `origin/master` after `git fetch origin --prune`; nothing new had landed.
+- **CI read:** the push run `42817477299` on `c0a6802` (the previous entry's commit, which it left unread) — success,
+  14 jobs green and 2 skipped (`heavy-gates` and `miri-slow`, as on every push).
+- **The cleanup.** The owner: *"Why size of "D:\nelan" delululang files and folders are 234 GB … when same GitHub repo
+  download … is just 7.9 MB. Delete all unwanted things. From C drive and other places also … Check wsl and others.
+  Make a .md file and log everything deleted. Verify everything before deleting"*. Recorded in full in
+  `docs/maintenance/DISK-CLEANUP-2026-11-10.md`: `cargo clean` of `DeluluLang\target` (214.8 GiB), `dl-launch\target`
+  (18.1 GiB; the worktree kept) and `fuzz\target`; 64,724 test-scratch entries (1.71 GB) from Windows' temp folder;
+  24 spent `.exe` (0.90 GB) from an old scratchpad; in WSL five cargo caches, two labs' caches, three clones verified
+  against `D:` (`dl-studyc`, `dl-dogfood`, `delulu-src-img`), `dogfood-bin`, the unpacked kernel build tree and
+  2,303 `/tmp` entries. No `.md` was deleted that is not kept elsewhere byte for byte (each checked). Then
+  `delulu` and `delulu-survey` rebuilt on Windows and into WSL's warm cache, `fstrim`, `wsl --shutdown`, `diskpart`
+  compact. `D:` free 16.5 → 235.5 GB; `C:` free 108.0 → 131.5 GB.
+- **Found, not changed:** WSL has no `/dev/kvm` (`kvm_amd: SVM not supported by CPU 3` although `.wslconfig` sets
+  `nestedVirtualization=true`) — the microVM tests cannot run in WSL until it returns. WSL 2.6.1 calls
+  `autoMemoryReclaim` and `sparseVhd` unknown under `[wsl2]` (they belong under `[experimental]`).
+- Files and folders (`git diff --name-status c0a6802..HEAD`): A `docs/maintenance/DISK-CLEANUP-2026-11-10.md`;
+  M `docs/REPOSITORY_STRUCTURE.md` (its §5 row), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing deleted or
+  renamed.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** unchanged from the entry above — read this commit's push run first; then the next basic, strings
+  (RW 2.37), in D-V2-220's order. For the owner: whether to restore `/dev/kvm` in WSL (a Windows-side setting).

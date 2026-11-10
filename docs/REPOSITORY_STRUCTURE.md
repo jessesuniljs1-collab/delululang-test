@@ -702,6 +702,9 @@ checked first, and what was kept. `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.
 removed on the owner's word after their notes were kept and both checks passed. `docs/maintenance/BRANCH-CLEANUP-2026-10-26.md`
 — 84 of `origin`'s 91 branches removed on the owner's word: each name and tip, the check each passed, the three
 superseded ones kept reachable on `archive/superseded-2026-10-26`, and the eight branches kept and why.
+`docs/maintenance/DISK-CLEANUP-2026-11-10.md` — `D:\nelan` at 234 GB again (the 215 GB `target` and the launch
+worktree's 18 GB one), 64,724 test-scratch entries in Windows' temp folder, and WSL's caches and three spent clones
+(`ext4.vhdx` 37.9 → 13.4 GB): what was deleted, how each was checked first, and what was kept.
 
 ### 5.9 `measurements/` and `rfcs/`
 
