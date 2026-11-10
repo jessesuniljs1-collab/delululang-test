@@ -148,7 +148,22 @@ their scratch behind when a run is cut short, and Windows never empties its temp
   read 26200.9818, and in WSL: `Hyper-V: Nested features: 0x4a0000`, `svm` on 4 of 4 CPUs, `kvm_amd: Nested
   Virtualization enabled`, `/dev/kvm` `crw-rw---- root kvm` (the `/etc/wsl.conf` boot command, unchanged), and as the
   ordinary user `KVM_GET_API_VERSION` = 12 and `KVM_CREATE_VM` returning a descriptor. The 5.4 GB of packages were then
-  deleted. The microVM images in WSL are still stale (the 2026-10-17 note above); KVM itself works.
+  deleted.
+- **The microVM images rebuilt and the KVM tests run, the same evening, at the owner's word** (*"rebuild the microVM
+  images and run the KVM tests"*). From a fresh clone of `e349208` on WSL's ext4 (`~/delulu-src-img`; libffi's configure
+  fails on `drvfs`), `scripts/microvm/check-reproducible.sh` built the image twice from clean in 470 s: kernel
+  `f19758e4…`, initramfs `7fc8b289…`, guest binary `cba376cd…`, kernel config `1ee82e55…` — *"two clean builds produced
+  identical bytes"*. The first became `~/microvm-image-a`, the second `~/microvm-image-b`, replacing the stale images of
+  2026-10-17 and 2026-09-27; the kernel tarball and Firecracker v1.17.0 matched their pins. Then, as CI's `microvm` job
+  runs them (`RUSTFLAGS=--cfg delulu_kvm`, `~/delulu-kvm-target`, `--test-threads=2`): on image A, `microvm_cli` 10 of 11
+  as the ordinary user — the eleventh, `as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host`, failed on its
+  precondition, *"sudo: a password is required"* (CI has passwordless `sudo -n`; WSL does not), and **passed** when the
+  same test binary ran as root (`wsl -u root`, 3.25 s); `microvm_criterion8` passed; `sandbox probe` answered *"L2
+  microvm present — … booted a guest and heard it dial in, in 1340 ms"*; `redteam/probe.sh` and `redteam/hostile.sh`
+  each *"every expectation held"* (one vsock device, no block device, IP/packet/Unix sockets refused; garbage, oversized,
+  wrong-port and silent guests each refused before any program ran, nothing left behind). On image B, the ten
+  non-root lifecycle tests and criterion 8 passed. The reproducibility check's 5.5 GB scratch (two kernel work trees
+  and two cargo caches) was then deleted, its 8 `.md` byte-identical to the kernel tarball's or the cargo registry's.
 
 ## Result
 

@@ -9238,3 +9238,24 @@ Survey and doctor: in the commit below.
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing added, deleted or renamed.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** read this commit's push run first; then the next basic, strings (RW 2.37), in D-V2-220's order.
+
+### 2026-11-10 — the laptop: the microVM images rebuilt in WSL (reproducible), every KVM test green on them
+- Session: `https://claude.ai/code/session_01Deh6W8XoWUPrjihjND5NtX`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `master`, pushed directly (records only). Pull request: none.
+- Base: `e349208` = `origin/master` after `git fetch origin`; nothing new had landed.
+- **The owner: *"rebuild the microVM images and run the KVM tests"*.** With `/dev/kvm` back (the entry above), from a
+  fresh ext4 clone of `e349208`: `check-reproducible.sh` — two clean builds, identical bytes (kernel `f19758e4…`,
+  initramfs `7fc8b289…`, guest `cba376cd…`), 470 s — installed as `~/microvm-image-a` and `-b`. On image A:
+  `microvm_cli` 10 of 11 as the ordinary user plus the as-root jailer test as root (WSL's `sudo` wants a password, so
+  `sudo -n` refused it as the ordinary user), `microvm_criterion8` 1 of 1, `sandbox probe` L2 present (boot 1340 ms),
+  `redteam/probe.sh` and `redteam/hostile.sh` every expectation held. On image B: the ten non-root lifecycle tests and
+  criterion 8. Full record: `docs/maintenance/DISK-CLEANUP-2026-11-10.md`. Nothing in the code changed.
+- **For the laptop's next KVM run:** `DELULU_MICROVM_IMAGE=~/microvm-image-a DELULU_FIRECRACKER=~/bin/firecracker
+  RUSTFLAGS="--cfg delulu_kvm" CARGO_TARGET_DIR=~/delulu-kvm-target cargo test -p delulu --test microvm_cli --test
+  microvm_criterion8 -- --test-threads=2` from `~/delulu-src-img` (pull it first); the as-root test by running the built
+  `microvm_cli-*` binary as root. An image is stale once the guest/host channel changes — rebuild it then.
+- Files and folders (`git diff --name-status e349208..HEAD`): M `docs/maintenance/DISK-CLEANUP-2026-11-10.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing added, deleted or renamed.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** read this commit's push run first; then the next basic, strings (RW 2.37), in D-V2-220's order.
