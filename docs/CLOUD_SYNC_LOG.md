@@ -9332,8 +9332,10 @@ Survey and doctor: in the commit below.
   triggers off*; *measure an answer that moves on the repository's own outputs first*). `docs/CLOUD_ROUTINE.md` gained
   the first as a step, and the formatter's long-line shapes (RW 6.86) as advice for a program's data.
 - **Open / next:**
-  1. **CI of this run:** `master`'s push run on the records commit (it carries `53e1b85f`) — read below in the
-     follow-up line, or, if this run ended before reading it, read it first.
+  1. **CI of this run, read:** `master`'s push run `42879398946` on the records commit `cfea31cc` (it carries
+     `53e1b85f`): success, 14 jobs green and `heavy-gates` and `miri-slow` skipped as on every push; arm64's ping-pong
+     MEASURED 2.79x against a bar of 1.48x, macOS, Ubuntu and Windows NOT MEASURED, as always on those runners. The push
+     run of the follow-up commit that wrote this item is unread here: read it first.
   2. **The next basics, in D-V2-220's order:** bitwise (2.35), methods on a program's own types (2.33), tuples, sets,
      keyed sorting and comprehensions (2.39), argv, environment, exit code and sleep (2.40), JSON (2.41, with the
      unquoted list text D-V2-225 kept), then interfaces (2.33, 2.9) and RW 3.24. RW 2.50 (`Option`/`Result` methods) and
