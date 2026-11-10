@@ -1,0 +1,6 @@
+// RW 2.37 (D-V2-225): `pad_left(width, fill)` takes the width first, then the one-character fill.
+module conf
+
+fn f(s: Str) -> Str {
+    s.pad_left(" ", 8)
+}

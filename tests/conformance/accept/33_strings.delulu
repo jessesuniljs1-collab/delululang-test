@@ -1,0 +1,35 @@
+// anchors: ref.grammar.expr ref.prim.str.ends_with ref.prim.str.is_empty ref.prim.str.trim_start ref.prim.str.trim_end ref.prim.str.find ref.prim.str.rfind ref.prim.str.count ref.prim.str.repeat ref.prim.str.pad_left ref.prim.str.pad_right ref.prim.float.to_fixed
+// RW 2.37 (D-V2-225): strings — an f-string, `f"…{expr}…"`, whose every hole is `str(hole)`; `s[i]`, the `i`th character;
+// and the rest of an everyday string's table, every position a character's. All of it is pure: no function here
+// declares an effect, and a hole's call counts in its function's row as any other call does.
+module conf
+
+fn greet(name: Str, n: Int) -> Str {
+    f"hello {name}, you are visitor {n + 1} of {{many}}"
+}
+
+fn first_and_last(s: Str) -> Str {
+    if s.is_empty() { "" } else { s[0] + s[len(s) - 1] }
+}
+
+fn where_is(s: Str, sub: Str) -> Int {
+    match s.find(sub) {
+        Some(i) => i
+        None => match s.rfind(sub) {
+            Some(j) => j
+            None => 0 - 1
+        }
+    }
+}
+
+fn row(name: Str, qty: Int, price: Float) -> Str {
+    f"{name.pad_right(10, " ")}|{str(qty).pad_left(4, "0")}|{price.to_fixed(2)}"
+}
+
+fn tidy(s: Str) -> Bool {
+    s.trim_start().trim_end() == s.trim() && s.ends_with(" ") == !s.trim_end().ends_with(" ")
+}
+
+fn rule(n: Int) -> Str {
+    "-".repeat(n) + str("a-b-c".count("-"))
+}

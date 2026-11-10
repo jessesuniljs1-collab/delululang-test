@@ -9,6 +9,18 @@ pub enum TokenKind {
     Int(i64),
     Float(f64),
     Str(String),
+    /// RW 2.37: an f-string, `f"…{expr}…"`, lexed as `FStrStart`, then its text (`FStrText`) and holes
+    /// (`FStrHoleOpen`, the hole's own tokens, `FStrHoleClose`) in order, then `FStrEnd`. The parser builds it into
+    /// `BinOp::Interp` over the hole's expressions, so every walk of an expression sees them.
+    FStrStart,
+    /// RW 2.37: a run of an f-string's text, its escapes and `{{`/`}}` already read.
+    FStrText(String),
+    /// RW 2.37: the `{` that opens an f-string's hole.
+    FStrHoleOpen,
+    /// RW 2.37: the `}` that closes an f-string's hole.
+    FStrHoleClose,
+    /// RW 2.37: the `"` that ends an f-string.
+    FStrEnd,
 
     // Keywords (active in Stage 1)
     KwFn,
@@ -101,6 +113,7 @@ impl TokenKind {
                 | TokenKind::Int(_)
                 | TokenKind::Float(_)
                 | TokenKind::Str(_)
+                | TokenKind::FStrEnd
                 | TokenKind::KwTrue
                 | TokenKind::KwFalse
                 | TokenKind::KwReturn
@@ -156,6 +169,11 @@ impl TokenKind {
             TokenKind::Int(v) => format!("integer `{v}`"),
             TokenKind::Float(v) => format!("float `{v}`"),
             TokenKind::Str(_) => "string literal".to_string(),
+            TokenKind::FStrStart => "an f-string".to_string(),
+            TokenKind::FStrText(_) => "an f-string's text".to_string(),
+            TokenKind::FStrHoleOpen => "`{` (an f-string's hole)".to_string(),
+            TokenKind::FStrHoleClose => "`}` (the end of an f-string's hole)".to_string(),
+            TokenKind::FStrEnd => "the end of an f-string".to_string(),
             TokenKind::KwFn => "`fn`".into(),
             TokenKind::KwLet => "`let`".into(),
             TokenKind::KwVar => "`var`".into(),
@@ -313,6 +331,11 @@ pub fn token_index() -> Vec<TokenInfo> {
         ("Int", TokenKind::Int(0)),
         ("Float", TokenKind::Float(0.0)),
         ("Str", TokenKind::Str(String::new())),
+        ("FStrStart", TokenKind::FStrStart),
+        ("FStrText", TokenKind::FStrText(String::new())),
+        ("FStrHoleOpen", TokenKind::FStrHoleOpen),
+        ("FStrHoleClose", TokenKind::FStrHoleClose),
+        ("FStrEnd", TokenKind::FStrEnd),
         ("KwFn", TokenKind::KwFn),
         ("KwLet", TokenKind::KwLet),
         ("KwVar", TokenKind::KwVar),
@@ -418,6 +441,10 @@ fn punctuation_lexeme(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::Star => "*",
         TokenKind::Slash => "/",
         TokenKind::Percent => "%",
+        TokenKind::FStrStart => "f\"",
+        TokenKind::FStrHoleOpen => "{",
+        TokenKind::FStrHoleClose => "}",
+        TokenKind::FStrEnd => "\"",
         TokenKind::PlusEq => "+=",
         TokenKind::MinusEq => "-=",
         TokenKind::StarEq => "*=",

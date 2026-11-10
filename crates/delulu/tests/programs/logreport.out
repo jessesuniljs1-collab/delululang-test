@@ -1,0 +1,42 @@
+line 14 refused: time `not`
+line 20 refused: hour 25 past 23
+line 21 refused: status `2OO`
+line 22 refused: latency `18.2s` is not in ms
+19 requests read, 4 lines refused, 1 blank
+================================================
+success......  13   68.4%
+redirect.....   1    5.3%
+client error.   4   21.1%
+server error.   1    5.3%
+
+endpoint   reqs   mean ms   max ms
+(root)        1      4.00      4.0
+admin         1      0.40      0.4
+api          11    125.48    812.7
+health        1      0.30      0.3
+static        4      2.27      3.2
+wp-login.php    1      0.90      0.9
+
+latency ms: min 0.3, median 12.5, p90 250.4, max 812.7
+latency ms: mean 73.421, standard deviation 183.093
+slow (50 ms or more): 4 of 19 — 61.3, 85.0, 250.4, 812.7
+traffic 1.20 MB in all, the largest response 1.00 MB
+
+08:00 ############    4
+09:00 ############### 5
+10:00 #########       3
+11:00 #########       3
+12:00 ###             1
+13:00 ###             1
+15:00 ###             1
+16:00 ###             1
+
+methods: Get Post Delete Put Head
+extensions: (none)×14, .css×1, .js×2, .php×1, .png×1
+2 requests carried a query, 3 parameters in all
+
+suspicious GET /admin/../etc/passwd -> parent-step [403]
+suspicious GET /wp-login.php -> php-probe [404]
+suspicious GET /api/reports/2026/11/10/daily -> depth-6 [200]
+the last three hours seen: [16, 15, 13]; every other hour from 8: [8, 10, 12, 14, 16]
+*** fingerprint 815628343 ***

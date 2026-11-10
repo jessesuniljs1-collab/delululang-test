@@ -1,0 +1,6 @@
+// RW 2.37 (D-V2-225): a `}` in an f-string's text is written `}}`; a single one is refused, saying so.
+module conf
+
+fn f() -> Str {
+    f"a}b"
+}

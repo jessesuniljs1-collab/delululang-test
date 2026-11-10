@@ -291,13 +291,9 @@ impl Value {
     fn display_step(&self, out: &mut String, inside: &mut BTreeSet<usize>, work: &mut Vec<Shown>) {
         match self {
             Value::Int(i) => out.push_str(&i.to_string()),
-            Value::Float(x) => {
-                if x.fract() == 0.0 && x.is_finite() {
-                    out.push_str(&format!("{x:.1}"))
-                } else {
-                    out.push_str(&x.to_string())
-                }
-            }
+            // RW 2.37: the formatter's text of a Float literal — the same digits as before from 1e-4 up to 1e16, and an
+            // exponent outside it, where every digit was printed (`str(1.0e300)` was 301 of them, `str(100.0.exp())` 44).
+            Value::Float(x) => out.push_str(&delulu_syntax::num::float_text(*x)),
             Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
             Value::Str(s) => out.push_str(s),
             Value::Unit => out.push_str("()"),

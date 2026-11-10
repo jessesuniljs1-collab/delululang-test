@@ -1,0 +1,7 @@
+// RW 2.37 (D-V2-225): an f-string's hole holds one expression. Python's format spec is refused, and the refusal names
+// the method that does it: `{x.to_fixed(2)}`.
+module conf
+
+fn f(x: Float) -> Str {
+    f"{x:.2f}"
+}

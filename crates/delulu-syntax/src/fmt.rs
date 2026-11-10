@@ -871,22 +871,57 @@ fn pattern_text(p: &Pattern) -> String {
 fn lit_text(k: &LitKind) -> String {
     match k {
         LitKind::Int(v) => v.to_string(),
-        LitKind::Float(v) => {
-            // FMT-FLOAT-EXP-1: `{:?}` is the shortest digits that read back as `v`, and switches to an exponent below
-            // 1e-4 and from 1e16 up, where `{}` would print every digit (300 of them for `1.0e-300`).
-            let s = format!("{v:?}");
-            // A float literal must stay a float literal when reparsed, and the lexer reads an exponent only after a
-            // fraction (`1.0e-300`, never `1e-300`).
-            match s.split_once('e') {
-                Some((mant, exp)) if !mant.contains('.') => format!("{mant}.0e{exp}"),
-                Some(_) => s,
-                None if s.contains('.') => s,
-                None => format!("{s}.0"),
-            }
-        }
+        // FMT-FLOAT-EXP-1: the shortest digits that read back as `v`, with an exponent below 1e-4 and from 1e16 up, where
+        // `{}` would print every digit (300 of them for `1.0e-300`) — and a fraction before it, since the lexer reads an
+        // exponent only after one. RW 2.37: the runtime's `str` of a `Float` is the same function.
+        LitKind::Float(v) => crate::num::float_text(*v),
         LitKind::Str(s) => escape_str(s),
         LitKind::Bool(b) => b.to_string(),
     }
+}
+
+/// RW 2.37: an `Interp` chain printed as the f-string the parser built it from — its head and each literal operand as
+/// text (braces doubled), every other operand as a hole printed flat, so the f-string stays on its one line.
+fn fstring_text(e: &Expr) -> String {
+    let mut operands = Vec::new();
+    let mut at = e;
+    while let Expr::Binary { op: BinOp::Interp, lhs, rhs, .. } = at {
+        operands.push(&**rhs);
+        at = lhs;
+    }
+    operands.reverse();
+    let mut out = String::from("f\"");
+    let text = |s: &str, out: &mut String| {
+        let quoted = escape_str(s);
+        for c in quoted[1..quoted.len() - 1].chars() {
+            match c {
+                '{' => out.push_str("{{"),
+                '}' => out.push_str("}}"),
+                c => out.push(c),
+            }
+        }
+    };
+    match at {
+        Expr::Lit { kind: LitKind::Str(s), .. } => text(s, &mut out),
+        // Only the parser builds an `Interp`, always on a `Str` literal head; any other head is printed as a hole.
+        other => {
+            out.push('{');
+            out.push_str(&expr_flat(other, 0, false));
+            out.push('}');
+        }
+    }
+    for operand in operands {
+        match operand {
+            Expr::Lit { kind: LitKind::Str(s), .. } => text(s, &mut out),
+            other => {
+                out.push('{');
+                out.push_str(&expr_flat(other, 0, false));
+                out.push('}');
+            }
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// Re-escape a string literal — the exact inverse of the lexer's escape set.
@@ -920,6 +955,8 @@ fn bin_prec(op: BinOp) -> u8 {
         Range | RangeInclusive => 4,
         Add | Sub => 5,
         Mul | Div | Rem => 6,
+        // RW 2.37: an f-string is one primary expression.
+        Interp => 9,
     }
 }
 
@@ -941,6 +978,8 @@ fn bin_text(op: BinOp) -> &'static str {
         Or => "||",
         Range => "..",
         RangeInclusive => "..=",
+        // RW 2.37: never printed as an operator — `fstring_text` prints the chain as the f-string it was.
+        Interp => "+",
     }
 }
 
@@ -983,6 +1022,7 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
             };
             (format!("{o}{}", expr_flat(operand, 7, no_struct)), 7)
         }
+        Expr::Binary { op: BinOp::Interp, .. } => (fstring_text(e), 9),
         // RW 2.36: a range is printed close, `0..n`, as Rust's and Kotlin's formatters print it; it does not chain,
         // so a range on its left keeps its parentheses too.
         Expr::Binary { op: op @ (BinOp::Range | BinOp::RangeInclusive), lhs, rhs, .. } => {
@@ -1468,7 +1508,21 @@ fn f() -> Int { 1 }
             };
         }
         let d = depth - 1;
-        match r.below(12) {
+        match r.below(13) {
+            // RW 2.37: an f-string — text runs (braces doubled, escapes, other scripts) and holes of any generated
+            // expression, so the laws hold over every shape a hole can hold.
+            12 => {
+                let mut f = String::from("f\"");
+                for _ in 0..=r.below(4) {
+                    if r.chance(2, 5) {
+                        f.push_str(["a", " ", "é🐦", "{{", "}}", "\\n", "\\\"", "\\\\", "\\u{41}"][r.below(9) as usize]);
+                    } else {
+                        f.push_str(&format!("{{{}}}", gen_expr(r, d)));
+                    }
+                }
+                f.push('"');
+                f
+            }
             0 => {
                 // RW 2.36: the range operators too, so the laws hold over `a..b` and `a..=b`.
                 let op =
@@ -1593,6 +1647,26 @@ fn f() -> Int { 1 }
         // test beside it too little of the 40-minute wall to finish. See the note on `budget` in
         // `laws_hold_over_the_repository_corpus` for the arithmetic of the pair.
         run_fuzz_gate(if cfg!(miri) { 8 } else { 2_000 });
+    }
+
+    /// RW 2.37: an f-string prints as the f-string it was — its text with braces doubled and its escapes, every hole
+    /// flat on the one line, however long the line — and the laws hold over it.
+    #[test]
+    fn an_fstring_prints_as_written_and_keeps_the_laws() {
+        let src = "module m\nfn f(n: Int, s: Str, xs: List[Int]) -> Str {\n    f\"a {{b}} {n + 1}\\n{s.trim()}{xs.map(fn(i: Int) -> Int { i * 2 })} \\\"q\\\" {if n > 2 { \"big\" } else { \"small\" }}\"\n}\n";
+        let out = laws(src);
+        assert!(out.contains(r#"f"a {{b}} {n + 1}\n{s.trim()}{xs.map(fn(i: Int) -> Int { i * 2 })} \"q\" {if n > 2 { "big" } else { "small" }}""#), "{out}");
+        // A literal hole becomes text, and an f-string with no hole left is the string literal it spells.
+        let out = laws("module m\nfn f(n: Int) -> Str {\n    f\"{\"x\"}{n}\" + f\"{{}}\"\n}\n");
+        assert!(out.contains(r#"f"x{n}" + "{}""#), "{out}");
+        // A line far past the width: the call breaks, the f-string stays whole on its line.
+        let long = format!(
+            "module m\nfn f(c: Cap[Console], n: Int) ! {{Write}} {{\n    c.println(f\"{} {{n}} {}\")\n}}\n",
+            "w".repeat(150),
+            "{n * 2}"
+        );
+        let out = laws(&long);
+        assert!(out.lines().any(|l| l.trim_start().starts_with("f\"") && l.contains("{n * 2}")), "{out}");
     }
 
     /// RW 2.34: a compound assignment prints as written — `op=` with one space each side, its right side alone (never the

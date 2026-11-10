@@ -1,0 +1,371 @@
+// engines: interp wasm
+// RW 2.37 (D-V2-220's program step): the few-hundred-line program — an access-log report using every basic built so
+// far: `var` and `let` (RW 2.46), compound assignment (2.34), the math methods and checked forms (2.38), ranges
+// (2.36) and strings (2.37): f-strings, `s[i]`, `find` and `rfind`, `count`, `ends_with`, `repeat`, `pad_left` and
+// `pad_right`, `trim_start` and `trim_end`, `is_empty`, `to_fixed`, and a `match` on a `Str`. Each line of the log is
+// parsed or refused with its reason; then requests by status class, by endpoint, by hour, latency statistics, traffic,
+// suspicious paths and a fingerprint of the whole log. Every answer is checked against an independent Python
+// implementation, line for line.
+module logreport
+
+type Req {
+    hour: Int,
+    method: Str,
+    path: Str,
+    query: Str,
+    status: Int,
+    bytes: Int,
+    tenths: Int,
+}
+
+// The log: time, method, path, status, bytes, latency, a line each. Some lines are malformed on purpose, one is blank,
+// and two carry spaces the parser trims.
+fn the_log() -> Str {
+    let lines = [
+        "  08:15:02 GET /api/users?id=7 200 512 12.5ms",
+        "08:15:09 GET /api/users 200 2048 30.1ms",
+        "08:16:44 POST /api/orders 201 128 85.0ms  ",
+        "08:59:59 GET /static/app.js 200 90112 3.2ms",
+        "09:01:13 GET /static/app.css 304 0 1.1ms",
+        "09:02:00 GET /api/users/42 404 64 7.9ms",
+        "",
+        "09:10:31 DELETE /api/orders/9 500 32 250.4ms",
+        "09:11:02 GET / 200 1500 4.0ms",
+        "09:45:00 GET /admin/../etc/passwd 403 0 0.4ms",
+        "10:00:01 GET /wp-login.php 404 10 0.9ms",
+        "10:00:02 GET /api/users?id=8&full=1 200 4096 44.0ms",
+        "10:30:30 PUT /api/orders/9 200 256 61.3ms",
+        "not a log line at all",
+        "11:05:00 GET /api/reports/2026/11/10/daily 200 1048576 812.7ms",
+        "11:05:01 GET /static/logo.png 200 20480 2.0ms",
+        "11:59:00 POST /api/login 401 48 15.5ms",
+        "12:00:00 GET /api/users 200 2048 29.9ms",
+        "13:13:13 GET //api//users 200 2048 31.0ms",
+        "25:00:00 GET /api/time 200 10 1.0ms",
+        "14:00:00 GET /api/time 2OO 10 1.0ms",
+        "14:20:00 PATCH /api/users/7 200 300 18.2s",
+        "15:45:59 GET /static/app.js 200 90112 2.8ms",
+        "16:00:00 HEAD /health 200 0 0.3ms",
+    ]
+    lines.join("\n")
+}
+
+// The text after the last `.` of the path's last segment, or "" — `rfind` twice.
+fn extension(path: Str) -> Str {
+    let start = match path.rfind("/") {
+        Some(i) => i + 1
+        None => 0
+    }
+    let last = path.slice(start, len(path))
+    match last.rfind(".") {
+        Some(j) => last.slice(j + 1, len(last))
+        None => ""
+    }
+}
+
+// The first segment of a path: `/api/users/7` is `api`, `/` is `(root)`.
+fn endpoint(path: Str) -> Str {
+    let rest = path.slice(1, len(path))
+    let seg = match rest.find("/") {
+        Some(i) => rest.slice(0, i)
+        None => rest
+    }
+    if seg.is_empty() { "(root)" } else { seg }
+}
+
+// One line read into a request, or the reason it was refused.
+fn parse_line(raw: Str) -> Result[Req, Str] {
+    let line = raw.trim_start().trim_end()
+    let parts = line.split(" ")
+    if len(parts) != 6 {
+        return Err(f"{len(parts)} fields, not 6")
+    }
+    let time = parts[0]
+    if len(time) != 8 || time[2] != ":" || time[5] != ":" {
+        return Err(f"time `{time}`")
+    }
+    let hour = match parse_int(time.slice(0, 2)) {
+        Some(h) => h
+        None => {
+            return Err(f"hour `{time.slice(0, 2)}`")
+        }
+    }
+    if hour > 23 {
+        return Err(f"hour {hour} past 23")
+    }
+    let target = parts[2].replace("//", "/")
+    let at = target.find("?")
+    let path = match at {
+        Some(i) => target.slice(0, i)
+        None => target
+    }
+    let query = match at {
+        Some(i) => target.slice(i + 1, len(target))
+        None => ""
+    }
+    let status = match parse_int(parts[3]) {
+        Some(s) => s
+        None => {
+            return Err(f"status `{parts[3]}`")
+        }
+    }
+    let bytes = match parse_int(parts[4]) {
+        Some(b) => b
+        None => {
+            return Err(f"bytes `{parts[4]}`")
+        }
+    }
+    let lat = parts[5]
+    if !lat.ends_with("ms") {
+        return Err(f"latency `{lat}` is not in ms")
+    }
+    let tenths = match parse_float(lat.slice(0, len(lat) - 2)) {
+        Some(x) => match (x * 10.0).round().to_int() {
+            Some(t) => t
+            None => {
+                return Err("latency out of range")
+            }
+        }
+        None => {
+            return Err(f"latency `{lat}`")
+        }
+    }
+    Ok(
+        Req { hour: hour, method: parts[1], path: path, query: query, status: status, bytes: bytes, tenths: tenths },
+    )
+}
+
+fn class_of(status: Int) -> Str {
+    match str(status)[0] {
+        "2" => "success"
+        "3" => "redirect"
+        "4" => "client error"
+        "5" => "server error"
+        _ => "other"
+    }
+}
+
+fn bump(m: ref Map[Str, Int], key: Str, by: Int) {
+    var v = match m.get(key) {
+        Some(n) => n
+        None => 0
+    }
+    v += by
+    m.insert(key, v)
+}
+
+fn get_or_zero(m: ref Map[Str, Int], key: Str) -> Int {
+    match m.get(key) {
+        Some(n) => n
+        None => 0
+    }
+}
+
+// Tenths of a millisecond as milliseconds, one decimal.
+fn ms(tenths: Int) -> Str {
+    (float(tenths) / 10.0).to_fixed(1)
+}
+
+fn human(bytes: Int) -> Str {
+    if bytes < 1024 {
+        f"{bytes} B"
+    } else if bytes < 1024 * 1024 {
+        f"{(float(bytes) / 1024.0).to_fixed(1)} KB"
+    } else {
+        f"{(float(bytes) / 1048576.0).to_fixed(2)} MB"
+    }
+}
+
+// The nearest-rank percentile `p` of a sorted, non-empty list: the value at rank ceil(p * n / 100).
+fn percentile(sorted: List[Int], p: Int) -> Int {
+    let n = len(sorted)
+    let rank = (p * n + 99) / 100
+    sorted[rank.clamp(1, n) - 1]
+}
+
+fn title(word: Str) -> Str {
+    if word.is_empty() { "" } else { word[0] + word.slice(1, len(word)).to_lower() }
+}
+
+// A fingerprint of the text: each character's place in an alphabet, folded into a rolling hash modulo a prime.
+fn fingerprint(text: Str) -> Int {
+    let alphabet = "abcdefghijklmnopqrstuvwxyz0123456789/.:? "
+    var h = 7
+    for i in 0..len(text) {
+        let code = match alphabet.find(text[i].to_lower()) {
+            Some(k) => k + 1
+            None => 50
+        }
+        h = (h * 131 + code) % 1000000007
+    }
+    h
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    let raw = the_log().split("\n")
+    let reqs: ref List[Req] = []
+    var skipped_blank = 0
+    var refused = 0
+    for n in 1..=len(raw) {
+        let line = raw[n - 1]
+        if line.trim_start().is_empty() {
+            skipped_blank += 1
+            continue
+        }
+        match parse_line(line) {
+            Ok(r) => reqs.push(r)
+            Err(why) => {
+                refused += 1
+                c.println(f"line {str(n).pad_left(2, " ")} refused: {why}")
+            }
+        }
+    }
+    c.println(f"{len(reqs)} requests read, {refused} lines refused, {skipped_blank} blank")
+    c.println("=".repeat(48))
+    // By status class, in a fixed order.
+    let classes: ref Map[Str, Int] = Map()
+    for r in reqs {
+        bump(classes, class_of(r.status), 1)
+    }
+    for name in ["success", "redirect", "client error", "server error", "other"] {
+        let k = get_or_zero(classes, name)
+        if k > 0 {
+            let share = float(k) * 100.0 / float(len(reqs))
+            c.println(
+                f"{name.pad_right(13, ".")} {str(k).pad_left(3, " ")}  {share.to_fixed(1).pad_left(5, " ")}%",
+            )
+        }
+    }
+    // By endpoint: requests, mean and worst latency.
+    let counts: ref Map[Str, Int] = Map()
+    let total_tenths: ref Map[Str, Int] = Map()
+    let worst: ref Map[Str, Int] = Map()
+    for r in reqs {
+        let e = endpoint(r.path)
+        bump(counts, e, 1)
+        bump(total_tenths, e, r.tenths)
+        if r.tenths > get_or_zero(worst, e) { worst.insert(e, r.tenths) }
+    }
+    c.println("")
+    c.println(
+        f"{"endpoint".pad_right(10, " ")}{"reqs".pad_left(5, " ")}{"mean ms".pad_left(10, " ")}{"max ms".pad_left(9, " ")}",
+    )
+    for e in counts.keys() {
+        let k = get_or_zero(counts, e)
+        let mean = float(get_or_zero(total_tenths, e)) / float(k) / 10.0
+        c.println(
+            f"{e.pad_right(10, " ")}{str(k).pad_left(5, " ")}{mean.to_fixed(2).pad_left(10, " ")}{ms(get_or_zero(worst, e)).pad_left(9, " ")}",
+        )
+    }
+    // Latency statistics over every request.
+    let lats: ref List[Int] = []
+    var sum = 0
+    for r in reqs {
+        lats.push(r.tenths)
+        sum += r.tenths
+    }
+    let sorted = lats.sort()
+    let n = len(sorted)
+    let mean = float(sum) / float(n)
+    var sq = 0.0
+    for t in sorted {
+        let d = float(t) - mean
+        sq += d * d
+    }
+    let sd = (sq / float(n)).sqrt()
+    c.println("")
+    c.println(
+        f"latency ms: min {ms(sorted[0])}, median {ms(percentile(sorted, 50))}, p90 {ms(percentile(sorted, 90))}, max {ms(sorted[n - 1])}",
+    )
+    c.println(
+        f"latency ms: mean {(mean / 10.0).to_fixed(3)}, standard deviation {(sd / 10.0).to_fixed(3)}",
+    )
+    let slow = sorted.filter(fn(t: Int) -> Bool { t >= 500 })
+    c.println(
+        f"slow (50 ms or more): {len(slow)} of {n} — {slow.map(fn(t: Int) -> Str { ms(t) }).join(", ")}",
+    )
+    // Traffic: the total asked first, in case it would not fit an `Int`.
+    var traffic = 0
+    var overflowed = false
+    for r in reqs {
+        match traffic.checked_add(r.bytes) {
+            Some(t) => {
+                traffic = t
+            }
+            None => {
+                overflowed = true
+            }
+        }
+    }
+    let biggest = reqs.fold(0, fn(acc: Int, r: Req) -> Int { acc.max(r.bytes) })
+    c.println(
+        f"traffic {human(traffic)} in all{if overflowed { " (overflowed)" } else { "" }}, the largest response {human(biggest)}",
+    )
+    // By hour, a bar per hour that had requests.
+    c.println("")
+    for h in 0..24 {
+        var k = 0
+        for r in reqs {
+            if r.hour == h {
+                k += 1
+            }
+        }
+        if k > 0 {
+            c.println(f"{str(h).pad_left(2, "0")}:00 {"#".repeat(k * 3).pad_right(15, " ")} {k}")
+        }
+    }
+    // Methods, title-cased, by first appearance.
+    let seen: ref List[Str] = []
+    for r in reqs {
+        if !seen.contains(r.method) { seen.push(r.method) }
+    }
+    c.println("")
+    c.println(f"methods: {seen.map(fn(m: Str) -> Str { title(m) }).join(" ")}")
+    // Extensions and queries.
+    let exts: ref Map[Str, Int] = Map()
+    var with_query = 0
+    var params = 0
+    for r in reqs {
+        let x = extension(r.path)
+        bump(exts, if x.is_empty() { "(none)" } else { f".{x}" }, 1)
+        if !r.query.is_empty() {
+            with_query += 1
+            params += r.query.count("&") + 1
+        }
+    }
+    let ext_list: ref List[Str] = []
+    for x in exts.keys() {
+        ext_list.push(f"{x}×{get_or_zero(exts, x)}")
+    }
+    c.println(f"extensions: {ext_list.join(", ")}")
+    c.println(f"{with_query} requests carried a query, {params} parameters in all")
+    // Suspicious paths: a parent step, a PHP probe, or deeper than four segments.
+    c.println("")
+    for r in reqs {
+        let depth = r.path.count("/")
+        var why = ""
+        if r.path.contains("..") {
+            why += " parent-step"
+        }
+        if r.path.ends_with(".php") {
+            why += " php-probe"
+        }
+        if depth > 4 {
+            why += f" depth-{depth}"
+        }
+        if !why.is_empty() { c.println(f"suspicious {r.method} {r.path} ->{why} [{r.status}]") }
+    }
+    // The countdown of the last three hours seen, and a fingerprint of the whole log.
+    let hours: ref List[Int] = []
+    for r in reqs {
+        if !hours.contains(r.hour) { hours.push(r.hour) }
+    }
+    let last3 = hours.sort().reverse().slice(0, 3)
+    c.println(f"the last three hours seen: {last3}; every other hour from 8: {(8..=16).step_by(2)}")
+    var stars = ""
+    for _ in 0..3 {
+        stars += "*"
+    }
+    c.println(f"{stars} fingerprint {fingerprint(the_log())} {stars}")
+}

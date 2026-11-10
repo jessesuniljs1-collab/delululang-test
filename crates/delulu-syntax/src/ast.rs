@@ -476,6 +476,12 @@ pub enum BinOp {
     /// RW 2.36: `lo..=hi`, the `Int`s from `lo` up to and including `hi`. Empty when `lo > hi`; `hi` may be
     /// `Int`'s largest value.
     RangeInclusive,
+    /// RW 2.37: one step of an f-string — `lhs`, a `Str`, followed by the text of `rhs` as `str(rhs)` gives it (the
+    /// checker refuses a secret, a capability or `Root` there as `str` does, DL0604). It has no spelling of its own:
+    /// the parser builds `f"a{x}b"` as `Interp(Interp(Lit("a"), x), Lit("b"))`, its text in literals and each hole an
+    /// operand, so every walk of an expression — effects, authority, the Atlas — sees a hole without knowing f-strings
+    /// exist. The formatter prints the chain back as the f-string.
+    Interp,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

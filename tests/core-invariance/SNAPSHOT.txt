@@ -3317,6 +3317,79 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/32_ranges.delulu`
 
+===== tests/conformance/accept/33_strings.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/33_strings.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/33_strings.delulu checked clean
+
+===== tests/conformance/accept/33_strings.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "first_and_last",
+      "greet",
+      "row",
+      "rule",
+      "tidy",
+      "where_is"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/33_strings.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     first_and_last, greet, row, rule, tidy, where_is
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/33_strings.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/33_strings.delulu`
+
 ===== tests/conformance/accept/compound_assignment.delulu :: check --json =====
 exit 0
 --- stdout ---
@@ -3593,6 +3666,57 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/var_and_let.delulu`
 
+===== tests/conformance/reject/DL0101_fstring_single_brace.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "a single `}` in an f-string's text: write `}}` for a brace",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 141,
+            "col": 9,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0101_fstring_single_brace.delulu",
+          "start": {
+            "byte": 140,
+            "col": 8,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0101_fstring_single_brace.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0101]: a single `}` in an f-string's text: write `}}` for a brace
+  --> tests/conformance/reject/DL0101_fstring_single_brace.delulu:5:8
+   |
+ 5 |     f"a}b"
+   |        ^
+  explain: delulu explain E-DL0101
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0101_range_three_dots.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -3641,6 +3765,58 @@ error[DL0101]: unexpected `...` — a range is `lo..hi` (up to `hi`, not includi
  6 |     0...3
    |      ^^^
   explain: delulu explain E-DL0101
+
+1 error(s)
+
+===== tests/conformance/reject/DL0102_fstring_unterminated.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0102",
+      "explanation_id": "E-DL0102",
+      "message": "unterminated f-string",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 117,
+            "col": 10,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0102_fstring_unterminated.delulu",
+          "label": "f-string opened here",
+          "start": {
+            "byte": 112,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0102_fstring_unterminated.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0102]: unterminated f-string
+  --> tests/conformance/reject/DL0102_fstring_unterminated.delulu:5:5
+   |
+ 5 |     f"abc
+   |     ^^^^^ f-string opened here
+  explain: delulu explain E-DL0102
 
 1 error(s)
 
@@ -3742,6 +3918,57 @@ error[DL0104]: float literal underflows Float (f64) to zero — it is smaller th
    |
 10 |   1.0e-400
    |   ^^^^^^^^
+  explain: delulu explain E-DL0104
+
+1 error(s)
+
+===== tests/conformance/reject/DL0104_float_without_fraction.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0104",
+      "explanation_id": "E-DL0104",
+      "message": "a Float literal needs a fraction before its exponent: write `1.0e300`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 207,
+            "col": 10,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0104_float_without_fraction.delulu",
+          "start": {
+            "byte": 202,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0104_float_without_fraction.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0104]: a Float literal needs a fraction before its exponent: write `1.0e300`
+  --> tests/conformance/reject/DL0104_float_without_fraction.delulu:6:5
+   |
+ 6 |     1e300
+   |     ^^^^^
   explain: delulu explain E-DL0104
 
 1 error(s)
@@ -4140,6 +4367,58 @@ error[DL0201]: expected an ABI string after `foreign`, found identifier `lib`
 
 1 error(s)
 
+===== tests/conformance/reject/DL0201_fstring_format_spec.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0201",
+      "explanation_id": "E-DL0201",
+      "message": "an f-string's hole holds one expression, not a format spec (`:…`): call a method in the hole instead — `{x.to_fixed(2)}` for decimals, `{s.pad_left(8, \" \")}` for a width",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 212,
+            "col": 10,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0201_fstring_format_spec.delulu",
+          "label": "the hole ends at its expression",
+          "start": {
+            "byte": 211,
+            "col": 9,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0201_fstring_format_spec.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0201]: an f-string's hole holds one expression, not a format spec (`:…`): call a method in the hole instead — `{x.to_fixed(2)}` for decimals, `{s.pad_left(8, " ")}` for a width
+  --> tests/conformance/reject/DL0201_fstring_format_spec.delulu:6:9
+   |
+ 6 |     f"{x:.2f}"
+   |         ^ the hole ends at its expression
+  explain: delulu explain E-DL0201
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0201_import_without_path.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -4478,6 +4757,58 @@ error[DL0202]: expected an expression, found end of statement
    |
  5 |   let x = ;
    |           ^ expected an expression
+  explain: delulu explain E-DL0202
+
+1 error(s)
+
+===== tests/conformance/reject/DL0202_fstring_empty_hole.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0202",
+      "explanation_id": "E-DL0202",
+      "message": "an empty `{}` in an f-string: put an expression between the braces, or write `{{}}` for the braces themselves",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 179,
+            "col": 10,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0202_fstring_empty_hole.delulu",
+          "label": "nothing to interpolate",
+          "start": {
+            "byte": 177,
+            "col": 8,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0202_fstring_empty_hole.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0202]: an empty `{}` in an f-string: put an expression between the braces, or write `{{}}` for the braces themselves
+  --> tests/conformance/reject/DL0202_fstring_empty_hole.delulu:6:8
+   |
+ 6 |     f"a{}b"
+   |        ^^ nothing to interpolate
   explain: delulu explain E-DL0202
 
 1 error(s)
@@ -6692,6 +7023,88 @@ error[DL0401]: a range counts in `Int`s, and this bound of `lo..hi` is a `Float`
 
 1 error(s)
 
+===== tests/conformance/reject/DL0401_str_pad_fill_type.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `Int`, found `Str`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 152,
+            "col": 19,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_str_pad_fill_type.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 149,
+            "col": 16,
+            "line": 5
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `Str`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 155,
+            "col": 22,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_str_pad_fill_type.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 154,
+            "col": 21,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_str_pad_fill_type.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: expected `Int`, found `Str`
+  --> tests/conformance/reject/DL0401_str_pad_fill_type.delulu:5:16
+   |
+ 5 |     s.pad_left(" ", 8)
+   |                ^^^ type mismatch here
+  explain: delulu explain E-DL0401
+
+error[DL0401]: argument type mismatch: expected `Str`, found `Int`
+  --> tests/conformance/reject/DL0401_str_pad_fill_type.delulu:5:21
+   |
+ 5 |     s.pad_left(" ", 8)
+   |                     ^ type mismatch here
+  explain: delulu explain E-DL0401
+
+2 error(s)
+
 ===== tests/conformance/reject/DL0401_str_replace_non_str.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -7676,6 +8089,58 @@ error[DL0405]: type `Int` has no method `sqrt`: `sqrt` is a `Float` method — c
    |
  5 |     n.sqrt()
    |       ^^^^ unknown method
+  explain: delulu explain E-DL0405
+
+1 error(s)
+
+===== tests/conformance/reject/DL0405_str_index_write.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "a `Str` cannot be changed in place: `s[i]` reads a character, and no index writes one",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 160,
+            "col": 6,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0405_str_index_write.delulu",
+          "label": "build a new string instead, e.g. `s.slice(0, i) + \"x\" + s.slice(i + 1, len(s))`",
+          "start": {
+            "byte": 159,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0405_str_index_write.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0405]: a `Str` cannot be changed in place: `s[i]` reads a character, and no index writes one
+  --> tests/conformance/reject/DL0405_str_index_write.delulu:6:5
+   |
+ 6 |     s[0] = "x"
+   |     ^ build a new string instead, e.g. `s.slice(0, i) + "x" + s.slice(i + 1, len(s))`
   explain: delulu explain E-DL0405
 
 1 error(s)
@@ -8780,6 +9245,58 @@ error[DL0603]: Secret.map requires a pure function
  6 |   s.map(fn(x: Str) -> Str ! {Write} {
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this function is not pure
   explain: delulu explain E-DL0603
+
+1 error(s)
+
+===== tests/conformance/reject/DL0604_fstring_secret_hole.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0604",
+      "explanation_id": "E-DL0604",
+      "message": "value of type `Secret[Str]` cannot be stringified",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 208,
+            "col": 20,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0604_fstring_secret_hole.delulu",
+          "label": "an f-string hole: opaque type (Secret/Cap/Root or a value containing one)",
+          "start": {
+            "byte": 207,
+            "col": 19,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0604_fstring_secret_hole.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0604]: value of type `Secret[Str]` cannot be stringified
+  --> tests/conformance/reject/DL0604_fstring_secret_hole.delulu:6:19
+   |
+ 6 |     f"the key is {s}"
+   |                   ^ an f-string hole: opaque type (Secret/Cap/Root or a value containing one)
+  explain: delulu explain E-DL0604
 
 1 error(s)
 

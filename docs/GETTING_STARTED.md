@@ -176,6 +176,26 @@ A range binds looser than arithmetic, so `0..n + 1` is `0..(n + 1)`. Its bounds 
 a body `n` times. A range used as a list holds at most 268,435,456 values (`DL0908` past that); a
 `for` over one has no such limit.
 
+**Text is built with an f-string.** `f"…"` interpolates: each `{…}` hole is any expression, turned into text exactly
+as `str(…)` turns it (so a secret is refused there too, `DL0604`), and `{{`/`}}` write a brace. A plain `"…{x}…"` is
+literal text, as it always was. A hole holds one expression — Python's `{x:.2f}` is refused with the method to call:
+
+```delulu
+fn row(name: Str, qty: Int, price: Float) -> Str {
+    f"{name.pad_right(10, " ")}|{str(qty).pad_left(4, "0")}|{price.to_fixed(2)}"
+}
+// row("tea", 7, 2.675) is "tea       |0007|2.67"
+```
+
+`s[i]` is the `i`th character, a one-character `Str` (`DL0903` past either end); a string never changes in place, so
+`s[i] = …` is `DL0405`. Every position counts characters, never bytes: `len(s)`, `s.slice(lo, hi)`, and
+`s.find(sub)` / `s.rfind(sub)`, which return `Option[Int]`. `s.count(sub)`, `s.ends_with(t)`, `s.repeat(n)`,
+`s.trim_start()`, `s.trim_end()` and `s.is_empty()` complete the everyday set; `x.to_fixed(d)` writes a `Float` with `d`
+decimals, rounded as Python's `f"{x:.2f}"` rounds. `str` of a `Float` is the shortest text that reads back as the same
+number, with an exponent below `0.0001` and from `1.0e16` up — `str(1.0e300)` is `1.0e300` — and a Float literal
+always has its fraction (`1e300` is `DL0104`, whose message spells `1.0e300`). A `match` on a `Str` with literal arms
+(`"left" => …`) runs on both engines.
+
 > **The collection surface, and the three places it deliberately refuses.** As of 2026-09-20
 > (V2 phase P3) `List` has fifteen methods — `len`, `is_empty`, `get`, `push`, `pop`, `map`,
 > `filter`, `find`, `fold`, `sort`, `reverse`, `concat`, `slice`, `contains`, `join` — `Str` has ten,

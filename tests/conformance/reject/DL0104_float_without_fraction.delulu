@@ -1,0 +1,7 @@
+// RW 2.48 (with RW 2.37, D-V2-225): a Float literal's exponent follows a fraction (§2.1). `1e300` is one malformed
+// literal, and the refusal spells it: `1.0e300`.
+module conf
+
+fn f() -> Float {
+    1e300
+}

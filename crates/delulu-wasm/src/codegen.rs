@@ -839,6 +839,12 @@ struct Imports {
     /// `delulu:cap.console_print` — `Cap[Console].print(s)`, `println` without the line's end. After `step_by`, so a
     /// module that never calls `print` is unchanged. `u32::MAX` when it never does.
     console_print: u32,
+    /// `delulu:str.str_find` — `Str.find`, `rfind` and `count`, answered by the interpreter's own `call_str_method` as a
+    /// flag and an `Int` (RW 2.37). After `console_print`. `u32::MAX` when the module calls none of them on a `Str`.
+    str_find: u32,
+    /// `delulu:math.float_to_fixed` — `Float.to_fixed(digits)`, the interpreter's own text, or its DL0908 (a trap) for
+    /// a count of digits outside 0 to 100 (RW 2.37). After `str_find`. `u32::MAX` when no `to_fixed` is called.
+    float_to_fixed: u32,
     /// Does the module `pop` a list? Then every walk that runs code per element (`for`, `map`, `filter`, `find`, `fold`)
     /// walks a private copy of the slots, taken when it begins: a `pop` and then a `push` reuse the popped slot, which a
     /// walk of the list's own slots could still reach, where the interpreter's walk — a copy — never sees the change.
@@ -1112,6 +1118,8 @@ fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<Node
     let hit = |e: &Expr| match e {
         Expr::Call { callee, args, .. } => matches!((&**callee, &args[..]),
             (Expr::Var { path, .. }, [a]) if path.segs.len() == 1 && path.segs[0].name == "str" && compound(a)),
+        // RW 2.37: an f-string's hole is `str(hole)`.
+        Expr::Binary { op: BinOp::Interp, rhs, .. } => compound(rhs),
         Expr::Binary { op: BinOp::Eq | BinOp::Ne, lhs, .. } => compound(lhs),
         // A list's `contains` compares as `==` does: an element the host's `eq` answers needs the interface too.
         Expr::Method { recv, name, args, .. } if name.name == "contains" && is_list_typed(recv, node_types) => {
@@ -1261,18 +1269,39 @@ fn mentions_float(t: &TypeExpr) -> bool {
 /// The `Str` methods the WASM engine runs host-side, through the interpreter's own `call_str_method` — so each answers
 /// exactly what the interpreter answers, Unicode and all (RW 3.4). A method's id is its index here; `host.rs` reads it
 /// back. `len` and `split` have their own paths (`__str_len`, `delulu:list.str_split`).
-pub(crate) const STR_METHODS: [&str; 8] =
-    ["trim", "to_upper", "to_lower", "chars", "contains", "starts_with", "replace", "slice"];
+pub(crate) const STR_METHODS: [&str; 16] = [
+    "trim",
+    "to_upper",
+    "to_lower",
+    "chars",
+    "contains",
+    "starts_with",
+    "replace",
+    "slice",
+    // RW 2.37 (D-V2-225), after the older ones so their ids do not move. `[]` is `s[i]`, which no program spells as a
+    // method.
+    "ends_with",
+    "is_empty",
+    "trim_start",
+    "trim_end",
+    "repeat",
+    "pad_left",
+    "pad_right",
+    "[]",
+];
 
 /// A `Str` method's id, its arguments' types and its result's type.
 fn str_method_sig(name: &str) -> Option<(u32, &'static [Ty], Ty)> {
     let id = STR_METHODS.iter().position(|m| *m == name)? as u32;
     let (args, ret): (&'static [Ty], Ty) = match name {
-        "trim" | "to_upper" | "to_lower" => (&[], Ty::Str),
+        "trim" | "to_upper" | "to_lower" | "trim_start" | "trim_end" => (&[], Ty::Str),
         "chars" => (&[], Ty::List(Scalar::Str)),
-        "contains" | "starts_with" => (&[Ty::Str], Ty::I32),
+        "contains" | "starts_with" | "ends_with" => (&[Ty::Str], Ty::I32),
+        "is_empty" => (&[], Ty::I32),
         "replace" => (&[Ty::Str, Ty::Str], Ty::Str),
         "slice" => (&[Ty::I64, Ty::I64], Ty::Str),
+        "repeat" | "[]" => (&[Ty::I64], Ty::Str),
+        "pad_left" | "pad_right" => (&[Ty::I64, Ty::Str], Ty::Str),
         _ => return None,
     };
     Some((id, args, ret))
@@ -1313,15 +1342,19 @@ fn float_method_sig(name: &str) -> Option<(u32, usize)> {
     })
 }
 
-/// What `host.rs` hands `call_str_method` for the method numbered `id`: its name, and how many `Str` arguments (the
-/// import's `a` and `b`) and `Int` arguments (`lo` and `hi`) it takes — read from `str_method_sig`, so the two sides
-/// cannot disagree on a slot.
-pub(crate) fn str_method_arity(id: i32) -> Option<(&'static str, usize, usize)> {
+/// What `host.rs` hands `call_str_method` for the method numbered `id`: its name, and for each argument in order whether
+/// it is a `Str` (taken from the import's `a`, then `b`) or an `Int` (from `lo`, then `hi`) — read from `str_method_sig`,
+/// so the two sides cannot disagree on a slot. RW 2.37: in the method's own order, since `pad_left(width, fill)` takes
+/// an `Int` before a `Str`.
+pub(crate) fn str_method_arity(id: i32) -> Option<(&'static str, Vec<bool>)> {
     let name = *STR_METHODS.get(usize::try_from(id).ok()?)?;
     let (_, params, _) = str_method_sig(name)?;
-    let strs = params.iter().filter(|t| **t == Ty::Str).count();
-    Some((name, strs, params.len() - strs))
+    Some((name, params.iter().map(|t| *t == Ty::Str).collect()))
 }
+
+/// RW 2.37: the `Str` methods that answer an `Int` (`count`) or an `Option[Int]` (`find`, `rfind`), run host-side
+/// (`delulu:str.str_find`) by the interpreter's own `call_str_method`. A method's id is its index here.
+pub(crate) const STR_FIND_METHODS: [&str; 3] = ["find", "rfind", "count"];
 
 /// Does any compilable function compare with `==` or `!=`? Then the module carries `__str_eq` (after the list helpers),
 /// which a comparison of two `Str`s calls.
@@ -1339,7 +1372,12 @@ fn module_compares(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, 
 /// Does a `match` of the module test inside a constructor (`tests_inside`)? It compiles arm by arm, and carries
 /// `delulu:match.no_arm` for the case no arm matches.
 fn module_matches_inside(env: &EnumEnv, module: &Module) -> bool {
-    let hit = |e: &Expr| matches!(e, Expr::Match { arms, .. } if arms.iter().any(|a| tests_inside(&a.pattern)));
+    // RW 2.37: a literal arm (`"left" => …`, `0 => …`) is a scalar `match`'s, tried in order the same way. No module with
+    // one compiled before (a `match` on a scalar was refused), so no module that did changes.
+    let hit = |e: &Expr| {
+        matches!(e, Expr::Match { arms, .. }
+            if arms.iter().any(|a| tests_inside(&a.pattern) || matches!(a.pattern, Pattern::Lit(..))))
+    };
     module_any(env, module, &hit, false)
 }
 
@@ -1529,6 +1567,8 @@ fn compile_module_typed(
         range_len: u32::MAX,
         list_step_by: u32::MAX,
         console_print: u32::MAX,
+        str_find: u32::MAX,
+        float_to_fixed: u32::MAX,
         pops_lists: false,
     };
     if needs_console {
@@ -1642,7 +1682,19 @@ fn compile_module_typed(
         imp.index_fault = n_imports + 1;
         n_imports += 2;
     }
-    let needs_str_methods = module_calls_str_methods(&env, module);
+    // RW 2.37: `s[i]` is the `[]` method. A module compiled with the checker's types carries the interface when it indexes
+    // a `Str`; one compiled without them (a Verified plugin's DIR) cannot tell a `Str`'s index from a list's, so it carries
+    // the interface whenever it indexes anything — rather than refusing a `Str` index it could have run.
+    let needs_str_methods = module_calls_str_methods(&env, module)
+        || module_any(
+            &env,
+            module,
+            &|e| {
+                matches!(e, Expr::Index { recv, .. }
+                    if node_types.is_empty() || matches!(node_types.get(&recv.id()), Some(delulu_check::Type::Str)))
+            },
+            false,
+        );
     if needs_str_methods {
         imp.str_method = n_imports;
         n_imports += 1;
@@ -1729,6 +1781,26 @@ fn compile_module_typed(
     let needs_console_print = needs_console && module_calls_method(&env, module, &["print"]);
     if needs_console_print {
         imp.console_print = n_imports;
+        n_imports += 1;
+    }
+    // RW 2.37: after every other import, so a module without them is unchanged. `rfind` and `count` are `Str`'s alone;
+    // `find` is a list's too, so a receiver the checker typed a `List` does not count.
+    let needs_str_find = module_any(
+        &env,
+        module,
+        &|e| {
+            matches!(e, Expr::Method { recv, name, .. }
+                if STR_FIND_METHODS.contains(&name.name.as_str()) && !is_list_typed(recv, node_types))
+        },
+        false,
+    );
+    if needs_str_find {
+        imp.str_find = n_imports;
+        n_imports += 1;
+    }
+    let needs_to_fixed = module_any(&env, module, &|e| matches!(e, Expr::Method { name, .. } if name.name == "to_fixed"), false);
+    if needs_to_fixed {
+        imp.float_to_fixed = n_imports;
         n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -2044,6 +2116,19 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], []); // console_print(cap, ptr, file, start, end)
         next_type += 1;
     }
+    let mut str_find_ty = 0;
+    if needs_str_find {
+        str_find_ty = next_type;
+        // str_find(s, method, sub) -> (found, value): `count`'s answer, or `find`'s place and whether there was one
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32], [ValType::I32, ValType::I64]);
+        next_type += 1;
+    }
+    let mut to_fixed_ty = 0;
+    if needs_to_fixed {
+        to_fixed_ty = next_type;
+        types.ty().function([ValType::F64, ValType::I64], [ValType::I32]); // float_to_fixed(x, digits) -> Str; DL0908 traps
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -2233,6 +2318,12 @@ fn compile_module_typed(
     }
     if needs_console_print {
         imports.import("delulu:cap", "console_print", EntityType::Function(console_print_ty));
+    }
+    if needs_str_find {
+        imports.import("delulu:str", "str_find", EntityType::Function(str_find_ty));
+    }
+    if needs_to_fixed {
+        imports.import("delulu:math", "float_to_fixed", EntityType::Function(to_fixed_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -3745,6 +3836,14 @@ fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<
 /// typed field binding. `expected` is the arms' result type; in synthesis it comes from the 1st arm.
 fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
     let sty = compile_expr(scrutinee, cx)?;
+    // RW 2.37: a `match` on a `Str`, an `Int` or a `Bool` — its arms literals, names and `_` — tries each arm in order, as
+    // the interpreter's `eval_match` does (a `Str` literal by `__str_eq`). Found by the strings basic's `wrap.delulu`,
+    // whose `match how { "left" => … }` was DL1201 on this engine alone.
+    if matches!(sty, Ty::Str | Ty::I64 | Ty::I32) {
+        let sp = cx.alloc_local(sty)?;
+        cx.emit(Instruction::LocalSet(sp));
+        return compile_match_ordered(arms, sp, sty, cx, expected);
+    }
     let ctors = cx
         .env
         .ctors_of(sty)
@@ -4735,6 +4834,20 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     return compile_str_method(id, params, ret, args, cx);
                 }
             }
+            // RW 2.37: `find`, `rfind` and `count`, the receiver on the stack.
+            if let (Ty::Str, Some(id), [sub]) = (recv_ty, STR_FIND_METHODS.iter().position(|m| *m == name.name), &args[..]) {
+                return compile_str_find(id as u32, name.name == "count", sub, cx);
+            }
+            if let (Ty::F64, "to_fixed", [digits]) = (recv_ty, name.name.as_str(), &args[..]) {
+                if cx.imp.float_to_fixed == u32::MAX {
+                    return Err(CompileError::Unsupported(
+                        "`to_fixed` in a module compiled without `delulu:math.float_to_fixed`".into(),
+                    ));
+                }
+                compile_expr_as(digits, cx, Ty::I64)?;
+                cx.emit(Instruction::Call(cx.imp.float_to_fixed));
+                return Ok(Ty::Str);
+            }
             // RW 2.38 (D-V2-223): the math methods, the receiver on the stack.
             if let (Ty::I64, Some((id, n, checked))) = (recv_ty, int_method_sig(&name.name)) {
                 if n == args.len() {
@@ -4849,53 +4962,7 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 };
             }
             if name == "str" && args.len() == 1 {
-                let at = compile_expr(&args[0], cx)?;
-                return match at {
-                    Ty::I64 => {
-                        cx.emit(Instruction::Call(cx.int_to_str_fn));
-                        Ok(Ty::Str)
-                    }
-                    Ty::Str => Ok(Ty::Str), // str(<Str>) is the identity; the pointer is already on the stack
-                    // Stage 4 phase 4g: `str(Float)` formats host-side (`float_to_str`) with the EXACT
-                    // `Value::Float` display logic, so both engines print a foreign Float identically.
-                    Ty::F64 if cx.imp.float_to_str != u32::MAX => {
-                        cx.emit(Instruction::Call(cx.imp.float_to_str));
-                        Ok(Ty::Str)
-                    }
-                    // Stage 4 phase 4g: `str(Bool)` selects the interned "true"/"false" literal (matches
-                    // `Value::Bool.display()`). Every module interns them (RW 3.4).
-                    Ty::I32 => {
-                        let t = *cx
-                            .str_off
-                            .get("true")
-                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without its interned literals".into()))?
-                            as i32;
-                        let f = *cx
-                            .str_off
-                            .get("false")
-                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without its interned literals".into()))?
-                            as i32;
-                        cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
-                        cx.emit(Instruction::I32Const(t));
-                        cx.emit(Instruction::Else);
-                        cx.emit(Instruction::I32Const(f));
-                        cx.emit(Instruction::End);
-                        Ok(Ty::Str)
-                    }
-                    // A list, an option, a result, a sum or a record: rendered host-side by the interpreter's own
-                    // `display`, over the value rebuilt by its type's descriptor.
-                    t @ (Ty::List(_) | Ty::Map(..) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
-                        if cx.imp.value_display != u32::MAX =>
-                    {
-                        cx.emit(Instruction::I32Const(desc_ptr(cx, t)?));
-                        cx.emit(Instruction::Call(cx.imp.value_display));
-                        Ok(Ty::Str)
-                    }
-                    _ => Err(CompileError::Unsupported(
-                        "str() of this type (Int, Str, Float, Bool, lists, maps, options, results, sums and records compile)"
-                            .into(),
-                    )),
-                };
+                return compile_str_of(&args[0], cx);
             }
             // A constructor with no expected type: `Some(x)` takes its payload's type; another, its sum's or the checker's.
             // CTOR-SHADOW-1: a constructor of the module's own types is built even where a function or a generic shares its
@@ -5022,6 +5089,57 @@ fn compile_parse(arg: &Expr, cx: &mut Cx, import: u32, s: Scalar, name: &str) ->
     cx.emit(Instruction::I32Add);
     cx.emit(Instruction::LocalGet(value));
     store_scalar(cx, s);
+    cx.emit(Instruction::Else);
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(none));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(cell));
+    Ok(opt)
+}
+
+/// RW 2.37: `find`, `rfind` or `count` run host-side (`delulu:str.str_find`), the receiver on the stack and `sub` computed
+/// after it. `count` keeps the `Int`; `find` and `rfind` build their `Option[Int]` from the flag, as `parse_int` does.
+fn compile_str_find(id: u32, count: bool, sub: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.str_find == u32::MAX {
+        return Err(CompileError::Unsupported(
+            "`find`, `rfind` or `count` in a module compiled without `delulu:str.str_find`".into(),
+        ));
+    }
+    let recv = cx.alloc_local(Ty::Str)?;
+    cx.emit(Instruction::LocalSet(recv));
+    compile_expr_as(sub, cx, Ty::Str)?;
+    let given = cx.alloc_local(Ty::Str)?;
+    cx.emit(Instruction::LocalSet(given));
+    cx.emit(Instruction::LocalGet(recv));
+    cx.emit(Instruction::I32Const(id as i32));
+    cx.emit(Instruction::LocalGet(given));
+    cx.emit(Instruction::Call(cx.imp.str_find));
+    let (found, value) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I64)?);
+    cx.emit(Instruction::LocalSet(value));
+    cx.emit(Instruction::LocalSet(found));
+    if count {
+        cx.emit(Instruction::LocalGet(value));
+        return Ok(Ty::I64);
+    }
+    let opt = Ty::Option(Scalar::I64);
+    let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
+    let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
+    let (some, none) = (tag("Some"), tag("None"));
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(cell));
+    cx.emit(Instruction::LocalGet(found));
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(some));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(field_offset(0)));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalGet(value));
+    store_scalar(cx, Scalar::I64);
     cx.emit(Instruction::Else);
     cx.emit(Instruction::LocalGet(cell));
     cx.emit(Instruction::I32Const(none));
@@ -5337,7 +5455,13 @@ fn list_scalar(env: &EnumEnv, t: &delulu_check::Type) -> Option<Scalar> {
 
 /// `xs[i]`: the element, or DL0903 in the interpreter's words when `i` is outside the list.
 fn compile_index(recv: &Expr, index: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
-    let Ty::List(s) = compile_expr(recv, cx)? else {
+    let recv_ty = compile_expr(recv, cx)?;
+    // RW 2.37: `s[i]`, the `i`th character, by the interpreter's own `str_index` (its DL0903 traps past either end).
+    if recv_ty == Ty::Str {
+        let (id, params, ret) = str_method_sig("[]").expect("`[]` is a Str method");
+        return compile_str_method(id, params, ret, std::slice::from_ref(index), cx);
+    }
+    let Ty::List(s) = recv_ty else {
         return Err(CompileError::Unsupported("indexing a value that is not a List".into()));
     };
     if cx.imp.index_fault == u32::MAX {
@@ -6234,6 +6358,57 @@ fn compile_operands(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<(T
     Ok((compile_expr(lhs, cx)?, compile_expr(rhs, cx)?))
 }
 
+/// `str(arg)`: `arg` computed, then its text — the interpreter's `display`, on every type both engines hold. RW 2.37: an
+/// f-string's hole is this conversion too, so `f"{x}"` and `str(x)` compile, answer and refuse alike.
+fn compile_str_of(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let at = compile_expr(arg, cx)?;
+    match at {
+        Ty::I64 => {
+            cx.emit(Instruction::Call(cx.int_to_str_fn));
+            Ok(Ty::Str)
+        }
+        Ty::Str => Ok(Ty::Str), // str(<Str>) is the identity; the pointer is already on the stack
+        // Stage 4 phase 4g: `str(Float)` formats host-side (`float_to_str`) with the EXACT
+        // `Value::Float` display logic, so both engines print a foreign Float identically.
+        Ty::F64 if cx.imp.float_to_str != u32::MAX => {
+            cx.emit(Instruction::Call(cx.imp.float_to_str));
+            Ok(Ty::Str)
+        }
+        // Stage 4 phase 4g: `str(Bool)` selects the interned "true"/"false" literal (matches
+        // `Value::Bool.display()`). Every module interns them (RW 3.4).
+        Ty::I32 => {
+            let t = *cx
+                .str_off
+                .get("true")
+                .ok_or_else(|| CompileError::Unsupported("str(Bool) without its interned literals".into()))?
+                as i32;
+            let f = *cx
+                .str_off
+                .get("false")
+                .ok_or_else(|| CompileError::Unsupported("str(Bool) without its interned literals".into()))?
+                as i32;
+            cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
+            cx.emit(Instruction::I32Const(t));
+            cx.emit(Instruction::Else);
+            cx.emit(Instruction::I32Const(f));
+            cx.emit(Instruction::End);
+            Ok(Ty::Str)
+        }
+        // A list, an option, a result, a sum or a record: rendered host-side by the interpreter's own
+        // `display`, over the value rebuilt by its type's descriptor.
+        t @ (Ty::List(_) | Ty::Map(..) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
+            if cx.imp.value_display != u32::MAX =>
+        {
+            cx.emit(Instruction::I32Const(desc_ptr(cx, t)?));
+            cx.emit(Instruction::Call(cx.imp.value_display));
+            Ok(Ty::Str)
+        }
+        _ => Err(CompileError::Unsupported(
+            "str() of this type (Int, Str, Float, Bool, lists, maps, options, results, sums and records compile)".into(),
+        )),
+    }
+}
+
 fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     // `&&` and `||` short-circuit, as the interpreter's do: the right side runs only when the left does not decide
     // the answer, so its fault or effect happens on exactly the runs it happens on there (WASM-SHORT-1: both sides
@@ -6264,6 +6439,15 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         compile_range_bounds(lhs, rhs, cx)?;
         return compile_range_list(op == BinOp::RangeInclusive, cx);
     }
+    // RW 2.37: one step of an f-string — the text so far, then the hole's text as `str` gives it, joined by `__concat`.
+    if op == BinOp::Interp {
+        if compile_expr(lhs, cx)? != Ty::Str {
+            return Err(CompileError::Unsupported("an f-string whose text is not a `Str`".into()));
+        }
+        compile_str_of(rhs, cx)?;
+        cx.emit(Instruction::Call(cx.concat_fn));
+        return Ok(Ty::Str);
+    }
     let (lt, rt) = compile_operands(op, lhs, rhs, cx)?;
     use BinOp::*;
     if lt == Ty::I64 && rt == Ty::I64 {
@@ -6285,6 +6469,7 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Ne => (Instruction::I64Ne, Ty::I32),
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
             Range | RangeInclusive => unreachable!("a range is compiled above, before either operand"),
+            Interp => unreachable!("an f-string's step is compiled above, before either operand"),
         };
         cx.emit(ins);
         return Ok(ty);
@@ -6308,6 +6493,7 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Ne => (Instruction::F64Ne, Ty::I32),
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
             Range | RangeInclusive => unreachable!("a range is compiled above, before either operand"),
+            Interp => unreachable!("an f-string's step is compiled above, before either operand"),
         };
         cx.emit(ins);
         return Ok(ty);

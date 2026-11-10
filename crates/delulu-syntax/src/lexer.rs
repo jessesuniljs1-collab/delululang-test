@@ -363,6 +363,13 @@ impl<'a> Lexer<'a> {
 
     fn scan_token(&mut self) {
         let start = self.pos;
+        // RW 2.37: `f"` begins an f-string, before any morph's alias is tried — a compact morph spells `fn` as `f`, and
+        // `fn "…"` is never a program, so no morphed program changes meaning. An identifier ending in `f` (`buf"x"`) is
+        // read whole by `ident` and never reaches here.
+        if self.src[start..].starts_with("f\"") {
+            self.fstring(start);
+            return;
+        }
         // A surface morph's alias becomes the keyword token it stands for. Checked here, at the one
         // point the lexer decides what token begins — and therefore AFTER trivia, so an alias
         // appearing inside a comment or a string literal is never seen by this at all. That is what
@@ -601,6 +608,33 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        // RW 2.48: `1e300` was the `Int` `1` and then the name `e300`, so the program was told about a missing `)` or an
+        // unknown name and never about the spelling. A Float literal's exponent follows a fraction (§2.1); an `Int`
+        // followed at once by an exponent is one malformed literal, refused once, with the spelling it needs. Its token
+        // is the `Float` that spelling means, so nothing after it cascades.
+        if !is_float && self.exponent_follows() {
+            let mant_end = self.pos;
+            self.bump(); // 'e' or 'E'
+            if matches!(self.peek(), Some('+') | Some('-')) {
+                self.bump();
+            }
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                self.bump();
+            }
+            let mant: String = self.src[start..mant_end].chars().filter(|&c| c != '_').collect();
+            let exp = &self.src[mant_end + 1..self.pos];
+            let spelled = format!("{mant}.0e{exp}");
+            self.diags.push(
+                Diagnostic::error("DL0104", format!("a Float literal needs a fraction before its exponent: write `{spelled}`"))
+                    .with_bare_span(self.span_from(start)),
+            );
+            let value = match crate::num::float_from_text(&spelled) {
+                crate::num::FloatText::Value(v) => v,
+                _ => 0.0,
+            };
+            self.push(TokenKind::Float(value), start);
+            return;
+        }
         let text: String = self.src[start..self.pos].chars().filter(|&c| c != '_').collect();
         if is_float {
             // The rule is shared with the runtime's `parse_float` (see `crate::num`): a literal in
@@ -663,65 +697,193 @@ impl<'a> Lexer<'a> {
                     self.push(TokenKind::Str(value), start);
                     return;
                 }
-                Some('\\') => {
-                    let esc_start = self.pos;
-                    self.bump();
-                    match self.bump() {
-                        Some('n') => value.push('\n'),
-                        Some('t') => value.push('\t'),
-                        Some('r') => value.push('\r'),
-                        Some('\\') => value.push('\\'),
-                        Some('"') => value.push('"'),
-                        Some('0') => value.push('\0'),
-                        Some('u') => {
-                            if self.peek() == Some('{') {
-                                self.bump();
-                                let hex_start = self.pos;
-                                while self.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
-                                    self.bump();
-                                }
-                                let hex = &self.src[hex_start..self.pos];
-                                let closed = self.peek() == Some('}');
-                                if closed {
-                                    self.bump();
-                                }
-                                let ok = closed
-                                    && !hex.is_empty()
-                                    && hex.len() <= 6
-                                    && u32::from_str_radix(hex, 16)
-                                        .ok()
-                                        .and_then(char::from_u32)
-                                        .map(|c| {
-                                            value.push(c);
-                                        })
-                                        .is_some();
-                                if !ok {
-                                    self.diags.push(
-                                        Diagnostic::error("DL0103", "invalid unicode escape (expected \\u{1-6 hex digits})")
-                                            .with_bare_span(self.span_from(esc_start)),
-                                    );
-                                }
-                            } else {
-                                self.diags.push(
-                                    Diagnostic::error("DL0103", "invalid escape: `\\u` needs `{…}`")
-                                        .with_bare_span(self.span_from(esc_start)),
-                                );
-                            }
-                        }
-                        other => {
-                            let shown = other.map(|c| c.to_string()).unwrap_or_default();
-                            self.diags.push(
-                                Diagnostic::error("DL0103", format!("invalid escape sequence `\\{shown}`"))
-                                    .with_bare_span(self.span_from(esc_start)),
-                            );
-                        }
-                    }
-                }
+                Some('\\') => self.escape(&mut value),
                 Some(_) => {
                     let c = self.bump().unwrap();
                     value.push(c);
                 }
             }
+        }
+    }
+
+    /// The escape that a backslash begins in a string or an f-string's text; the backslash is at the cursor.
+    fn escape(&mut self, value: &mut String) {
+        let esc_start = self.pos;
+        self.bump();
+        match self.bump() {
+            Some('n') => value.push('\n'),
+            Some('t') => value.push('\t'),
+            Some('r') => value.push('\r'),
+            Some('\\') => value.push('\\'),
+            Some('"') => value.push('"'),
+            Some('0') => value.push('\0'),
+            Some('u') => {
+                if self.peek() == Some('{') {
+                    self.bump();
+                    let hex_start = self.pos;
+                    while self.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
+                        self.bump();
+                    }
+                    let hex = &self.src[hex_start..self.pos];
+                    let closed = self.peek() == Some('}');
+                    if closed {
+                        self.bump();
+                    }
+                    let ok = closed
+                        && !hex.is_empty()
+                        && hex.len() <= 6
+                        && u32::from_str_radix(hex, 16)
+                            .ok()
+                            .and_then(char::from_u32)
+                            .map(|c| {
+                                value.push(c);
+                            })
+                            .is_some();
+                    if !ok {
+                        self.diags.push(
+                            Diagnostic::error("DL0103", "invalid unicode escape (expected \\u{1-6 hex digits})")
+                                .with_bare_span(self.span_from(esc_start)),
+                        );
+                    }
+                } else {
+                    self.diags.push(
+                        Diagnostic::error("DL0103", "invalid escape: `\\u` needs `{…}`")
+                            .with_bare_span(self.span_from(esc_start)),
+                    );
+                }
+            }
+            other => {
+                let shown = other.map(|c| c.to_string()).unwrap_or_default();
+                self.diags.push(
+                    Diagnostic::error("DL0103", format!("invalid escape sequence `\\{shown}`"))
+                        .with_bare_span(self.span_from(esc_start)),
+                );
+            }
+        }
+    }
+
+    /// RW 2.37: an f-string, `f"text {expr} text"`. The text reads as a string literal's does, its escapes and all, with
+    /// `{{` and `}}` for a brace; each `{` opens a hole whose tokens are lexed in place, as code, until the `}` that closes
+    /// it at depth zero — so a hole may hold strings, calls, records and nested f-strings, and every token keeps its own
+    /// span. An f-string ends on its line, as a string literal does (DL0102); a hole cannot cross a line either.
+    fn fstring(&mut self, start: usize) {
+        self.bump(); // 'f'
+        self.bump(); // '"'
+        self.push(TokenKind::FStrStart, start);
+        let mut text = String::new();
+        let mut text_start = self.pos;
+        loop {
+            match self.peek() {
+                None | Some('\n') => {
+                    self.diags.push(
+                        Diagnostic::error("DL0102", "unterminated f-string")
+                            .with_span(self.span_from(start), "f-string opened here"),
+                    );
+                    self.flush_fstr_text(&mut text, text_start);
+                    self.push(TokenKind::FStrEnd, self.pos);
+                    return;
+                }
+                Some('"') => {
+                    self.flush_fstr_text(&mut text, text_start);
+                    let at = self.pos;
+                    self.bump();
+                    self.push(TokenKind::FStrEnd, at);
+                    return;
+                }
+                Some('\\') => self.escape(&mut text),
+                Some('{') if self.peek2() == Some('{') => {
+                    self.bump();
+                    self.bump();
+                    text.push('{');
+                }
+                Some('}') if self.peek2() == Some('}') => {
+                    self.bump();
+                    self.bump();
+                    text.push('}');
+                }
+                Some('}') => {
+                    let at = self.pos;
+                    self.bump();
+                    self.diags.push(
+                        Diagnostic::error("DL0101", "a single `}` in an f-string's text: write `}}` for a brace")
+                            .with_bare_span(self.span_from(at)),
+                    );
+                    text.push('}');
+                }
+                Some('{') => {
+                    self.flush_fstr_text(&mut text, text_start);
+                    let at = self.pos;
+                    self.bump();
+                    self.push(TokenKind::FStrHoleOpen, at);
+                    if !self.fstring_hole() {
+                        // The line ended inside the hole: it is closed where the line ends, so the parser reads a whole
+                        // hole and the f-string's own DL0102 is the one error it causes.
+                        self.push(TokenKind::FStrHoleClose, self.pos);
+                        continue;
+                    }
+                    text_start = self.pos;
+                }
+                Some(_) => {
+                    let c = self.bump().unwrap();
+                    text.push(c);
+                }
+            }
+        }
+    }
+
+    /// Push the f-string text read since `from`, if there is any, and start the next run empty.
+    fn flush_fstr_text(&mut self, text: &mut String, from: usize) {
+        if !text.is_empty() {
+            let span = Span::new(self.file, from as u32, self.pos as u32);
+            self.tokens.push(Token { kind: TokenKind::FStrText(std::mem::take(text)), span });
+        }
+    }
+
+    /// The tokens of one f-string hole, lexed as code, then its closing `}` as `FStrHoleClose`. `false` when the line
+    /// ends first (the caller reports the unterminated f-string).
+    fn fstring_hole(&mut self) -> bool {
+        let mut depth = 0u32;
+        loop {
+            while matches!(self.peek(), Some(' ') | Some('\t') | Some('\r')) {
+                self.bump();
+            }
+            match self.peek() {
+                None | Some('\n') => return false,
+                Some('}') if depth == 0 => {
+                    let at = self.pos;
+                    self.bump();
+                    self.push(TokenKind::FStrHoleClose, at);
+                    return true;
+                }
+                _ => {
+                    let before = self.tokens.len();
+                    let at = self.pos;
+                    self.scan_token();
+                    match self.tokens.get(before).map(|t| &t.kind) {
+                        Some(TokenKind::LBrace) => depth += 1,
+                        Some(TokenKind::RBrace) => depth = depth.saturating_sub(1),
+                        _ => {}
+                    }
+                    if self.pos == at {
+                        // Nothing was read (cannot happen: `scan_token` always takes a character); never loop on it.
+                        self.bump();
+                    }
+                }
+            }
+        }
+    }
+
+    /// RW 2.48: is the cursor on an exponent — `e` or `E`, an optional sign, then a digit?
+    fn exponent_follows(&self) -> bool {
+        let rest = &self.src[self.pos..];
+        let mut it = rest.chars();
+        if !matches!(it.next(), Some('e') | Some('E')) {
+            return false;
+        }
+        match it.next() {
+            Some(c) if c.is_ascii_digit() => true,
+            Some('+') | Some('-') => it.next().is_some_and(|c| c.is_ascii_digit()),
+            _ => false,
         }
     }
 }
@@ -1062,5 +1224,98 @@ mod tests {
         );
         // A range at a line's end continues onto the next line; one at a line's start does not begin a statement.
         assert_eq!(kinds("0..\n3")[..3], [TokenKind::Int(0), TokenKind::DotDot, TokenKind::Int(3)]);
+    }
+}
+
+/// RW 2.37 (D-V2-225) and RW 2.48: the f-string's tokens, and a Float literal's exponent without a fraction.
+#[cfg(test)]
+mod fstring_lex_tests {
+    use super::*;
+
+    fn kinds(src: &str) -> Vec<TokenKind> {
+        let (tokens, diags) = lex(0, src);
+        assert!(diags.is_empty(), "{src}: {diags:?}");
+        tokens.into_iter().map(|t| t.kind).filter(|k| !matches!(k, TokenKind::Eof | TokenKind::Term)).collect()
+    }
+
+    #[test]
+    fn an_fstring_lexes_as_its_text_and_holes_in_order() {
+        use TokenKind::*;
+        assert_eq!(
+            kinds(r#"f"a{x}b""#),
+            [FStrStart, FStrText("a".into()), FStrHoleOpen, Ident("x".into()), FStrHoleClose, FStrText("b".into()), FStrEnd]
+        );
+        // A record's braces inside a hole are counted; the hole closes at depth zero.
+        assert_eq!(
+            kinds(r#"f"{P { x: 1 }}""#),
+            [
+                FStrStart,
+                FStrHoleOpen,
+                Ident("P".into()),
+                LBrace,
+                Ident("x".into()),
+                Colon,
+                Int(1),
+                RBrace,
+                FStrHoleClose,
+                FStrEnd
+            ]
+        );
+        // A string in a hole, and an f-string in that.
+        assert_eq!(
+            kinds(r#"f"{g("}")}{f"{n}"}""#),
+            [
+                FStrStart,
+                FStrHoleOpen,
+                Ident("g".into()),
+                LParen,
+                Str("}".into()),
+                RParen,
+                FStrHoleClose,
+                FStrHoleOpen,
+                FStrStart,
+                FStrHoleOpen,
+                Ident("n".into()),
+                FStrHoleClose,
+                FStrEnd,
+                FStrHoleClose,
+                FStrEnd
+            ]
+        );
+    }
+
+    /// Each token keeps its own place in the source, so a hole's refusal points into the hole.
+    #[test]
+    fn a_holes_tokens_keep_their_spans() {
+        let src = r#"f"ab{xy}c""#;
+        let (tokens, _) = lex(0, src);
+        let x = tokens.iter().find(|t| t.kind == TokenKind::Ident("xy".into())).expect("the hole's name");
+        assert_eq!(&src[x.span.start as usize..x.span.end as usize], "xy");
+        let text = tokens.iter().find(|t| t.kind == TokenKind::FStrText("c".into())).expect("the last text");
+        assert_eq!(&src[text.span.start as usize..text.span.end as usize], "c");
+    }
+
+    /// A newline ends a statement after an f-string, as after a string literal.
+    #[test]
+    fn a_newline_after_an_fstring_ends_the_statement() {
+        let (tokens, _) = lex(0, "f\"a\"\nx");
+        let ks: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert_eq!(ks[..4], [TokenKind::FStrStart, TokenKind::FStrText("a".into()), TokenKind::FStrEnd, TokenKind::Term]);
+    }
+
+    #[test]
+    fn a_float_exponent_without_a_fraction_names_its_spelling() {
+        for (src, spelled, value) in
+            [("1e300", "1.0e300", 1e300), ("2E-5", "2.0e-5", 2e-5), ("1_000e3", "1000.0e3", 1e6), ("7e+2", "7.0e+2", 700.0)]
+        {
+            let (tokens, diags) = lex(0, src);
+            assert_eq!(diags.len(), 1, "{src}: once, no cascade: {diags:?}");
+            assert_eq!(diags[0].code, "DL0104", "{src}");
+            assert!(diags[0].message.contains(&format!("`{spelled}`")), "{src}: {}", diags[0].message);
+            assert_eq!(tokens[0].kind, TokenKind::Float(value), "{src}: the token is the Float the spelling means");
+        }
+        // Not an exponent: a name after a number stays a name (`e` with no digit), and a method call stays one.
+        assert!(matches!(lex(0, "1.e").0[0].kind, TokenKind::Int(1)));
+        assert!(lex(0, "2.exp()").1.is_empty());
     }
 }

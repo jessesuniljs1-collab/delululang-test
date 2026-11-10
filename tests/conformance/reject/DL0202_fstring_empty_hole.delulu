@@ -1,0 +1,7 @@
+// RW 2.37 (D-V2-225): an empty hole interpolates nothing. The refusal says to write the expression, or `{{}}` for the
+// braces themselves.
+module conf
+
+fn f() -> Str {
+    f"a{}b"
+}

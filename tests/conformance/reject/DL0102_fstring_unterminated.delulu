@@ -1,0 +1,6 @@
+// RW 2.37 (D-V2-225): an f-string ends on its line, as a string literal does.
+module conf
+
+fn f() -> Str {
+    f"abc
+}

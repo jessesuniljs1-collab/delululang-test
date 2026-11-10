@@ -111,3 +111,76 @@ mod tests {
         }
     }
 }
+
+/// RW 2.37: the text of a `Float`, one rule for the formatter's literal and the runtime's `str`. It is the shortest
+/// digits that read back as `v` (Rust's `{:?}`), with an exponent below 1e-4 and from 1e16 up in magnitude — Python's
+/// `repr` thresholds — written as DeluluLang spells a Float literal, with a fraction before the exponent (`1.0e300`,
+/// `2.6881171418161356e43`), so the text a program prints is a literal that reads back as the same number. Before RW
+/// 2.37 the runtime printed every digit (`str(1.0e300)` was 301 of them) and the formatter had its own copy of this rule
+/// (FMT-FLOAT-EXP-1). A NaN is `NaN` and the infinities `inf` and `-inf`, as before.
+pub fn float_text(v: f64) -> String {
+    let s = format!("{v:?}");
+    if !v.is_finite() {
+        return s;
+    }
+    match s.split_once('e') {
+        Some((mant, exp)) if !mant.contains('.') => format!("{mant}.0e{exp}"),
+        Some(_) => s,
+        None if s.contains('.') => s,
+        None => format!("{s}.0"),
+    }
+}
+
+/// RW 2.37: `float_text`, the one text of a `Float`.
+#[cfg(test)]
+mod float_text_tests {
+    use super::*;
+
+    #[test]
+    fn the_exponent_starts_where_pythons_repr_starts_it() {
+        for (v, want) in [
+            (0.0001, "0.0001"),
+            (0.00009999, "9.999e-5"),
+            (1.0e16, "1.0e16"),
+            (9999999999999998.0, "9999999999999998.0"),
+            (123.0, "123.0"),
+            (2.5, "2.5"),
+            (-0.0, "-0.0"),
+            (-2.5e-10, "-2.5e-10"),
+            (1.0e300, "1.0e300"),
+            (5e-324, "5.0e-324"),
+            (f64::MAX, "1.7976931348623157e308"),
+            (f64::NAN, "NaN"),
+            (f64::INFINITY, "inf"),
+            (f64::NEG_INFINITY, "-inf"),
+        ] {
+            assert_eq!(float_text(v), want, "{v:e}");
+        }
+    }
+
+    /// Every finite `Float` prints as a literal that reads back as itself, through the rule the lexer and `parse_float`
+    /// share — over generated bit patterns, every exponent and sign, not a hand-picked list.
+    #[test]
+    fn every_finite_float_prints_as_a_literal_that_reads_back_as_itself() {
+        let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut checked = 0;
+        for _ in 0..200_000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let v = f64::from_bits(seed);
+            if !v.is_finite() {
+                continue;
+            }
+            let text = float_text(v);
+            assert!(text.contains('.'), "{text}: a Float literal has a fraction");
+            // Subnormals included: the shared rule keeps them (`FloatText::Value`).
+            match float_from_text(&text) {
+                FloatText::Value(back) => assert_eq!(back.to_bits(), v.to_bits(), "{text}"),
+                other => panic!("{text} read back as {other:?}"),
+            }
+            checked += 1;
+        }
+        assert!(checked > 190_000, "the generator must give finite floats ({checked})");
+    }
+}

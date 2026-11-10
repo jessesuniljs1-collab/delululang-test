@@ -2851,6 +2851,76 @@ file = "crates/delulu-check/src/prim_table.rs"
 test = "arity_column_matches_the_checker_gate"
 kind = "negative"
 
+# RW 2.37 (D-V2-225): the rejecting witnesses of the new `Str` methods and `Float.to_fixed`.
+# `arity_column_matches_the_checker_gate` calls each with one argument more than its arity and asserts the gate's own
+# DL0403, and with exactly its arity and asserts the gate does not fire. The accepting witness of every one is
+# `tests/conformance/accept/33_strings.delulu`.
+[[witness]]
+anchor = "ref.prim.str.ends_with"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.is_empty"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.trim_start"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.trim_end"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.find"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.rfind"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.count"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.repeat"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.pad_left"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.pad_right"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.float.to_fixed"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "arity_column_matches_the_checker_gate"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.list.len"
 file = "crates/delulu-check/src/prim_table.rs"

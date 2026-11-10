@@ -1,0 +1,10 @@
+// engines: interp wasm
+// RW 2.37 (D-V2-220's program step): the one-liner — a boxed title, its width counted in characters, built with an
+// f-string, `repeat`, `pad_right` and `to_upper`.
+module banner
+
+fn main(root: Root) ! {Write} {
+    root.console().println(
+        f"+{"-".repeat(14)}+\n| {"délulu".to_upper().pad_right(12, " ")} |\n+{"-".repeat(14)}+",
+    )
+}

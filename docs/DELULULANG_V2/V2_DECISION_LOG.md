@@ -6571,3 +6571,89 @@ before are unchanged, and so are the WASM bytes of a module with no range, `step
 mutants M1220–M1245 (25, all red); the full suite; the witness runs on macOS and Windows; the programs `squares`,
 `calendar` (checked against Python's `calendar`) and `numbers` (367 lines, every basic so far, checked against an
 independent Python implementation), on both engines.
+
+## D-V2-225 — RW 2.37: strings — `f"…{expr}…"` is an f-string whose every hole is `str(hole)`; `s[i]` is a character; the everyday `Str` methods and `Float.to_fixed`; `str` of a `Float` is its literal's text; with RW 2.48 — TAKEN (head chef, 2026-11-10, under the owner's delegation)
+
+**Context.** The fifth basic in D-V2-220's order. RW 2.37, measured 2026-11-02: `"hello {name}"` printed its braces,
+`s[0]` was DL0405, and there was no `find`, `ends_with`, `repeat`, padding or number formatting. RW 2.38's programs added
+that `str` of a large or tiny `Float` printed every digit (`str(100.0.exp())` 44 of them, `str(1.0e300)` 301), and RW
+2.36's that a list's text does not quote its strings. Probed again by on-demand routine run 24 before building, on
+`58f9d6b5`: each of the nine forms refused on both engines (`f"…"` DL0201, `s[1]` DL0405, `find`, `ends_with`,
+`repeat`, `pad_left`, `trim_start`, `to_fixed` DL0405), and `1e300` DL0201 *expected `)`, found identifier `e300`* (RW
+2.48).
+
+**Decision.**
+1. **The spelling is Python's f-string, `f"…"`, because it is the one that changes no program.** A plain string keeps
+   its meaning: `"{x}"` is literal text, as before. Measured: no `.delulu` file in the repository holds `f"` at a
+   token's start, and `f` directly before a string literal parsed as nothing (an identifier then a string), so every
+   program that checked means the same. `"${x}"` (Kotlin, JavaScript) and bare `"{x}"` (Rust's `format!`) would each
+   have changed every string holding the character. `f` begins an f-string only at a token's start (`buf"x"` is a name
+   and a string, as before), and before any morph's alias (a compact morph's `f` for `fn` never preceded a string in a
+   program that parsed).
+2. **A hole is `str(hole)`, and an f-string is a binary operator, `BinOp::Interp`.** The parser folds `f"a{x}b"` into
+   `Interp(Interp("a", x), "b")`: its text in `Str` literals, each hole an operand. So every walk of an expression — the
+   checker's effects, `authority` and `--within`, the Atlas, the reference-capability pass, DIR — sees a hole's code
+   without knowing f-strings exist (D-V2-224's reason for `..`). The checker types a hole as `str` types its argument:
+   a value holding a secret, a capability or `Root` has no text (DL0604, R-5) whichever way the conversion is spelled.
+   The interpreter evaluates a step as `Str + x` already did (the left side, then `x`'s display); the WASM engine
+   lowers a hole through the one function `str(x)` now compiles through (`compile_str_of`). One f-string has one shape:
+   a hole that is a plain string literal is text, adjacent text joins, and an f-string with no hole left is the `Str`
+   literal it spells — so the formatter, which prints the chain back as the f-string (text braces doubled, each hole
+   flat on its line), round-trips.
+3. **A hole holds one expression, and the f-string ends on its line.** A hole is lexed as code with its braces counted,
+   so it may hold strings, records, calls, blocks and other f-strings. Python's format spec, conversion and `=`
+   (`{x:.2f}`, `{x!r}`, `{x=}`) are DL0201 naming the methods that do each (`{x.to_fixed(2)}`, `{s.pad_left(8, " ")}`),
+   never a mini-language guessed at; `{}` is DL0202; a lone `}` is DL0101 (*write `}}`*); a line that ends inside an
+   f-string or its hole is DL0102, once. No new code.
+4. **`s[i]` is the `i`th character**, a one-character `Str` (a Unicode scalar value, counted as `len` and `slice` count),
+   DL0903 past either end in a list index's words. A string does not change in place: `s[i] = …` is DL0405 saying so
+   (the reference-capability pass no longer adds a second refusal about a list's element).
+5. **The everyday table, every position a character's:** `ends_with`, `is_empty`, `trim_start`, `trim_end`, `find` and
+   `rfind` (`Option[Int]`, Python's `find`/`rfind` with `None` for -1; the empty `sub` at 0 and at `len`), `count`
+   (Python's, non-overlapping; the empty `sub` `len + 1` times), `repeat(n)` (DL0908 for a negative `n`), `pad_left(width,
+   fill)` and `pad_right` (the fill exactly one character, else DL0908; a text already that wide unchanged — JavaScript's
+   `padStart`/`padEnd` with Python's `rjust`/`ljust` answers). A `repeat` or a pad that would build more than 2^28 bytes
+   is DL0908 before anything is allocated (`prim::STR_BUILD_MAX`, as a range's list is bounded by D-V2-224), never an
+   abort. **`Float.to_fixed(digits)`**, 0 to 100 digits (JavaScript's range, DL0908 past it), rounds to the nearest with a
+   tie to even on the value's exact binary expansion — the digits Python's `f"{x:.2f}"` prints (`2.675` is `2.67`).
+   `PRIM_TABLE` 126 → 137, `PRIM_TABLE_VERSION` 11 → 12, additive by its own rule.
+6. **`str` of a `Float` is the formatter's literal text, one function** (`delulu_syntax::num::float_text`): the shortest
+   digits that read back as the value, the same as before from 1e-4 up to 1e16 in magnitude, and outside that an
+   exponent at Python's `repr` thresholds, spelled as a DeluluLang literal is (`1.0e300`, `6.123233995736766e-17`), so
+   every printed `Float` reads back as itself through the rule the lexer and `parse_float` share (generated over 200,000
+   bit patterns). The formatter's own copy of the rule (FMT-FLOAT-EXP-1) is that function now.
+7. **RW 2.48: `1e300` is one malformed literal**, DL0104 *"a Float literal needs a fraction before its exponent: write
+   `1.0e300`"*, its token the `Float` that spelling means so nothing after it cascades. Accepting `1e300` as a literal
+   would be a grammar change and is not taken: the refusal teaches the one spelling, as `{x:.2f}`'s does.
+8. **Both engines run one implementation.** Every new method runs host-side in the WASM engine through the interpreter's
+   own `call_str_method` and `float_to_fixed` (`delulu:str.str_method` for the `Str` answers and `s[i]`,
+   `delulu:str.str_find` for `find`/`rfind`/`count`, `delulu:math.float_to_fixed`), each argument rebuilt in the method's
+   own order (`pad_left` takes an `Int` before a `Str`), and a fault is recorded in the interpreter's words and traps, so
+   the guest never runs past it. The new imports follow every older one and are decided from the syntax; a module
+   without this surface is byte-identical. A module compiled without the checker's types (a Verified plugin's DIR)
+   carries the string interface whenever it indexes anything, since it cannot tell a `Str`'s index from a list's.
+9. **A `match` on a `Str`, an `Int` or a `Bool` compiles on WASM**, each arm tried in order as the interpreter tries
+   them (`compile_match_ordered`, a `Str` literal by `__str_eq`). It was DL1201 (*"`match` on the non-variant type"*) and
+   recorded nowhere; this basic's `wrap.delulu` (`match how { "left" => … }`) found it. No module with a top-level
+   literal arm compiled before, so none that did changes.
+10. **What is not decided here.** A list's text still shows its strings unquoted (`str(["a, b"])` and `str(["a", "b"])`
+    print the same): it is Java's and Kotlin's `toString`, a program's printed answers depend on it, and JSON (RW 2.41)
+    is the unambiguous text — kept, and recorded under RW 2.41. RW 2.49 (a line beginning with an operator inside
+    parentheses) is a grammar change and stays open.
+
+**Classification.** Additive (`STABILITY.md` §1) for the syntax (`f"…"` and `s[i]` parsed or typed to nothing before),
+the new primitives, the refusals' words (`1e300`'s code is DL0104 where it was DL0201) and WASM's scalar `match`.
+**An answer moves, deliberately:** `str` of a `Float` at or past 1e16 or below 1e-4 in magnitude (non-zero) prints its
+exponent form — same value, a different text (`26881171418161356094253400435962903554686976.0` is
+`2.6881171418161356e43`, `0.000001` is `1.0e-6`). Measured: of the repository's programs one prints such a value,
+`crates/delulu/tests/programs/math_table.delulu` (five lines of its `.out`), and no conformance or snapshot answer moves.
+A program that compared such a text with a fixed string sees the new one.
+
+**What does not move.** `tests/core-invariance/SNAPSHOT.txt`: 9 NEW cases (`33_strings.delulu` and the eight new
+rejects), 517 lines added, none removed or changed. The DIR's bytes for a program that checked before are unchanged, and
+so are the WASM bytes of a module with none of this surface.
+
+**Evidence.** In `V2_LOG.md`'s entry for on-demand routine run 24: the probes above, red before the fix; the tests; the
+mutants; the full suite; the witness runs on macOS and Windows; the programs `banner` (one line), `wrap` (an everyday
+utility, checked against Python's `textwrap` and an independent implementation) and `logreport` (346 lines, every basic
+so far, checked line for line against an independent Python implementation), on both engines.

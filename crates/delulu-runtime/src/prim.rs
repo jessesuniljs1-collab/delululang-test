@@ -1058,8 +1058,116 @@ pub fn call_str_method(s: &str, method: &str, args: &[Value], span: Span) -> Res
         // DEFINED as `split("")`, and `chars_agrees_with_split_on_the_empty_separator` pins it, so
         // the second spelling of one operation cannot drift from the first.
         "chars" => call_str_method(s, "split", &[Value::str(String::new())], span),
+        // RW 2.37 (D-V2-225): the rest of an everyday string's table. Every position is a CHARACTER's (a Unicode scalar
+        // value's), as `len`, `slice` and `s[i]` count — never a byte offset.
+        "ends_with" => Ok(Value::Bool(s.ends_with(&str_arg(args, 0, span)?))),
+        "is_empty" => Ok(Value::Bool(s.is_empty())),
+        "trim_start" => Ok(Value::str(s.trim_start().to_string())),
+        "trim_end" => Ok(Value::str(s.trim_end().to_string())),
+        // The first (`find`) or last (`rfind`) place `sub` begins, as Python's `find` and `rfind` answer — `None` where
+        // it does not occur. The empty `sub` occurs everywhere: at 0 for `find`, at `len` for `rfind`.
+        "find" | "rfind" => {
+            let sub = str_arg(args, 0, span)?;
+            let at = if method == "find" { s.find(&sub) } else { s.rfind(&sub) };
+            Ok(match at {
+                Some(byte) => Value::variant("Some", vec![Value::Int(s[..byte].chars().count() as i64)]),
+                None => Value::variant("None", vec![]),
+            })
+        }
+        // How many times `sub` occurs, without overlapping, as Python's `count`: the empty `sub` occurs `len + 1` times.
+        "count" => {
+            let sub = str_arg(args, 0, span)?;
+            Ok(Value::Int(if sub.is_empty() { s.chars().count() as i64 + 1 } else { s.matches(&sub).count() as i64 }))
+        }
+        "repeat" => {
+            let n = int_arg(args, 0, span)?;
+            if n < 0 {
+                return Err(Fault::at("DL0908", format!("`repeat` takes a count of 0 or more, and this is {n}"), span));
+            }
+            let bytes = (s.len() as u128) * (n as u128);
+            let mut out = new_str_of(bytes, "repeat", span)?;
+            for _ in 0..n {
+                out.push_str(s);
+            }
+            Ok(Value::str(out))
+        }
+        // `pad_left(width, fill)` puts copies of the one-character `fill` on the left until the text is `width`
+        // characters (it right-aligns, as JavaScript's `padStart`); `pad_right` on the right. A text already that wide
+        // is unchanged.
+        "pad_left" | "pad_right" => {
+            let width = int_arg(args, 0, span)?;
+            let fill = str_arg(args, 1, span)?;
+            let mut fills = fill.chars();
+            let (Some(f), None) = (fills.next(), fills.next()) else {
+                return Err(Fault::at(
+                    "DL0908",
+                    format!("`{method}` pads with one character, and its fill `{fill}` has {}", fill.chars().count()),
+                    span,
+                ));
+            };
+            let have = s.chars().count() as i128;
+            let add = (i128::from(width) - have).max(0) as u128;
+            let mut out = new_str_of(s.len() as u128 + add * f.len_utf8() as u128, method, span)?;
+            if method == "pad_right" {
+                out.push_str(s);
+            }
+            for _ in 0..add {
+                out.push(f);
+            }
+            if method == "pad_left" {
+                out.push_str(s);
+            }
+            Ok(Value::str(out))
+        }
+        // `s[i]`, the indexing the checker types as `Str`: no program can spell this name as a method.
+        "[]" => str_index(s, int_arg(args, 0, span)?, span),
         _ => Err(Fault::at("DL0907", format!("unknown Str method `{method}`"), span)),
     }
+}
+
+/// RW 2.37: the most bytes a string `repeat` or a pad builds may hold, on both engines — 2^28, 256 MiB, as a range's
+/// list holds 2^28 values. Past it the call is DL0908 before anything is allocated, never an abort: `"ab".repeat(10^12)`
+/// would ask for 2 TB.
+pub const STR_BUILD_MAX: u128 = 1 << 28;
+
+/// An empty string with room for `bytes`, or DL0908 — past [`STR_BUILD_MAX`], or memory the process could not have.
+fn new_str_of(bytes: u128, method: &str, span: Span) -> Result<String, Fault> {
+    let too_big = || {
+        Fault::at(
+            "DL0908",
+            format!("`{method}` would build a string of {bytes} bytes, more than one holds ({STR_BUILD_MAX})"),
+            span,
+        )
+    };
+    if bytes > STR_BUILD_MAX {
+        return Err(too_big());
+    }
+    let mut out = String::new();
+    out.try_reserve_exact(bytes as usize).map_err(|_| too_big())?;
+    Ok(out)
+}
+
+/// RW 2.37: `s[i]`, the character at `i` as a one-character `Str` — a Unicode scalar value, counted as `len` and `slice`
+/// count — or DL0903 past either end, in the words a list's index uses.
+pub fn str_index(s: &str, n: i64, span: Span) -> Result<Value, Fault> {
+    let at = usize::try_from(n).ok().and_then(|i| s.chars().nth(i));
+    match at {
+        Some(c) => Ok(Value::str(c.to_string())),
+        None => Err(Fault::at("DL0903", format!("index {n} out of bounds (len {})", s.chars().count()), span)),
+    }
+}
+
+/// RW 2.37: `x.to_fixed(digits)`, `x` written with exactly `digits` digits after the point, rounded to the nearest
+/// (a tie to even, on `x`'s exact binary value — Python's `f"{x:.2f}"` and JavaScript's `toFixed` print the same digits).
+/// A NaN and the infinities print as `str` prints them. `digits` runs 0 to 100, JavaScript's own range; past it, DL0908.
+pub fn float_to_fixed(x: f64, digits: i64, span: Span) -> Result<String, Fault> {
+    if !(0..=100).contains(&digits) {
+        return Err(Fault::at("DL0908", format!("`to_fixed` takes 0 to 100 digits, and this is {digits}"), span));
+    }
+    if !x.is_finite() {
+        return Ok(Value::Float(x).display());
+    }
+    Ok(format!("{x:.prec$}", prec = digits as usize))
 }
 
 /// The `Int` methods (RW 2.38, D-V2-223): pure, no effect row, on both engines — the WASM engine runs this same function
@@ -1180,6 +1288,8 @@ pub fn call_float_method(x: f64, method: &str, args: &[Value], span: Span) -> Re
             Some(n) => Value::variant("Some", vec![Value::Int(n)]),
             None => Value::variant("None", vec![]),
         }),
+        // RW 2.37: the number formatting a report needs, `3.14159.to_fixed(2)` is `"3.14"`.
+        "to_fixed" => Ok(Value::str(float_to_fixed(x, int_arg(args, 0, span)?, span)?)),
         _ => Err(Fault::at("DL0907", format!("unknown Float method `{method}`"), span)),
     }
 }

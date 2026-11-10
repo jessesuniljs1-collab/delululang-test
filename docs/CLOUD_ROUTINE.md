@@ -313,8 +313,8 @@ another OS, and then takes about seven minutes itself (run 5).
         and fix it"*):
         - in this order: ~~compound assignment (RW 2.34)~~ — done (on-demand routine run 21, D-V2-221); ~~RW 2.46~~ —
           done (the laptop, 2026-11-08, D-V2-222); ~~math and the checked forms (2.38)~~ — done (on-demand routine run 22,
-          D-V2-223); ~~ranges (2.36)~~ — done (on-demand routine run 23, D-V2-224); strings
-          (2.37); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
+          D-V2-223); ~~ranges (2.36)~~ — done (on-demand routine run 23, D-V2-224); ~~strings (2.37)~~ — done
+          (on-demand routine run 24, D-V2-225); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
           comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
           and RW 3.24;
         - built as surface syntax and prelude over the core, so the core's answers do not move and no RFC period
@@ -578,7 +578,11 @@ reaches first, never the guard whose absence loops. **A test that holds a gap re
 (run 23): `conformance_parity` listed `len(range(0, 5))` among the programs WASM must refuse, and the first full suite
 went red on it alone. Before the suite, grep the tests for the construct a basic adds (its name, `DL1201`, a compile's
 `is_err()`) and move each such case to a gap that remains.
-**Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
+**A witness of one trigger holds the other triggers off** (on-demand run 24): a feature decided by several causes (an
+import taken for a method's name OR for an index) needs one witness per cause with no other cause in it — M1273 survived
+a witness that held both. **Write a program's long data as a list bound to a `let`** (run 24, RW 6.86): the formatter
+breaks a list that is a value one item a line, but joins a long `+` chain onto one line and leaves a long method receiver
+whole. **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
 — the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and
 commit (on-demand run 1 merged `master` into `launch/2.0.0` in one, with its own `CARGO_TARGET_DIR`): its `.git` is a

@@ -852,7 +852,7 @@ overstate it downstream:
 - **Foreign code is outside the proof.** `ForeignCall` is a hole, enumerated in the report.
 - **The collection surface, and what it refuses.** As of 2026-09-20 (V2 phase P3) `List` has fifteen
   methods (`len`, `is_empty`, `get`, `push`, `pop`, `map`, `filter`, `find`, `fold`, `sort`,
-  `reverse`, `concat`, `slice`, `contains`, `join`), `Str` has ten, and `Map[K, V]` exists
+  `reverse`, `concat`, `slice`, `contains`, `join`), `Str` has ten (twenty since 2026-11-10, *Strings* below), and `Map[K, V]` exists
   (`Map()` constructs one; `len`, `is_empty`, `get`, `contains_key`, `insert`, `remove`, `keys`,
   `values`). There is no `Set`. Four things a generator needs to know:
   - **`fold`'s callback is argument 1** — `xs.fold(init, fn(acc, x) { … })`. Every higher-order one
@@ -874,6 +874,18 @@ overstate it downstream:
     `xs == 0..3`) and does not chain (`a..b..c` is DL0201). There is no three-argument `range` (DL0403 names
     `(lo..hi).step_by(k)`); count down with `(lo..hi).reverse()`; `for _ in 0..n` repeats a body. `...` is DL0101. Every
     free builtin takes exactly its arguments (`str(1, 2)` is DL0403; `len` reads a `Str`, a `List` or a `Map`).
+  - **Strings** (RW 2.37, D-V2-225): `f"…{expr}…"` interpolates, each hole `str(expr)` — the checker refuses a
+    secret, a capability or `Root` in a hole as `str` does (DL0604), and an effect or capability used in a hole is in
+    the function's row and in `authority` like any other call. `{{` and `}}` are braces; a plain string is never
+    interpolated. A hole is one expression: `{x:.2f}`, `{x!r}` and `{x=}` are DL0201 naming `x.to_fixed(2)` and
+    `s.pad_left(8, " ")`; `{}` is DL0202; a lone `}` is DL0101; an f-string ends on its line (DL0102). `s[i]` is a
+    one-character `Str` (DL0903 past either end, the list's words); `s[i] = …` is DL0405. Positions are characters:
+    `find`/`rfind` → `Option[Int]`, `count`, `ends_with`, `repeat(n)`, `pad_left(width, fill)` / `pad_right` (one-character
+    fill), `trim_start`, `trim_end`, `is_empty`; `Float.to_fixed(digits)` (0–100 digits), ties to even on the exact value as
+    Python's `:.Nf`. A `repeat` or pad past 2^28 bytes is DL0908 before anything is allocated. `str(Float)` uses an
+    exponent outside 1e-4..1e16, spelled as a literal (`1.0e300`, `6.123233995736766e-17`); `1e300` is DL0104 with that
+    spelling. All pure, the same answers and faults on both engines (the WASM engine calls the interpreter's own
+    functions). A `match` on a `Str`, an `Int` or a `Bool` with literal arms compiles on WASM too.
   - **Math is written as methods** (RW 2.38, D-V2-223), so a program's own `fn abs` or `fn max` keeps its meaning.
     `Int`: `abs`, `min`, `max`, `clamp(lo, hi)`, `pow(e)`, and the checked forms `checked_add`, `checked_sub`,
     `checked_mul`, `checked_div`, `checked_rem`. `Float`: `abs`, `min`, `max`, `clamp`, `sqrt`, `floor`, `ceil`,

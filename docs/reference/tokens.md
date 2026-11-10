@@ -14,6 +14,11 @@ be added, renamed or removed without this chapter changing with it.
 | `Int` | *(literal)* | integer `0` |
 | `Float` | *(literal)* | float `0` |
 | `Str` | *(literal)* | string literal |
+| `FStrStart` | `f"` | an f-string |
+| `FStrText` | *(literal)* | an f-string's text |
+| `FStrHoleOpen` | `{` | `{` (an f-string's hole) |
+| `FStrHoleClose` | `}` | `}` (the end of an f-string's hole) |
+| `FStrEnd` | `"` | the end of an f-string |
 | `KwFn` | `fn` | `fn` |
 | `KwLet` | `let` | `let` |
 | `KwVar` | `var` | `var` |

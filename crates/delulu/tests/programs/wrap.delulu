@@ -1,0 +1,102 @@
+// engines: interp wasm
+// RW 2.37 (D-V2-220's program step): the everyday utility — `fmt`-style text wrapping. A paragraph is cut into words,
+// laid greedily into lines of at most `width` characters (Python's `textwrap.wrap` for words that fit), then each line
+// is set left, right, centred or justified with `pad_left`, `pad_right` and `repeat`. Widths are counted in
+// characters, so `é` counts once. Every answer is checked against an independent Python implementation.
+module wrap
+
+// The words of `text`: its runs of characters between spaces, the empty runs dropped.
+fn words_of(text: Str) -> List[Str] {
+    text.split(" ").filter(fn(w: Str) -> Bool { !w.is_empty() })
+}
+
+// Greedy lines: each takes words while the next fits with one space before it.
+fn lines_of(words: List[Str], width: Int) -> List[Str] {
+    let out: ref List[Str] = []
+    var line = ""
+    for w in words {
+        if line.is_empty() {
+            line = w
+        } else if len(line) + 1 + len(w) <= width {
+            line += f" {w}"
+        } else {
+            out.push(line)
+            line = w
+        }
+    }
+    if !line.is_empty() { out.push(line) }
+    out
+}
+
+fn centred(line: Str, width: Int) -> Str {
+    let room = width - len(line)
+    let left = room / 2
+    (" ".repeat(left) + line).pad_right(width, " ")
+}
+
+// Justified: the line's gaps widened to fill `width`, the first gaps one wider when the room does not divide.
+fn justified(line: Str, width: Int) -> Str {
+    let ws = words_of(line)
+    let gaps = len(ws) - 1
+    if gaps < 1 {
+        return line.pad_right(width, " ")
+    }
+    var letters = 0
+    for w in ws {
+        letters += len(w)
+    }
+    let spaces = width - letters
+    let each = spaces / gaps
+    let extra = spaces % gaps
+    var out = ""
+    for i in 0..len(ws) {
+        out += ws[i]
+        if i < gaps {
+            out += " ".repeat(each + (if i < extra { 1 } else { 0 }))
+        }
+    }
+    out
+}
+
+fn set(lines: List[Str], width: Int, how: Str, c: Cap[Console]) ! {Write} {
+    c.println(f"-- {how}, width {width} --")
+    let last = len(lines) - 1
+    for i in 0..len(lines) {
+        let line = lines[i]
+        let shown = match how {
+            "left" => line.pad_right(width, " ")
+            "right" => line.pad_left(width, " ")
+            "centre" => centred(line, width)
+            _ => if i == last { line.pad_right(width, " ") } else { justified(line, width) }
+        }
+        c.println(f"|{shown}|")
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    let parts = [
+        "DeluluLang is a statically typed language in which   a program can do nothing except what it was ",
+        "explicitly handed. Effects are in the type, capabilities are values, and authority is computed from the ",
+        "code — même les accents comptent une fois.",
+    ]
+    let text = parts.join("")
+    let words = words_of(text)
+    c.println(f"{len(words)} words, {len(text)} characters, the longest {longest(words)}")
+    for width in [28, 41] {
+        let lines = lines_of(words, width)
+        for how in ["left", "right", "centre", "justify"] {
+            set(lines, width, how, c)
+        }
+    }
+}
+
+fn longest(words: List[Str]) -> Str {
+    var best = ""
+    for w in words {
+        if len(w) > len(best) {
+            best = w
+        }
+    }
+    f"\"{best}\" ({len(best)})"
+}

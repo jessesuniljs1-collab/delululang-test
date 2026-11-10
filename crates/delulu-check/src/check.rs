@@ -1781,6 +1781,20 @@ impl<'a> Checker<'a> {
                 self.expect_type(&Type::Int, &it, idx.span(), "index must be Int");
                 let elem = match self.cx.apply_type(&bt) {
                     Type::List(inner) => *inner,
+                    // RW 2.37: a `Str` is read by index and never written through one — a string does not change in place.
+                    Type::Str => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0405",
+                                "a `Str` cannot be changed in place: `s[i]` reads a character, and no index writes one",
+                            )
+                            .with_span(
+                                base.span(),
+                                "build a new string instead, e.g. `s.slice(0, i) + \"x\" + s.slice(i + 1, len(s))`",
+                            ),
+                        );
+                        self.cx.fresh_type()
+                    }
                     other => {
                         if !self.is_poisoned(&other) {
                             self.diags.push(
@@ -1844,6 +1858,8 @@ impl<'a> Checker<'a> {
                 self.expect_type(&Type::Int, &it, index.span(), "index must be Int");
                 let out = match self.cx.apply_type(&rt) {
                     Type::List(inner) => *inner,
+                    // RW 2.37: `s[i]` is the `i`th character of `s`, a one-character `Str` (DL0903 past either end).
+                    Type::Str => Type::Str,
                     other => {
                         self.diags.push(
                             Diagnostic::error("DL0405", format!("cannot index a value of type `{}`", self.ty(&other)))
@@ -3081,6 +3097,31 @@ impl<'a> Checker<'a> {
                 // `chars_agrees_with_split_on_the_empty_separator` holds the two together so the
                 // second spelling cannot drift from the first.
                 "chars" => Some((Type::List(Box::new(Type::Str)), None, None)),
+                // RW 2.37 (D-V2-225): pure, every position a character's. `prim.rs`'s `call_str_method` says what each
+                // answers and where it faults (`repeat` of a negative count, a fill of other than one character).
+                "ends_with" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::Bool, None, None))
+                }
+                "is_empty" => Some((Type::Bool, None, None)),
+                "trim_start" | "trim_end" => Some((Type::Str, None, None)),
+                "find" | "rfind" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::Option(Box::new(Type::Int)), None, None))
+                }
+                "count" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::Int, None, None))
+                }
+                "repeat" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Str, None, None))
+                }
+                "pad_left" | "pad_right" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    self.expect_arg(args, 1, &Type::Str, span);
+                    Some((Type::Str, None, None))
+                }
                 _ => None,
             },
             // RW 2.38 (D-V2-223): the math methods, pure (no effect row). Methods rather than free functions, because a
@@ -3119,6 +3160,11 @@ impl<'a> Checker<'a> {
                 "is_nan" | "is_finite" => Some((Type::Bool, None, None)),
                 // The checked conversion: `None` for a NaN, an infinity or a value past `Int`'s range.
                 "to_int" => Some((Type::Option(Box::new(Type::Int)), None, None)),
+                // RW 2.37: `x.to_fixed(digits)`, the text with exactly `digits` decimals (0 to 100, DL0908 past them).
+                "to_fixed" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Str, None, None))
+                }
                 _ => None,
             },
             Type::Map(kt, vt) => {
@@ -3595,6 +3641,18 @@ impl<'a> Checker<'a> {
                 self.range_bound(&lt, lhs.span(), form);
                 self.range_bound(&rt, rhs.span(), form);
                 Type::List(Box::new(Type::Int))
+            }
+            // RW 2.37: one step of an f-string. Its left side is the text so far; its hole is checked as `str(hole)` is —
+            // a value holding a secret, a capability or `Root` has no text (DL0604, R-5), whatever spells the conversion.
+            Interp => {
+                self.expect_type(&Type::Str, &lt, lhs.span(), "an f-string's text is a `Str`");
+                if self.is_opaque(&rt, &mut HashSet::new()) {
+                    self.diags.push(
+                        Diagnostic::error("DL0604", format!("value of type `{}` cannot be stringified", self.ty(&rt)))
+                            .with_span(rhs.span(), "an f-string hole: opaque type (Secret/Cap/Root or a value containing one)"),
+                    );
+                }
+                Type::Str
             }
         };
         (out, acc)

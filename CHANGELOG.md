@@ -11,6 +11,29 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — strings, 2026-11-10
+
+- **Added (RW 2.37, D-V2-225):** strings, on both engines.
+  - `f"hello {name}, {n + 1} items"` is an f-string: each `{…}` hole is any expression, turned into text as `str(…)`
+    turns it (a secret, a capability or `Root` in a hole is DL0604, as in `str`), and `{{`/`}}` write a brace. A plain
+    string is never interpolated, so every existing program means the same. An effect or a capability used in a hole is
+    in its function's row and in `delulu authority` like any other call. `delulu fmt` keeps an f-string as written.
+  - `s[i]` is the `i`th character, a one-character `Str` (DL0903 past either end).
+  - `Str`: `find` and `rfind` (`Option[Int]`), `count`, `ends_with`, `repeat(n)`, `pad_left(width, fill)`,
+    `pad_right(width, fill)`, `trim_start`, `trim_end` and `is_empty` — every position a character's, not a byte's.
+  - `Float.to_fixed(digits)`: `3.14159.to_fixed(2)` is `"3.14"`, rounded as Python's `f"{x:.2f}"`.
+  - On `--engine wasm`, a `match` on a `Str`, an `Int` or a `Bool` with literal arms compiles (it was DL1201).
+- **Changed — an answer moves (`STABILITY.md` §1):** `str` of a `Float` of magnitude 1e16 or more, or below 1e-4 (not
+  zero), prints with an exponent, as its literal is spelled: `str(100.0.exp())` is `2.6881171418161356e43` (it printed
+  all 44 digits), `str(1.0e-6)` is `1.0e-6` (it was `0.000001`). Every other `Float` prints as before, and every printed
+  `Float` reads back as the same number.
+- **Refusals that say how it is written:** Python's `{x:.2f}`, `{x!r}` and `{x=}` in a hole are DL0201 naming
+  `{x.to_fixed(2)}` and `{s.pad_left(8, " ")}`; `{}` is DL0202; a lone `}` in an f-string is DL0101; `s[i] = …` is
+  DL0405, once (a string does not change in place). RW 2.48: `1e300` is DL0104 *"a Float literal needs a fraction
+  before its exponent: write `1.0e300`"*, once — it was DL0201 about a missing `)` and DL0301 about a name `e300`.
+- A `repeat` or a pad that would build more than 2^28 bytes is DL0908 before anything is allocated; `to_fixed` takes 0
+  to 100 digits (DL0908 past that); a pad's fill is one character (DL0908 otherwise).
+
 ## Unreleased — ranges, 2026-11-10
 
 - **Added (RW 2.36, D-V2-224):** ranges, on both engines.

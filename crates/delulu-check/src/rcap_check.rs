@@ -793,6 +793,11 @@ impl<'a> Pass<'a> {
             }
             LValue::Index(base, _) => {
                 let (recv_k, recv_ty) = self.resolve_lvalue(base);
+                // RW 2.37: a `Str` written through an index is refused by the type checker (DL0405), which says a string
+                // does not change in place; a second refusal about a list's element would be about nothing there is.
+                if matches!(recv_ty, Some(Type::Str)) {
+                    return;
+                }
                 let lift = self.lift_of_lvalue(base);
                 // "list element", as a `push` or a `pop` names it: an index assigns into a list alone (RW 6.41: it was
                 // "element", and the sentence read "cannot write a element").

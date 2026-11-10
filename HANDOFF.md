@@ -931,6 +931,14 @@ wins, and you should update the memory to match.
   - **A basic's programs find the engine's gaps, not only the basic's** (run 23). The calendar's first line on WASM was
     `c.print(…)`, DL1201 since the WASM engine was built; the free `len(x)` and `push(xs, v)` were the same, and `for _
     in 0..n` did not parse on either engine. Run every program on both engines before writing a test that assumes one.
+  - **A witness of one trigger must hold the other triggers off** (on-demand routine run 24, RW 2.37). The WASM engine
+    takes its string interface for a `Str` method by name, or for `s[i]`. The untyped-compile witness used both, so the
+    mutant that removed the index trigger survived (M1273): the method brought the import in anyway. A decision with
+    several causes needs one witness per cause, each with no other cause present. A mutant that changes only a span
+    (M1250) is the same question about the witness: assert the span.
+  - **Measure an answer that moves on the repository's own outputs first** (run 24). `str` of a `Float` past 1e16 or below
+    1e-4 now prints an exponent. Before deciding, every program's expected output and the core snapshot were checked:
+    one file moved, `math_table.out`, five lines, and nothing in the snapshot. Record the measure in the decision.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

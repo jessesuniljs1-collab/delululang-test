@@ -65,8 +65,13 @@ Source is UTF-8. Identifiers are ASCII in v0.1 (revisit post-1.0).
 IDENT     = [A-Za-z_][A-Za-z0-9_]*        (minus keywords)
 INT       = [0-9][0-9_]* | 0x[0-9a-fA-F_]+
 FLOAT     = [0-9][0-9_]* "." [0-9][0-9_]* ( ("e"|"E") ("+"|"-")? [0-9]+ )?
+            (RW 2.48: an INT followed at once by an exponent, `1e300`, is one malformed literal — DL0104,
+             naming `1.0e300` — never INT then IDENT)
 STRING    = '"' ( char | escape )* '"'
             escape = \n \t \r \\ \" \0 \u{1-6 hex}
+FSTRING   = 'f"' ( char | escape | "{{" | "}}" | "{" hole "}" )* '"'      (RW 2.37, D-V2-225)
+            hole = the tokens of one expr, lexed as code, its braces counted; on one line (DL0102)
+            a lone "}" in the text is DL0101; "f" begins an FSTRING only at a token's start
 COMMENT   = "//" to end of line | "/*" ... "*/" (nesting allowed) | "///" doc comment (attached)
 ```
 
@@ -215,7 +220,10 @@ field_access  = "." , IDENT ;
 index         = "[" , expr , "]" ;
 try           = "?" ;                                       (* Result propagation *)
 
-primary       = INT | FLOAT | STRING | "true" | "false"
+primary       = INT | FLOAT | STRING | FSTRING | "true" | "false"
+                     (* RW 2.37: an FSTRING with no hole is the STRING it spells; otherwise each hole is
+                        `str(hole)` and the text joins in order — `BinOp::Interp` folded from the left. A hole is
+                        one expr: `{x:.2f}`, `{x!r}`, `{x=}` are DL0201, `{}` is DL0202. *)
               | path                                        (* var, or variant like Some *)
               | path , "{" , [ field_init , { "," , field_init } , [ "," ] ] , "}"   (* record literal.
                      Restriction (implementation-forced): record literals are NOT parsed in

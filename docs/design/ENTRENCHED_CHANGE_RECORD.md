@@ -912,3 +912,34 @@ a program. `PRIM_TABLE_VERSION` moves from 10 to 11 by its own rule.
    it: *PASS: 100% anchor coverage*, 400 of 400.
 2. Mutants M1220–M1245 turn the new tests red (`V2_LOG.md`); `--reference` regenerated the reference (126 of 126 in the
    primitives chapter) and `--check-reference` reads it in sync.
+
+## 2026-11-10 — `tests/conformance/witnesses.toml`: the new string methods' rejecting witnesses
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: eleven `[[witness]]` rows, the rejecting witnesses for the new anchors `ref.prim.str.ends_with`, `is_empty`, `trim_start`, `trim_end`, `find`, `rfind`, `count`, `repeat`, `pad_left`, `pad_right` and `ref.prim.float.to_fixed`, after `ref.prim.list.step_by`'s, under a comment naming the decision. No other row changes. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | on-demand routine run 24 (2026-11-10); `REMAINING_WORK.md` 2.37 and 2.48; decision D-V2-225 |
+| Approved by | **the head chef, 2026-11-10, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+D-V2-225 adds eleven primitives to the primitive table. The coverage law (invariant 42) demands an accepting and a
+rejecting witness for every anchor. The accepting one is `tests/conformance/accept/33_strings.delulu`, which uses every
+one and names each anchor in its header. The rejecting one is the table's own `arity_column_matches_the_checker_gate`,
+which calls each with one argument more than its arity and asserts the gate's DL0403 by its exact message, and with
+exactly its arity and asserts the gate does not fire.
+
+**Why this is not an RFC**
+
+The primitives are additive (`STABILITY.md` §1): no program that checked changes its answer, and a method takes no name
+from a program. `PRIM_TABLE_VERSION` moves from 11 to 12 by its own rule.
+
+**Verified before the change**
+
+1. `delulu-conform --coverage` without the rows: eleven gaps, each *"no accepting test, no rejecting test"*, 400 of 411.
+   With them and `33_strings.delulu`: *PASS: 100% anchor coverage*, 411 of 411.
+2. Mutants M1246–M1273 turn the new tests red (`V2_LOG.md`); `--reference` regenerated the reference (137 of 137 in the
+   primitives chapter) and `--check-reference` reads it in sync.

@@ -1,0 +1,8 @@
+// RW 2.37 (D-V2-225): `s[i]` reads a character; a string does not change in place, so no index writes one.
+module conf
+
+fn f() -> Str {
+    var s = "abc"
+    s[0] = "x"
+    s
+}

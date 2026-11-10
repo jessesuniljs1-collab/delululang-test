@@ -384,8 +384,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
       RW 2.47) → ~~math and the checked forms (2.38)~~ (done 2026-11-09 by on-demand routine run 22, D-V2-223; its
       programs found two formatter defects, fixed, and RW 2.48 and 2.49) → ~~ranges (2.36)~~ (done 2026-11-10 by on-demand
       routine run 23, D-V2-224, with every free builtin's arguments read; its programs found WASM's missing `print`,
-      `len(x)` and `push`, fixed, and RW 2.50, 2.51 and 6.85) →
-      strings (2.37) →
+      `len(x)` and `push`, fixed, and RW 2.50, 2.51 and 6.85) → ~~strings (2.37)~~ (done 2026-11-10 by on-demand routine
+      run 24, D-V2-225: f-strings, `s[i]`, the everyday `Str` table and `to_fixed`, with RW 2.48; its programs found
+      WASM's missing `match` on a `Str`, fixed, and RW 6.86) →
       bitwise (2.35) → methods on a program's own types (2.33) → tuples, sets, keyed sorting, comprehensions (2.39) →
       argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.
     - Each is built as surface syntax and prelude over the core, so no RFC period applies; one that would change

@@ -2034,6 +2034,154 @@ impl Parser {
         args
     }
 
+    /// RW 2.37: an f-string, `f"text {expr} text"`, at its `FStrStart`. Its parts are its text runs and its holes in
+    /// order; a hole that is itself a plain string literal is text, and adjacent text joins, so one f-string has one
+    /// shape. With no hole left it is the `Str` literal it spells. Otherwise it is `BinOp::Interp` folded from the left
+    /// over a head literal (empty when the f-string begins with a hole): `f"a{x}b"` is `Interp(Interp("a", x), "b")`.
+    /// A hole holds one expression; Python's `{x:.2f}`, `{x!r}` and `{x=}` are refused with the method that does it.
+    fn parse_fstring(&mut self) -> Expr {
+        let start = self.span();
+        self.bump(); // FStrStart
+        enum Part {
+            Text(String, Span),
+            Hole(Box<Expr>),
+        }
+        let mut parts: Vec<Part> = Vec::new();
+        let mut end = start;
+        loop {
+            match self.peek().clone() {
+                TokenKind::FStrText(t) => {
+                    let sp = self.span();
+                    self.bump();
+                    parts.push(Part::Text(t, sp));
+                }
+                TokenKind::FStrHoleOpen => {
+                    let open = self.span();
+                    self.bump();
+                    if matches!(self.peek(), TokenKind::FStrHoleClose) {
+                        let close = self.span();
+                        self.bump();
+                        self.error(
+                            "DL0202",
+                            "an empty `{}` in an f-string: put an expression between the braces, or write `{{}}` for \
+                             the braces themselves",
+                            open.to(close),
+                            "nothing to interpolate",
+                        );
+                        continue;
+                    }
+                    let e = self.parse_expr();
+                    match self.peek().clone() {
+                        TokenKind::FStrHoleClose => {
+                            self.bump();
+                            self.panicking = false;
+                        }
+                        k @ (TokenKind::Colon | TokenKind::Bang | TokenKind::Eq) => {
+                            let what = match k {
+                                TokenKind::Colon => "a format spec (`:…`)",
+                                TokenKind::Bang => "a conversion (`!…`)",
+                                _ => "a self-documenting `=`",
+                            };
+                            self.error(
+                                "DL0201",
+                                format!(
+                                    "an f-string's hole holds one expression, not {what}: call a method in the hole \
+                                     instead — `{{x.to_fixed(2)}}` for decimals, `{{s.pad_left(8, \" \")}}` for a width"
+                                ),
+                                self.span(),
+                                "the hole ends at its expression",
+                            );
+                            self.skip_fstr_hole();
+                        }
+                        _ => {
+                            self.expect(TokenKind::FStrHoleClose);
+                            self.skip_fstr_hole();
+                        }
+                    }
+                    parts.push(Part::Hole(Box::new(e)));
+                }
+                TokenKind::FStrEnd => {
+                    end = self.span();
+                    self.bump();
+                    break;
+                }
+                // The lexer closes every f-string it opens; this is a hole's tokens run past their `}` by a parse error.
+                _ => {
+                    self.skip_fstr_hole();
+                    if matches!(self.peek(), TokenKind::FStrEnd) {
+                        continue;
+                    }
+                    break;
+                }
+            }
+        }
+        let whole = start.to(end);
+        // One shape for one f-string: a hole that is a plain string literal is text, and adjacent texts join.
+        let mut merged: Vec<Part> = Vec::new();
+        for part in parts {
+            let part = match part {
+                Part::Hole(e) => match *e {
+                    Expr::Lit { kind: LitKind::Str(t), span, .. } => Part::Text(t, span),
+                    e => Part::Hole(Box::new(e)),
+                },
+                other => other,
+            };
+            match (merged.last_mut(), part) {
+                (Some(Part::Text(acc, acc_span)), Part::Text(t, sp)) => {
+                    acc.push_str(&t);
+                    *acc_span = acc_span.to(sp);
+                }
+                (_, part) => merged.push(part),
+            }
+        }
+        if !merged.iter().any(|p| matches!(p, Part::Hole(_))) {
+            let text = match merged.into_iter().next() {
+                Some(Part::Text(t, _)) => t,
+                _ => String::new(),
+            };
+            return Expr::Lit { kind: LitKind::Str(text), id: self.node_id(), span: whole };
+        }
+        let mut rest = merged.into_iter().peekable();
+        let head = match rest.peek() {
+            Some(Part::Text(..)) => match rest.next() {
+                Some(Part::Text(t, sp)) => Expr::Lit { kind: LitKind::Str(t), id: self.node_id(), span: sp },
+                _ => unreachable!("peeked a text part"),
+            },
+            // The f-string begins with a hole: its head is the empty text before it, where it would stand.
+            _ => {
+                let at = Span::new(start.file, start.end, start.end);
+                Expr::Lit { kind: LitKind::Str(String::new()), id: self.node_id(), span: at }
+            }
+        };
+        let mut acc = head;
+        let mut parts_left = rest.collect::<Vec<_>>().into_iter().peekable();
+        while let Some(part) = parts_left.next() {
+            let rhs = match part {
+                Part::Text(t, sp) => Expr::Lit { kind: LitKind::Str(t), id: self.node_id(), span: sp },
+                Part::Hole(e) => *e,
+            };
+            let span = if parts_left.peek().is_none() { whole } else { start.to(rhs.span()) };
+            acc = Expr::Binary { op: BinOp::Interp, lhs: Box::new(acc), rhs: Box::new(rhs), id: self.node_id(), span };
+        }
+        acc
+    }
+
+    /// Read past the rest of an f-string hole after a parse error in it, to its `}` (consumed) or to the f-string's end.
+    fn skip_fstr_hole(&mut self) {
+        loop {
+            match self.peek() {
+                TokenKind::FStrHoleClose => {
+                    self.bump();
+                    return;
+                }
+                TokenKind::FStrEnd | TokenKind::Eof => return,
+                _ => {
+                    self.bump();
+                }
+            }
+        }
+    }
+
     fn parse_primary(&mut self, allow_struct: bool) -> Expr {
         let start = self.span();
         match self.peek().clone() {
@@ -2049,6 +2197,7 @@ impl Parser {
                 self.bump();
                 Expr::Lit { kind: LitKind::Str(s), id: self.node_id(), span: start }
             }
+            TokenKind::FStrStart => self.parse_fstring(),
             TokenKind::KwTrue => {
                 self.bump();
                 Expr::Lit { kind: LitKind::Bool(true), id: self.node_id(), span: start }
@@ -3337,5 +3486,150 @@ mod range_tests {
             assert!(e.iter().any(|d| d.code == "DL0201" && d.message.contains("a range has one `..`")), "{src}: {e:?}");
         }
         assert!(errors("(0..3).concat(3..5)").is_empty());
+    }
+}
+
+/// RW 2.37 (D-V2-225): f-strings — one shape for one f-string, and the refusals that teach the spelling.
+#[cfg(test)]
+mod fstring_tests {
+    use super::*;
+
+    fn parse_src(src: &str) -> (Module, Vec<Diagnostic>) {
+        let (tokens, mut ldiags) = crate::lexer::lex(0, src);
+        let (m, d) = parse(0, tokens);
+        ldiags.extend(d);
+        (m, ldiags)
+    }
+
+    /// The value of `let v = <src>` in a function that must parse clean.
+    fn value(src: &str) -> Expr {
+        let (m, d) = parse_src(&format!("module m\nfn f() -> Int {{\nlet v = {src}\n0\n}}\n"));
+        assert!(!d.iter().any(|d| d.is_error()), "{src}: {d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!("expected a fn") };
+        let Stmt::Let { value, .. } = &f.body.stmts[0] else { panic!("{:?}", f.body.stmts[0]) };
+        value.clone()
+    }
+
+    fn errors(src: &str) -> Vec<Diagnostic> {
+        let (_, d) = parse_src(&format!("module m\nfn f() -> Int {{\nlet v = {src}\n0\n}}\n"));
+        d.into_iter().filter(|d| d.is_error()).collect()
+    }
+
+    /// The chain's head and operands, the head first: each a literal's text or `{…}` for any other operand.
+    fn parts(e: &Expr) -> Vec<String> {
+        let show = |e: &Expr| match e {
+            Expr::Lit { kind: LitKind::Str(s), .. } => format!("'{s}'"),
+            Expr::Var { path, .. } => format!("{{{}}}", path.dotted()),
+            Expr::Binary { op: BinOp::Interp, .. } => "{f-string}".to_string(),
+            other => format!("{{{:?}}}", std::mem::discriminant(other)),
+        };
+        let mut out = Vec::new();
+        let mut at = e;
+        while let Expr::Binary { op: BinOp::Interp, lhs, rhs, .. } = at {
+            out.push(show(rhs));
+            at = lhs;
+        }
+        out.push(show(at));
+        out.reverse();
+        out
+    }
+
+    #[test]
+    fn an_fstring_is_interp_folded_from_the_left_over_a_head_literal() {
+        assert_eq!(parts(&value(r#"f"a{x}b""#)), ["'a'", "{x}", "'b'"]);
+        // A hole first: the head is the empty text before it.
+        assert_eq!(parts(&value(r#"f"{x} and {y}""#)), ["''", "{x}", "' and '", "{y}"]);
+        assert_eq!(parts(&value(r#"f"{x}""#)), ["''", "{x}"]);
+        // Two holes side by side: no text between them.
+        assert_eq!(parts(&value(r#"f"{x}{y}""#)), ["''", "{x}", "{y}"]);
+    }
+
+    /// A hole that is a plain string literal is text, and adjacent texts join — so the formatter, which prints a literal
+    /// operand as text, gives back an f-string that parses to the same tree.
+    #[test]
+    fn one_fstring_has_one_shape() {
+        assert_eq!(parts(&value(r#"f"a{"b"}c{x}""#)), ["'abc'", "{x}"]);
+        assert_eq!(parts(&value(r#"f"{"lit"}{x}{"t"}""#)), ["'lit'", "{x}", "'t'"]);
+        // `{{` and `}}` are a brace each; escapes read as a string literal's do.
+        assert_eq!(parts(&value(r#"f"{{a}}\n\"{x}\u{e9}""#)), ["'{a}\n\"'", "{x}", "'é'"]);
+        // With no hole left, it is the `Str` literal it spells.
+        for (src, text) in [(r#"f"plain""#, "plain"), (r#"f"""#, ""), (r#"f"{"only"}""#, "only"), (r#"f"{{}}""#, "{}")] {
+            let e = value(src);
+            let Expr::Lit { kind: LitKind::Str(s), .. } = &e else { panic!("{src}: {e:?}") };
+            assert_eq!(s, text, "{src}");
+        }
+    }
+
+    /// An f-string with no hole is its literal over the WHOLE of its source, `f"` to the closing quote — so a refusal of
+    /// it, the Atlas and the language server point at all of it, not at its text run alone.
+    #[test]
+    fn an_fstring_without_a_hole_spans_all_of_its_source() {
+        for (src, text) in [(r#"f"plain""#, "plain"), (r#"f"{"only"}""#, "only"), (r#"f"a{{b""#, "a{b")] {
+            let whole = format!("module m\nfn f() -> Int {{\nlet v = {src}\n0\n}}\n");
+            let e = value(src);
+            let Expr::Lit { kind: LitKind::Str(s), span, .. } = &e else { panic!("{src}: {e:?}") };
+            assert_eq!(s, text, "{src}");
+            assert_eq!(&whole[span.start as usize..span.end as usize], src, "{src}: the span is the whole f-string");
+        }
+    }
+
+    /// A hole is lexed as code: strings, records, calls, blocks and other f-strings nest, each brace counted.
+    #[test]
+    fn a_hole_holds_any_expression() {
+        for src in [
+            r#"f"{m.get("k")}""#,
+            r#"f"{P { x: 1 }.x}""#,
+            r#"f"{if b { 1 } else { 2 }}""#,
+            r#"f"{match o { Some(v) => v, None => 0 }}""#,
+            r#"f"{xs.map(fn(i: Int) -> Int { i * 2 })}""#,
+            r#"f"{f"in {n}"} out""#,
+            r#"f"{(1..3)}""#,
+            r#"f"{ x }""#,
+        ] {
+            let e = value(src);
+            assert!(matches!(e, Expr::Binary { op: BinOp::Interp, .. }), "{src}: {e:?}");
+        }
+        let e = value(r#"f"{f"in {n}"} out""#);
+        assert_eq!(parts(&e), ["''", "{f-string}", "' out'"]);
+    }
+
+    /// Python's format spec, conversion and `=` are refused once, naming the method that does each, never guessed at.
+    #[test]
+    fn a_python_spec_in_a_hole_is_refused_with_the_method() {
+        for (src, what) in [
+            (r#"f"{x:.2f}""#, "a format spec"),
+            (r#"f"{x!r}""#, "a conversion"),
+            (r#"f"{x=}""#, "a self-documenting `=`"),
+            (r#"f"{s:>8}""#, "a format spec"),
+        ] {
+            let d = errors(src);
+            assert_eq!(d.len(), 1, "{src}: {d:?}");
+            assert_eq!(d[0].code, "DL0201", "{src}");
+            assert!(d[0].message.contains(what) && d[0].message.contains("to_fixed"), "{src}: {}", d[0].message);
+        }
+    }
+
+    #[test]
+    fn the_malformed_fstrings_are_each_refused_once() {
+        for (src, code) in [
+            (r#"f"a{}b""#, "DL0202"),
+            (r#"f"a}b""#, "DL0101"),
+            (r#"f"a{1 +}b""#, "DL0202"),
+            ("f\"abc", "DL0102"),
+            ("f\"a{x", "DL0102"),
+        ] {
+            let d = errors(src);
+            assert!(!d.is_empty() && d[0].code == code, "{src}: {d:?}");
+            assert_eq!(d.len(), 1, "{src}: one refusal, no cascade: {d:?}");
+        }
+    }
+
+    /// `f"` begins an f-string only at a token's start: an identifier that ends in `f` is read whole.
+    #[test]
+    fn only_an_f_at_a_tokens_start_opens_an_fstring() {
+        let d = errors(r#"buf"x""#);
+        assert!(!d.is_empty(), "`buf\"x\"` is a name then a string, never an f-string: {d:?}");
+        let (tokens, _) = crate::lexer::lex(0, r#"buf"x" f "y""#);
+        assert!(!tokens.iter().any(|t| matches!(t.kind, TokenKind::FStrStart)), "{tokens:?}");
     }
 }

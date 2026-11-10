@@ -2572,27 +2572,42 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         .func_wrap(
             "delulu:str",
             "str_method",
-            |mut caller: Caller<'_, HostState>, s: i32, method: i32, a: i32, b: i32, lo: i64, hi: i64| -> i32 {
+            |mut caller: Caller<'_, HostState>, s: i32, method: i32, a: i32, b: i32, lo: i64, hi: i64| -> wasmtime::Result<i32> {
                 if caller.data().refused.is_some() {
-                    return 0;
+                    return Ok(0);
                 }
-                let Some((name, strs, ints)) = crate::codegen::str_method_arity(method) else {
+                let Some((name, kinds)) = crate::codegen::str_method_arity(method) else {
                     caller.refuse(format!("DL0907: no `Str` method numbered {method}"));
-                    return 0;
+                    return Ok(0);
                 };
                 let recv = read_guest_str(&mut caller, s);
-                let given: Option<Vec<String>> = [a, b].into_iter().take(strs).map(|p| read_guest_str(&mut caller, p)).collect();
-                let (Some(recv), Some(given)) = (recv, given) else {
+                // RW 2.37: each argument from its own slot, in the method's order — `Str`s from `a` then `b`, `Int`s from
+                // `lo` then `hi` (`pad_left(width, fill)` takes an `Int` first).
+                let (mut strs, mut ints) = ([a, b].into_iter(), [lo, hi].into_iter());
+                let mut args: Vec<Value> = Vec::new();
+                let mut outside = recv.is_none();
+                for is_str in kinds {
+                    if is_str {
+                        match strs.next().and_then(|p| read_guest_str(&mut caller, p)) {
+                            Some(t) => args.push(Value::str(t)),
+                            None => outside = true,
+                        }
+                    } else {
+                        args.push(Value::Int(ints.next().unwrap_or(0)));
+                    }
+                }
+                let (Some(recv), false) = (recv, outside) else {
                     caller.refuse(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
-                    return 0;
+                    return Ok(0);
                 };
-                let mut args: Vec<Value> = given.into_iter().map(Value::str).collect();
-                args.extend([lo, hi].into_iter().take(ints).map(Value::Int));
                 let answer = match delulu_runtime::prim::call_str_method(&recv, name, &args, delulu_diag::Span::new(0, 0, 0)) {
                     Ok(v) => v,
+                    // RW 2.37: a fault (`s[i]` past the end, `repeat` of a negative count) is recorded in the interpreter's
+                    // words and traps, so the guest never goes on past it — as the math methods' faults do.
                     Err(fault) => {
-                        caller.refuse(format!("{}: {}", fault.code, fault.message));
-                        return 0;
+                        let why = format!("{}: {}", fault.code, fault.message);
+                        caller.refuse_first(|| why.clone());
+                        return Err(wasmtime::Error::msg(why));
                     }
                 };
                 let parts: Option<Vec<String>> = match &answer {
@@ -2607,18 +2622,72 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     _ => None,
                 };
                 let written = match (answer, parts) {
-                    (Value::Bool(yes), _) => return i32::from(yes),
+                    (Value::Bool(yes), _) => return Ok(i32::from(yes)),
                     (Value::Str(t), _) => write_str_cell(&mut caller, &t),
                     (Value::List(_), Some(parts)) => write_str_list(&mut caller, &parts),
                     _ => {
                         caller.refuse(format!("DL0907: `{name}` answered a value the WASM engine does not hold"));
-                        return 0;
+                        return Ok(0);
                     }
                 };
-                written.unwrap_or_else(|()| {
+                Ok(written.unwrap_or_else(|()| {
                     caller.refuse(MEMORY_EXHAUSTED.into());
                     0
-                })
+                }))
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // RW 2.37: `Str.find`, `rfind` and `count` (`codegen.rs`'s `STR_FIND_METHODS`), by the interpreter's own
+    // `call_str_method`: a flag and an `Int` — `find`'s `Some(place)` as 1 and the place, its `None` as 0, and `count`'s
+    // answer with the flag 1. The guest builds the `Option[Int]`.
+    linker
+        .func_wrap(
+            "delulu:str",
+            "str_find",
+            |mut caller: Caller<'_, HostState>, s: i32, method: i32, sub: i32| -> wasmtime::Result<(i32, i64)> {
+                let Some(name) = usize::try_from(method).ok().and_then(|i| crate::codegen::STR_FIND_METHODS.get(i)) else {
+                    caller.refuse(format!("DL0907: no `Str` method numbered {method}"));
+                    return Ok((0, 0));
+                };
+                let (Some(recv), Some(sub)) = (read_guest_str(&mut caller, s), read_guest_str(&mut caller, sub)) else {
+                    caller.refuse(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+                    return Ok((0, 0));
+                };
+                match delulu_runtime::prim::call_str_method(&recv, name, &[Value::str(sub)], delulu_diag::Span::new(0, 0, 0)) {
+                    Ok(Value::Int(n)) => Ok((1, n)),
+                    Ok(Value::Variant { name: c, fields }) if &*c == "Some" => match fields.first() {
+                        Some(Value::Int(n)) => Ok((1, *n)),
+                        _ => Ok(unheld(&mut caller, name, &Value::Unit, (0, 0))),
+                    },
+                    Ok(Value::Variant { name: c, .. }) if &*c == "None" => Ok((0, 0)),
+                    Ok(other) => Ok(unheld(&mut caller, name, &other, (0, 0))),
+                    Err(fault) => {
+                        let why = format!("{}: {}", fault.code, fault.message);
+                        caller.refuse_first(|| why.clone());
+                        Err(wasmtime::Error::msg(why))
+                    }
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // RW 2.37: `Float.to_fixed(digits)` by the interpreter's own `float_to_fixed`; its DL0908 (digits outside 0 to 100)
+    // is recorded and traps.
+    linker
+        .func_wrap(
+            "delulu:math",
+            "float_to_fixed",
+            |mut caller: Caller<'_, HostState>, x: f64, digits: i64| -> wasmtime::Result<i32> {
+                match delulu_runtime::prim::float_to_fixed(x, digits, delulu_diag::Span::new(0, 0, 0)) {
+                    Ok(text) => Ok(write_str_cell(&mut caller, &text).unwrap_or_else(|()| {
+                        caller.refuse(MEMORY_EXHAUSTED.into());
+                        0
+                    })),
+                    Err(fault) => {
+                        let why = format!("{}: {}", fault.code, fault.message);
+                        caller.refuse_first(|| why.clone());
+                        Err(wasmtime::Error::msg(why))
+                    }
+                }
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;

@@ -58,6 +58,15 @@ returns `Option[Int]`; a list has `len()`, `push(x)` and `get(i)`, which returns
 `for i in 0..n { … }` counts (building no list, so any `n` is fine), and `(0..10).step_by(2)`,
 `(0..n).reverse()` and `(1..=n).map(f)` work as on any list. There is no three-argument `range`:
 write `(lo..hi).step_by(k)`. `for _ in 0..n` repeats a body `n` times.
+**Strings:** `f"hello {name}, {n + 1} items"` is an f-string — each `{…}` hole is `str(…)` of any
+expression, `{{` and `}}` are braces, and a plain `"…{x}…"` stays literal text. A hole holds an expression, never a
+Python format spec: `{x:.2f}` is refused — write `{x.to_fixed(2)}` (decimals) or `{s.pad_left(8, " ")}` (a width,
+`pad_right` to the other side; the fill is one character, `"0"` pads a number). `s[i]` is the `i`th character (a
+one-character `Str`, DL0903 past the end; a string never changes in place). Every position counts characters:
+`s.find(sub)` and `s.rfind(sub)` give `Option[Int]`, `s.count(sub)`, `s.slice(lo, hi)`, `len(s)`. Also
+`ends_with`, `starts_with`, `repeat(n)`, `trim_start`, `trim_end`, `is_empty`, `replace`, `to_upper`, `to_lower`,
+`split`, `chars`. A Float literal needs its fraction: `1.0e-9`, never `1e-9`; `str` prints a very large or small
+`Float` with an exponent (`1.0e300`). A `match` on a `Str` with literal arms works on both engines.
 There is no `unwrap` — `match` the `Option` or `Result`, or use `?` inside a function that returns
 `Result`. A match arm that does nothing is `None => {}`; one that assigns or `continue`s wraps it in
 braces: `Some(v) => { best = v }`, `_ => { continue }`.

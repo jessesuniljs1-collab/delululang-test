@@ -2585,6 +2585,8 @@ impl Interp {
                     Ok(b[n as usize].clone())
                 }
             }
+            // RW 2.37: `s[i]`, the `i`th character, by the one rule both engines run.
+            (Value::Str(s), Value::Int(n)) => prim::str_index(&s, n, span).map_err(Escape::Fault),
             _ => Err(Escape::Fault(Fault::at("DL0907", "cannot index this value", span))),
         }
     }
@@ -2656,7 +2658,9 @@ impl Interp {
         match op {
             Eq => Ok(Value::Bool(l.eq(&r))),
             Ne => Ok(Value::Bool(!l.eq(&r))),
-            Add if matches!(l, Value::Str(_)) => {
+            // RW 2.37: an f-string's step is `Str + str(hole)` — the hole's text as `str` gives it, which is what `+` of a
+            // `Str` writes, charged the same way.
+            Add | Interp if matches!(l, Value::Str(_)) => {
                 // Charge the projected result size (best-effort memory, spec §5.4) BEFORE allocating
                 // it, so a runaway doubling concatenation trips the byte budget instead of the heap.
                 let ls = l.display();
@@ -2666,6 +2670,7 @@ impl Interp {
             }
             Add | Sub | Mul | Div | Rem => self.arith(op, l, r, span),
             Range | RangeInclusive => self.range_value(&l, &r, op == RangeInclusive, span),
+            Interp => Err(Escape::Fault(Fault::at("DL0907", "an f-string's text was not a `Str` (checker bug)", span))),
             Lt | Le | Gt | Ge => self.compare(op, l, r, span),
             // Unreachable because the `matches!(op, And | Or)` branch at the top of this function
             // returns unconditionally for exactly these two operators. That guard is twenty-five

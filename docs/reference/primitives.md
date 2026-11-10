@@ -8,7 +8,7 @@ Every primitive operation, by receiver. **Arity is normative**: the checker refu
 
 Capability operations are the only source of primitive effects (T-CapOp), which is why this table is the checker's single source of truth rather than prose.
 
-> **Coverage (invariant 42):** 126 of 126 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 137 of 137 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 
 ## `root`
@@ -164,6 +164,16 @@ Capability operations are the only source of primitive effects (T-CapOp), which 
 | `to_lower` | 0 | `ref.prim.str.to_lower` | covered |
 | `replace` | 2 | `ref.prim.str.replace` | covered |
 | `chars` | 0 | `ref.prim.str.chars` | covered |
+| `ends_with` | 1 | `ref.prim.str.ends_with` | covered |
+| `is_empty` | 0 | `ref.prim.str.is_empty` | covered |
+| `trim_start` | 0 | `ref.prim.str.trim_start` | covered |
+| `trim_end` | 0 | `ref.prim.str.trim_end` | covered |
+| `find` | 1 | `ref.prim.str.find` | covered |
+| `rfind` | 1 | `ref.prim.str.rfind` | covered |
+| `count` | 1 | `ref.prim.str.count` | covered |
+| `repeat` | 1 | `ref.prim.str.repeat` | covered |
+| `pad_left` | 2 | `ref.prim.str.pad_left` | covered |
+| `pad_right` | 2 | `ref.prim.str.pad_right` | covered |
 
 ## `int`
 
@@ -207,6 +217,7 @@ Capability operations are the only source of primitive effects (T-CapOp), which 
 | `is_nan` | 0 | `ref.prim.float.is_nan` | covered |
 | `is_finite` | 0 | `ref.prim.float.is_finite` | covered |
 | `to_int` | 0 | `ref.prim.float.to_int` | covered |
+| `to_fixed` | 1 | `ref.prim.float.to_fixed` | covered |
 
 ## `list`
 

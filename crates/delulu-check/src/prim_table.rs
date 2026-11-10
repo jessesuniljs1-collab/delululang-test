@@ -151,6 +151,17 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "str", method: "to_lower", arity: 0 },
     PrimEntry { receiver: "str", method: "replace", arity: 2 },
     PrimEntry { receiver: "str", method: "chars", arity: 0 },
+    // RW 2.37 (D-V2-225): the rest of an everyday string's table, every position a character's.
+    PrimEntry { receiver: "str", method: "ends_with", arity: 1 },
+    PrimEntry { receiver: "str", method: "is_empty", arity: 0 },
+    PrimEntry { receiver: "str", method: "trim_start", arity: 0 },
+    PrimEntry { receiver: "str", method: "trim_end", arity: 0 },
+    PrimEntry { receiver: "str", method: "find", arity: 1 },
+    PrimEntry { receiver: "str", method: "rfind", arity: 1 },
+    PrimEntry { receiver: "str", method: "count", arity: 1 },
+    PrimEntry { receiver: "str", method: "repeat", arity: 1 },
+    PrimEntry { receiver: "str", method: "pad_left", arity: 2 },
+    PrimEntry { receiver: "str", method: "pad_right", arity: 2 },
     // Int (builtin) — RW 2.38, D-V2-223: the math methods, pure. `abs` and `pow` past the range are DL0901, a negative
     // exponent and `clamp(lo, hi)` with `lo > hi` DL0908; each `checked_` form answers `None` where its operator faults.
     PrimEntry { receiver: "int", method: "abs", arity: 0 },
@@ -188,6 +199,8 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "float", method: "is_nan", arity: 0 },
     PrimEntry { receiver: "float", method: "is_finite", arity: 0 },
     PrimEntry { receiver: "float", method: "to_int", arity: 0 },
+    // RW 2.37: the text of a `Float` with exactly `digits` decimals.
+    PrimEntry { receiver: "float", method: "to_fixed", arity: 1 },
     // List (builtin).
     PrimEntry { receiver: "list", method: "len", arity: 0 },
     PrimEntry { receiver: "list", method: "get", arity: 1 },
@@ -250,7 +263,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            126,
+            137,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

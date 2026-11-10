@@ -1,0 +1,73 @@
+41 words, 243 characters, the longest "capabilities" (12)
+-- left, width 28 --
+|DeluluLang is a statically  |
+|typed language in which a   |
+|program can do nothing      |
+|except what it was          |
+|explicitly handed. Effects  |
+|are in the type,            |
+|capabilities are values, and|
+|authority is computed from  |
+|the code — même les accents |
+|comptent une fois.          |
+-- right, width 28 --
+|  DeluluLang is a statically|
+|   typed language in which a|
+|      program can do nothing|
+|          except what it was|
+|  explicitly handed. Effects|
+|            are in the type,|
+|capabilities are values, and|
+|  authority is computed from|
+| the code — même les accents|
+|          comptent une fois.|
+-- centre, width 28 --
+| DeluluLang is a statically |
+| typed language in which a  |
+|   program can do nothing   |
+|     except what it was     |
+| explicitly handed. Effects |
+|      are in the type,      |
+|capabilities are values, and|
+| authority is computed from |
+|the code — même les accents |
+|     comptent une fois.     |
+-- justify, width 28 --
+|DeluluLang  is  a statically|
+|typed  language  in  which a|
+|program   can   do   nothing|
+|except     what    it    was|
+|explicitly  handed.  Effects|
+|are     in     the     type,|
+|capabilities are values, and|
+|authority  is  computed from|
+|the  code — même les accents|
+|comptent une fois.          |
+-- left, width 41 --
+|DeluluLang is a statically typed language|
+|in which a program can do nothing except |
+|what it was explicitly handed. Effects   |
+|are in the type, capabilities are values,|
+|and authority is computed from the code —|
+|même les accents comptent une fois.      |
+-- right, width 41 --
+|DeluluLang is a statically typed language|
+| in which a program can do nothing except|
+|   what it was explicitly handed. Effects|
+|are in the type, capabilities are values,|
+|and authority is computed from the code —|
+|      même les accents comptent une fois.|
+-- centre, width 41 --
+|DeluluLang is a statically typed language|
+|in which a program can do nothing except |
+| what it was explicitly handed. Effects  |
+|are in the type, capabilities are values,|
+|and authority is computed from the code —|
+|   même les accents comptent une fois.   |
+-- justify, width 41 --
+|DeluluLang is a statically typed language|
+|in  which a program can do nothing except|
+|what  it  was  explicitly handed. Effects|
+|are in the type, capabilities are values,|
+|and authority is computed from the code —|
+|même les accents comptent une fois.      |
