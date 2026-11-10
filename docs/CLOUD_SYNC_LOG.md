@@ -9259,3 +9259,89 @@ Survey and doctor: in the commit below.
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing added, deleted or renamed.
 - Survey and doctor (after the last edit): in the commit message.
 - **Open / next:** read this commit's push run first; then the next basic, strings (RW 2.37), in D-V2-220's order.
+
+### 2026-11-10 — on-demand routine run 24: RW 2.37 closed — strings: f-strings, `s[i]`, the everyday `Str` table, `to_fixed` and a `Float`'s text (D-V2-225), with RW 2.48
+- Session: `https://claude.ai/code/session_01Deh6W9FCexh2kSmSS7acgF`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with
+  step 0's command at the start, were 2, both `"effort":"xhigh"`, and before the records commit 520, every one
+  `"effort":"xhigh"`. The setup script had run: the 1.96.1 toolchain was there before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*), as a fast-forward of the session's
+  branch `claude/peaceful-carson-ahal3y`, which carried the code first for its runner reads. Pull request: none.
+- Base: `58f9d6b5` (`master` at the start). `gh` is installed (`/usr/local/bin/gh`); CI was read with the MCP tools and
+  `curl`. `cargo-deny` 0.20.2 installed in the VM (not needed: no lockfile change).
+- **Housekeeping:**
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1693 nodes, 20394 edges)`; `ok: 26 check(s)
+    passed`.
+  - CI since the laptop's last entry: the push run `42839085241` on `58f9d6b5` — success. The four entries before it
+    each read their predecessor's push run green (`42817477299`, `42826851198`, `42835298991`).
+  - Branches: after `git fetch --unshallow --prune`, none ahead of `master` but the kept ones the laptop recorded
+    (`launch/2.0.0`, `autosave/*`, `archive/*`, `rc/1.0.0-drill`, `laptop/stack-ladder-witness`). `autosave/laptop`'s
+    newest snapshot is still `4271780` (2026-11-08), landed by run 22.
+- **The milestone, named before building:** RW 2.37 closed end to end — f-string interpolation (each hole checked and
+  printed as `str` is, DL0604 for a secret), `s[i]` with a defined fault, the missing methods and `Float.to_fixed`,
+  `str` of a `Float` with an exponent outside 1e-4..1e16, on both engines; with RW 2.48's DL0104 words; conformance,
+  docs, programs, mutants, the full suite, runner witnesses and records; pushed to `master` and its push run read.
+  **Delivered:**
+  - **Witnessed before building** (a debug build of `58f9d6b5`, both engines): `f"hello {name}"` DL0201, `s[1]` DL0405,
+    `find`/`ends_with`/`repeat`/`pad_left`/`trim_start`/`to_fixed` DL0405, `str(100.0.exp())` 44 digits, `1e300` DL0201.
+  - **The basic** (D-V2-225): `f"…{expr}…"` as `BinOp::Interp` over the core (every walk of an expression sees a hole;
+    a plain string keeps its meaning); `s[i]`; `find`, `rfind`, `count`, `ends_with`, `repeat`, `pad_left`, `pad_right`,
+    `trim_start`, `trim_end`, `is_empty`, `Float.to_fixed` (`PRIM_TABLE` 126 → 137, version 12), bounded at 2^28 bytes;
+    `num::float_text`, one text of a `Float` for the formatter and `str`; RW 2.48's DL0104.
+  - **WASM:** one lowering for `str(x)` and a hole; `delulu:str.str_find`; `delulu:math.float_to_fixed`; `s[i]` through
+    `str_method` with arguments in the method's order and faults trapping; and the scalar `match` (DL1201 until now).
+  - **The program step (D-V2-220):** `banner` (one line), `wrap` (an everyday wrapper/justifier; Python's `textwrap`
+    and an independent implementation, 73 lines) and `logreport` (346 lines, every basic so far; an independent Python
+    implementation, 42 lines), on both engines. They found WASM's missing `match` on a `Str` (fixed), **RW 6.86** (the
+    formatter leaves a long `+` chain or a long method receiver on one line), and a `<error>` name in RW 6.85's class.
+- Commits: `53e1b85f` RW 2.37 (the code, the tests, the programs, the conformance files and rows, the reference, the
+  snapshot, the docs taught); the records commit after it (this entry, `V2_LOG.md`, the regenerated map).
+- Files and folders (`git diff --name-status 58f9d6b5..HEAD`):
+  A `crates/delulu-wasm/tests/strings_parity.rs`, `crates/delulu/tests/strings_cli.rs`,
+  `crates/delulu/tests/programs/{banner,logreport,wrap}.{delulu,out}`, `tests/conformance/accept/33_strings.delulu`,
+  `tests/conformance/reject/{DL0101_fstring_single_brace,DL0102_fstring_unterminated,DL0104_float_without_fraction,
+  DL0201_fstring_format_spec,DL0202_fstring_empty_hole,DL0401_str_pad_fill_type,DL0405_str_index_write,
+  DL0604_fstring_secret_hole}.delulu`;
+  M `crates/delulu-syntax/src/{ast,fmt,lexer,num,parser,token}.rs`, `crates/delulu-check/src/{check,dir,prim_table,rcap_check}.rs`,
+  `crates/delulu-runtime/src/{interp,prim,value}.rs`, `crates/delulu-wasm/src/{codegen,host}.rs`,
+  `crates/delulu/tests/programs/math_table.out`, `tests/conformance/witnesses.toml` (**entrenched**:
+  `ENTRENCHED_CHANGE_RECORD.md`'s 2026-11-10 entry for it), `tests/core-invariance/SNAPSHOT.txt`,
+  `docs/reference/{README,coverage,primitives,tokens}.md`, `skills/delulu/SKILL.md`, `docs/GETTING_STARTED.md`,
+  `docs/for-agents.md`, `docs/design/STAGE1_SPECIFICATION.md`, `CHANGELOG.md`, `HANDOFF.md`, `README.md`,
+  `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG,V2_PHASE_STATUS}.md`,
+  `docs/survey/*`. Nothing deleted or renamed; no new markdown file.
+- **Verified:**
+  - witnessed red before each fix: the nine probes above on `58f9d6b5`; WASM's `match` on a `Str` by `wrap.delulu`;
+  - mutants M1246–M1273: 28, all red after two witnesses were added for the first run's two survivors (M1250, M1273);
+    each control green;
+  - `scripts/clippy.sh -j 4` clean after the last `.rs` edit; `scripts/check-other-os.sh` clean on all five targets;
+  - **the full suite** (`scripts/suite.sh`, `53e1b85f`): 199 targets, 2,797 passed, 0 failed, 16 ignored, `EXIT=0`, the
+    tree unmoved;
+  - `delulu-conform --coverage` 100% (411 of 411), `--check-reference` in sync; `core_invariance` blessed: 9 NEW cases,
+    517 lines added, none removed or changed; `math_table.out`'s five exponent-range lines re-blessed (D-V2-225's
+    measure);
+  - the two-engine differential (50,000 programs, `--release`): green, 154 s;
+  - **witness runs on `53e1b85f`**, each read: macOS `42875662948` and Windows `42875669189` (`conformance`,
+    `core_invariance`, `programs_cli`, `strings_cli`), macOS `42875675405` and Windows `42875681473` (`strings_parity`
+    7), Windows `42875686840` and macOS `42875693790` (`delulu-syntax` `lib`) — all six green.
+- Survey and doctor (after the last edit): in the records commit's message.
+- Redo on the laptop: nothing for the milestone. Delete this run's branch `claude/peaceful-carson-ahal3y` on `origin` if
+  this run's own deletion is refused (its tip is in `master`'s history once the fast-forward lands).
+- For the laptop's memory: `HANDOFF.md` §11.2 has two new lessons (*a witness of one trigger must hold the other
+  triggers off*; *measure an answer that moves on the repository's own outputs first*). `docs/CLOUD_ROUTINE.md` gained
+  the first as a step, and the formatter's long-line shapes (RW 6.86) as advice for a program's data.
+- **Open / next:**
+  1. **CI of this run:** `master`'s push run on the records commit (it carries `53e1b85f`) — read below in the
+     follow-up line, or, if this run ended before reading it, read it first.
+  2. **The next basics, in D-V2-220's order:** bitwise (2.35), methods on a program's own types (2.33), tuples, sets,
+     keyed sorting and comprehensions (2.39), argv, environment, exit code and sleep (2.40), JSON (2.41, with the
+     unquoted list text D-V2-225 kept), then interfaces (2.33, 2.9) and RW 3.24. RW 2.50 (`Option`/`Result` methods) and
+     RW 2.51 fit before methods (2.33); RW 2.49 (a line beginning with an operator inside brackets — a lexer bracket
+     stack is the likely shape) and RW 6.86 (the formatter's long lines) when the parser or the formatter is next
+     touched; RW 6.85 with the parser's next touch; RW 3.32 and 2.45 when a basic's programs need them.
+  3. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  4. RW 3.25's two remaining constructs (a function-typed parameter, an `if` without `else` as an arm). RW 3.30: measure
+     on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for their next red.
+  5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
+     prepared, not launched; it does not hold D-V2-210 onward.

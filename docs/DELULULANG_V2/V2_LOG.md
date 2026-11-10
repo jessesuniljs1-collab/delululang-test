@@ -12786,3 +12786,57 @@ jobs; arm64 2.85x, macOS 1.96x against 1.32x), the release dry run `42623379628`
   `refusal_trace_parity` 3).
 - `master`'s push run `42776213089` on the records commit `d572c9c`: success, 14 jobs green, 2 skipped (`heavy-gates`,
   `miri-slow`); arm64's ping-pong MEASURED 2.79x against 1.48x.
+
+## 2026-11-10 — on-demand routine run 24: RW 2.37 closed — strings: f-strings, `s[i]`, the everyday `Str` table, `to_fixed` and a `Float`'s text (D-V2-225), with RW 2.48
+
+**Start.** `master` at `58f9d6b5` (the laptop's records of the microVM rebuild), its push run `42839085241` read: success.
+Branches: none new ahead of `master`; `autosave/laptop`'s newest snapshot is still `4271780` (2026-11-08), landed by run
+22. The Survey: `ok` (1693 nodes, 20394 edges); `doctor --check`: 26 passed. `CLAUDE_EFFORT=xhigh`.
+
+**What.** RW 2.37, the fifth language basic (D-V2-220), with RW 2.48 beside it.
+- **Probed before building** (`58f9d6b5`, both engines): `f"hello {name}"` DL0201; `s[1]` DL0405; `find`, `ends_with`,
+  `repeat`, `pad_left`, `trim_start` and `Float.to_fixed` DL0405; `str(100.0.exp())` 44 digits and `str(1.0e-7)`
+  `0.0000001`; `1e300` DL0201 *expected `)`, found identifier `e300`*.
+- **Built:** the f-string in the lexer (its text, escapes, `{{`/`}}`, and holes lexed in place with their braces counted),
+  the parser (`BinOp::Interp` folded from the left, one shape for one f-string, Python's specs refused with the method),
+  the formatter (the chain printed back as the f-string, holes flat); the checker (a hole is `str(hole)`, DL0604);
+  `s[i]` (and `s[i] = …` DL0405, once); ten `Str` methods and `Float.to_fixed` (`PRIM_TABLE` 126 → 137, version 12),
+  bounded at 2^28 bytes; `num::float_text`, the one text of a `Float`, shared by the formatter and `str`; RW 2.48's
+  DL0104; on WASM `compile_str_of`, `delulu:str.str_find`, `delulu:math.float_to_fixed`, `s[i]` through `str_method`
+  (arguments rebuilt in the method's order, faults trapping), and the scalar `match`.
+- **The programs** (D-V2-220's step), on both engines: `banner` (one line), `wrap` (an `fmt`-style wrapper, left, right,
+  centred and justified, at two widths: Python's `textwrap.wrap` for its lines and an independent implementation for
+  every character, 73 lines), `logreport` (346 lines: an access log parsed or refused with its reason, then classes,
+  endpoints, latency statistics, traffic, hours, extensions, suspicious paths and a fingerprint; 42 lines, each equal to
+  an independent Python implementation). They found:
+  - **WASM's `match` on a `Str`** (and an `Int` or a `Bool`) was DL1201, recorded nowhere — fixed, through the ordered
+    match the engine already had;
+  - **RW 6.86**: the formatter joins a long `+` chain onto one line (about 1,250 characters) and leaves a long method
+    receiver whole while breaking its one short argument;
+  - **RW 6.85**'s class again: `let (a, b) = …` (tuples are RW 2.39) ends in DL0414 naming `<error>`.
+
+**Evidence.**
+- Tests: `strings_parity` 7 (hand- or Python-worked answers and every fault, word for word on both engines; 300
+  generated f-strings; the untyped compile entry, with `s[i]` alone; the scalar `match`; no new import without the
+  surface), `strings_cli` 6 (an effect in a hole is DL0501 on its function; `authority --json` counts a read in a hole
+  and keeps a pure-hole function pure; DL0604 in a hole; the refusals' words; `fmt`), the syntax crate's `fstring_tests`
+  7, `fstring_lex_tests` 4, `float_text_tests` 2 (200,000 generated bit patterns read back) and `fmt` 1, with the
+  formatter's fuzz gate generating f-strings; conformance `accept/33_strings.delulu` and eight rejects, eleven witness
+  rows (entrenched: `ENTRENCHED_CHANGE_RECORD.md`'s 2026-11-10 entry); `delulu-conform --coverage` 411 of 411,
+  `--check-reference` in sync.
+- Mutants M1246–M1273: 28. The first run: 26 red, two survived — M1250 (the no-hole branch: only a span moved) and M1273
+  (the untyped compile's index trigger: its witness also called a `Str` method, which brought the import by name). Each
+  got a witness (`an_fstring_without_a_hole_spans_all_of_its_source`, `a_str_index_alone_compiles_without_the_checkers_types`)
+  and went red on the re-run; both controls green.
+- `scripts/clippy.sh -j 4` clean after the last `.rs` edit; `scripts/check-other-os.sh` clean on all five targets.
+- `core_invariance` blessed: 9 NEW cases, 517 lines added, none removed or changed. `math_table.out` re-blessed: five
+  lines, each a `Float` past 1e16 or below 1e-4, the same digits in exponent form (D-V2-225's measure).
+- **The full suite** (`scripts/suite.sh`, on `53e1b85f`): 199 targets, 2,797 passed, 0 failed, 16 ignored, `EXIT=0`, the
+  tree unmoved.
+- Witness runs on `53e1b85f`, each read: macOS `42875662948` (`conformance` 4, `core_invariance` 1, `programs_cli` 3,
+  `strings_cli` 6) and Windows `42875669189` (the same four targets; `core_invariance`, `programs_cli` and `strings_cli`
+  read in the log, the job green); macOS `42875675405` (`strings_parity` 7) and Windows `42875681473` (`strings_parity`,
+  the job and its step green); Windows `42875686840` and macOS `42875693790` (`delulu-syntax` `lib`, each job and its
+  step green).
+- The two-engine differential (50,000 programs, `--release`, by hand since `codegen.rs` changed): green, 154 s.
+- `master`'s push run on the records commit: read in `docs/CLOUD_SYNC_LOG.md`'s entry for this run.
