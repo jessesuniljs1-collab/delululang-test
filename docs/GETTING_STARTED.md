@@ -153,6 +153,29 @@ The list is fixed when the loop starts, so mutating it inside the body cannot ch
 the loop runs. `break`/`continue` outside a loop are a compile error (`DL0412`), and `for` over
 anything that is not a list is `DL0411`.
 
+**Counting is a range.** `0..n` is the `Int`s from `0` up to but not including `n`, and `1..=n` runs
+up to and including `n`; `range(lo, hi)` is `lo..hi` written as a call. A range is a `List[Int]`, so
+every list method takes one, and a `for` over it counts without building the list:
+
+```delulu
+fn triangle(n: Int) -> Int {
+    var total = 0
+    for i in 1..=n {
+        total += i
+    }
+    total
+}
+
+fn evens(n: Int) -> List[Int] {
+    (0..n).step_by(2)   // [0, 2, 4, …]; `(0..n).reverse()` counts down
+}
+```
+
+A range binds looser than arithmetic, so `0..n + 1` is `0..(n + 1)`. Its bounds are `Int`s (a
+`Float` bound is `DL0401`, and the message says how to step by a fraction); `for _ in 0..n` repeats
+a body `n` times. A range used as a list holds at most 268,435,456 values (`DL0908` past that); a
+`for` over one has no such limit.
+
 > **The collection surface, and the three places it deliberately refuses.** As of 2026-09-20
 > (V2 phase P3) `List` has fifteen methods — `len`, `is_empty`, `get`, `push`, `pop`, `map`,
 > `filter`, `find`, `fold`, `sort`, `reverse`, `concat`, `slice`, `contains`, `join` — `Str` has ten,

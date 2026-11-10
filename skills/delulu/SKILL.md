@@ -54,6 +54,10 @@ and nothing more, and the checker refuses any other signature.
 discovering it — `measurements/ai-usability/`). `str(x)` turns a value into `Str`; `parse_int(s)`
 returns `Option[Int]`; a list has `len()`, `push(x)` and `get(i)`, which returns `Option[T]`; a
 `Str` has `split(sep)`, `trim()`, `len()`, `contains(s)`; `for x in xs { … }` iterates a list.
+**Ranges:** `0..n` is `0` up to but not including `n`, `1..=n` includes `n` — each a `List[Int]`, so
+`for i in 0..n { … }` counts (building no list, so any `n` is fine), and `(0..10).step_by(2)`,
+`(0..n).reverse()` and `(1..=n).map(f)` work as on any list. There is no three-argument `range`:
+write `(lo..hi).step_by(k)`. `for _ in 0..n` repeats a body `n` times.
 There is no `unwrap` — `match` the `Option` or `Result`, or use `?` inside a function that returns
 `Result`. A match arm that does nothing is `None => {}`; one that assigns or `continue`s wraps it in
 braces: `Some(v) => { best = v }`, `_ => { continue }`.

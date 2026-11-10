@@ -202,7 +202,9 @@ expr          = or_expr ;
 or_expr       = and_expr , { "||" , and_expr } ;
 and_expr      = eq_expr , { "&&" , eq_expr } ;
 eq_expr       = cmp_expr , [ ( "==" | "!=" ) , cmp_expr ] ;
-cmp_expr      = add_expr , [ ( "<" | "<=" | ">" | ">=" ) , add_expr ] ;
+cmp_expr      = range_expr , [ ( "<" | "<=" | ">" | ">=" ) , range_expr ] ;
+range_expr    = add_expr , [ ( ".." | "..=" ) , add_expr ] ;   (* RW 2.36: `lo..hi` is `range(lo, hi)`,
+                     `lo..=hi` includes `hi`; a `List[Int]` of two `Int` bounds; never chained (DL0201) *)
 add_expr      = mul_expr , { ( "+" | "-" ) , mul_expr } ;
 mul_expr      = unary , { ( "*" | "/" | "%" ) , unary } ;
 unary         = ( "-" | "!" ) , unary | postfix ;
@@ -655,7 +657,10 @@ pattern; refusing it here only made authors invent a name and wonder whether it 
 
 Builtin free functions (prelude, all pure): `str(x)`, `len(x)`, `int(f)`, `float(i)`,
 `parse_int(s) -> Option[Int]`, `parse_float(s) -> Option[Float]`, `push(list, x)`,
-`range(lo, hi) -> List[Int]`.
+`range(lo, hi) -> List[Int]`. Each takes exactly the arguments written here (DL0403 otherwise, RW 2.36);
+`len` counts a `Str`'s characters, a `List`'s elements or a `Map`'s pairs, and `range(lo, hi)` is
+`lo..hi` — at most 2^28 values as a list (DL0908 past it), unbounded as a `for` loop's iterable, which
+counts without building one. A `for` loop's variable may be `_`, as `let`'s may.
 
 **Numeric literals, and `parse_float`, obey one rule: the value written is the value used.** A
 literal that names a magnitude the type cannot hold is **DL0104**, in both columns — an integer too

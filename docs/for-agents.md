@@ -867,6 +867,13 @@ overstate it downstream:
     gives — use `Secret.verify`, which is constant-time and carries `Declassify`); a `Map` key that is
     not one of the three scalars. Do not work around these by reaching for a flag; there is none, and
     the refusal is the answer.
+  - **Ranges** (RW 2.36, D-V2-224): `lo..hi` is `lo` up to but not including `hi`, `lo..=hi` includes `hi`; both are
+    `range(lo, hi)`'s `List[Int]` written as operators, on both engines. A `for` over one counts without building a list,
+    so `for i in 0..n` is right for any `n`; as a value a range holds at most 268,435,456 values (DL0908 past it, in the
+    same words on both engines). A range binds looser than arithmetic and tighter than comparison (`0..n + 1`,
+    `xs == 0..3`) and does not chain (`a..b..c` is DL0201). There is no three-argument `range` (DL0403 names
+    `(lo..hi).step_by(k)`); count down with `(lo..hi).reverse()`; `for _ in 0..n` repeats a body. `...` is DL0101. Every
+    free builtin takes exactly its arguments (`str(1, 2)` is DL0403; `len` reads a `Str`, a `List` or a `Map`).
   - **Math is written as methods** (RW 2.38, D-V2-223), so a program's own `fn abs` or `fn max` keeps its meaning.
     `Int`: `abs`, `min`, `max`, `clamp(lo, hi)`, `pow(e)`, and the checked forms `checked_add`, `checked_sub`,
     `checked_mul`, `checked_div`, `checked_rem`. `Float`: `abs`, `min`, `max`, `clamp`, `sqrt`, `floor`, `ceil`,

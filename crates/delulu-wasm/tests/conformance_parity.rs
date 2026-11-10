@@ -211,12 +211,25 @@ fn fragment_external_programs_are_compile_errors() {
     // must refuse (DL1201-class) — the CLI then runs it on the interpreter instead of miscompiling.
     let cases = [
         "module m\nfn f(n: Int) -> Int { match n { _ => n } }\n", // match
-        "module m\nfn f() -> Int { len(range(0, 5)) }\n",         // list builtins (range/len)
+        // An `if` without `else` as a match arm's value (RW 3.25's third construct). This case was `len(range(0, 5))`
+        // until RW 2.36 (D-V2-224) compiled `range` and the free `len`; that program's answer is held below instead.
+        "module m\nfn f(o: Option[Int]) -> Int {\n  var found = 0\n  match o {\n    Some(p) => if p > 2 { found = 1 },\n    None => {},\n  }\n  found\n}\n",
         "module m\nfn f() -> Int {\n  let fs = [fn(x: Int) -> Int { x }]\n  fs.len()\n}\n", // a list of functions
     ];
     for src in cases {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "case should check clean: {src}\n{:?}", checked.diagnostics);
         assert!(compile_module(&checked.module).is_err(), "should be a DL1201 CompileError (fall back to interpreter): {src}");
+    }
+    // RW 2.36: `len(range(0, 5))` was fragment-external; it compiles now, on both entries, and answers 5 as the
+    // interpreter does.
+    let src = "module m\nfn main(root: Root) ! {Write} {\n  root.console().println(str(len(range(0, 5))))\n}\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let cfg = HostConfig { console: true, ..HostConfig::default() };
+    for wasm in
+        [compile_module(&checked.module).expect("untyped"), compile_checked(&checked.module, &checked.result).expect("typed")]
+    {
+        assert_eq!(run_main(&wasm, &cfg).map_err(|e| e.message()).as_deref(), Ok("5\n"));
     }
 }

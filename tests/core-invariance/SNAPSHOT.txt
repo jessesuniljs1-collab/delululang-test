@@ -3246,6 +3246,77 @@ exit 0
 program cannot perform `Write`
 --- stderr ---
 
+===== tests/conformance/accept/32_ranges.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/32_ranges.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/32_ranges.delulu checked clean
+
+===== tests/conformance/accept/32_ranges.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "countdown",
+      "evens_below",
+      "same",
+      "sum_to"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/32_ranges.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     countdown, evens_below, same, sum_to
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/32_ranges.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/32_ranges.delulu`
+
 ===== tests/conformance/accept/compound_assignment.delulu :: check --json =====
 exit 0
 --- stdout ---
@@ -3521,6 +3592,57 @@ exit 2
 --- stdout ---
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/var_and_let.delulu`
+
+===== tests/conformance/reject/DL0101_range_three_dots.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected `...` — a range is `lo..hi` (up to `hi`, not including it) or `lo..=hi` (up to and including `hi`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 207,
+            "col": 9,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0101_range_three_dots.delulu",
+          "start": {
+            "byte": 204,
+            "col": 6,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0101_range_three_dots.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0101]: unexpected `...` — a range is `lo..hi` (up to `hi`, not including it) or `lo..=hi` (up to and including `hi`)
+  --> tests/conformance/reject/DL0101_range_three_dots.delulu:6:6
+   |
+ 6 |     0...3
+   |      ^^^
+  explain: delulu explain E-DL0101
+
+1 error(s)
 
 ===== tests/conformance/reject/DL0104_float_overflow.delulu :: check --json =====
 exit 1
@@ -4118,6 +4240,58 @@ error[DL0201]: expected `:`, found identifier `Int`
    |
  4 | fn f(x Int) -> Int {
    |        ^^^ expected `:` here
+  explain: delulu explain E-DL0201
+
+1 error(s)
+
+===== tests/conformance/reject/DL0201_range_chained.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0201",
+      "explanation_id": "E-DL0201",
+      "message": "a range has one `..`: `a..b..c` is not a range — write the one you mean, `a..c`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 148,
+            "col": 11,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0201_range_chained.delulu",
+          "label": "a second range operator",
+          "start": {
+            "byte": 146,
+            "col": 9,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0201_range_chained.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0201]: a range has one `..`: `a..b..c` is not a range — write the one you mean, `a..c`
+  --> tests/conformance/reject/DL0201_range_chained.delulu:5:9
+   |
+ 5 |     0..3..5
+   |         ^^ a second range operator
   explain: delulu explain E-DL0201
 
 1 error(s)
@@ -5998,6 +6172,58 @@ error[DL0401]: argument type mismatch: expected `Int`, found `Float`
 
 1 error(s)
 
+===== tests/conformance/reject/DL0401_len_of_an_int.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`len` counts a `Str`, a `List` or a `Map`, and this is `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 143,
+            "col": 10,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_len_of_an_int.delulu",
+          "label": "not a `Str`, a `List` or a `Map`",
+          "start": {
+            "byte": 142,
+            "col": 9,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_len_of_an_int.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `len` counts a `Str`, a `List` or a `Map`, and this is `Int`
+  --> tests/conformance/reject/DL0401_len_of_an_int.delulu:5:9
+   |
+ 5 |     len(5)
+   |         ^ not a `Str`, a `List` or a `Map`
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0401_list_concat_element_mismatch.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -6414,6 +6640,58 @@ error[DL0401]: a `Float` cannot be a Map key: it has no total order (NaN compare
 
 1 error(s)
 
+===== tests/conformance/reject/DL0401_range_float_bound.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "a range counts in `Int`s, and this bound of `lo..hi` is a `Float`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 207,
+            "col": 11,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0401_range_float_bound.delulu",
+          "label": "a `Float` bound: for fractional steps count in `Int`s and scale, `(0..n).map(fn(i: Int) -> Float { float(i) * 0.5 })`",
+          "start": {
+            "byte": 204,
+            "col": 8,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_range_float_bound.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: a range counts in `Int`s, and this bound of `lo..hi` is a `Float`
+  --> tests/conformance/reject/DL0401_range_float_bound.delulu:6:8
+   |
+ 6 |     0..2.5
+   |        ^^^ a `Float` bound: for fractional steps count in `Int`s and scale, `(0..n).map(fn(i: Int) -> Float { float(i) * 0.5 })`
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0401_str_replace_non_str.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -6618,6 +6896,58 @@ error[DL0403]: expected 2 argument(s), found 1
    |
  9 |   g(1)
    |   ^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_builtin_extra_argument.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`str` expects 1 argument(s), found 2: `str(value)`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 152,
+            "col": 14,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_builtin_extra_argument.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 143,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_builtin_extra_argument.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `str` expects 1 argument(s), found 2: `str(value)`
+  --> tests/conformance/reject/DL0403_builtin_extra_argument.delulu:5:5
+   |
+ 5 |     str(1, 2)
+   |     ^^^^^^^^^ wrong number of arguments
   explain: delulu explain E-DL0403
 
 1 error(s)
@@ -7034,6 +7364,58 @@ error[DL0403]: `map.values` expects 0 argument(s), found 1
    |
  5 |     m.values(1)
    |     ^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_range_with_a_step.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`range` expects 2 argument(s), found 3: a range has no step — `(lo..hi).step_by(k)` counts in steps of `k`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 169,
+            "col": 20,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_range_with_a_step.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 154,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_range_with_a_step.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `range` expects 2 argument(s), found 3: a range has no step — `(lo..hi).step_by(k)` counts in steps of `k`
+  --> tests/conformance/reject/DL0403_range_with_a_step.delulu:5:5
+   |
+ 5 |     range(0, 10, 2)
+   |     ^^^^^^^^^^^^^^^ wrong number of arguments
   explain: delulu explain E-DL0403
 
 1 error(s)
