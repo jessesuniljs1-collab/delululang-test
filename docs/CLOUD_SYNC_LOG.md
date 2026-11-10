@@ -9161,3 +9161,34 @@ Survey and doctor: in the commit below.
      on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for their next red.
   5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
      prepared, not launched; it does not hold D-V2-210 onward.
+
+### 2026-11-10 — the laptop: synced with routine runs 22 and 23; run 23's follow-up push run read green; the merged branches deleted on `origin` and locally
+- Session: `https://claude.ai/code/session_01Deh6WAQG9TRkvtHZJobPiq`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `master`, pushed directly (records only, as the routine's records commits are). Pull request: none.
+- Base: `bc0cc78`. The laptop's `master` was at `459e410`, 11 behind `origin/master`; `git fetch origin --prune`, then a
+  fast-forward to `bc0cc78` (runs 22 and 23's commits, each carrying its run's session link — the routine's, not
+  another AI's). Nothing local was unpushed and the tree was clean. `laptop/basics-math` `ee207ce`, the laptop's work in
+  progress, was in `master`'s history: run 22 finished it (RW 2.38, D-V2-223).
+- **CI read:** the push run `42779161529` on `bc0cc78` — run 23's follow-up records commit, which its entry left unread —
+  success, 14 jobs green and 2 skipped (`heavy-gates` and `miri-slow`, as on every push). On the same commit the
+  scheduled runs `42801445421` (success) and `42806761636` (skipped) were listed, not opened.
+- **Deleted on `origin`**, as run 23's *Redo on the laptop* asked — each checked with `git merge-base --is-ancestor
+  <branch> origin/master` after the fetch, none with an open pull request; `git push origin --delete` exited 0 and
+  `git ls-remote --heads origin` no longer lists them: `claude/peaceful-carson-klplez`, `claude/peaceful-carson-r464uq`,
+  `claude/peaceful-carson-yjtqjc`, `laptop/basics-compound`, `laptop/basics-let-var`, `laptop/basics-math`,
+  `laptop/mcp-cancel`, `laptop/missing-grants`, `laptop/package-fast-paths`, `laptop/rw-7-31-formal-pin`,
+  `laptop/sandbox-faults`, `laptop/stack-ladder` and `laptop/wasm-main-shapes`.
+- **Kept on `origin`**, each holding commits `master` lacks: `launch/2.0.0` (58; prepared, not launched),
+  `autosave/laptop` (172), `autosave/laptop-dl-launch` (56), `autosave/dogfood` (13), `archive/superseded-2026-10-26`
+  (6), `rc/1.0.0-drill` (1) and `laptop/stack-ladder-witness` (1; superseded, recorded before).
+- **Deleted locally** with `git branch -d`, which refuses a branch not merged: the ten local copies of the branches
+  above, and six whose `origin` branches were deleted before — `laptop/rw-4-98-fix`, `laptop/rw-4-98-orders`,
+  `laptop/rw-4-98-review`, `laptop/rw-7-25-ci-evidence`, `laptop/rw-7-25-records` and `laptop/rw-7-25-witness`. Left
+  locally: `master`, `launch/2.0.0` (its worktree `D:/nelan/dl-launch`), `laptop/stack-ladder-witness` and
+  `rc/1.0.0-drill`; the two stashes are kept.
+- Files and folders (`git diff --name-status bc0cc78..HEAD`): M `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing
+  added, deleted or renamed.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:** run 23's list above stands, its item 1 now done (the push run read, the branches deleted). Read this
+  commit's push run first; then the next basic, strings (RW 2.37), in D-V2-220's order.
