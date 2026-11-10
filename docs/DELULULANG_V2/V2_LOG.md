@@ -12732,3 +12732,55 @@ The Survey: `ok` (1661 nodes, 20052 edges); `doctor --check`: 26 passed.
   - Windows `42573369648` and macOS `42573372582`: `delulu-runtime` `math_tests` 7, `libm`'s digits among them.
 - `master`'s push run `42575366656` on the records commit `0213077`: success, 14 jobs green, 2 skipped (`heavy-gates`,
   `miri-slow`); arm64's ping-pong MEASURED 2.88x against 1.48x.
+
+## 2026-11-10 — on-demand routine run 23: RW 2.36 closed — ranges, and every free builtin reads its arguments (D-V2-224)
+
+**Start.** `master` at `0ff6f5c`, unmoved since run 22; every branch ahead of it already recorded (`autosave/laptop`'s
+newest snapshot `4271780` older than and a subset of `ee207ce`, landed). CI since run 22, read: the push run `42578548200`
+on `0ff6f5c` success (14 jobs; arm64's ping-pong MEASURED 2.95x against 1.48x), the nightly `42604091047` success (18
+jobs; arm64 2.85x, macOS 1.96x against 1.32x), the release dry run `42623379628` success. The Survey: `ok` (1677 nodes,
+20203 edges); `doctor --check`: 26 passed. `CLAUDE_EFFORT=xhigh`.
+
+**What.** RW 2.36, the fourth language basic (D-V2-220), and the defect class its probes opened.
+- **Probed before building** (`0ff6f5c`): `0..3` was DL0201; `range` was DL1201 on WASM; `range(1.5, "x")`, `range(1)`
+  and `range(0, 3, 9)` checked clean and ran wrong; `range(0, 10^12)` aborted the interpreter (SIGABRT) and
+  `range(MIN + 1, MAX)` panicked (*capacity overflow*). Then every free builtin, sixteen calls: all sixteen ran, among
+  them `str(1, 2)` printing `1`, `Some()` as `Some(())`, and `len(m)` of a `Map` as 0.
+- **Built:** `..` and `..=` (lexer, parser at a level of their own, formatter with its precedence scale renumbered);
+  `BinOp::Range` and `RangeInclusive` typed `List[Int]`; the bounded builder `prim::range_list` (2^28 values, `i128`
+  counts, `try_reserve_exact`, the memory budget); a counting `for` on both engines; `List.step_by`; `for _ in`;
+  `builtin_arity` and the argument types of `len`, `parse_int`, `parse_float` and `push`; on WASM `delulu:list.range_len`,
+  `delulu:list.step_by`, `delulu:cap.console_print`, and the free `len` and `push`.
+- **The programs** (D-V2-220's step), on both engines: `squares` (one line), `calendar` (a month's grid, line for line
+  Python's `calendar.TextCalendar(6)`), `numbers` (367 lines: primes, gaps and twins, a last-digit histogram, gcd and
+  lcm up to overflow, factorials and Fibonacci to `Int`'s end, Collatz, perfect numbers, Pascal's rows, digit sums,
+  `isqrt` to `Int`'s largest value, fixed-point sines, clamping), every answer equal to an independent Python
+  implementation. They found:
+  - **WASM's `Cap[Console].print`** was DL1201, and the free `len(x)` and `push(xs, v)` — fixed;
+  - **`for _ in 0..n`** did not parse — fixed, as `let _` binds (D63);
+  - **RW 2.50**: `Option` and `Result` have no methods (`unwrap_or`);
+  - **RW 2.51**: a list a builtin or method makes is `val`, and a list replaced in a loop cannot be returned (DL1603);
+  - **RW 6.85**: a parse error in a `for` head cascades into errors about correct code;
+  - **RW 2.37**'s evidence: `str` of a `List[Str]` does not quote its strings;
+  - and a defect in the program itself, `isqrt(Int max)` overflowing `(r + 1) * (r + 1)`: DL0901 on both engines, fixed
+    with `checked_mul`.
+
+**Evidence.**
+- Tests: `delulu-syntax` (lexer 1, parser 5, fmt 1, the fuzz gate generating both operators); `delulu-check`
+  `every_prelude_builtin_reads_its_argument_count`; `delulu-runtime` `range_tests` (2); `delulu-wasm` `range_parity`
+  (5: 28 answers and 7 faults on both engines against hand-worked values, the counting `for`, a shadowed `range`, the
+  untyped compile) and `refusal_trace_parity` (+1 case, +1 test: `print`'s trace byte-identical); `delulu` `ranges_cli`
+  (5) and `programs_cli` over three new programs; conformance `accept/32_ranges.delulu` and six rejects, one witness row
+  (`ENTRENCHED_CHANGE_RECORD.md`); `delulu-conform --coverage` 400 of 400, `--check-reference` in sync.
+- Mutants M1220–M1229 and M1231–M1245: 25, all red; the control green. The rcap pass's range arm has none: with today's
+  defaults a range's `default_k` is the `val` it had before, so no mutant can tell the two apart.
+- `scripts/clippy.sh -j 4` clean after the last `.rs` edit; `scripts/check-other-os.sh` clean on all five targets.
+- **The full suite**, first run: 197 targets, 2,769 passed, 1 failed, 16 ignored (`EXIT=101`, the tree unmoved). The red
+  was `conformance_parity`'s list of fragment-external programs, which held `len(range(0, 5))` refused on WASM; that
+  case is now RW 3.25's `if`-without-`else` arm, still refused, and the old program is held compiling and printing `5`.
+  On the final tree (`3329c00`): 197 targets, 2,770 passed, 0 failed, 16 ignored, `EXIT=0`, the tree unmoved.
+- The two-engine differential (50,000 programs, `--release`, since `codegen.rs` changed): green, 159 s.
+- `core_invariance` blessed: 17 NEW cases (`32_ranges.delulu` and the six new rejects), 382 lines added, none removed or changed — no answer the core gave before moved.
+- Witness runs on `7a6f5f2`, each read in its log: macOS `42770837951` and Windows `42770841584` (`conformance` 4,
+  `programs_cli` 3, `ranges_cli` 5); macOS `42770845536` and Windows `42770849696` (`range_parity` 5,
+  `refusal_trace_parity` 3).

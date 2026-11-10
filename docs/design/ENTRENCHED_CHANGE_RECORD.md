@@ -881,3 +881,34 @@ from a program. `PRIM_TABLE_VERSION` moves from 9 to 10 by its own rule.
 git checkout 79431e4^ -- tests/conformance/witnesses.toml
 ```
 — together with the 33 primitive-table entries, or the coverage gate fails on 33 unwitnessed anchors.
+
+## 2026-11-10 — `tests/conformance/witnesses.toml`: `List.step_by`'s rejecting witness
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: one `[[witness]]` row, the rejecting witness for the new anchor `ref.prim.list.step_by`, before `ref.prim.list.len`'s, under a comment naming the decision. No other row changes. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | on-demand routine run 23 (2026-11-10); `REMAINING_WORK.md` 2.36; decision D-V2-224 |
+| Approved by | **the head chef, 2026-11-10, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+D-V2-224 adds one primitive, `List.step_by(k)`, to the primitive table. The coverage law (invariant 42) demands an
+accepting and a rejecting witness for every anchor. The accepting one is `tests/conformance/accept/32_ranges.delulu`,
+which uses it and names the anchor in its header. The rejecting one is the table's own
+`arity_column_matches_the_checker_gate`, which calls it with one argument more than its arity and asserts the gate's
+DL0403 by its exact message, and with exactly its arity and asserts the gate does not fire.
+
+**Why this is not an RFC**
+
+The primitive is additive (`STABILITY.md` §1): no program that checked changes its answer, and a method takes no name from
+a program. `PRIM_TABLE_VERSION` moves from 10 to 11 by its own rule.
+
+**Verified before the change**
+
+1. `delulu-conform --coverage` without the row: one gap, *"ref.prim.list.step_by — no rejecting test"*, 399 of 400. With
+   it: *PASS: 100% anchor coverage*, 400 of 400.
+2. Mutants M1220–M1245 turn the new tests red (`V2_LOG.md`); `--reference` regenerated the reference (126 of 126 in the
+   primitives chapter) and `--check-reference` reads it in sync.

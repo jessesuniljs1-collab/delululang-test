@@ -6507,3 +6507,67 @@ from line 47 to 50 by the reformat. No answer moved. The DIR's bytes for a progr
   lines: statistics, wind vectors, great-circle distances, a least-squares trend). `loan` and `weather` match an
   independent Python implementation line for line.
 - **Mutants M1201–M1219 and M1206b:** 20, all red; each control green.
+
+## D-V2-224 — RW 2.36: ranges — `lo..hi` and `lo..=hi` are the prelude's `range` written as operators, a `List[Int]` a `for` counts without building; every free builtin reads its arguments — TAKEN (head chef, 2026-11-10, under the owner's delegation)
+
+**Context.** The fourth basic in D-V2-220's order. RW 2.36, measured 2026-11-02 and re-run 2026-11-05: `for i in 0..3`
+was DL0201 (*expected a member name, found `.`*), and the documented `for i in range(0, n)` ran on the interpreter and
+was DL1201 on WASM (RW 3.25's first construct). Probed again by on-demand routine run 23 before building, on `0ff6f5c`:
+- `range(1.5, "x")` and `range(1)` checked clean and were an empty list; `range(0, 3, 9)` ignored its third argument;
+- `range(0, 1000000000000)` aborted the interpreter (*memory allocation of 40000000000000 bytes failed*, SIGABRT, exit
+  134), and `range(-9223372036854775807, 9223372036854775807)` panicked (*capacity overflow*): no code, no span;
+- the same unread arguments in eleven more builtins: `str(1, 2)` printed `1`, `Some()` was `Some(())`, `Ok(1, 2)` was
+  `Ok(1)`, `parse_int(5)` was `None`, `len(5)` was 0 and `len(m)` of a `Map` holding pairs was 0 (a wrong answer),
+  and `push(5, 3)` checked and then faulted DL0907 (*"a checker bug"*).
+
+**Decision.**
+1. **Two operators over the prelude's `range`.** `lo..hi` is the `Int`s from `lo` up to but not including `hi`, and
+   `lo..=hi` up to and including `hi`: Rust's spellings, which Swift and Kotlin share in meaning. Each is
+   `BinOp::Range` or `BinOp::RangeInclusive`, typed `List[Int]` of two `Int` bounds, and empty when the bounds are
+   crossed (never a fault, as Python's and Rust's are). A binary operator rather than a parser rewrite to a call:
+   every walk of an expression already visits a `Binary`'s two sides, so effects, authority and the Atlas see a range
+   without knowing it exists, and the formatter prints it as written.
+2. **Precedence: looser than arithmetic, tighter than comparison** (Swift's and Kotlin's level, not Rust's lowest):
+   `0..n + 1` is `0..(n + 1)`, and `xs == 0..3` compares two lists. It does not chain: `a..b..c` is DL0201, said once
+   (the extra `..c` is read past, so no second error follows). `...`, which other languages disagree about, is DL0101
+   naming both spellings. The formatter prints a range close, `0..n`, as Rust's and Kotlin's do.
+3. **A `for` over a range counts.** `for i in lo..hi`, `lo..=hi` or `range(lo, hi)` (with no local of that name) reads
+   its bounds once, in order, and counts an `Int` on both engines without building a list, so any length is iterable;
+   `..=` stops at `hi` before its step and so reaches `Int`'s largest value. `for _ in 0..n` repeats a body: `_` is the
+   loop's write-only name, as `let _`'s has been since D63.
+4. **A range used as a list is bounded.** It holds at most 2^28 = 268,435,456 values on both engines (a 2 GiB list in
+   the WASM engine's 4 GiB memory); a longer one is DL0908 before anything is allocated, in the same words on both
+   engines (`prim::range_len`, counted in `i128`). Below that, the interpreter reserves with `try_reserve_exact` and
+   charges the run's memory budget as a list literal does; a refused reservation is DL0908 too. No range aborts or
+   panics a process.
+5. **`List.step_by(k)`**, every `k`th element from the first, is a range's step and any list's (`(0..10).step_by(3)`
+   is `[0, 3, 6, 9]`); a step below 1 is DL0908, whose words say to `reverse()` first to count down. There is no
+   three-argument `range`: its DL0403 names `step_by`. `PRIM_TABLE` 125 → 126, `PRIM_TABLE_VERSION` 10 → 11.
+6. **Every free builtin reads its arguments.** `builtin_arity` names the count of `Ok`, `Err`, `Some`, `str`, `len`,
+   `int`, `float`, `parse_int`, `parse_float` and `push` (DL0403 otherwise); `load`, `assert`, `assert_eq`, `range`
+   and `Map` keep their own words; a drift test calls every prelude builtin with one argument too many. `len` reads a
+   `Str`, a `List` or a `Map` (DL0401 otherwise) and counts a `Map`'s pairs on both engines; `parse_int` and
+   `parse_float` read a `Str`; `push`'s first argument is a `List`.
+7. **The WASM engine runs what the interpreter runs.** A range list is counted host-side by the interpreter's own
+   `prim::range_len` (`delulu:list.range_len`) and filled in the guest; `step_by` copies slots host-side
+   (`delulu:list.step_by`); the free `len(x)` and `push(xs, v)` compile; and `Cap[Console].print`, found DL1201 by this
+   basic's programs, has `delulu:cap.console_print`, the same trace, custody and refusals as `println`. Each new import
+   follows every older one and is decided from the syntax, so a module without a range, a `step_by` or a `print` is
+   byte-identical to before, and the untyped compile entry (a Verified plugin's DIR) decides as the typed one does.
+8. **What a range is not, yet.** Its list is `val`, as `range(lo, hi)`'s, `split`'s and `map`'s are (a literal and
+   `Map()` are fresh): `let xs: ref List[Int] = 0..3` is DL1603. That and the other shapes this basic's programs found
+   are rows (RW 2.50, 2.51), not part of this decision.
+
+**Classification.** Additive for every program that used `..` as an operator (none could: it did not parse) and for
+`range(lo, hi)` called correctly, whose list is the same. **Refusing (`STABILITY.md` §1, a program that checked now does
+not):** a builtin called with the wrong count or type — `range(1.5, "x")`, `str(1, 2)`, `len(5)`, `Some()` — each of
+which printed a wrong or meaningless answer. The repository holds no such call (searched: every `.delulu`, every `.md`).
+`len(m)` of a `Map` moves from 0 to its pairs: a wrong answer corrected.
+
+**What does not move.** `tests/core-invariance/SNAPSHOT.txt`: 17 NEW cases (`32_ranges.delulu` and the six new rejects), 382 lines added, none removed or changed — no answer the core gave before moved. The DIR's bytes for a program that checked
+before are unchanged, and so are the WASM bytes of a module with no range, `step_by` or `print`.
+
+**Evidence.** In `V2_LOG.md`'s entry for on-demand routine run 23: the probes above, red before the fix; the tests;
+mutants M1220–M1245 (25, all red); the full suite; the witness runs on macOS and Windows; the programs `squares`,
+`calendar` (checked against Python's `calendar`) and `numbers` (367 lines, every basic so far, checked against an
+independent Python implementation), on both engines.

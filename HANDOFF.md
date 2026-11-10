@@ -923,6 +923,14 @@ wins, and you should update the memory to match.
   - **A basic's programs test the toolchain as well as the basic** (run 22). `delulu fmt` on the new `loan.delulu`
     squashed a nested `match` onto one 700-character line. Five gated files in the repository had carried the same
     flattening for weeks, canonical by definition, and nothing flagged it. Format every new program and read the diff.
+  - **A builtin whose arguments no pass reads gives wrong answers, not refusals** (on-demand routine run 23, RW 2.36).
+    `range(lo, hi)` had been documented and run since Stage 1, and its checker arm never looked at what it was given:
+    `range(1.5, "x")` was an empty list, `range(1)` the same, and `range(0, 10^12)` aborted the process. Eleven more
+    builtins were the same, and `len(m)` of a `Map` answered 0. Before building on a prelude name, call it with one
+    argument too many and one of the wrong type; `every_prelude_builtin_reads_its_argument_count` now does it for all.
+  - **A basic's programs find the engine's gaps, not only the basic's** (run 23). The calendar's first line on WASM was
+    `c.print(…)`, DL1201 since the WASM engine was built; the free `len(x)` and `push(xs, v)` were the same, and `for _
+    in 0..n` did not parse on either engine. Run every program on both engines before writing a test that assumes one.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

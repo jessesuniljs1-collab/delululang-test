@@ -382,7 +382,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
     - The order: ~~compound assignment (2.34)~~ (done 2026-11-08 by on-demand routine run 21, D-V2-221; its programs
       found RW 2.45, 2.46 and 3.32, and RW 3.31, fixed) → ~~RW 2.46~~ (done 2026-11-08 by the laptop, D-V2-222, with
       RW 2.47) → ~~math and the checked forms (2.38)~~ (done 2026-11-09 by on-demand routine run 22, D-V2-223; its
-      programs found two formatter defects, fixed, and RW 2.48 and 2.49) → ranges (2.36) →
+      programs found two formatter defects, fixed, and RW 2.48 and 2.49) → ~~ranges (2.36)~~ (done 2026-11-10 by on-demand
+      routine run 23, D-V2-224, with every free builtin's arguments read; its programs found WASM's missing `print`,
+      `len(x)` and `push`, fixed, and RW 2.50, 2.51 and 6.85) →
       strings (2.37) →
       bitwise (2.35) → methods on a program's own types (2.33) → tuples, sets, keyed sorting, comprehensions (2.39) →
       argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.

@@ -9058,3 +9058,100 @@ Survey and doctor: in the commit below.
      their next red.
   5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
      prepared, not launched; it does not hold D-V2-210 onward.
+
+### 2026-11-10 — on-demand routine run 23: RW 2.36 closed — ranges, a `for` that counts without a list, and every free builtin reads its arguments (D-V2-224)
+- Session: `https://claude.ai/code/session_01Deh6W9FSJH8uDnwDHLfofA`   Model: Claude Opus 5.5 (the routine; no fallback
+  notice; no sous-chef). **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`; the transcript's replies, counted with
+  step 0's command at the start, were 2, both `"effort":"xhigh"`. The setup script had run: the 1.96.1 toolchain was
+  there before the first command.
+- Branch: `master`, pushed directly (`docs/CLOUD_ROUTINE.md`, *Where a run works*). The code also went to the session's
+  branch `claude/peaceful-carson-klplez` for its runner reads. Pull request: none.
+- Base: `0ff6f5c` (`master` at the start). `gh` is installed (`/usr/local/bin/gh`); CI was read with the MCP tools and
+  `curl`.
+- **Housekeeping:**
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1677 nodes, 20203 edges)`; `ok: 26 check(s)
+    passed`.
+  - CI since run 22, all read green: the push run `42578548200` on `0ff6f5c` (14 jobs, 2 skipped; arm64's ping-pong
+    MEASURED 2.95x against a bar of 1.48x, the others NOT MEASURED), the nightly `42604091047` (18 jobs; arm64 2.85x,
+    macOS 1.96x against 1.32x) and the release dry run `42623379628`.
+  - Branches ahead of `master`: none new. `autosave/laptop`'s newest snapshot is still `4271780` (2026-11-08 16:57 UTC),
+    older than and a subset of `ee207ce`, which run 22 landed; the rest were recorded before.
+- **The milestone, named before building:** RW 2.36 closed end to end — `lo..hi` and `lo..=hi` over the prelude's
+  `range`, its arguments checked, ranges on both engines (RW 3.25's first construct), a `for` over one building no list,
+  a range too long to hold DL0908 rather than an abort; the formatter, the docs, conformance, the program step, tests,
+  mutants, the full suite and the records; pushed to `master` and its push run read. Its probes widened it by one
+  defect class, closed with it: eleven more free builtins never read their arguments. **Delivered:**
+  - **Witnessed before building** (a debug build of `0ff6f5c`): `0..3` DL0201; `range(0, 3)` DL1201 on WASM;
+    `range(1.5, "x")` and `range(1)` were `[]`, `range(0, 3, 9)` dropped its third; `range(0, 10^12)` aborted the
+    interpreter (SIGABRT, exit 134, *memory allocation of 40000000000000 bytes failed*) and `range(-MAX, MAX)` panicked
+    (*capacity overflow*); 16 of 16 wrong builtin calls ran (`str(1, 2)` printed `1`, `len(m)` of a `Map` was 0).
+  - **The basic:** `lo..hi`, `lo..=hi` (below arithmetic, above comparison, never chained; `...` refused with both
+    spellings), a `List[Int]`; a counting `for` on both engines, `..=` reaching `Int`'s end; at most 2^28 values as a
+    list, DL0908 past it in the same words on both engines; `List.step_by(k)`; `for _ in 0..n`.
+  - **The class:** `builtin_arity` (DL0403) and the argument types of `len`, `parse_int`, `parse_float` and `push`
+    (DL0401); `len` of a `Map` counts its pairs; a drift test calls every prelude builtin with one argument too many.
+  - **WASM:** `range`, ranges and the counting `for`; `step_by` host-side; the free `len(x)` and `push(xs, v)`;
+    `Cap[Console].print` (DL1201 until now), with `println`'s trace and custody. Each new import follows every older one
+    and is decided from the syntax, so other modules are byte-identical and the untyped entry agrees.
+  - **D-V2-224** records the meanings; DL0908's explanation names ranges and `step_by`; the Skill, `GETTING_STARTED.md`,
+    `docs/for-agents.md` and the Stage 1 grammar teach them.
+  - **The program step (D-V2-220):** `squares` (one line), `calendar` (Python's `calendar` line for line) and `numbers`
+    (367 lines, every basic so far, an independent Python implementation line for line), on both engines. They found
+    WASM's missing `print`, `len` and `push` and the unparsed `for _` (all fixed), **RW 2.50** (`Option`/`Result` have no
+    methods), **RW 2.51** (a builder's list is `val`; a list replaced in a loop cannot be returned), **RW 6.85** (a
+    parse error in a `for` head cascades), and RW 2.37's unquoted strings in a list's text.
+- Commits: `7a6f5f2` RW 2.36 (the code, the tests, the programs, the conformance files and row, the reference);
+  ``3329c00` the snapshot blessed, the docs taught, `conformance_parity`'s overturned case moved`; the records commit after it (this entry, D-V2-224, the entrenched record, the rows, CHANGELOG, V2_LOG,
+  V2_PHASE_STATUS, README, `AI_ONBOARDING.md`, `CLOUD_ROUTINE.md`, `HANDOFF.md` §11.2, the regenerated map).
+- Files and folders (`git diff --name-status 0ff6f5c..HEAD`):
+  A `crates/delulu-wasm/tests/range_parity.rs`, `crates/delulu/tests/ranges_cli.rs`,
+  `crates/delulu/tests/programs/{calendar,numbers,squares}.{delulu,out}`, `tests/conformance/accept/32_ranges.delulu`,
+  `tests/conformance/reject/{DL0101_range_three_dots,DL0201_range_chained,DL0401_len_of_an_int,DL0401_range_float_bound,
+  DL0403_builtin_extra_argument,DL0403_range_with_a_step}.delulu`;
+  M `crates/delulu-syntax/src/{ast,fmt,lexer,parser,token}.rs`, `crates/delulu-check/src/{check,dir,lib,prim_table,rcap_check}.rs`,
+  `crates/delulu-runtime/src/{interp,prim}.rs`, `crates/delulu-wasm/src/{codegen,host}.rs`,
+  `crates/delulu-wasm/tests/{refusal_trace_parity,conformance_parity}.rs`, `crates/delulu-diag/src/codes.rs`,
+  `tests/conformance/witnesses.toml` (**entrenched**: `ENTRENCHED_CHANGE_RECORD.md`'s 2026-11-10 entry),
+  `tests/core-invariance/SNAPSHOT.txt`, `docs/reference/{README,coverage,primitives,tokens}.md`, `skills/delulu/SKILL.md`,
+  `docs/GETTING_STARTED.md`, `docs/for-agents.md`, `docs/design/STAGE1_SPECIFICATION.md`, `CHANGELOG.md`, `HANDOFF.md`,
+  `README.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG,V2_PHASE_STATUS}.md`,
+  `docs/survey/*`. Nothing deleted or renamed; no new markdown file.
+- **Verified:**
+  - witnessed red before each fix: the range probes and the sixteen builtin calls above, on `0ff6f5c`; WASM's `print`,
+    `len` and `push` and `for _`, by the programs, before their fixes;
+  - mutants M1220–M1229 and M1231–M1245: 25, all red, the control green;
+  - `scripts/clippy.sh -j 4` clean after the last `.rs` edit; `scripts/check-other-os.sh` clean on all five targets;
+  - the touched crates' suites (`delulu-check`, `delulu-syntax`, `delulu-runtime`): green before the full suite;
+  - **the full suite, first run** (`scripts/suite.sh`, the working tree after `7a6f5f2` with the snapshot blessed and
+    the docs patched): 197 targets, 2,769 passed, **1 failed**, 16 ignored, `EXIT=101`, the tree unmoved. The failure was
+    `conformance_parity`'s `fragment_external_programs_are_compile_errors`, which held `len(range(0, 5))` refused on
+    WASM — the premise this milestone overturns. Its case is now RW 3.25's `if`-without-`else` arm, still refused, and
+    the old program is held compiling on both entries and printing `5`;
+  - **the full suite, on the final tree** (`scripts/suite.sh`, `3329c00`): 197 targets, 2,770 passed, 0 failed, 16 ignored, `EXIT=0`, the tree unmoved;
+  - `delulu-conform --coverage` 100% (400 of 400), `--check-reference` in sync; `core_invariance` blessed: 17 NEW cases (`32_ranges.delulu` and the six new rejects), 382 lines added, none removed or changed — no answer the core gave before moved;
+  - the two-engine differential (50,000 programs, `--release`): green, 159 s;
+  - **witness runs on `7a6f5f2`**, each read in its log: macOS `42770837951` and Windows `42770841584` (`conformance` 4,
+    `programs_cli` 3, `ranges_cli` 5); macOS `42770845536` and Windows `42770849696` (`range_parity` 5,
+    `refusal_trace_parity` 3).
+- Survey and doctor (after the last edit): in the records commit's message.
+- Redo on the laptop: nothing for the milestone. Delete the merged branches if this session's policy refuses it again:
+  `laptop/basics-math`, `laptop/basics-let-var`, `laptop/basics-compound`, `laptop/rw-7-31-formal-pin`, `laptop/mcp-cancel`,
+  `laptop/sandbox-faults`, `laptop/missing-grants`, `laptop/package-fast-paths`, `laptop/stack-ladder`,
+  `laptop/wasm-main-shapes`, `laptop/rw-4-98-*`, `laptop/rw-7-25-ci-evidence`, `laptop/stack-ladder-witness`
+  (superseded), `claude/peaceful-carson-yjtqjc`, `-qprliy`, `-r464uq` and this run's `claude/peaceful-carson-klplez`.
+- For the laptop's memory: `HANDOFF.md` §11.2 has two new lessons (*a builtin whose arguments no pass reads gives wrong
+  answers, not refusals*; *a basic's programs find the engine's gaps, not only the basic's*). `docs/CLOUD_ROUTINE.md`'s
+  program-step paragraph gained them as steps, with how a mutant that could hang or fill the VM is written.
+- **Open / next:**
+  1. **CI of this run:** `master`'s push run on the records commit (it carries `7a6f5f2` and `3329c00`) is read in the follow-up commit that records it; that follow-up's own push run is the next session's first read.
+  2. **The next basics, in D-V2-220's order:** strings (2.37, with RW 2.48 and 2.49 beside them and the unquoted
+     strings in a list's text), bitwise (2.35), methods on a program's own types (2.33), tuples and sets (2.39), argv
+     and exit code (2.40), JSON (2.41). RW 2.50 (`Option`/`Result` methods, its own D-V2 first) and RW 2.51 (a builder's
+     list fresh, an rcap decision) fit before methods (2.33); RW 6.85 with the parser's next touch; RW 3.32 and 2.45 when
+     a basic's programs need them.
+  3. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  4. RW 3.25's two remaining constructs (a function-typed parameter, an `if` without `else` as an arm). RW 3.30: measure
+     on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for their next red.
+  5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
+     prepared, not launched; it does not hold D-V2-210 onward.

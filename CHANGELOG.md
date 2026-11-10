@@ -11,6 +11,27 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — ranges, 2026-11-10
+
+- **Added (RW 2.36, D-V2-224):** ranges, on both engines.
+  - `lo..hi` is the `Int`s from `lo` up to but not including `hi`, and `lo..=hi` up to and including `hi`: the
+    prelude's `range(lo, hi)` written as operators, each a `List[Int]`. A range binds looser than arithmetic and tighter
+    than comparison (`0..n + 1`, `xs == 0..3`) and does not chain.
+  - A `for` over a range counts without building a list, so `for i in 0..1000000000000` runs and `1..=n` reaches
+    `Int`'s largest value. `for _ in 0..n` repeats a body.
+  - `List.step_by(k)`: every `k`th element from the first (`(0..10).step_by(3)` is `[0, 3, 6, 9]`).
+  - On `--engine wasm`, `range(lo, hi)` (it was DL1201), the free `len(x)` and `push(xs, v)`, and `Cap[Console].print`
+    (it was DL1201) now compile.
+- **Changed — refused where it ran (`STABILITY.md` §1):** every free builtin reads its arguments. `str(1, 2)`,
+  `Some()`, `Ok(1, 2)`, `range(1)` and `range(0, 3, 9)` are DL0403; `range(1.5, "x")`, `len(5)`, `parse_int(5)` and
+  `push(5, 3)` are DL0401. Each checked clean before and printed a wrong or meaningless answer. A `Float` bound's
+  refusal says how to step by a fraction, and a third `range` argument's names `step_by`. `a..b..c` is DL0201 and
+  `...` is DL0101, each naming both spellings.
+- **Fixed:** `range(0, 1000000000000)` aborted the interpreter (`memory allocation … failed`, SIGABRT) and
+  `range(-9223372036854775807, 9223372036854775807)` panicked (`capacity overflow`). A range used as a list holds at
+  most 268,435,456 values; a longer one is DL0908, in the same words on both engines. `len(m)` of a `Map` was 0; it
+  counts the map's pairs.
+
 ## Unreleased — math and the checked forms, 2026-11-09
 
 - **Added (RW 2.38, D-V2-223):** math, written as methods, pure, on both engines.

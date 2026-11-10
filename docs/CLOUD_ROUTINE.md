@@ -313,8 +313,7 @@ another OS, and then takes about seven minutes itself (run 5).
         and fix it"*):
         - in this order: ~~compound assignment (RW 2.34)~~ — done (on-demand routine run 21, D-V2-221); ~~RW 2.46~~ —
           done (the laptop, 2026-11-08, D-V2-222); ~~math and the checked forms (2.38)~~ — done (on-demand routine run 22,
-          D-V2-223);
-          ranges (2.36); strings
+          D-V2-223); ~~ranges (2.36)~~ — done (on-demand routine run 23, D-V2-224); strings
           (2.37); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
           comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
           and RW 3.24;
@@ -570,6 +569,15 @@ reads; that is how RW 2.34's split place was found. **Run `delulu fmt` on each n
 one 700-character line (FMT-MATCH-ARM-1). **A new primitive the WASM engine compiles is tested through both compile
 entries** (run 22): `compile_checked` carries the checker's types and `compile_module` does not (a Verified plugin's DIR
 recompile); the math import was decided from the types, and the untyped entry refused every math method.
+**Probe the prelude a basic rests on, with a wrong count and a wrong type** (run 23): `range(1.5, "x")` was `[]` and
+`range(0, 3, 9)` dropped its third, and eleven more builtins never read their arguments — `len(m)` of a `Map` answered 0.
+`every_prelude_builtin_reads_its_argument_count` now calls each with one too many; a basic that adds a builtin gives it a
+count. **Mutants that can hang or eat the VM are written to fail fast** (run 23): a WASM loop's overflow guard removed
+wraps forever, and a range bound removed allocates gigabytes, so each such mutant breaks a comparison the witness
+reaches first, never the guard whose absence loops. **A test that holds a gap refused is a premise a basic overturns**
+(run 23): `conformance_parity` listed `len(range(0, 5))` among the programs WASM must refuse, and the first full suite
+went red on it alone. Before the suite, grep the tests for the construct a basic adds (its name, `DL1201`, a compile's
+`is_err()`) and move each such case to a gap that remains.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
 — the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and
