@@ -11,6 +11,27 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — bitwise operators, 2026-11-12
+
+- **Added (RW 2.35, D-V2-226):** bitwise operators, on both engines.
+  - `&`, `|`, `^` and `~` work on an `Int`'s 64 bits in two's complement, and `<<` and `>>` move them; each binary one
+    has its compound form (`flags |= 1 << 3`, `m &= ~mask`, `x >>= 2`).
+  - An `Int` literal may be written in octal (`0o755`) and binary (`0b1010`) as well as hexadecimal, any of them grouped
+    by `_` (`0b1111_0000`).
+  - Precedence is Python's and Rust's: looser than arithmetic, tighter than a comparison, `&` before `^` before `|` — so
+    `x & 1 == 0` asks whether `x` is even. `>>` copies the sign in (`-8 >> 1` is `-4`); `<<` drops the bits it moves past
+    the 64th (`1 << 63` is the smallest `Int`).
+  - A shift count outside 0 to 63 stops the program with DL0908, the same words on both engines — never a count quietly
+    taken modulo 64, as the hardware takes it.
+- **Refusals that name what was meant**, each once: `&`, `|` or `^` on two `Bool`s (naming `&&`, `||`, `!=`), a
+  `Float` under a bitwise operator (naming `int(x)`), `!` on an `Int` (naming `~`), `~` on a `Bool` (naming `!`), a
+  line beginning with `|` (*end the line above with the operator*), a digit a base lacks (`0b102`), and a literal past
+  `Int`'s largest in any base (naming `1 << 63` and `~`).
+- **`delulu fmt`** keeps an `Int` literal as written — its base, digits and grouping, the base's letter lowered — where
+  it printed the value in decimal (`0xFF00` became `65280`); and it parenthesizes a bitwise or shift operator that
+  stands beside a different binary operator (`(x & 1) == 0`, `(a & b) | c`, `1 << (n - 1)`), because C, Java and
+  JavaScript bind `&` below `==` and a reader from them would read the other grouping.
+
 ## Unreleased — strings, 2026-11-10
 
 - **Added (RW 2.37, D-V2-225):** strings, on both engines.

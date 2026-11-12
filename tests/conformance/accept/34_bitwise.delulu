@@ -1,0 +1,55 @@
+// anchors: ref.grammar.expr
+// RW 2.35 (D-V2-226): the bitwise operators on an `Int`'s 64 bits in two's complement — `&`, `|`, `^`, `~`, `<<`,
+// `>>` — their compound forms, and the `0b` and `0o` literals beside `0x`. Each binds tighter than a comparison and
+// looser than arithmetic, `&` before `^` before `|` (Python's and Rust's order). All of it is pure: no function here
+// declares an effect.
+module conf
+
+let READ: Int = 0b100
+
+let WRITE: Int = 0b010
+
+let EXEC: Int = 0b001
+
+fn has(mode: Int, bit: Int) -> Bool {
+    (mode & bit) != 0
+}
+
+fn perms(mode: Int) -> Str {
+    let r = if has(mode, READ) { "r" } else { "-" }
+    let w = if has(mode, WRITE) { "w" } else { "-" }
+    let x = if has(mode, EXEC) { "x" } else { "-" }
+    r + w + x
+}
+
+fn octal_mode(mode: Int) -> Str {
+    perms(mode >> 6) + perms((mode >> 3) & 0o7) + perms(mode & 0o7)
+}
+
+fn bits_set(n: Int) -> Int {
+    var m = n
+    var count = 0
+    while m != 0 {
+        m &= m - 1
+        count += 1
+    }
+    count
+}
+
+fn toggle(flags: Int, bit: Int) -> Int {
+    var f = flags
+    f ^= 1 << bit
+    f
+}
+
+fn low_bits(n: Int, k: Int) -> Int {
+    n & ((1 << k) - 1)
+}
+
+fn is_negative(n: Int) -> Bool {
+    (n >> 63) != 0
+}
+
+fn masks() -> List[Int] {
+    [0xFF00, 0b1010_1010, 0o755, ~0, 1 << 63, -8 >> 1]
+}

@@ -1,0 +1,7 @@
+// RW 2.35 (D-V2-226): `!` negates a `Bool`. On an `Int` it is another language's bit flip, and the refusal names this
+// one's: `~`.
+module conf
+
+fn f(n: Int) -> Int {
+    !n
+}

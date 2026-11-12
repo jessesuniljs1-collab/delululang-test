@@ -1,0 +1,6 @@
+// RW 2.35 (D-V2-226): a `Float` has no bits for these operators to work on; the refusal says how it becomes an `Int`.
+module conf
+
+fn f(x: Float) -> Int {
+    1 << x
+}

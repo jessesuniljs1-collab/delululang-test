@@ -35,6 +35,15 @@ pub fn random_pure_program(seed: u64) -> (String, Vec<i64>) {
     let mut r = Rng::new(seed);
     let g_body = gen_expr(&mut r, 2, &["x"], false);
     let f_body = gen_expr(&mut r, 3, &["a", "b", "c"], true);
+    // RW 2.35: the bitwise operators, from a stream of their own so every other part is what this seed always gave. A
+    // shift's count is sometimes an argument, which is usually outside 0 to 63: the shift's fault is drawn as well.
+    let mut bits = Rng::new(seed ^ 0x1F83_D9AB_FB41_BD6B);
+    let f_body = if bits.chance(1, 3) {
+        let vars = ["a", "b", "c"];
+        format!("({f_body}) ^ {}", gen_bits(&mut bits, 3, &|r| gen_leaf(r, &vars), false))
+    } else {
+        f_body
+    };
     let src = format!("module gp\nfn g(x: Int) -> Int {{ {g_body} }}\nfn f(a: Int, b: Int, c: Int) -> Int {{ {f_body} }}\n");
     // Arguments span a large range so multiplication overflows and edge values appear.
     let args = vec![gen_arg(&mut r), gen_arg(&mut r), gen_arg(&mut r)];
@@ -62,6 +71,41 @@ fn gen_expr(r: &mut Rng, depth: u32, vars: &[&str], allow_call: bool) -> String 
         // Negation goes through the checked multiply on WASM (WASM-NEG-1); here it is exercised on ordinary values.
         6 => format!("(-{})", sub(r)),
         _ => format!("g({})", gen_leaf(r, vars)),
+    }
+}
+
+/// RW 2.35: an expression of `&`, `|`, `^`, `~`, `<<` and `>>` over `leaf`. A shift's count is a number from 0 to 63, an
+/// expression masked into that range, or (unless `safe`) a leaf, which may be outside it and fault on both engines.
+fn gen_bits(r: &mut Rng, depth: u32, leaf: &dyn Fn(&mut Rng) -> String, safe: bool) -> String {
+    if depth == 0 || r.chance(1, 3) {
+        return leaf(r);
+    }
+    match r.below(6) {
+        0 => format!("({} & {})", gen_bits(r, depth - 1, leaf, safe), gen_bits(r, depth - 1, leaf, safe)),
+        1 => format!("({} | {})", gen_bits(r, depth - 1, leaf, safe), gen_bits(r, depth - 1, leaf, safe)),
+        2 => format!("({} ^ {})", gen_bits(r, depth - 1, leaf, safe), gen_bits(r, depth - 1, leaf, safe)),
+        3 => format!("(~{})", gen_bits(r, depth - 1, leaf, safe)),
+        k => {
+            let op = if k == 4 { "<<" } else { ">>" };
+            let value = gen_bits(r, depth - 1, leaf, safe);
+            let count = match r.below(4) {
+                0 if !safe => leaf(r),
+                0 | 1 => r.below(64).to_string(),
+                _ => format!("({} & 63)", gen_bits(r, depth - 1, leaf, safe)),
+            };
+            format!("({value} {op} {count})")
+        }
+    }
+}
+
+/// RW 2.35: a literal for a bitwise expression, in each of the bases a program can write one in.
+fn gen_bits_literal(r: &mut Rng) -> String {
+    match r.below(5) {
+        0 => r.below(10).to_string(),
+        1 => format!("0x{:X}", r.below(1 << 32)),
+        2 => format!("0b{:b}", r.below(256)),
+        3 => format!("0o{:o}", r.below(4096)),
+        _ => r.below(4_000_000_000).to_string(),
     }
 }
 
@@ -163,6 +207,12 @@ pub fn random_console_program(seed: u64) -> String {
         let (decl, line) = gen_sum(&mut c);
         decls = decl;
         body.push_str(&line);
+    }
+    // RW 2.35: a line of bitwise arithmetic over literals in every base, from a stream of its own; fault-free, as this
+    // program is: every shift's count is from 0 to 63.
+    let mut w = Rng::new(seed ^ 0x5BE0_CD19_137E_2179);
+    if w.chance(1, 3) {
+        body.push_str(&format!("  out.println(str({}))\n", gen_bits(&mut w, 3, &gen_bits_literal, true)));
     }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.

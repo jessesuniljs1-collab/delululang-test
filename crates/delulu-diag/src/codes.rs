@@ -815,7 +815,13 @@ pub fn code_explain(code: &str) -> Option<String> {
              meaning. Float literals must name a value `Float` (f64) can actually hold: `1.0e400` \
              would become `inf` and `1.0e-400` would become `0.0`, and a literal whose value is not \
              the value you wrote is refused on the same reasoning. Infinity is still reachable by \
-             computing it (`1.0 / 0.0`); what you cannot do is spell it as a finite number.",
+             computing it (`1.0 / 0.0`); what you cannot do is spell it as a finite number. An `Int` \
+             is written in decimal, hexadecimal (`0xFF`), octal (`0o755`) or binary (`0b1010`), its \
+             digits grouped by `_` if you like (`1_000_000`, `0b1111_0000`), and a digit its base \
+             lacks is refused by name (`0b102`, `0o8`). A literal is a value, never a bit pattern \
+             read as a negative number: `0xFFFF_FFFF_FFFF_FFFF` is past `Int`'s largest, so write a \
+             pattern with the top bit set as `1 << 63`, or as `~` of the bits it leaves clear (`~0` \
+             is every bit). (The `0b` and `0o` bases: RW 2.35, D-V2-226.)",
         "DL0105" => "A block comment opened with `/*` and the file ended before `*/`. Block \
              comments NEST, so an inner `/*` needs its own close — count them from the top of the \
              comment. Nesting is deliberate: it lets you comment out a region that already contains \
@@ -1115,8 +1121,14 @@ pub fn code_explain(code: &str) -> Option<String> {
              iteratively — the bound exists so that a runaway program fails in a way you can act \
              on.",
         "DL0907" => "The runtime reached a state the checker was supposed to have made impossible. This is a COMPILER BUG, not your code's fault — please report it with the program that produced it. The canonical case is a `match` that reached no arm: exhaustiveness is proved statically (DL0407), so a fallthrough at run time means the checker let something through. But this code covers the whole CLASS of checker-should-have-caught-it conditions, and it is raised for several others: an unbound name or an assignment to one, a field assignment on a non-record, an index assignment on a non-list, `?` applied to a non-Result, a call to an unknown function, an unknown test name, an actor turn with no actor address, and a foreign value reaching an actor boundary. Each is likewise a broken static guarantee rather than a program error. The message text always names the specific condition; this code names the class. (Campaign finding C14: this entry used to describe only the `match` case, so a reader who hit it for an unbound name was told something false about their own program.)",
-        "DL0908" => "An operation was given an argument it does not accept, so it could not run. Five \
-             operations can fault this way. `r.int(lo, hi)` draws from `lo` up to but not \
+        "DL0908" => "An operation was given an argument it does not accept, so it could not run. These \
+             operations can fault this way. `a << n` and `a >> n` move an `Int`'s 64 bits by a count \
+             from 0 to 63: `1 << 64` names a bit the 64 do not have, and the count is never taken \
+             modulo 64 as the hardware takes it (where `1 << 64` would quietly be `1`), so hold a \
+             count from data in range first (`1 << (n & 63)`, or `if n < 64 { … }`). \
+             `s.repeat(n)`, `s.pad_left(w, fill)` and `s.pad_right(w, fill)` take a count of 0 or \
+             more and a fill of one character, and build a string of at most 268435456 bytes; \
+             `x.to_fixed(d)` takes 0 to 100 digits. `r.int(lo, hi)` draws from `lo` up to but not \
              including `hi`, so it needs `lo < hi`, and `r.int(5, 5)` or `r.int(6, 5)` names no \
              value to draw: write the bounds so the range holds at least one value (`r.int(1, 7)` \
              rolls a die). `n.pow(e)` on an `Int` takes an exponent of 0 or more: `2.pow(-1)` is \
@@ -1131,7 +1143,8 @@ pub fn code_explain(code: &str) -> Option<String> {
              holds. (Found 2026-10-24 by the agent test campaign, A15: it was reported as DL0904, \
              a capability scope violation, which sent the reader looking for a path or host outside \
              a grant. D-V2-190. `pow` and `clamp` joined it with the math methods, RW 2.38, \
-             D-V2-223; ranges and `step_by` with RW 2.36, D-V2-224.)",
+             D-V2-223; ranges and `step_by` with RW 2.36, D-V2-224; the string methods with RW 2.37, \
+             D-V2-225; the shifts with RW 2.35, D-V2-226.)",
 
         // ===== DL10xx — packages and provenance ============================
         "DL1001" => "A dependency's authority exceeds what the lockfile pinned for it. This is the \

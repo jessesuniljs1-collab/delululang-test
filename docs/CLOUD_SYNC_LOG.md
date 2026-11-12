@@ -9589,3 +9589,63 @@ Survey and doctor: in the commit below.
      - whether 2.0 waits for the basics (`launch/2.0.0` stays prepared, not launched);
      - the routine's model and effort, and whether it gets its own cloud environment;
      - when the routine is switched on.
+
+### 2026-11-12 — the laptop: RW 2.35 closed — bitwise operators (D-V2-226), finished from the Fable 5.2 session's branch and landed
+- Session: `https://claude.ai/code/session_01Deh6W821P8QQeR4mbW1xdE`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice). One web-fetch agent earlier in the session (refused by `agent_gate.py`, did nothing); no sous-chef for this
+  slice.
+- **The owner: *"Head chef, finish bitwise (RW 2.35) on the Fable 5.2 session's branch. Then stop."***
+- Branch: `claude/eloquent-brown-7i7fhs` — the Fable 5.2 session's (`e13eb21`, `39f1ca2`, `d4f1b42`), worked on locally
+  as `laptop/rw-2-35`, `master` (`8481bcf`) merged into it (`5287805`; only the Survey's files and this log conflicted —
+  both entries kept, the map regenerated), then the finishing commit(s) below. Pushed to that branch, CI read, then
+  `master` fast-forwarded to it. Pull request: none (a fast-forward, as the routine lands).
+- Base: `8481bcf` = `origin/master`; nothing else had landed.
+- Commits: `5287805` (the merge of `master`), then the slice with these records (named in the follow-up records commit,
+  which also records its CI).
+- **What the milestone delivered** — RW 2.35 closed end to end; `V2_LOG.md`'s entry of this date and D-V2-226 hold it
+  in full:
+  - **Two corrections to the branch:** a refusal for `b & b`, `~b` or `!n` drew a second error in a condition or an
+    `Int` result (now poisoned, D-V2-19: one refusal); and `fmt` printed `(x & 1) == 0` as `x & 1 == 0` (now a bitwise
+    or shift operator beside any different binary operator is parenthesized, `fmt::operand_min`).
+  - **Tests:** `prim::shift_tests` (2), `crates/delulu-wasm/tests/bitwise_parity.rs` (6), `crates/delulu/tests/bitwise_cli.rs`
+    (5); the differential's generator draws the operators; conformance `accept/34_bitwise` and eight rejects;
+    `core_invariance` 9 NEW cases, none removed.
+  - **The programs:** `rgb` (one line), `chmod` (222 lines, interpreter alone — RW 3.33), `ipcalc` (421 lines, every
+    basic so far, both engines), each equal to Python.
+  - **Docs:** the Skill, `GETTING_STARTED.md`, `docs/for-agents.md`, `STAGE1_SPECIFICATION.md`, `README.md`,
+    `CHANGELOG.md`, `codes.rs`'s DL0104 and DL0908, D-V2-226, `REMAINING_WORK.md`, `V2_PHASE_STATUS.md`, `V2_LOG.md`,
+    `HANDOFF.md` §11.2 (two lessons), `docs/AI_ONBOARDING.md` and `docs/CLOUD_ROUTINE.md` (the work order and counters).
+  - **New rows:** RW 2.52 (character codes, another base, bit counts, `>>>`, wrapping), RW 2.53 (`let mut`), RW 3.33 (a
+    module-level `let` on WASM).
+- **Verified** (in full in `V2_LOG.md`'s entry): `prim::shift_tests`, `bitwise_parity`, `bitwise_cli`, `programs_cli`,
+  `conformance`, `core_invariance` (unblessed), `strings_cli`, `book`, `examples_run`, `cli` and `delulu-syntax`'s
+  170 green; the five changed crates' whole suites 1,173 passed, 0 failed; the differential 50,000 programs, 0
+  mismatches; mutants M1274–M1295, 22, all red, control green; `scripts/clippy.sh -j 4` clean; `delulu-conform`
+  in sync, coverage 411 of 411; WASM bytes unchanged for the 29 programs that compile without this surface.
+  `scripts/check-other-os.sh` not run (no OS `cfg` touched; CI covers macOS and Windows). **CI:** `ci.yml`
+  (`everything`) dispatched at the branch after this commit, and `master`'s push run after the fast-forward — both
+  read in the follow-up records commit.
+- Files and folders (`git diff --name-status 8481bcf..HEAD`, the branch's own included; 47 paths): M `CHANGELOG.md`,
+  `HANDOFF.md`, `README.md`, `skills/delulu/SKILL.md`, `crates/delulu-check/src/check.rs`, `crates/delulu-diag/src/codes.rs`,
+  `crates/delulu-runtime/src/{interp,prim}.rs`, `crates/delulu-syntax/src/{ast,fmt,lexer,parser,token}.rs`,
+  `crates/delulu-wasm/src/{codegen,gen,host}.rs`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG,V2_PHASE_STATUS}.md`, `docs/GETTING_STARTED.md`, `docs/REMAINING_WORK.md`,
+  `docs/design/STAGE1_SPECIFICATION.md`, `docs/for-agents.md`, `docs/reference/tokens.md`, `docs/survey/*`,
+  `tests/core-invariance/SNAPSHOT.txt`; A `crates/delulu-wasm/tests/bitwise_parity.rs`, `crates/delulu/tests/bitwise_cli.rs`,
+  `crates/delulu/tests/programs/{rgb,chmod,ipcalc}.{delulu,out}`, `tests/conformance/accept/34_bitwise.delulu` and eight
+  files in `tests/conformance/reject/` (named in `V2_LOG.md`). Nothing deleted or renamed; no new markdown file.
+- Survey and doctor (after the last edit): in the commit message.
+- For the laptop's memory: `HANDOFF.md` §11.2 — *a refusal is witnessed in every place its value can stand*; *a
+  formatter's "needed parentheses" are the parser's, not the reader's*.
+- **Open / next:**
+  1. Read the push run of the records commit that closes this entry (named below as unread, if it is).
+  2. **The next basic, in D-V2-220's order:** RW 2.50 (`Option`/`Result` methods) and RW 2.51 first, then methods on a
+     program's own types (2.33); then tuples, sets, keyed sorting and comprehensions (2.39), argv, environment, exit code
+     and sleep (2.40), JSON (2.41), interfaces (2.33, 2.9) and RW 3.24. RW 2.52 when a basic's programs need it; RW 3.33
+     soon (a program's named constants run on the interpreter alone until it closes); RW 2.53 with the parser's next
+     touch, beside RW 2.49 and 6.85; RW 6.86 with the formatter's.
+  3. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  4. RW 3.25's two remaining constructs; RW 3.30 (measure on Linux first); RW 6.82 with the language server's next
+     touch; RW 7.25, 7.29 and 7.30 wait for their next red.
+  5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
+     prepared, not launched.

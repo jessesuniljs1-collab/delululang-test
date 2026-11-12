@@ -393,9 +393,9 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
       `len(x)` and `push`, fixed, and RW 2.50, 2.51 and 6.85) → ~~strings (2.37)~~ (done 2026-11-10 by on-demand routine
       run 24, D-V2-225: f-strings, `s[i]`, the everyday `Str` table and `to_fixed`, with RW 2.48; its programs found
       WASM's missing `match` on a `Str`, fixed, and RW 6.86) →
-      bitwise (2.35: **in progress** — built on both engines on `claude/eloquent-brown-7i7fhs`, `e13eb21a`, by a
-      cloud session on 2026-11-12, probed by hand, not yet tested, documented or landed; finish it first) →
-      methods on a program's own types (2.33) → tuples, sets, keyed sorting, comprehensions (2.39) →
+      ~~bitwise (2.35)~~ (done 2026-11-12, D-V2-226: begun by a cloud session on Fable 5.2 on
+      `claude/eloquent-brown-7i7fhs`, finished by the laptop; its programs found RW 2.52, 2.53 and 3.33) →
+      methods on a program's own types (2.33, with RW 2.50 and 2.51 first) → tuples, sets, keyed sorting, comprehensions (2.39) →
       argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.
     - Each is built as surface syntax and prelude over the core, so no RFC period applies; one that would change
       `DELULU_CORE.md` gets its own decision.
@@ -406,8 +406,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
   - the OpenShell pin bump (RW 7.28);
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-225 (D-V2-226 is RW 2.35's, to be written when it lands);
-  - the last mutant is M1273, so continue from M1274;
+  - the last decision is D-V2-226;
+  - the last mutant is M1295, so continue from M1296;
   - there are 157 DL codes and 411 reference anchors;
   - pull requests are numbered on GitHub, and #144 was the last merged (by fast-forward, the laptop, 2026-11-08).
 

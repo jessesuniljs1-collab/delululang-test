@@ -1,0 +1,8 @@
+// engines: interp wasm
+// RW 2.35 (D-V2-220's program step): the one-liner — a colour's three channels out of one `Int`, by shifts and masks.
+module rgb
+
+fn main(root: Root) ! {Write} {
+    let c = 0xC0FFEE
+    root.console().println(f"#C0FFEE is rgb({c >> 16}, {(c >> 8) & 0xFF}, {c & 0xFF})")
+}

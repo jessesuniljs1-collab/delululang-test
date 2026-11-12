@@ -1,0 +1,7 @@
+// RW 2.35 (D-V2-226): a whole word is one literal, so a digit its base lacks is refused naming the digit and the
+// literal (`2` is not a binary digit), never read as `0b10` followed by a stray `2`.
+module conf
+
+fn f() -> Int {
+    0b102
+}

@@ -33,7 +33,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 347
+- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 349
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
@@ -45,7 +45,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** a current document should cite the archived path
 
-- `CHANGELOG.md:2720` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
+- `CHANGELOG.md:2741` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:30` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:31` — prose names `docs/design/PRODUCTION_READINESS_REVIEW.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:32` — prose names `docs/design/PRODUCTION_READINESS_2026-08-09.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md` in V2-0; the citation is historical and left as written

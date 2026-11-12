@@ -2726,3 +2726,54 @@ mod math_tests {
         assert!(float(-1.0, "sqrt", &[]).is_nan());
     }
 }
+
+#[cfg(test)]
+mod shift_tests {
+    use super::*;
+
+    /// Values whose bits make every shift visible: both ends of `Int`, the signs, a lone high bit, alternating patterns.
+    const VALUES: [i64; 10] =
+        [0, 1, -1, 2, -8, i64::MAX, i64::MIN, 0x5555_5555_5555_5555, -0x5555_5555_5555_5556, 0x0123_4567_89AB_CDEF];
+
+    /// RW 2.35: `prim::shift` against arithmetic that does not shift. A left shift by `n` is the product with `2^n`,
+    /// its low 64 bits kept; a right shift by `n` is the floor of the quotient by `2^n`, so the sign comes in on the left.
+    #[test]
+    fn every_count_from_0_to_63_moves_the_bits_as_the_arithmetic_says() {
+        for a in VALUES {
+            for n in 0..=63i64 {
+                let pow = 1i128 << n;
+                let left = (i128::from(a) * pow) as i64; // the product's low 64 bits
+                let right = i128::from(a).div_euclid(pow) as i64; // the floor of the quotient
+                assert_eq!(shift(true, a, n), Ok(left), "{a} << {n}");
+                assert_eq!(shift(false, a, n), Ok(right), "{a} >> {n}");
+            }
+        }
+        // The answers a reader checks first (Python: 1 << 63 wraps to -2**63 in 64 bits; -8 >> 1 == -4; -1 >> 63 == -1).
+        assert_eq!(shift(true, 1, 63), Ok(i64::MIN));
+        assert_eq!(shift(false, -8, 1), Ok(-4));
+        assert_eq!(shift(false, -1, 63), Ok(-1));
+        assert_eq!(shift(true, -1, 1), Ok(-2));
+    }
+
+    /// A count the 64 bits do not have is DL0908's text, naming the operator and the count, never a count taken modulo
+    /// 64 (WebAssembly's and the hardware's rule: `1 << 64` would be `1`).
+    #[test]
+    fn a_count_outside_0_to_63_is_refused_in_words_never_taken_modulo_64() {
+        for n in [64, 65, 127, 128, -1, -64, i64::MAX, i64::MIN] {
+            for a in [1, -1, 0] {
+                assert_eq!(
+                    shift(true, a, n),
+                    Err(format!("`<<` moves an `Int`'s 64 bits by a count from 0 to 63; it was given a count of {n}")),
+                );
+                assert_eq!(
+                    shift(false, a, n),
+                    Err(format!("`>>` moves an `Int`'s 64 bits by a count from 0 to 63; it was given a count of {n}")),
+                );
+            }
+        }
+        assert_eq!(
+            shift_count_fault(true, 64),
+            "`<<` moves an `Int`'s 64 bits by a count from 0 to 63; it was given a count of 64"
+        );
+    }
+}

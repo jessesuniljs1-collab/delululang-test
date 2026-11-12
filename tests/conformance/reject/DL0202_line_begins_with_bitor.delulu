@@ -1,0 +1,10 @@
+// RW 2.35 (D-V2-226): a line break ends a statement, so a line that begins with `|` begins nothing — the first thing a
+// writer stacking flags one per line meets. The refusal says to end the line above with the operator (RW 2.49 is the
+// grammar's half of this).
+module conf
+
+fn flags() -> Int {
+    let f = 0b001
+        | 0b100
+    f
+}

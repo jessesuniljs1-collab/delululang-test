@@ -3591,6 +3591,9 @@ impl<'a> Checker<'a> {
                         )
                         .with_span(operand.span(), "an `Int`: `~n` is its bits flipped, `n == 0` is whether it is zero"),
                     );
+                    // Which the writer meant is not known (C's `!n` is `n == 0`, Rust's flips the bits), so the value
+                    // is poisoned (D-V2-19): one refusal, and none after it whichever type its place wants.
+                    return (self.fresh_poisoned(), r);
                 } else {
                     self.expect_type(&Type::Bool, &t, operand.span(), "`!` expects Bool");
                 }
@@ -3606,9 +3609,10 @@ impl<'a> Checker<'a> {
                         )
                         .with_span(operand.span(), "a `Bool`"),
                     );
-                } else {
-                    self.bitwise_operand(&t, operand.span(), "~");
+                    // Poisoned (D-V2-19), so `if ~b` is one refusal, not a second for its condition.
+                    return (self.fresh_poisoned(), r);
                 }
+                self.bitwise_operand(&t, operand.span(), "~");
                 (Type::Int, r)
             }
         }
@@ -3718,13 +3722,16 @@ impl<'a> Checker<'a> {
                             )
                             .with_span(span, format!("two `Bool`s: write {logical}")),
                         );
+                        // Poisoned (D-V2-19), so `if a & b` is one refusal, not a second DL0408 for a condition that
+                        // is an `Int`.
+                        self.fresh_poisoned()
                     }
                     _ => {
                         self.bitwise_operand(&lt, lhs.span(), sym);
                         self.bitwise_operand(&rt, rhs.span(), sym);
+                        Type::Int
                     }
                 }
-                Type::Int
             }
         };
         (out, acc)

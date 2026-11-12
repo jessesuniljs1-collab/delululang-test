@@ -1,0 +1,8 @@
+// RW 2.35 (D-V2-226): a literal is a value, never a bit pattern read as a negative number, so a hexadecimal literal
+// past `Int`'s largest is refused in any base, and the refusal says how the pattern is written: `1 << 63`, or `~` of
+// the bits it leaves clear.
+module conf
+
+fn f() -> Int {
+    0xFFFF_FFFF_FFFF_FFFF
+}

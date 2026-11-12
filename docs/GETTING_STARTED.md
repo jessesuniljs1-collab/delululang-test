@@ -196,6 +196,27 @@ number, with an exponent below `0.0001` and from `1.0e16` up — `str(1.0e300)` 
 always has its fraction (`1e300` is `DL0104`, whose message spells `1.0e300`). A `match` on a `Str` with literal arms
 (`"left" => …`) runs on both engines.
 
+**Bits are an `Int`'s.** `&`, `|`, `^` and `~` work on an `Int`'s 64 bits, `<<` and `>>` move them, each with its
+compound form (`flags |= 1 << 3`), and a literal may be written in hexadecimal, octal or binary, grouped by `_`:
+
+```delulu
+fn perms(mode: Int) -> Str {
+    let r = if (mode & 0o4) != 0 { "r" } else { "-" }
+    let w = if (mode & 0o2) != 0 { "w" } else { "-" }
+    let x = if (mode & 0o1) != 0 { "x" } else { "-" }
+    r + w + x
+}
+// perms(0o755 >> 6) is "rwx"; perms(0b101) is "r-x"; 0xC0FFEE & 0xFF is 238
+```
+
+They bind as in Python and Rust — tighter than a comparison, so `x & 1 == 0` asks whether `x` is even, and looser
+than arithmetic, so `1 << n - 1` is `1 << (n - 1)` — but `delulu fmt` writes the parentheses anyway wherever a bitwise
+operator stands beside a different one, because C, Java and JavaScript read `x & 1 == 0` the other way. `>>` copies
+the sign in (`-8 >> 1` is `-4`) and `<<` drops the bits it pushes past the 64th (`1 << 63` is the smallest `Int`). A
+count outside 0 to 63 is `DL0908`, never quietly taken modulo 64 as the hardware takes it: hold a count that comes from
+data in range first, `1 << (n & 63)`. `&`, `|` and `^` on two `Bool`s are refused with the operator a `Bool` takes
+(`&&`, `||`, `!=`), and `!n` on an `Int` with `~`.
+
 > **The collection surface, and the three places it deliberately refuses.** As of 2026-09-20
 > (V2 phase P3) `List` has fifteen methods — `len`, `is_empty`, `get`, `push`, `pop`, `map`,
 > `filter`, `find`, `fold`, `sort`, `reverse`, `concat`, `slice`, `contains`, `join` — `Str` has ten,

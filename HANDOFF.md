@@ -955,6 +955,16 @@ wins, and you should update the memory to match.
     so whatever the tree drops the formatter drops with it; a spelling that must survive travels beside the tree, as
     comments do. When a defect reads *"this function prints X where the source said Y"*, read every arm of the
     function for the same loss before closing it. (Fixed on the RW 2.35 branch; it lands with that slice.)
+  - **A refusal is witnessed in every place its value can stand** (the laptop, 2026-11-12, RW 2.35, D-V2-226). The
+    branch's refusals for `b & b`, `~b` and `!n` each gave the refused expression a type — the one the operator returns,
+    or the one the writer probably meant — and each looked right where it was probed. In an `if` condition, or as an
+    `Int` function's result, the guess was wrong and a second error followed (DL0408, a body of the wrong type). When
+    what the writer meant is not known, the value is poisoned (D-V2-19) and nothing after it fires. Probe a new
+    refusal in a condition, an argument, a `let` and a function's result before calling it "one refusal".
+  - **A formatter's "needed parentheses" are the parser's, not the reader's** (the same slice). Printing only the
+    parentheses a precedence table needs made `(x & 1) == 0` into `x & 1 == 0`: the same tree here, and the opposite
+    grouping to a reader from C, Java or JavaScript. Where a new operator's precedence differs between the languages a
+    reader comes from, the canonical text shows the grouping (`fmt::operand_min`).
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 

@@ -12879,3 +12879,75 @@ doctor `ok` (26 checks) at the start.
 
 **Found on the way.** FMT-INT-BASE-1, above. And the words of DL0202 for a line that begins with an operator, the
 half of RW 2.49 that needs no grammar change.
+
+## 2026-11-12 — the laptop: RW 2.35 closed — bitwise operators (D-V2-226), finished from the Fable 5.2 session's branch
+
+**The owner:** *"Head chef, finish bitwise (RW 2.35) on the Fable 5.2 session's branch. Then stop."* The laptop (Opus 5.5)
+took `claude/eloquent-brown-7i7fhs` at `d4f1b42` (`e13eb21a`'s work in progress and its records), merged `master`
+(`8481bcf`) into it, and finished the list its sync-log entry left (*Open / next* item 1).
+
+**What the branch had, verified before anything was added:** the six operators, the five compound forms and the `0b`/`0o`
+literals on both engines; a debug build answered a probe of all of them as Python does on both engines; its CI run
+`43156380681` was 18 of 18 green, the three `miri-slow` jobs included.
+
+**Corrected** (D-V2-226, decisions 6 and 7):
+- **One refusal, not two.** `if b & b`, `if ~b` and `!n` returned from an `Int` function each drew a second error (DL0408
+  for the condition, or a body of the wrong type), because the branch typed the refused value `Int` or `Bool`. It is
+  poisoned now (D-V2-19). Witnessed: `delulu check` printed two `error[` lines for each before the change, one after.
+- **The grouping is shown.** The branch's formatter printed `(x & 1) == 0` as `x & 1 == 0` and `(a & b) | c` as
+  `a & b | c` — the same tree in this language's precedence, and the other grouping to a reader from C, Java or
+  JavaScript. `fmt::operand_min` now parenthesizes a bitwise or shift operator beside any different binary operator.
+
+**Built** (the rest of the list):
+- **Tests.** `prim::shift_tests` (2: every count 0 to 63 on ten values against arithmetic that does not shift — the
+  product's low 64 bits, the floor of the quotient — and the counts outside, refused in words);
+  `crates/delulu-wasm/tests/bitwise_parity.rs` (6: Python's answers on both engines, every DL0908 word for word, 400
+  generated expressions against a reference evaluator that uses Rust's own operators, the untyped compile entry, the
+  shift's import decided from the syntax and placed last, and the differential's bitwise programs checked clean and
+  agreeing); `crates/delulu/tests/bitwise_cli.rs` (5, through the binary: both engines, the fault after what was printed,
+  each refusal once, purity in `authority`, `fmt`'s bases and grouping). The formatter test the branch wrote was
+  corrected to the grouping rule.
+- **The differential's generator** (`crates/delulu-wasm/src/gen.rs`) draws the operators from streams of their own: the
+  pure programs with a shift count that may be an argument (the shift's fault is drawn), the console programs
+  fault-free over literals in every base. `two_engine_differential_gate`, 50,000 programs, release, on the final tree: 50,000 checked, 44,290
+  agreed, 5,710 faulted on both engines, 0 mismatches (135 s; the same on its first run, before the last edits).
+- **Conformance.** `accept/34_bitwise.delulu` and eight rejects (`DL0104` a binary digit outside its base, a hex literal
+  past `Int`; `DL0401` two `Bool`s, a `Float`, `!` on an `Int`, `~` on a `Bool`; `DL0202` a line beginning with `|`;
+  `DL0207` a compound `|=` whose target holds a call). `delulu-conform --check-reference` in sync; `--coverage` 100%.
+  `core_invariance`: 9 NEW cases, 489 lines added, none removed.
+- **The explanations** (`crates/delulu-diag/src/codes.rs`): DL0104 names the three bases and the bit-pattern rule;
+  DL0908 names the shift (and the string methods of RW 2.37, which its list had missed).
+- **The programs** (D-V2-220's step), each checked against Python: `rgb` (one line: a colour's channels, both engines);
+  `chmod` (an everyday utility, 222 lines: modes as `ls -l` prints them against Python's `stat.filemode`, `chmod`'s
+  symbolic changes, umasks and the bits two modes differ in, against an independent Python implementation — the
+  interpreter alone, see RW 3.33); `ipcalc` (421 lines, every basic so far: an IPv4 calculator — masks, networks,
+  broadcasts, host ranges, binary and hex forms, subnetting, VLSM allocation, the smallest common network, a range as the
+  fewest blocks — against Python's `ipaddress`, line for line, on both engines). Each is `delulu fmt`-canonical.
+- **Documents.** The Skill, `GETTING_STARTED.md`, `docs/for-agents.md`, `STAGE1_SPECIFICATION.md` (the literal, the
+  tokens, the compound assignments and four new expression levels), `README.md`, `CHANGELOG.md`, D-V2-226,
+  `REMAINING_WORK.md` (2.35 closed; 2.52, 2.53 and 3.33 new), `V2_PHASE_STATUS.md`.
+
+**Found on the way** (rows, not fixed here):
+- **RW 2.52** — no character codes, no `Int` text in another base, no bit counts, no unsigned shift or wrapping
+  arithmetic: `ipcalc` writes `bits`, `hex32` and `bit_length` as loops, `chmod` writes `octal` and `bit_count`.
+- **RW 2.53** — `let mut x = 0`, a Rust writer's first mutable binding, is fourteen errors in a fifteen-line program,
+  none of them naming `var`.
+- **RW 3.33** — a module-level `let` constant is DL1201 on `--engine wasm`, so `chmod.delulu`, whose masks are named
+  constants, runs on the interpreter alone.
+
+**Evidence.**
+- WASM bytes: 29 of the repository's programs, accept files and examples compile to the same `.dwx` bytes under
+  `8481bcf`'s compiler and this one; 31 compile under neither.
+- Mutants M1274–M1295: 22, all red, each against the target named for it — the shift's bound (63 against 64, a
+  negative count), its sign, `^`, `~` and the operator's direction in the interpreter; the count's unsigned test, the
+  arithmetic right shift, the fault's operator flag, `~`, `^` and the import's decision on WASM; two precedence levels
+  and the longest token in the syntax; a digit's base; each of three refusals' words and one-refusal rule; the
+  formatter's grouping rule; and the generator's drawing of the shift's fault. M1295 (a `Float` operand's refusal) was
+  run separately with its function's signature as context, its first spelling appearing twice. The control, every
+  target on the restored tree, green.
+- The five changed crates' whole suites (`delulu-diag`, `delulu-check`, `delulu-syntax`, `delulu-runtime`,
+  `delulu-wasm`): 57 targets, 1,173 passed, 0 failed, 3 ignored. The `delulu` targets the slice touches
+  (`bitwise_cli`, `programs_cli`, `conformance`, `core_invariance` unblessed, `strings_cli`, `book`, `examples_run`,
+  `cli`) green; `delulu-conform --check-reference` in sync, `--coverage` 411 of 411. `scripts/clippy.sh -j 4` clean.
+  `scripts/check-other-os.sh` was not run: no operating system's `cfg` is touched, and CI builds and tests on macOS,
+  Windows and Linux (the run is named in `docs/CLOUD_SYNC_LOG.md`'s entry of this date).

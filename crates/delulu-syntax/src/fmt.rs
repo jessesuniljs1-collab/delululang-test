@@ -1016,6 +1016,22 @@ fn bin_prec(op: BinOp) -> u8 {
     }
 }
 
+/// RW 2.35 (D-V2-226): the level an operand of `op` must reach to be printed without parentheses. A bitwise or shift
+/// operator never shares an unparenthesized expression with a different binary operator, in either direction:
+/// `(x & 1) == 0`, `(a & b) | c`, `1 << (n - 1)`, `(m + n) & 0xFF`. The parser reads each of these the same without
+/// the parentheses (Python's and Rust's order), but C, C++, Java, JavaScript and C# put `&`, `|` and `^` below `==`,
+/// so a reader from those languages reads `x & 1 == 0` as `x & (1 == 0)`; and a shift beside arithmetic trips
+/// readers in every language (Rust's `clippy::precedence`). The canonical text shows the grouping instead. A chain of
+/// one operator (`a | b | c`) and an f-string need none.
+fn operand_min(op: BinOp, operand: &Expr, min: u8) -> u8 {
+    use BinOp::*;
+    let bitwise = |o: BinOp| matches!(o, BitAnd | BitOr | BitXor | Shl | Shr);
+    match operand {
+        Expr::Binary { op: inner, .. } if *inner != op && *inner != Interp && (bitwise(op) || bitwise(*inner)) => P_ATOM,
+        _ => min,
+    }
+}
+
 /// The levels above every binary operator: a unary operator's operand, a postfix form's receiver, and an atom.
 const P_UNARY: u8 = 11;
 const P_POSTFIX: u8 = 12;
@@ -1099,14 +1115,14 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
         // so a range on its left keeps its parentheses too.
         Expr::Binary { op: op @ (BinOp::Range | BinOp::RangeInclusive), lhs, rhs, .. } => {
             let p = bin_prec(*op);
-            let l = expr_flat(lhs, p + 1, no_struct);
-            let r = expr_flat(rhs, p + 1, no_struct);
+            let l = expr_flat(lhs, operand_min(*op, lhs, p + 1), no_struct);
+            let r = expr_flat(rhs, operand_min(*op, rhs, p + 1), no_struct);
             (format!("{l}{}{r}", bin_text(*op)), p)
         }
         Expr::Binary { op, lhs, rhs, .. } => {
             let p = bin_prec(*op);
-            let l = expr_flat(lhs, p, no_struct);
-            let r = expr_flat(rhs, p + 1, no_struct);
+            let l = expr_flat(lhs, operand_min(*op, lhs, p), no_struct);
+            let r = expr_flat(rhs, operand_min(*op, rhs, p + 1), no_struct);
             (format!("{l} {} {r}", bin_text(*op)), p)
         }
         Expr::If { cond, then_, else_, .. } => {
@@ -1805,9 +1821,11 @@ fn f() -> Int { 1 }
         run_fuzz_gate(n);
     }
 
-    /// RW 2.35: a bitwise expression prints with one space each side of its operator, `~` close to its operand, and
-    /// exactly the parentheses its levels need — the ones the source carried without needing them dropped, the ones
-    /// that change the tree kept — and each compound form as written.
+    /// RW 2.35: a bitwise expression prints with one space each side of its operator, `~` close to its operand, the
+    /// parentheses that change the tree kept, and each compound form as written. A bitwise or shift operator beside a
+    /// different binary operator is always parenthesized (`operand_min`), whether or not the source carried the
+    /// parentheses; parentheses no level needs are dropped elsewhere (`m >>= (n)`, `m ^= (a | b)`), and a chain of one
+    /// operator keeps none.
     #[test]
     fn a_bitwise_expression_prints_with_the_parentheses_it_needs() {
         let src = "module m\nfn f(x: Int, a: Int, b: Int, c: Int, n: Int) -> Bool {\n    var m = 0\n    m|=1<<n\n    m &= ~ (a+b)\n    m ^= (a | b)\n    m<<=2\n    m >>= (n)\n    let p = (a|b)&c\n    let q = a|(b&c)\n    let r = (1<<n)-1\n    let s = 1<<(n-1)\n    let t = a<<(b<<c)\n    let u = (a<<b)<<c\n    let v = - ~a\n    let w = (a ^ b) | (a & b) | (a >> 1)\n    for i in 0..(1<<n) {\n        m ^= i\n    }\n    (x&1)==0\n}\n";
@@ -1819,15 +1837,15 @@ fn f() -> Int { 1 }
             "    m <<= 2\n",
             "    m >>= n\n",
             "    let p = (a | b) & c\n",
-            "    let q = a | b & c\n",
+            "    let q = a | (b & c)\n",
             "    let r = (1 << n) - 1\n",
-            "    let s = 1 << n - 1\n",
+            "    let s = 1 << (n - 1)\n",
             "    let t = a << (b << c)\n",
             "    let u = a << b << c\n",
             "    let v = -~a\n",
-            "    let w = a ^ b | a & b | a >> 1\n",
-            "    for i in 0..1 << n {\n",
-            "    x & 1 == 0\n",
+            "    let w = (a ^ b) | (a & b) | (a >> 1)\n",
+            "    for i in 0..(1 << n) {\n",
+            "    (x & 1) == 0\n",
         ] {
             assert!(out.contains(line), "expected {line:?} in:\n{out}");
         }

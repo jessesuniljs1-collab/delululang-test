@@ -1,0 +1,13 @@
+// RW 2.35 (D-V2-226), by RW 2.34's rule: a compound assignment reads its target and then writes it, so a call inside
+// the target would run twice. `|=` is refused there as `+=` is.
+module conf
+
+fn slot() -> Int {
+    0
+}
+
+fn f() -> Int {
+    var xs = [1, 2]
+    xs[slot()] |= 4
+    xs[0]
+}

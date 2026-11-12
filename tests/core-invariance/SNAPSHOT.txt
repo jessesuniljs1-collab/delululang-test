@@ -3390,6 +3390,81 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/33_strings.delulu`
 
+===== tests/conformance/accept/34_bitwise.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/34_bitwise.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/34_bitwise.delulu checked clean
+
+===== tests/conformance/accept/34_bitwise.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "bits_set",
+      "has",
+      "is_negative",
+      "low_bits",
+      "masks",
+      "octal_mode",
+      "perms",
+      "toggle"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/34_bitwise.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     bits_set, has, is_negative, low_bits, masks, octal_mode, perms, toggle
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/34_bitwise.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/34_bitwise.delulu`
+
 ===== tests/conformance/accept/compound_assignment.delulu :: check --json =====
 exit 0
 --- stdout ---
@@ -3820,6 +3895,57 @@ error[DL0102]: unterminated f-string
 
 1 error(s)
 
+===== tests/conformance/reject/DL0104_binary_digit_outside_base.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0104",
+      "explanation_id": "E-DL0104",
+      "message": "`2` is not a binary digit, in the literal `0b102`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 238,
+            "col": 10,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0104_binary_digit_outside_base.delulu",
+          "start": {
+            "byte": 233,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0104_binary_digit_outside_base.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0104]: `2` is not a binary digit, in the literal `0b102`
+  --> tests/conformance/reject/DL0104_binary_digit_outside_base.delulu:6:5
+   |
+ 6 |     0b102
+   |     ^^^^^
+  explain: delulu explain E-DL0104
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0104_float_overflow.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -3969,6 +4095,57 @@ error[DL0104]: a Float literal needs a fraction before its exponent: write `1.0e
    |
  6 |     1e300
    |     ^^^^^
+  explain: delulu explain E-DL0104
+
+1 error(s)
+
+===== tests/conformance/reject/DL0104_hex_literal_past_int.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0104",
+      "explanation_id": "E-DL0104",
+      "message": "integer literal overflows Int (i64): the largest is 0x7FFF_FFFF_FFFF_FFFF — for a bit pattern with the top bit set, write `1 << 63`, or `~` of the bits it leaves clear (`~0` is every bit)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 318,
+            "col": 26,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0104_hex_literal_past_int.delulu",
+          "start": {
+            "byte": 297,
+            "col": 5,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0104_hex_literal_past_int.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0104]: integer literal overflows Int (i64): the largest is 0x7FFF_FFFF_FFFF_FFFF — for a bit pattern with the top bit set, write `1 << 63`, or `~` of the bits it leaves clear (`~0` is every bit)
+  --> tests/conformance/reject/DL0104_hex_literal_past_int.delulu:7:5
+   |
+ 7 |     0xFFFF_FFFF_FFFF_FFFF
+   |     ^^^^^^^^^^^^^^^^^^^^^
   explain: delulu explain E-DL0104
 
 1 error(s)
@@ -4865,6 +5042,58 @@ error[DL0202]: expected an expression, found `{`
 
 1 error(s)
 
+===== tests/conformance/reject/DL0202_line_begins_with_bitor.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0202",
+      "explanation_id": "E-DL0202",
+      "message": "expected an expression, found `|` — a line break ended the expression before it: end the line above with `|`, and the next line continues it",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 328,
+            "col": 10,
+            "line": 8
+          },
+          "file": "tests/conformance/reject/DL0202_line_begins_with_bitor.delulu",
+          "label": "a line cannot begin with a binary operator",
+          "start": {
+            "byte": 327,
+            "col": 9,
+            "line": 8
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0202_line_begins_with_bitor.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0202]: expected an expression, found `|` — a line break ended the expression before it: end the line above with `|`, and the next line continues it
+  --> tests/conformance/reject/DL0202_line_begins_with_bitor.delulu:8:9
+   |
+ 8 |         | 0b100
+   |         ^ a line cannot begin with a binary operator
+  explain: delulu explain E-DL0202
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0202_unclosed_group.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -5184,6 +5413,58 @@ error[DL0401]: comparison expects Int or Float: expected `Int`, found `Bool`
   explain: delulu explain E-DL0401
 
 2 error(s)
+
+===== tests/conformance/reject/DL0207_compound_bitor_target_holds_a_call.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0207",
+      "explanation_id": "E-DL0207",
+      "message": "a compound assignment (`|=`) reads its target and then writes it, so a call inside the target would run twice — bind the index first (`let i = …`), then assign to `xs[i]`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 274,
+            "col": 15,
+            "line": 11
+          },
+          "file": "tests/conformance/reject/DL0207_compound_bitor_target_holds_a_call.delulu",
+          "label": "this target holds a call",
+          "start": {
+            "byte": 264,
+            "col": 5,
+            "line": 11
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0207_compound_bitor_target_holds_a_call.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0207]: a compound assignment (`|=`) reads its target and then writes it, so a call inside the target would run twice — bind the index first (`let i = …`), then assign to `xs[i]`
+  --> tests/conformance/reject/DL0207_compound_bitor_target_holds_a_call.delulu:11:5
+   |
+11 |     xs[slot()] |= 4
+   |     ^^^^^^^^^^ this target holds a call
+  explain: delulu explain E-DL0207
+
+1 error(s)
 
 ===== tests/conformance/reject/DL0207_compound_invalid_target.delulu :: check --json =====
 exit 1
@@ -6399,6 +6680,110 @@ error[DL0307]: `Bogus` is not a capability resource kind
 
 1 error(s)
 
+===== tests/conformance/reject/DL0401_bitwise_on_a_float.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`<<` works on the bits of an `Int`, and this operand is a `Float`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 166,
+            "col": 11,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_bitwise_on_a_float.delulu",
+          "label": "a `Float`: convert it first, `int(x)` (or `x.to_int()` to ask whether it fits)",
+          "start": {
+            "byte": 165,
+            "col": 10,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_bitwise_on_a_float.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `<<` works on the bits of an `Int`, and this operand is a `Float`
+  --> tests/conformance/reject/DL0401_bitwise_on_a_float.delulu:5:10
+   |
+ 5 |     1 << x
+   |          ^ a `Float`: convert it first, `int(x)` (or `x.to_int()` to ask whether it fits)
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_bitwise_on_two_bools.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`&` works on the bits of two `Int`s, and both sides are `Bool`: for `Bool`s write `&&`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 243,
+            "col": 10,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0401_bitwise_on_two_bools.delulu",
+          "label": "two `Bool`s: write `&&`",
+          "start": {
+            "byte": 238,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_bitwise_on_two_bools.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `&` works on the bits of two `Int`s, and both sides are `Bool`: for `Bool`s write `&&`
+  --> tests/conformance/reject/DL0401_bitwise_on_two_bools.delulu:6:5
+   |
+ 6 |     a & b
+   |     ^^^^^ two `Bool`s: write `&&`
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0401_float_max_int_argument.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -6971,6 +7356,58 @@ error[DL0401]: a `Float` cannot be a Map key: it has no total order (NaN compare
 
 1 error(s)
 
+===== tests/conformance/reject/DL0401_not_on_an_int.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`!` negates a `Bool`, and this is an `Int`: to flip an `Int`'s bits write `~`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 175,
+            "col": 7,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0401_not_on_an_int.delulu",
+          "label": "an `Int`: `~n` is its bits flipped, `n == 0` is whether it is zero",
+          "start": {
+            "byte": 174,
+            "col": 6,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_not_on_an_int.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `!` negates a `Bool`, and this is an `Int`: to flip an `Int`'s bits write `~`
+  --> tests/conformance/reject/DL0401_not_on_an_int.delulu:6:6
+   |
+ 6 |     !n
+   |      ^ an `Int`: `~n` is its bits flipped, `n == 0` is whether it is zero
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0401_range_float_bound.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -7153,6 +7590,58 @@ error[DL0401]: argument type mismatch: expected `Str`, found `Int`
    |
  5 |     s.replace(1, "b")
    |               ^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_tilde_on_a_bool.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`~` flips the bits of an `Int`, and this is a `Bool`: to negate a `Bool` write `!`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 134,
+            "col": 7,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_tilde_on_a_bool.delulu",
+          "label": "a `Bool`",
+          "start": {
+            "byte": 133,
+            "col": 6,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_tilde_on_a_bool.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `~` flips the bits of an `Int`, and this is a `Bool`: to negate a `Bool` write `!`
+  --> tests/conformance/reject/DL0401_tilde_on_a_bool.delulu:5:6
+   |
+ 5 |     ~b
+   |      ^ a `Bool`
   explain: delulu explain E-DL0401
 
 1 error(s)

@@ -1,0 +1,421 @@
+// engines: interp wasm
+// RW 2.35 (D-V2-220's program step): the few-hundred-line program — an IPv4 subnet calculator, using every basic built
+// so far: `var` and `let`, compound assignment (RW 2.34), the math methods and checked forms (2.38), ranges (2.36),
+// strings (2.37) and the bitwise operators (2.35). An address is an `Int` of 32 bits: a netmask is `~0` shifted, a
+// network is an address `&` its mask, a broadcast is the network `|` the mask's complement, a class is read off the
+// leading bits, and a range of addresses becomes the fewest aligned blocks by the lowest set bit, `a & -a`. It parses
+// and refuses addresses and CIDR blocks, reports each block in dotted, binary and hexadecimal form, splits a block into
+// subnets, allocates subnets by size (VLSM), finds the smallest network holding a set of addresses, and covers a range
+// with blocks. Every answer is checked against Python's `ipaddress` module, line for line.
+module ipcalc
+
+type Net {
+    addr: Int,
+    prefix: Int,
+}
+
+// ---- Text --------------------------------------------------------------------------------------------------------
+fn dotted(a: Int) -> Str {
+    f"{(a >> 24) & 0xFF}.{(a >> 16) & 0xFF}.{(a >> 8) & 0xFF}.{a & 0xFF}"
+}
+
+// The `width` low bits of `n`, the highest first.
+fn bits(n: Int, width: Int) -> Str {
+    var s = ""
+    for k in (0..width).reverse() {
+        s += str((n >> k) & 1)
+    }
+    s
+}
+
+fn dotted_binary(a: Int) -> Str {
+    [24, 16, 8, 0].map(fn(shift: Int) -> Str { bits(a >> shift, 8) }).join(".")
+}
+
+fn hex32(a: Int) -> Str {
+    let digits = "0123456789ABCDEF"
+    var s = ""
+    for k in (0..8).reverse() {
+        s += digits[(a >> (4 * k)) & 0xF]
+    }
+    "0x" + s
+}
+
+// `1 block`, `2 blocks`.
+fn plural(n: Int, one: Str, many: Str) -> Str {
+    if n == 1 { f"{n} {one}" } else { f"{n} {many}" }
+}
+
+fn cidr(n: Net) -> Str {
+    f"{dotted(n.addr)}/{n.prefix}"
+}
+
+// ---- Masks and blocks --------------------------------------------------------------------------------------------
+fn mask_of(prefix: Int) -> Int {
+    (0xFFFF_FFFF << (32 - prefix)) & 0xFFFF_FFFF
+}
+
+fn wildcard_of(prefix: Int) -> Int {
+    ~mask_of(prefix) & 0xFFFF_FFFF
+}
+
+fn network_of(addr: Int, prefix: Int) -> Int {
+    addr & mask_of(prefix)
+}
+
+fn broadcast_of(addr: Int, prefix: Int) -> Int {
+    network_of(addr, prefix) | wildcard_of(prefix)
+}
+
+// The addresses a block holds, `2^(32 - prefix)`, by the math table's `pow` — the same as `1 << (32 - prefix)`.
+fn size_of(prefix: Int) -> Int {
+    2.pow(32 - prefix)
+}
+
+// Usable hosts: all but the network and the broadcast, except a /31 (a point-to-point link, RFC 3021) and a /32.
+fn hosts_of(prefix: Int) -> Int {
+    if prefix >= 31 { size_of(prefix) } else { size_of(prefix) - 2 }
+}
+
+fn contains(n: Net, addr: Int) -> Bool {
+    network_of(addr, n.prefix) == n.addr
+}
+
+// The number of bits `n` needs: 0 for 0, 1 for 1, 32 for an address with its top bit set.
+fn bit_length(n: Int) -> Int {
+    var m = n
+    var k = 0
+    while m != 0 {
+        m >>= 1
+        k += 1
+    }
+    k
+}
+
+// The class, read off the leading bits: 0 is A, 10 is B, 110 is C, 1110 is D (multicast), 1111 is E.
+fn class_of(a: Int) -> Str {
+    let top = a >> 28
+    if (top & 0b1000) == 0 {
+        "A"
+    } else if (top & 0b0100) == 0 {
+        "B"
+    } else if (top & 0b0010) == 0 {
+        "C"
+    } else if (top & 0b0001) == 0 {
+        "D"
+    } else {
+        "E"
+    }
+}
+
+fn within(a: Int, net: Int, prefix: Int) -> Bool {
+    network_of(a, prefix) == net
+}
+
+fn kind_of(a: Int) -> Str {
+    if within(a, 0x0A00_0000, 8) || within(a, 0xAC10_0000, 12) || within(a, 0xC0A8_0000, 16) {
+        "private (RFC 1918)"
+    } else if within(a, 0x7F00_0000, 8) {
+        "loopback"
+    } else if within(a, 0xA9FE_0000, 16) {
+        "link-local"
+    } else if within(a, 0x6440_0000, 10) {
+        "shared (RFC 6598)"
+    } else if within(a, 0xE000_0000, 4) {
+        "multicast"
+    } else {
+        "public"
+    }
+}
+
+// ---- Parsing -----------------------------------------------------------------------------------------------------
+fn parse_octet(part: Str, text: Str) -> Result[Int, Str] {
+    if part.is_empty() {
+        return Err(f"`{text}` has an empty part")
+    }
+    for ch in part.chars() {
+        if !"0123456789".contains(ch) {
+            return Err(f"`{text}`: `{part}` is not a number")
+        }
+    }
+    if len(part) > 1 && part[0] == "0" {
+        return Err(f"`{text}`: `{part}` has a leading zero")
+    }
+    match parse_int(part) {
+        Some(n) => if n > 255 { Err(f"`{text}`: {n} is more than 255") } else { Ok(n) }
+        None => Err(f"`{text}`: `{part}` is not a number")
+    }
+}
+
+fn parse_addr(text: Str) -> Result[Int, Str] {
+    if text.count(".") != 3 {
+        return Err(f"`{text}` needs four parts, found {text.count(".") + 1}")
+    }
+    var a = 0
+    for part in text.split(".") {
+        match parse_octet(part, text) {
+            Ok(n) => {
+                a = (a << 8) | n
+            }
+            Err(why) => {
+                return Err(why)
+            }
+        }
+    }
+    Ok(a)
+}
+
+// `a.b.c.d/p`: the address as written, and its prefix.
+fn parse_cidr(text: Str) -> Result[Net, Str] {
+    let slash = match text.find("/") {
+        Some(i) => i
+        None => {
+            return Err(f"`{text}` has no `/prefix`")
+        }
+    }
+    let addr = match parse_addr(text.slice(0, slash)) {
+        Ok(a) => a
+        Err(why) => {
+            return Err(why)
+        }
+    }
+    let p = text.slice(slash + 1, len(text))
+    match parse_int(p) {
+        Some(n) => if p.is_empty() || n < 0 || n > 32 || p[0] == "+" {
+            Err(f"`{text}`: the prefix is 0 to 32")
+        } else {
+            Ok(Net { addr: addr, prefix: n })
+        }
+        None => Err(f"`{text}`: the prefix is 0 to 32")
+    }
+}
+
+// ---- Reports -----------------------------------------------------------------------------------------------------
+fn row(label: Str, value: Str, extra: Str) -> Str {
+    f"  {label.pad_right(10, " ")} {value.pad_right(22, " ")} {extra}".trim_end()
+}
+
+fn report(c: Cap[Console], text: Str) ! {Write} {
+    match parse_cidr(text) {
+        Err(why) => c.println(f"{text}: refused, {why}")
+        Ok(n) => {
+            let net = network_of(n.addr, n.prefix)
+            let last = broadcast_of(n.addr, n.prefix)
+            c.println(f"{text} — class {class_of(n.addr)}, {kind_of(n.addr)}")
+            c.println(row("address", dotted(n.addr), f"{dotted_binary(n.addr)}  {hex32(n.addr)}"))
+            c.println(
+                row("netmask", f"{dotted(mask_of(n.prefix))} = {n.prefix}", dotted_binary(mask_of(n.prefix))),
+            )
+            c.println(row("wildcard", dotted(wildcard_of(n.prefix)), ""))
+            c.println(row("network", f"{dotted(net)}/{n.prefix}", ""))
+            if n.prefix >= 31 {
+                c.println(
+                    row("hosts", f"{dotted(net)} - {dotted(last)}", f"({hosts_of(n.prefix)})"),
+                )
+            } else {
+                c.println(row("broadcast", dotted(last), ""))
+                c.println(
+                    row("hosts", f"{dotted(net + 1)} - {dotted(last - 1)}", f"({hosts_of(n.prefix)})"),
+                )
+            }
+        }
+    }
+}
+
+// A block split into subnets of `prefix`, each with its host range; at most `limit` are listed.
+fn subnets(c: Cap[Console], n: Net, prefix: Int, limit: Int) ! {Write} {
+    let count = 1 << (prefix - n.prefix)
+    c.println(f"{cidr(n)} as /{prefix}: {count} subnets of {hosts_of(prefix)} hosts")
+    for i in 0..count.min(limit) {
+        let start = n.addr + i * size_of(prefix)
+        c.println(f"  {str(i + 1).pad_left(3, " ")} {cidr(Net { addr: start, prefix: prefix })}")
+    }
+    if count > limit { c.println(f"  ... and {count - limit} more") }
+}
+
+// VLSM: each need gets the smallest block whose hosts hold it, the largest first, each block placed at the next address
+// aligned to its size — so the blocks, taken largest first, never overlap and never leave a gap.
+fn allocate(c: Cap[Console], pool: Net, needs: List[Int]) ! {Write} {
+    c.println(f"allocate {needs} hosts from {cidr(pool)}")
+    let sorted = needs.sort().reverse()
+    var next = pool.addr
+    let end = pool.addr + size_of(pool.prefix)
+    for need in sorted {
+        // The smallest prefix whose hosts hold `need`: the bits `need + 2` addresses take.
+        let prefix = (32 - bit_length(need + 1)).clamp(0, 30)
+        let size = size_of(prefix)
+        let start = (next + size - 1) & ~(size - 1)
+        if start + size > end {
+            c.println(f"  {str(need).pad_left(4, " ")} hosts: no room left in {cidr(pool)}")
+        } else {
+            let spare = hosts_of(prefix) - need
+            c.println(
+                f"  {str(need).pad_left(4, " ")} hosts: {cidr(Net { addr: start, prefix: prefix })} ({spare} spare)",
+            )
+            next = start + size
+        }
+    }
+    c.println(f"  used {next - pool.addr} of {size_of(pool.prefix)} addresses")
+}
+
+// The smallest network holding every address: the leading bits they all share. An address's difference from the first
+// is `^`; the bits any of them differ in are those differences `|`-ed together.
+fn summarize(c: Cap[Console], texts: List[Str]) ! {Write} {
+    var first = 0 - 1
+    var differ = 0
+    var lowest = 0xFFFF_FFFF
+    var highest = 0
+    for t in texts {
+        match parse_addr(t) {
+            Ok(a) => {
+                if first < 0 {
+                    first = a
+                }
+                differ |= a ^ first
+                lowest = lowest.min(a)
+                highest = highest.max(a)
+            }
+            Err(why) => c.println(f"  skipped: {why}")
+        }
+    }
+    let prefix = 32 - bit_length(differ)
+    let n = Net { addr: network_of(first, prefix), prefix: prefix }
+    let spread = (highest - lowest).abs()
+    let held = plural(size_of(prefix), "address", "addresses")
+    c.println(f"{texts.join(", ")} -> {cidr(n)} ({held} for a spread of {spread + 1})")
+}
+
+// A range of addresses as the fewest aligned blocks: from the start, the largest block aligned there (its lowest set
+// bit, `a & -a`) that does not pass the end.
+fn blocks(first: Int, last: Int) -> List[Str] {
+    let out: ref List[Str] = []
+    var a = first
+    while a <= last {
+        // The largest block aligned at `a`: its lowest set bit, or all 2^32 addresses at 0.
+        var size = if a == 0 { 1 << 32 } else { a & -a }
+        while a + size - 1 > last {
+            size >>= 1
+        }
+        out.push(cidr(Net { addr: a, prefix: 32 - bit_length(size - 1) }))
+        a += size
+    }
+    out
+}
+
+fn cover(c: Cap[Console], from: Str, to: Str) ! {Write} {
+    let first = match parse_addr(from) {
+        Ok(a) => a
+        Err(why) => {
+            c.println(f"{from} - {to}: refused, {why}")
+            return
+        }
+    }
+    let last = match parse_addr(to) {
+        Ok(a) => a
+        Err(why) => {
+            c.println(f"{from} - {to}: refused, {why}")
+            return
+        }
+    }
+    if first > last {
+        c.println(f"{from} - {to}: refused, the range runs backwards")
+        return
+    }
+    let bs = blocks(first, last)
+    let count = plural(last - first + 1, "address", "addresses")
+    c.println(f"{from} - {to} ({count}): {plural(len(bs), "block", "blocks")}")
+    c.println(f"  {bs.join(" ")}")
+}
+
+// The address after `a`, or None past 255.255.255.255 — a checked add, against the 32 bits an address has.
+fn next_addr(a: Int) -> Option[Int] {
+    match a.checked_add(1) {
+        Some(b) => if b > 0xFFFF_FFFF { None } else { Some(b) }
+        None => None
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    let rule = "-".repeat(100)
+    let blocks_in = [
+        "192.168.10.77/26",
+        "10.0.0.1/8",
+        "172.20.5.9/12",
+        "8.8.8.8/32",
+        "100.64.7.1/31",
+        "224.0.0.251/24",
+        "169.254.1.20/16",
+        "127.0.0.1/0",
+        "250.1.2.3/30",
+    ]
+    for text in blocks_in {
+        report(c, text)
+    }
+    c.println(rule)
+    let refused_in = [
+        "256.1.1.1/24",
+        "1.2.3/24",
+        "1.2.3.4/33",
+        "01.2.3.4/8",
+        "a.b.c.d/8",
+        "1.2.3.4/",
+        "1.2.3.4",
+        "1..3.4/8",
+        "1.2.3.4/+8",
+        "1.2.3.4/-1",
+    ]
+    for bad in refused_in {
+        report(c, bad)
+    }
+    c.println(rule)
+    match parse_cidr("10.0.0.0/22") {
+        Ok(n) => subnets(c, n, 24, 8)
+        Err(why) => c.println(why)
+    }
+    match parse_cidr("192.168.100.0/24") {
+        Ok(n) => subnets(c, n, 28, 5)
+        Err(why) => c.println(why)
+    }
+    c.println(rule)
+    match parse_cidr("172.16.0.0/22") {
+        Ok(pool) => {
+            allocate(c, pool, [100, 50, 25, 10, 2, 2])
+            allocate(c, pool, [500, 300, 60])
+        }
+        Err(why) => c.println(why)
+    }
+    c.println(rule)
+    summarize(c, ["10.1.4.17", "10.1.5.200", "10.1.7.3"])
+    summarize(c, ["192.168.1.1", "192.168.1.1"])
+    summarize(c, ["10.0.0.1", "11.255.0.1", "bad.addr"])
+    summarize(c, ["0.0.0.0", "255.255.255.255"])
+    c.println(rule)
+    cover(c, "192.168.1.5", "192.168.1.20")
+    cover(c, "10.0.0.0", "10.0.3.255")
+    cover(c, "0.0.0.1", "0.0.0.6")
+    cover(c, "0.0.0.0", "255.255.255.255")
+    cover(c, "10.0.0.9", "10.0.0.1")
+    cover(c, "10.0.0.9", "10.0.0.300")
+    c.println(rule)
+    match parse_cidr("10.1.4.0/22") {
+        Ok(n) => {
+            for t in ["10.1.6.9", "10.1.8.1", "10.1.3.255", "10.1.7.255"] {
+                match parse_addr(t) {
+                    Ok(a) => c.println(f"{t} in {cidr(n)}: {contains(n, a)}")
+                    Err(why) => c.println(why)
+                }
+            }
+        }
+        Err(why) => c.println(why)
+    }
+    for t in ["10.0.0.255", "255.255.255.254", "255.255.255.255"] {
+        match parse_addr(t) {
+            Ok(a) => match next_addr(a) {
+                Some(b) => c.println(f"after {t}: {dotted(b)}")
+                None => c.println(f"after {t}: none, the last address")
+            }
+            Err(why) => c.println(why)
+        }
+    }
+}

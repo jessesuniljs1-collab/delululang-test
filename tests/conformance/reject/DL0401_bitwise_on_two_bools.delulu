@@ -1,0 +1,7 @@
+// RW 2.35 (D-V2-226): `&`, `|` and `^` work on the bits of `Int`s. Two `Bool`s are another language's habit; the
+// refusal names the operator a `Bool` takes (`&&`, `||`, `!=`), once.
+module conf
+
+fn both(a: Bool, b: Bool) -> Bool {
+    a & b
+}

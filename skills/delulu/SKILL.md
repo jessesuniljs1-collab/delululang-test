@@ -67,6 +67,13 @@ one-character `Str`, DL0903 past the end; a string never changes in place). Ever
 `ends_with`, `starts_with`, `repeat(n)`, `trim_start`, `trim_end`, `is_empty`, `replace`, `to_upper`, `to_lower`,
 `split`, `chars`. A Float literal needs its fraction: `1.0e-9`, never `1e-9`; `str` prints a very large or small
 `Float` with an exponent (`1.0e300`). A `match` on a `Str` with literal arms works on both engines.
+**Bits:** `&`, `|`, `^`, `~` (bits flipped), `<<` and `>>` work on an `Int`'s 64 bits, with `&=`, `|=`, `^=`, `<<=`,
+`>>=`; literals may be `0xFF`, `0o755` or `0b1010`, grouped by `_`. They bind as in Python and Rust: tighter than a
+comparison (`x & 1 == 0` is `(x & 1) == 0`), looser than arithmetic, `&` before `^` before `|`; `fmt` prints the
+parentheses anyway wherever one stands beside a different operator. `>>` copies the sign in (`-8 >> 1` is `-4`); `<<`
+drops bits past the 64th (`1 << 63` is the smallest `Int`); a count outside 0 to 63 is DL0908, never taken modulo 64 —
+mask a count from data first (`1 << (n & 63)`). `&`, `|`, `^` on `Bool`s are refused naming `&&`, `||`, `!=`; `!` on an
+`Int` names `~`. A mutable binding is `var x = 0`, never `let mut`.
 There is no `unwrap` — `match` the `Option` or `Result`, or use `?` inside a function that returns
 `Result`. A match arm that does nothing is `None => {}`; one that assigns or `continue`s wraps it in
 braces: `Some(v) => { best = v }`, `_ => { continue }`.

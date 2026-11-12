@@ -1,0 +1,222 @@
+// engines: interp
+// RW 2.35 (D-V2-220's program step): the everyday utility — Unix file modes. A mode is an `Int` whose bits are a
+// file's type, its set-id and sticky bits and its nine permissions. This prints each mode as `ls -l` does (Python's
+// `stat.filemode`) with its octal digits, applies `chmod`'s symbolic changes (`u+x`, `go-w`, `a=r`, `+t`, `u+s`) by
+// setting, clearing and replacing bits, refuses a change it cannot read, shows what a umask leaves of a new file's
+// mode, and names the bits two modes differ in. Every answer is checked against an independent Python implementation.
+// It names the interpreter alone: on `--engine wasm` its module-level `let` constants are DL1201 (RW 3.33, found by this
+// program); it names both engines once that row closes.
+module chmod
+
+let S_IFMT: Int = 0o170000
+
+let S_IFDIR: Int = 0o040000
+
+let S_IFREG: Int = 0o100000
+
+let S_IFLNK: Int = 0o120000
+
+let SETUID: Int = 0o4000
+
+let SETGID: Int = 0o2000
+
+let STICKY: Int = 0o1000
+
+type File {
+    name: Str,
+    mode: Int,
+}
+
+// The mode's permission digits in octal, at least four: `0o755` is `0755`.
+fn octal(mode: Int) -> Str {
+    var m = mode & 0o7777
+    var s = ""
+    while m > 0 {
+        s = str(m & 0o7) + s
+        m >>= 3
+    }
+    s.pad_left(4, "0")
+}
+
+// One `rwx` triad: the three bits at `shift`, and the special bit that takes the execute place, `on` when the execute
+// bit is set too and `off` when it is not (`s` and `S`, `t` and `T`).
+fn triad(mode: Int, shift: Int, special: Int, on: Str, off: Str) -> Str {
+    let bits = (mode >> shift) & 0o7
+    let r = if (bits & 0b100) != 0 { "r" } else { "-" }
+    let w = if (bits & 0b010) != 0 { "w" } else { "-" }
+    let exec = (bits & 0b001) != 0
+    let x = if (mode & special) != 0 {
+        if exec { on } else { off }
+    } else if exec {
+        "x"
+    } else {
+        "-"
+    }
+    r + w + x
+}
+
+fn filemode(mode: Int) -> Str {
+    let t = mode & S_IFMT
+    let k = if t == S_IFDIR {
+        "d"
+    } else if t == S_IFLNK {
+        "l"
+    } else if t == S_IFREG {
+        "-"
+    } else {
+        "?"
+    }
+    k + triad(mode, 6, SETUID, "s", "S") + triad(mode, 3, SETGID, "s", "S") + triad(mode, 0, STICKY, "t", "T")
+}
+
+// The bits `who` covers: `u`, `g` and `o` each with its set-id or sticky bit, and all of them for `a` or for none.
+fn who_mask(who: Str) -> Int {
+    if who.is_empty() || who.contains("a") {
+        return 0o7777
+    }
+    var m = 0
+    if who.contains("u") {
+        m |= 0o4700
+    }
+    if who.contains("g") {
+        m |= 0o2070
+    }
+    if who.contains("o") {
+        m |= 0o1007
+    }
+    m
+}
+
+// The bits `perms` names in every triad, before `who` narrows them: `s` is both set-id bits, `t` the sticky bit.
+fn perm_bits(perms: Str) -> Int {
+    var m = 0
+    for ch in perms.chars() {
+        m |= match ch {
+            "r" => 0o444
+            "w" => 0o222
+            "x" => 0o111
+            "s" => SETUID | SETGID
+            "t" => STICKY
+            _ => 0
+        }
+    }
+    m
+}
+
+// One clause: who letters, one operator, permission letters. `+` sets the bits, `-` clears them, `=` replaces every bit
+// `who` covers. (No umask is applied to a clause without `who`, unlike a shell's `chmod +x`.)
+fn apply_clause(mode: Int, clause: Str) -> Result[Int, Str] {
+    var i = 0
+    while i < len(clause) && "ugoa".contains(clause[i]) {
+        i += 1
+    }
+    if i == len(clause) {
+        return Err(f"`{clause}` has no operator")
+    }
+    let op = clause[i]
+    let perms = clause.slice(i + 1, len(clause))
+    for ch in perms.chars() {
+        if !"rwxst".contains(ch) {
+            return Err(f"`{ch}` is not a permission, in `{clause}`")
+        }
+    }
+    let mask = who_mask(clause.slice(0, i))
+    let bits = perm_bits(perms) & mask
+    match op {
+        "+" => Ok(mode | bits)
+        "-" => Ok(mode & ~bits)
+        "=" => Ok((mode & ~mask) | bits)
+        _ => Err(f"`{op}` is not `+`, `-` or `=`, in `{clause}`")
+    }
+}
+
+fn chmod(mode: Int, spec: Str) -> Result[Int, Str] {
+    var m = mode
+    for clause in spec.split(",") {
+        match apply_clause(m, clause) {
+            Ok(next) => {
+                m = next
+            }
+            Err(why) => {
+                return Err(why)
+            }
+        }
+    }
+    Ok(m)
+}
+
+fn bit_count(n: Int) -> Int {
+    var m = n
+    var count = 0
+    while m != 0 {
+        m &= m - 1
+        count += 1
+    }
+    count
+}
+
+// The names of the bits two modes differ in, the highest first.
+fn differences(a: Int, b: Int) -> Str {
+    let names = [
+        "o+x",
+        "o+w",
+        "o+r",
+        "g+x",
+        "g+w",
+        "g+r",
+        "u+x",
+        "u+w",
+        "u+r",
+        "sticky",
+        "setgid",
+        "setuid",
+    ]
+    let changed = (a ^ b) & 0o7777
+    let out: ref List[Str] = []
+    for k in (0..12).reverse() {
+        if ((changed >> k) & 1) == 1 {
+            let now = if ((b >> k) & 1) == 1 { "set" } else { "cleared" }
+            out.push(f"{names[k]} {now}")
+        }
+    }
+    if out.is_empty() { "no change" } else { out.join(", ") }
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    let files = [
+        File { name: "/bin/sh", mode: S_IFREG | 0o755 },
+        File { name: "notes.txt", mode: S_IFREG | 0o644 },
+        File { name: "/tmp", mode: S_IFDIR | 0o1777 },
+        File { name: "/usr/bin/passwd", mode: S_IFREG | 0o4755 },
+        File { name: "shared", mode: S_IFDIR | 0o2770 },
+        File { name: "odd", mode: S_IFREG | 0o4644 },
+        File { name: "dropbox", mode: S_IFDIR | 0o1730 },
+        File { name: "link", mode: S_IFLNK | 0o777 },
+    ]
+    for f in files {
+        c.println(f"{filemode(f.mode)} {octal(f.mode)} {bit_count(f.mode & 0o7777)} {f.name}")
+    }
+    c.println("")
+    var mode = S_IFREG | 0o644
+    c.println(f"start                 {filemode(mode)} {octal(mode)}")
+    for spec in ["u+x", "go-r", "a+r", "g=rw", "o=", "u+s,g+s", "+t", "a-st", "ug+x,o-w", "u*x", "u+q", "", "u=rwx,go=rx"] {
+        match chmod(mode, spec) {
+            Ok(next) => {
+                c.println(
+                    f"chmod {spec.pad_right(15, " ")} {filemode(next)} {octal(next)}  {differences(mode, next)}",
+                )
+                mode = next
+            }
+            Err(why) => {
+                c.println(f"chmod {spec.pad_right(15, " ")} refused: {why}")
+            }
+        }
+    }
+    c.println("")
+    for umask in [0o022, 0o027, 0o077, 0o002] {
+        let file = S_IFREG | (0o666 & ~umask)
+        let dir = S_IFDIR | (0o777 & ~umask)
+        c.println(f"umask {octal(umask)}: new file {filemode(file)}, new directory {filemode(dir)}")
+    }
+}

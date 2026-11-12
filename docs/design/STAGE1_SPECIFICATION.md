@@ -63,7 +63,9 @@ Source is UTF-8. Identifiers are ASCII in v0.1 (revisit post-1.0).
 
 ```
 IDENT     = [A-Za-z_][A-Za-z0-9_]*        (minus keywords)
-INT       = [0-9][0-9_]* | 0x[0-9a-fA-F_]+
+INT       = [0-9][0-9_]* | 0[xX][0-9a-fA-F_]+ | 0[oO][0-7_]+ | 0[bB][01_]+      (0o, 0b: RW 2.35, D-V2-226)
+            (a whole word is one literal: a digit its base lacks is DL0104 naming it, `0b102`; a value past
+             Int's largest is DL0104 in every base — a literal is a value, never a bit pattern read as negative)
 FLOAT     = [0-9][0-9_]* "." [0-9][0-9_]* ( ("e"|"E") ("+"|"-")? [0-9]+ )?
             (RW 2.48: an INT followed at once by an exponent, `1e300`, is one malformed literal — DL0104,
              naming `1.0e300` — never INT then IDENT)
@@ -77,7 +79,8 @@ COMMENT   = "//" to end of line | "/*" ... "*/" (nesting allowed) | "///" doc co
 
 Punctuation/operators (each a distinct token):
 `( ) { } [ ] , . : ; -> => ! ? | = == != < <= > >= + - * / % += -= *= /= %= && || _ @` (the five compound-assignment
-tokens since 2026-11-08, RW 2.34)
+tokens since 2026-11-08, RW 2.34), and `& ^ ~ << >> &= |= ^= <<= >>=` (since 2026-11-12, RW 2.35, D-V2-226; the
+longest token wins, so `<<=` is one token and `a<<-1` is `a << -1`)
 
 **Source hygiene (normative, hardening D26).** Identifiers are ASCII by construction (the `IDENT`
 production above), which forecloses homoglyph and invisible-character attacks on names. In addition,
@@ -190,7 +193,7 @@ block         = "{" , { stmt } , "}" ;
 stmt          = let_stmt | var_stmt | assign_stmt | while_stmt | for_stmt | break_stmt | continue_stmt | return_stmt | expr_stmt ;
 let_stmt      = "let" , IDENT , [ ":" , type ] , "=" , expr , term ;
 var_stmt      = "var" , IDENT , [ ":" , type ] , "=" , expr , term ;
-assign_stmt   = lvalue , ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) , expr , term ;
+assign_stmt   = lvalue , ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" ) , expr , term ;
                  (* RW 2.34, D-V2-221: `t op= e` is `t = t op e`, the place of t found once, before e runs; a call in t is DL0207 *)
 lvalue        = IDENT , { "." , IDENT | "[" , expr , "]" } ;
 while_stmt    = "while" , expr , block ;
@@ -208,11 +211,17 @@ or_expr       = and_expr , { "||" , and_expr } ;
 and_expr      = eq_expr , { "&&" , eq_expr } ;
 eq_expr       = cmp_expr , [ ( "==" | "!=" ) , cmp_expr ] ;
 cmp_expr      = range_expr , [ ( "<" | "<=" | ">" | ">=" ) , range_expr ] ;
-range_expr    = add_expr , [ ( ".." | "..=" ) , add_expr ] ;   (* RW 2.36: `lo..hi` is `range(lo, hi)`,
+range_expr    = bitor_expr , [ ( ".." | "..=" ) , bitor_expr ] ;   (* RW 2.36: `lo..hi` is `range(lo, hi)`,
                      `lo..=hi` includes `hi`; a `List[Int]` of two `Int` bounds; never chained (DL0201) *)
+bitor_expr    = bitxor_expr , { "|" , bitxor_expr } ;      (* RW 2.35, D-V2-226: the bitwise levels, each of two
+bitxor_expr   = bitand_expr , { "^" , bitand_expr } ;         `Int`s on their 64 bits in two's complement, between a
+bitand_expr   = shift_expr , { "&" , shift_expr } ;           range and arithmetic — Python's and Rust's order, never
+shift_expr    = add_expr , { ( "<<" | ">>" ) , add_expr } ;   C's: `x & 1 == 0` is `(x & 1) == 0`. A shift's count is
+                                                               0 to 63 (DL0908 otherwise, never taken modulo 64); `<<`
+                                                               drops bits past the 64th, `>>` copies the sign in. *)
 add_expr      = mul_expr , { ( "+" | "-" ) , mul_expr } ;
 mul_expr      = unary , { ( "*" | "/" | "%" ) , unary } ;
-unary         = ( "-" | "!" ) , unary | postfix ;
+unary         = ( "-" | "!" | "~" ) , unary | postfix ;          (* `~n`: an `Int`'s bits flipped, RW 2.35 *)
 postfix       = primary , { call | method | field_access | index | try } ;
 call          = "(" , [ expr , { "," , expr } ] , ")" ;
 method        = "." , IDENT , "(" , [ expr , { "," , expr } ] , ")" ;

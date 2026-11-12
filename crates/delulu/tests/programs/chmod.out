@@ -1,0 +1,28 @@
+-rwxr-xr-x 0755 7 /bin/sh
+-rw-r--r-- 0644 4 notes.txt
+drwxrwxrwt 1777 10 /tmp
+-rwsr-xr-x 4755 8 /usr/bin/passwd
+drwxrws--- 2770 7 shared
+-rwSr--r-- 4644 5 odd
+drwx-wx--T 1730 6 dropbox
+lrwxrwxrwx 0777 9 link
+
+start                 -rw-r--r-- 0644
+chmod u+x             -rwxr--r-- 0744  u+x set
+chmod go-r            -rwx------ 0700  g+r cleared, o+r cleared
+chmod a+r             -rwxr--r-- 0744  g+r set, o+r set
+chmod g=rw            -rwxrw-r-- 0764  g+w set
+chmod o=              -rwxrw---- 0760  o+r cleared
+chmod u+s,g+s         -rwsrwS--- 6760  setuid set, setgid set
+chmod +t              -rwsrwS--T 7760  sticky set
+chmod a-st            -rwxrw---- 0760  setuid cleared, setgid cleared, sticky cleared
+chmod ug+x,o-w        -rwxrwx--- 0770  g+x set
+chmod u*x             refused: `*` is not `+`, `-` or `=`, in `u*x`
+chmod u+q             refused: `q` is not a permission, in `u+q`
+chmod                 refused: `` has no operator
+chmod u=rwx,go=rx     -rwxr-xr-x 0755  g+w cleared, o+r set, o+x set
+
+umask 0022: new file -rw-r--r--, new directory drwxr-xr-x
+umask 0027: new file -rw-r-----, new directory drwxr-x---
+umask 0077: new file -rw-------, new directory drwx------
+umask 0002: new file -rw-rw-r--, new directory drwxrwxr-x

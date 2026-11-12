@@ -6657,3 +6657,83 @@ so are the WASM bytes of a module with none of this surface.
 mutants; the full suite; the witness runs on macOS and Windows; the programs `banner` (one line), `wrap` (an everyday
 utility, checked against Python's `textwrap` and an independent implementation) and `logreport` (346 lines, every basic
 so far, checked line for line against an independent Python implementation), on both engines.
+
+## D-V2-226 — RW 2.35: bitwise operators — `&`, `|`, `^`, `~`, `<<`, `>>` on an `Int`'s 64 bits, their compound forms and `0b`/`0o` literals; a shift count outside 0 to 63 is DL0908; `fmt` keeps a literal's base and shows a bitwise operator's grouping — TAKEN (head chef, 2026-11-12, under the owner's delegation)
+
+**Context.** The sixth basic in D-V2-220's order. RW 2.35, measured 2026-11-02: `6 & 3` was DL0101 *unexpected
+character `&` (did you mean `&&`?)* and `1 << 4` DL0202. Probed again on 2026-11-12 on a debug build of `6c156b2c`, both
+engines: all six operators, `x &= 3`, `x <<= 4`, `0b101` and `0o17` refused, and `delulu fmt` rewrote `0xFF + 1_000` as
+`255 + 1000` (FMT-INT-BASE-1). A cloud session on Fable 5.2 built the operators on both engines on
+`claude/eloquent-brown-7i7fhs` (`e13eb21a`) and stopped at the owner's word, probed by hand with one crate's tests; the
+laptop (Opus 5.5) finished the slice from that branch: the tests, two corrections below (decisions 6 and 7), the
+conformance files, the programs, the documents and the mutants.
+
+**Decision.**
+1. **Six operators on `Int`, on its 64 bits in two's complement:** `&`, `|`, `^` (binary), `~` (prefix: every bit
+   flipped, `-n - 1`), `<<` and `>>`. They are binary operators in the tree (`BinOp::{BitAnd, BitOr, BitXor, Shl, Shr}`,
+   `UnOp::BitNot`), so every walk of an expression — effects, `authority`, the Atlas, the reference-capability pass, DIR
+   (which serializes an operator by name) — sees their operands without knowing they exist (D-V2-224's reason for
+   `..`). Pure; no primitive is added, so `PRIM_TABLE` does not move and no witness row is needed.
+2. **Precedence is Python's and Rust's, never C's.** Loosest first: `||`, `&&`, comparisons, ranges, `|`, `^`, `&`, the
+   shifts, `+ -`, `* / %`, prefix; each bitwise level left-associative. So `x & 1 == 0` is `(x & 1) == 0`, the reading a
+   reader means; C, C++, Java, JavaScript and C# put `&`, `|` and `^` below `==`, a recognized defect of C's that Python,
+   Rust, Go and Swift each corrected. `1 << n - 1` is `1 << (n - 1)`, and `0..1 << n` is `0..(1 << n)`.
+3. **A shift moves bits.** `<<` brings zeros in on the right and drops the bits moved past the 64th: it is not a checked
+   multiplication, so `1 << 63` is `Int`'s smallest value and not DL0901 — the top bit is written that way, and a mask
+   built by shifting must not fault (Rust's `<<` on `i64` has the same rule). `>>` is arithmetic, the sign bit copied in
+   (`-8 >> 1` is `-4`, `-1 >> 63` is `-1`), as Rust's `i64`, Java's `>>` and Python's `>>` on a negative `int`. **A count
+   outside 0 to 63 is DL0908** (*"`<<` moves an `Int`'s 64 bits by a count from 0 to 63; it was given a count of 64"*),
+   on both engines in the same words (`prim::shift`, `prim::shift_count_fault`): never a count taken modulo the
+   width, as WebAssembly, x86, Java and JavaScript take it (`1 << 64` would quietly be `1` on the first three), never
+   saturated, never a panic in one
+   build and a mask in another (Rust's debug and release). DL0908 is the existing code for an argument outside what an
+   operation accepts; no new code. `&`, `|`, `^` and `~` cannot fault.
+4. **The compound forms** `&=`, `|=`, `^=`, `<<=` and `>>=`, by RW 2.34's rewrite and its rules (D-V2-221): a call inside
+   the target is DL0207.
+5. **`0b` and `0o` literals beside `0x`**, any of them grouped by `_`, the base's letter in either case. A whole word is
+   one literal, so a digit its base lacks is DL0104 naming the digit and the literal (`0b102`, `0o8`), never `0b10`
+   followed by a stray `2`. **A literal is a value, never a bit pattern:** one past `Int`'s largest is DL0104 in every
+   base (`0xFFFF_FFFF_FFFF_FFFF`), the message naming `1 << 63` and `~` (`~0` is every bit). C and Java read such a
+   literal as a negative number; a value that is not the value written is refused here, as `1.0e400` is.
+6. **Refusals that teach, each once** (all existing codes): two `Bool`s under `&`, `|` or `^` are DL0401 naming `&&`,
+   `||`, `!=`; a `Float` operand is DL0401 naming `int(x)`; `!` on an `Int` is DL0401 naming `~` (its label says
+   `n == 0` is whether it is zero); `~` on a `Bool` is DL0401 naming `!`; a statement that begins with a binary operator
+   after a line break is DL0202 *end the line above with the operator* (the first thing a writer stacking flags with a
+   leading `|` meets; RW 2.49, the grammar's half, stays open). **Corrected by the laptop:** the branch typed the first,
+   third and fourth as `Int` or `Bool`, so `if b & b`, `if ~b` and `!n` returned from an `Int` function each drew a
+   second error. Their value is now poisoned (D-V2-19) — the writer's meaning is not known (C's `!n` is `n == 0`, Rust's
+   flips the bits) — so each is one refusal whatever its place wants. `&` and `|` on `Bool`s as non-short-circuiting
+   operators (Rust allows them) are not taken: two spellings of one meaning, one of which evaluates both sides.
+7. **The formatter keeps a literal as written and shows a bitwise operator's grouping.** An `Int` literal prints in its
+   own base, digits and grouping, the base's letter lowered; the spelling travels beside the tree by the literal's span
+   (`IntSpellings`), because the AST and DIR hold the value (FMT-INT-BASE-1, fixed by the branch). **Added by the
+   laptop:** a bitwise or shift operator never shares an unparenthesized expression with a different binary operator,
+   in either direction (`fmt::operand_min`): `(x & 1) == 0`, `(a & b) | c`, `1 << (n - 1)`, `(m + n) & 0xFF`,
+   `0..(1 << n)`. The parser reads each the same without them; the canonical text shows the grouping to a reader from a
+   C-family language, and a shift beside arithmetic trips readers in every language (Rust's `clippy::precedence`). A
+   chain of one operator (`a | b | c`, `a << b << c`) and a compound assignment's right side (`m |= a & b`) need none.
+   The branch's formatter had dropped every parenthesis no level needed, printing `x & 1 == 0`.
+8. **The WASM engine.** `&`, `|`, `^` are `i64.and`, `i64.or`, `i64.xor`; `~` is `xor -1`. A shift checks its count
+   first, read unsigned so a negative count is caught by the same test (`> 63`), and outside the range records the
+   interpreter's DL0908 through `delulu:math.shift_fault` and traps; then `i64.shl` or `i64.shr_s`. The import is decided
+   from the syntax (a compound `<<=` is a `Binary` in its statement's value), so the untyped compile entry decides as
+   the typed one does, and it follows every older import, so a module that shifts nothing is unchanged — measured: every one of the repository's kept programs, conformance
+   accept files and examples that compiles to a `.dwx` (29) compiles to the same bytes, the whole artifact, under
+   `8481bcf`'s compiler and this one (31 more compile under neither, alike).
+9. **Not built, recorded as RW 2.52:** an unsigned shift (`>>>`), wrapping arithmetic, bit counts (`count_ones`,
+   `leading_zeros`, `bit_length`), an `Int`'s text in another base and `parse_int` of another base, and a character's
+   code. The programs wrote each as a loop or a mask (a logical shift by `n` from 1 to 63 is `(x >> n) & ~(-1 << (64 -
+   n))`); the next decision on them is RW 2.52's.
+
+**Compatibility.** Additive (`STABILITY.md` §1): every operator, literal and compound form parsed to nothing or was
+refused before, and every program that checked means the same. No answer moves. The formatter's output moves for a
+source that spells an `Int` in hexadecimal or with `_` (kept now; it printed the decimal value), and its new
+parentheses appear only beside a bitwise operator, which no program could hold before.
+
+**What does not move.** `tests/core-invariance/SNAPSHOT.txt`: 9 NEW cases (`34_bitwise.delulu` and the eight new
+rejects), 489 lines added, none removed or changed.
+
+**Evidence.** In `V2_LOG.md`'s entry of 2026-11-12 (the laptop, finishing RW 2.35): the probes, red before the
+build; the tests; the mutants; the differential; the programs `rgb` (one line), `chmod` (an everyday utility, against
+Python's `stat.filemode` and an independent implementation; the interpreter alone until RW 3.33) and `ipcalc` (421
+lines, every basic so far, against Python's `ipaddress`, line for line, on both engines).

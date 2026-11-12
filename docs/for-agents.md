@@ -886,6 +886,20 @@ overstate it downstream:
     exponent outside 1e-4..1e16, spelled as a literal (`1.0e300`, `6.123233995736766e-17`); `1e300` is DL0104 with that
     spelling. All pure, the same answers and faults on both engines (the WASM engine calls the interpreter's own
     functions). A `match` on a `Str`, an `Int` or a `Bool` with literal arms compiles on WASM too.
+  - **Bitwise operators** (RW 2.35, D-V2-226): `&`, `|`, `^`, `~`, `<<` and `>>` on an `Int`'s 64 bits in two's
+    complement, the compound forms `&=`, `|=`, `^=`, `<<=`, `>>=`, and `0b`/`0o` literals beside `0x` (any base grouped
+    by `_`; a digit the base lacks is DL0104 naming it; a literal past `Int`'s largest is DL0104 in any base, naming
+    `1 << 63` and `~`). Precedence, loosest first: `||`, `&&`, comparisons, ranges, `|`, `^`, `&`, the shifts, `+ -`,
+    `* / %`, prefix — Python's and Rust's order, never C's (`x & 1 == 0` is `(x & 1) == 0`); all left-associative. `fmt`
+    parenthesizes a bitwise or shift operator beside any different binary operator, so the canonical text shows the
+    grouping to a reader from C, Java or JavaScript. `>>` is arithmetic (the sign copied in); `<<` drops bits past the
+    64th and is not a checked multiplication (`1 << 63` is `Int`'s smallest, no DL0901); a count outside 0 to 63 is
+    DL0908 in the same words on both engines, never a count modulo 64. `&`, `|`, `^` and `~` cannot fault. Refusals,
+    each once (DL0401): two `Bool`s under `&`, `|`, `^` (naming `&&`, `||`, `!=`), a `Float` operand (naming `int(x)`),
+    `!` on an `Int` (naming `~`), `~` on a `Bool` (naming `!`); a line that begins with `|` is DL0202 (*end the line
+    above with the operator*). Pure, on both engines. No unsigned shift (`>>>`), no wrapping arithmetic, no bit counts
+    and no `Int` text in another base yet (RW 2.52): mask instead (`(x >> n) & ~(-1 << (64 - n))` is a logical shift
+    for `n` from 1 to 63 — `(1 << (64 - n)) - 1` would overflow at `n` = 1), and write the loops.
   - **Math is written as methods** (RW 2.38, D-V2-223), so a program's own `fn abs` or `fn max` keeps its meaning.
     `Int`: `abs`, `min`, `max`, `clamp(lo, hi)`, `pow(e)`, and the checked forms `checked_add`, `checked_sub`,
     `checked_mul`, `checked_div`, `checked_rem`. `Float`: `abs`, `min`, `max`, `clamp`, `sqrt`, `floor`, `ceil`,

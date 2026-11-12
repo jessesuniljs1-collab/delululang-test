@@ -1,0 +1,6 @@
+// RW 2.35 (D-V2-226): `~` flips an `Int`'s bits; on a `Bool` the refusal names `!`, once.
+module conf
+
+fn f(b: Bool) -> Bool {
+    ~b
+}
