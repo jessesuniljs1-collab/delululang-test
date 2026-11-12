@@ -12840,3 +12840,40 @@ Branches: none new ahead of `master`; `autosave/laptop`'s newest snapshot is sti
   step green).
 - The two-engine differential (50,000 programs, `--release`, by hand since `codegen.rs` changed): green, 154 s.
 - `master`'s push run on the records commit: read in `docs/CLOUD_SYNC_LOG.md`'s entry for this run.
+
+## 2026-11-12 — a Claude Code cloud session (Fable 5.2): RW 2.35's bitwise operators built on both engines, work in progress on `claude/eloquent-brown-7i7fhs`; stopped at the owner's word
+
+**What.** The sixth basic of D-V2-220's order, started and not finished. The owner opened a cloud session with the
+routine's prompt (Claude Fable 5.2 at xhigh, read from the run) and, 95 minutes in, said to wrap up. The code is one
+work-in-progress commit, `e13eb21a`, on the session's branch. `master` is not moved.
+
+**Housekeeping, read and recorded.** `master`'s push run `42883429963` on `6c156b2c`: success, 14 jobs green, 2
+skipped; arm64's ping-pong MEASURED 2.93x against 1.48x, the other three NOT MEASURED. The nightly `43001793269` on
+`6c156b2c`: success, 18 of 18; arm64 2.86x. No branch held unlanded work. Survey `ok` (1710 nodes, 20572 edges) and
+doctor `ok` (26 checks) at the start.
+
+**Why it is built the way it is** (D-V2-226, to be written when it lands):
+- Binary and unary operators in the AST, not a rewrite to calls, so effects, authority and the Atlas see the operands
+  without knowing the operators exist.
+- Rust's and Python's precedence. C's, where `x & 1 == 0` compares first, is the trap those languages left behind, and
+  here the checker would refuse it anyway (a `Bool` operand).
+- A shift moves bits and does not check magnitude: every language with checked arithmetic draws the line there, and a
+  hash or a mask relies on it. Only the count is a fault, and DL0908 already meant an argument an operation does not
+  accept.
+- A literal in any base is an `Int`'s value. Reading `0xFFFF_FFFF_FFFF_FFFF` as -1 (Java's rule) would turn a refusal
+  into a silent sign change, so it stays DL0104 and says which operators make the pattern.
+- The formatter printed an `Int` literal's value in decimal, so a formatted program could not hold a readable mask.
+  The AST and DIR keep the value alone, so the spelling reaches the printer beside the tree, by the literal's span.
+
+**Evidence.**
+- Red on `6c156b2c`, both engines: the six operators, `x &= 3`, `x <<= 4`, `0b101`, `0o17` each refused (DL0101,
+  DL0201 or DL0202); `delulu fmt` rewrote `0xFF + 1_000` as `255 + 1000`.
+- On `e13eb21a`: `cargo test -p delulu-syntax --lib` 170 passed, 1 ignored; 21 answers by hand on both engines equal
+  to Python 3's; three shift faults (DL0908) word for word alike on both engines with the earlier output kept; seven
+  refusals in their words; `scripts/clippy.sh -j 4` clean; the reference in sync and coverage 411 of 411. (The
+  commit's message says 25 and eight: a miscount, corrected here and in the sync-log entry.)
+- **Not evidence yet:** no other test target ran on this tree, and nothing else was written (the sync-log entry's
+  *Open / next* item 1). `ci.yml` run `43156380681` at `e13eb21a` was dispatched and is unread.
+
+**Found on the way.** FMT-INT-BASE-1, above. And the words of DL0202 for a line that begins with an operator, the
+half of RW 2.49 that needs no grammar change.

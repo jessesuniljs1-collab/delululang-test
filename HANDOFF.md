@@ -939,6 +939,14 @@ wins, and you should update the memory to match.
   - **Measure an answer that moves on the repository's own outputs first** (run 24). `str` of a `Float` past 1e16 or below
     1e-4 now prints an exponent. Before deciding, every program's expected output and the core snapshot were checked:
     one file moved, `math_table.out`, five lines, and nothing in the snapshot. Record the measure in the decision.
+  - **A fix to one arm of a function asks the question of its other arms** (a cloud session, 2026-11-12, RW 2.35,
+    FMT-INT-BASE-1). `fmt.rs`'s `lit_text` printed a literal's VALUE. Run 22 fixed its `Float` arm (FMT-FLOAT-EXP-1),
+    and the note that found that defect had said the function *"prints the value, not the source spelling"*. The `Int`
+    arm one line above did the same and was left: `delulu fmt` rewrote `0xFF00` as `65280` and `1_000_000` as
+    `1000000` in every program, canonical by definition, until a basic needed masks. The AST holds a literal's value,
+    so whatever the tree drops the formatter drops with it; a spelling that must survive travels beside the tree, as
+    comments do. When a defect reads *"this function prints X where the source said Y"*, read every arm of the
+    function for the same loss before closing it. (Fixed on the RW 2.35 branch; it lands with that slice.)
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
 
@@ -1033,6 +1041,11 @@ wins, and you should update the memory to match.
   filled the volume on 2026-11-05. Run the full suite on CI (`ci.yml`, `witness.yml`), not in the cloud VM.
 - **A broker started under the cloud scratch path is refused**: its socket path is 116 bytes, and Linux allows 107.
   Give `DELULU_STATE_DIR` a short path.
+- **A session may run on Fable 5.2** (2026-11-12). The owner opened a cloud session with the routine's prompt rewritten
+  for *"Fable 5.2 at xhigh effort"* (`claude-fable-5-2`). The routine itself was unchanged that day: `get_trigger` read
+  Opus 5.5, paused. A session reads its own model from `get_session` and from the transcript's `"model"` field, and
+  signs its commits with that one; the documents that say the head chef is Opus 5.5 describe the routine and the
+  laptop until the owner says otherwise.
 
 ### 11.4 Findings that must never be quietly re-softened
 

@@ -9347,3 +9347,144 @@ Survey and doctor: in the commit below.
      on Linux first. RW 6.82 when the language server is next touched. RW 7.25, 7.29 and 7.30 wait for their next red.
   5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
      prepared, not launched; it does not hold D-V2-210 onward.
+
+### 2026-11-12 — a Claude Code cloud session (Fable 5.2, the routine's prompt): RW 2.35's bitwise operators built on both engines, WORK IN PROGRESS on `claude/eloquent-brown-7i7fhs`; stopped at the owner's word
+- Session: `https://claude.ai/code/session_01Deh6WBdGG7Ni78MxEdJHK6`   Model: **Claude Fable 5.2** (`claude-fable-5-2`), the
+  model the owner's prompt named (*"Fable 5.2 at xhigh effort"*). Read from the run: `get_session` gave
+  `claude-fable-5-2` as the configured, the set and the last served model, and every reply in the transcript carries
+  `"model":"claude-fable-5-2"`. No fallback notice; no sous-chef. **Effort, read from the run:** `CLAUDE_EFFORT=xhigh`;
+  the transcript's replies were 3 at the start and 232 before these records, every one `"effort":"xhigh"`.
+- **What kind of session.** Not a fire of the routine: the owner opened it from the desktop app with the routine's
+  prompt rewritten for Fable 5.2. `trig_01HFG6usfzmDAPQigiDu9DLq` was read with `get_trigger`: still Opus 5.5,
+  `enabled: false`, last fired 2026-11-10 17:23 UTC (run 24). So the next routine fire is still run 25.
+- **Stopped at the owner's word**, 04:31 UTC, mid-slice: *"Wrap up and record and push everything to test repo."* The
+  slice was at the WASM engine when it came. The workspace was brought to a compiling, linted state, committed as one
+  work-in-progress commit and pushed; nothing else was started.
+- Branch: `claude/eloquent-brown-7i7fhs`   Pull request: none (a work in progress is not one)   Merged: **no. `master`
+  is not moved** (`6c156b2c`).
+- Base: `6c156b2c` (`master` at the start).
+- Commits: `e13eb21a` WIP RW 2.35: bitwise operators on Int, both engines (not finished); the records commit after it
+  (this entry, `V2_LOG.md`, the regenerated map). **A correction:** `e13eb21a`'s message counts 25 answers and eight
+  refusals probed by hand. The counts are 21 and seven, each listed under *Verified* below; the message stays as it
+  was pushed.
+- **Housekeeping (02:56 → about 03:40 UTC):**
+  - `git fetch --unshallow --prune`. `master` = `origin/master` = `6c156b2c`. No branch held unlanded work:
+    `claude/peaceful-carson-ahal3y` is `master`'s tip; `autosave/laptop`'s newest snapshot is still `4271780`
+    (2026-11-08, landed by run 22); `laptop/stack-ladder-witness`, `launch/2.0.0`, `autosave/*`, `archive/*` and
+    `rc/1.0.0-drill` are the kept ones.
+  - Survey and doctor at the start: `ok: the Survey matches the tree (1710 nodes, 20572 edges)`; `ok: 26 check(s)
+    passed`. The 1.96.1 toolchain and 335 crate archives were there; `target/` was not, so the first build was a clean
+    one. About 28 GB free.
+  - **CI read:** `master`'s push run `42883429963` on `6c156b2c` (run 24's unread one): success, 14 jobs green and
+    `heavy-gates` and `miri-slow` skipped; arm64's ping-pong MEASURED 2.93x against a bar of 1.48x, macOS, Ubuntu and
+    Windows NOT MEASURED. The nightly `43001793269` on `6c156b2c` (2026-11-11): success, 18 of 18, arm64 2.86x.
+    Nothing red; nothing to fix.
+  - `gh` is installed; CI was read with `curl`, `scripts/ci-annotations.py` and the MCP tools.
+  - **Branch deletion refused:** `git push origin --delete claude/peaceful-carson-ahal3y` ended `send-pack: unexpected
+    disconnect`, and the branch is still listed after `fetch --prune`. Not worked around: the laptop's.
+- **The milestone that was named** (not reached): RW 2.35 closed end to end. **What exists instead** is its code on
+  both engines, probed by hand, with one crate's tests.
+- **Witnessed red before building** (a debug build of `6c156b2c`, the interpreter and `--engine wasm` alike): `6 & 3`
+  DL0101 *unexpected character `&` (did you mean `&&`?)*; `6 | 3` DL0201; `6 ^ 3` and `~5` DL0101; `1 << 4` and
+  `256 >> 4` DL0202; `x &= 3` DL0101; `x <<= 4` DL0202; `0b101` and `0o17` DL0201 *expected `)`, found identifier
+  `b101`*; and `delulu fmt` rewrote `str(0xFF + 1_000)` as `str(255 + 1000)`, exit 0 (**FMT-INT-BASE-1**).
+- **Built in `e13eb21a`** (the design; it becomes D-V2-226 when the slice lands):
+  - **Six operators on `Int`,** on its 64 bits in two's complement: `&`, `|`, `^`, `~`, `<<`, `>>`, as
+    `BinOp::{BitAnd, BitOr, BitXor, Shl, Shr}` and `UnOp::BitNot`. Binary operators, so every walk of an expression
+    sees their operands (D-V2-224's reason for `..`).
+  - **Precedence,** loosest first: `||`, `&&`, `==`, `<`, a range, `|`, `^`, `&`, the shifts, `+`, `*`, a prefix
+    operator. It is Rust's and Python's order: every bitwise operator binds tighter than a comparison (`x & 1 == 0` is
+    `(x & 1) == 0`, never C's reading), looser than arithmetic (`1 << n - 1` is `1 << (n - 1)`), and tighter than a
+    range (`0..1 << n`). Each is left-associative.
+  - **A shift moves bits.** `<<` drops the bits moved past the 64th and is not a checked multiplication (`1 << 63` is
+    `Int`'s smallest value, no DL0901); `>>` copies the sign in (`-8 >> 1` is `-4`). A count outside 0 to 63 is
+    **DL0908**, in the same words on both engines (`prim::shift`, `prim::shift_count_fault`), never a count taken
+    modulo 64. `&`, `|`, `^` and `~` cannot fault. No new code.
+  - **The compound forms** `&=`, `|=`, `^=`, `<<=` and `>>=`, by RW 2.34's rewrite and its rules.
+  - **`0b` and `0o` literals** beside `0x`. A whole word is one literal: a digit the base lacks is DL0104 naming it
+    (`0b102`), and a literal past `Int`'s largest is DL0104 in any base, saying to write `1 << 63` or `~` (a literal is
+    a value, never read as a negative number).
+  - **The formatter** prints the new levels and `~`, and an `Int` literal as it was written — its base and its `_`
+    grouping, the base's letter in lower case — wherever a literal stands (FMT-INT-BASE-1 fixed). The spelling travels
+    beside the tree by the literal's span (`IntSpellings`, set for one `format_source` call), because the AST and DIR
+    hold a literal's value. The fmt fuzz generator writes the new shapes.
+  - **Refusals that teach,** all existing codes: two `Bool`s under `&`, `|` or `^` (DL0401 naming `&&`, `||`, `!=`); a
+    `Float` operand (DL0401, `int(x)`); `!n` on an `Int` (DL0401, `~`); `~b` on a `Bool` (DL0401, `!`); and a
+    statement that begins with a binary operator after a line break (DL0202: *end the line above with the operator*),
+    the first thing a writer stacking flags with a leading `|` meets. RW 2.49 itself stays open.
+  - **WASM:** `i64.and`, `i64.or`, `i64.xor`; `~` as `xor -1`; a shift checks its count first (unsigned, so a negative
+    one too) and records the interpreter's DL0908 through `delulu:math.shift_fault`, then traps. The import is decided
+    from the syntax and placed after every other.
+- Files and folders (`git diff --name-status 6c156b2c..HEAD`): M `crates/delulu-syntax/src/{ast,fmt,lexer,parser,token}.rs`,
+  `crates/delulu-check/src/check.rs`, `crates/delulu-runtime/src/{interp,prim}.rs`,
+  `crates/delulu-wasm/src/{codegen,host}.rs`, `docs/reference/tokens.md` (regenerated), `HANDOFF.md`,
+  `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`. Nothing added, deleted or renamed; no new markdown file.
+- **Verified — and this is all of it:**
+  - `cargo test -p delulu-syntax --lib` after the last `.rs` edit: 170 passed, 0 failed, 1 ignored. New in it: the
+    lexer's two tests (each token and the longest-token rule; `0b`/`0o`/`0x` values and their eleven refusals), the
+    parser's `bitwise_tests` (6: every level against its neighbours both ways round, by the tree's shape), the
+    formatter's two (the parentheses each level needs; a literal keeps its base in a value, a pattern, an index, a flat
+    block and an f-string's hole), and the fuzz gate over the new shapes.
+  - **By hand on both engines, 21 answers, each equal to Python 3's:** `6 & 3`, `6 | 3`, `6 ^ 3`, `~5`, `1 << 4`,
+    `256 >> 4`; `-8 >> 1`, `-1 >> 63`, `1 << 63`, `-1 << 1`, `~0`, `~(-1)`; `0xFF & 0b1010_1010`, `0o17 | 0x10`, `a ^ a`
+    of `Int`'s largest; a chain of all five compound forms (12); `1 << 2 + 1` (8), `5 & 3 == 1` (true),
+    `1 | 2 ^ 3 & 4` (3), `(0..1 << 3).len()` (8); and FNV-1a 32 of two bytes, masked to 32 bits (1748694682).
+  - **Faults, by hand:** `1 << 64`, `8 >> -1` and `x <<= 70` are DL0908 with the same words on both engines, exit 1,
+    and the line printed before the fault is kept on both.
+  - **Refusals, by hand, seven:** the five DL0401 and DL0202 forms above, `0b102` and `0xFFFF_FFFF_FFFF_FFFF`. And
+    `delulu fmt` keeps `0xFF00`, `0b1010_1010` and `0o17` and prints `m |= 0b1010_1010 << 2`.
+  - `scripts/clippy.sh -j 4` clean after the last `.rs` edit (one finding fixed first, `sliced_string_as_bytes`).
+    `delulu-conform --check-reference` in sync; `--coverage` 411 of 411.
+- **NOT verified, not written:** no test in `delulu-check`, `delulu-runtime`, `delulu-wasm` or `delulu` names the new
+  operators; no existing test target but `delulu-syntax`'s was run on this tree; no conformance file; no program; no
+  document teaches them; no mutant; `scripts/check-other-os.sh`, the full suite and the two-engine differential did
+  not run. Open / next item 1 lists each.
+- Survey and doctor (after the last edit): in the records commit's message.
+- **CI:** `ci.yml` (`jobs=everything`) was dispatched at `e13eb21a`: run **`43156380681`**, in progress when this was
+  written, **unread**. It is the three-OS reading of what the half-built slice breaks. Its Miri jobs run for hours.
+- Redo on the laptop: delete `claude/peaceful-carson-ahal3y` on `origin` (in `master`'s history). Nothing else.
+- For the laptop's memory: `HANDOFF.md` §11.2 has one new lesson (*a fix to one arm of a function asks the question
+  of its other arms*, FMT-INT-BASE-1) and §11.3 one fact (a session on Fable 5.2). `docs/CLOUD_ROUTINE.md` step 9 says
+  how a slice stopped at the owner's word is left.
+- **Open / next, in order:**
+  1. **Finish RW 2.35 from `claude/eloquent-brown-7i7fhs`** (start there: it is `master` plus two commits). Read the
+     branch's run `43156380681` first, then:
+     - **tests, each witnessed red on `6c156b2c` or by a mutant:** `delulu-check` (typing, and the five refusals'
+       words); `delulu-runtime` (`prim::shift` against `i64`'s own shifts for every count 0 to 63, and the counts
+       outside); a `bitwise_parity` target in `delulu-wasm` (answers and faults word for word on both engines,
+       through BOTH compile entries, `compile_checked` and the untyped `compile_module`; a module with no shift
+       byte-identical to `6c156b2c`'s, and one with `&` alone importing nothing new); a `bitwise_cli` target in
+       `delulu`; the differential's generator (`crates/delulu-wasm/src/gen.rs`) taught the operators and the shift
+       fault, then `cargo test -p delulu-wasm --release --test differential -- --ignored`;
+     - **conformance:** an accept file and rejects (a bad binary digit, an `Int` literal past the largest in hex, two
+       `Bool`s, a `Float` operand, a line beginning with `|`, a compound target holding a call); `core_invariance`
+       blessed and its diff read (new cases only); no witness row is needed while no primitive is added;
+     - **the explanations** in `crates/delulu-diag/src/codes.rs`: DL0908 names the operations that fault so and does
+       not name a shift yet; DL0104 could name the three bases;
+     - **the programs (D-V2-220's step):** a one-liner, an everyday utility and a few-hundred-line program using every
+       basic so far, on both engines, each answer checked against Python, each run through `delulu fmt` with its
+       diff read. They decide what is still missing. Candidates seen while building, none built: an unsigned shift
+       (`>>>`); wrapping arithmetic, which a 64-bit hash needs (a 32-bit one works by masking, as the FNV probe did);
+       bit counts (`count_ones`, `leading_zeros`); an `Int`'s text in another base and its parse (`parse_int` reads
+       base 10 only). Build what the programs need, or row it;
+     - **docs:** the Skill, `GETTING_STARTED.md`, `for-agents.md`, `STAGE1_SPECIFICATION.md` (tokens and the
+       precedence table), `README.md`, `CHANGELOG.md`; D-V2-226 from the design above; `REMAINING_WORK.md` 2.35;
+       `V2_PHASE_STATUS.md`; `ENTRENCHED_CHANGE_RECORD.md` only if a witness row is added;
+     - **mutants from M1274:** each token's longest-match rule; each pair of neighbouring levels swapped; `~`; each
+       compound form's operator; the count's bound (63 against 64, and a negative count); left against right;
+       `shr_s` against `shr_u` on WASM and the interpreter's sign; the fault's `left` flag; each refusal; the
+       formatter's base kept, its letter lowered, a decimal untouched, and the spellings put back after a call;
+     - `scripts/check-other-os.sh`, `scripts/suite.sh`, runner witnesses on macOS and Windows for the new tests, then
+       the fast-forward to `master` on a read green run.
+  2. Delete `claude/peaceful-carson-ahal3y` on `origin` (the laptop; this session's deletion was refused).
+  3. **The next basics, in D-V2-220's order:** methods on a program's own types (2.33), tuples, sets, keyed sorting
+     and comprehensions (2.39), argv, environment, exit code and sleep (2.40), JSON (2.41), then interfaces (2.33,
+     2.9) and RW 3.24. RW 2.50 and 2.51 fit before methods. RW 2.49's grammar half and RW 6.85 are still open with the
+     parser's next touch; RW 6.86 with the formatter's; RW 3.32 and 2.45 when a basic's programs need them.
+  4. Then the outcome contracts (RW 6.83, 6.77, 6.84, 6.76, 6.78–6.81) and the rest of the reviews' order.
+  5. RW 3.25's two remaining constructs. RW 3.30: measure on Linux first. RW 6.82 when the language server is next
+     touched. RW 7.25, 7.29 and 7.30 wait for their next red.
+  6. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
+     prepared, not launched; it does not hold D-V2-210 onward. The documents still name Opus 5.5 as the head chef;
+     whether Fable 5.2 is now the routine's model too is his to say (the trigger was not changed).

@@ -314,7 +314,9 @@ another OS, and then takes about seven minutes itself (run 5).
         - in this order: ~~compound assignment (RW 2.34)~~ — done (on-demand routine run 21, D-V2-221); ~~RW 2.46~~ —
           done (the laptop, 2026-11-08, D-V2-222); ~~math and the checked forms (2.38)~~ — done (on-demand routine run 22,
           D-V2-223); ~~ranges (2.36)~~ — done (on-demand routine run 23, D-V2-224); ~~strings (2.37)~~ — done
-          (on-demand routine run 24, D-V2-225); bitwise (2.35); methods on a program's own types (2.33); tuples, sets, keyed sorting and
+          (on-demand routine run 24, D-V2-225); bitwise (2.35) — **in progress, finish it first**: built on both engines
+          on `claude/eloquent-brown-7i7fhs` (`e13eb21a`, a cloud session, 2026-11-12; the sync-log entry of that date is
+          its list); methods on a program's own types (2.33); tuples, sets, keyed sorting and
           comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
           and RW 3.24;
         - built as surface syntax and prelude over the core, so the core's answers do not move and no RFC period
@@ -665,6 +667,13 @@ deleted from `origin` once its commits are in `master` (*Branches*, below); ever
 in *Open / next* as pending with its id; no background job left (`jobs`; stop a waiter by its PID). Then end the run with
 one short final message — the milestone, its commits, the CI runs and their state, *Open / next* — and start nothing
 after it.
+
+**A slice stopped at the owner's word, mid-build** (a cloud session, 2026-11-12, RW 2.35). Bring the workspace to a
+state that compiles and passes `scripts/clippy.sh`, commit it as ONE commit titled `WIP …` on the session's own branch,
+and push it at once. Then the records, as a second commit on the same branch: the sync-log entry says what was probed
+by hand, what has a test and what has none, and its *Open / next* item 1 is the list that finishes the slice. `master`
+is not moved. Dispatch `ci.yml` at the branch, so the next session reads what the half-built slice breaks, and name
+the run as unread.
 
 **Branches** (2026-10-26: `origin` held 91; 84 were removed — 80 already in `master`'s history, one in `launch/2.0.0`'s,
 three superseded ones kept reachable on `archive/superseded-2026-10-26` — every name and tip in
