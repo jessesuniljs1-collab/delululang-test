@@ -9622,9 +9622,17 @@ Survey and doctor: in the commit below.
   170 green; the five changed crates' whole suites 1,173 passed, 0 failed; the differential 50,000 programs, 0
   mismatches; mutants M1274–M1295, 22, all red, control green; `scripts/clippy.sh -j 4` clean; `delulu-conform`
   in sync, coverage 411 of 411; WASM bytes unchanged for the 29 programs that compile without this surface.
-  `scripts/check-other-os.sh` not run (no OS `cfg` touched; CI covers macOS and Windows). **CI:** `ci.yml`
-  (`everything`) dispatched at the branch after this commit, and `master`'s push run after the fast-forward — both
-  read in the follow-up records commit.
+  `scripts/check-other-os.sh` not run (no OS `cfg` touched; CI covers macOS and Windows).
+- **CI, read** (the follow-up records commit):
+  - The branch's `ci.yml` run **`43268255520`** (`everything`, at the slice's commit `c50d50b`): 15 of 18 jobs
+    complete, every one success — `test` on Ubuntu, macOS and Windows, `arm64`, `lints`, `editor`, `formal`, `fuzz`,
+    `heavy-gates` (the CI's own two-engine differential), `microvm`, `microvm-reproducible`, `supply-chain`, `miri`
+    (`delulu-diag`, `delulu-atlas`) and `miri-ffi`. Its three `miri-slow` jobs (`delulu-check`, `delulu-syntax`,
+    `delulu-broker`) were still running, **unread**: they run for hours.
+  - On those 15, `master` was fast-forwarded `8481bcf..c50d50b`. **`master`'s push run `43272181862` on `c50d50b`:
+    success, 14 jobs green**, `heavy-gates` and `miri-slow` skipped as on every push.
+  - `claude/eloquent-brown-7i7fhs` deleted on `origin` once landed (its tip `c50d50b`, an ancestor of `master`, checked
+    with `merge-base --is-ancestor` just before); the local `laptop/rw-2-35` too.
 - Files and folders (`git diff --name-status 8481bcf..HEAD`, the branch's own included; 47 paths): M `CHANGELOG.md`,
   `HANDOFF.md`, `README.md`, `skills/delulu/SKILL.md`, `crates/delulu-check/src/check.rs`, `crates/delulu-diag/src/codes.rs`,
   `crates/delulu-runtime/src/{interp,prim}.rs`, `crates/delulu-syntax/src/{ast,fmt,lexer,parser,token}.rs`,
@@ -9638,7 +9646,8 @@ Survey and doctor: in the commit below.
 - For the laptop's memory: `HANDOFF.md` §11.2 — *a refusal is witnessed in every place its value can stand*; *a
   formatter's "needed parentheses" are the parser's, not the reader's*.
 - **Open / next:**
-  1. Read the push run of the records commit that closes this entry (named below as unread, if it is).
+  1. **Read first:** run `43268255520`'s three `miri-slow` jobs (they interpret the new lexer, parser and formatter
+     tests, `delulu-check`'s and `delulu-broker`'s), and the push run of the records commit that closes this entry.
   2. **The next basic, in D-V2-220's order:** RW 2.50 (`Option`/`Result` methods) and RW 2.51 first, then methods on a
      program's own types (2.33); then tuples, sets, keyed sorting and comprehensions (2.39), argv, environment, exit code
      and sleep (2.40), JSON (2.41), interfaces (2.33, 2.9) and RW 3.24. RW 2.52 when a basic's programs need it; RW 3.33
