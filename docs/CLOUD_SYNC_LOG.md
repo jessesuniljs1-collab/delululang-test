@@ -9658,3 +9658,29 @@ Survey and doctor: in the commit below.
      touch; RW 7.25, 7.29 and 7.30 wait for their next red.
   5. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
      prepared, not launched.
+
+### 2026-11-13 — the laptop: RW 2.35's CI read whole — run `43268255520` 18 of 18 green, its three `miri-slow` jobs included; `cb4c4c8`'s push run green
+- Session: `https://claude.ai/code/session_01Deh6W9U2poMk8ErqtkiHve`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice; no sous-chef).
+- Branch: `master`, pushed directly (records only). Pull request: none.
+- Base: `cb4c4c8` = `origin/master` after `git fetch origin`; nothing new had landed, and no `claude/*` branch is open.
+- **The owner: *"Enable monitor to watch the run"*, then *"record it"*.** The entry above left run `43268255520`'s three
+  `miri-slow` jobs unread (its *Open / next* item 1). Watched to the end and read:
+  - **`ci.yml` run `43268255520`** (`everything`, at the slice's commit `c50d50b`): **completed, success, 18 of 18
+    jobs.** The three that were running: `miri-slow (delulu-syntax)` success at 18:50:53 UTC, `miri-slow
+    (delulu-broker)` success at 19:09:29 UTC, `miri-slow (delulu-check)` success at 19:14:19 UTC (2026-11-12). Miri
+    interpreted the new lexer, parser and formatter tests, and `delulu-check`'s, on the finished slice.
+  - **`master`'s push run `43275912122` on the records commit `cb4c4c8`:** success, 14 jobs green, `heavy-gates` and
+    `miri-slow` skipped as on every push.
+  - So every CI run on RW 2.35 is read and green: the branch run whole, and `master`'s push runs `43272181862`
+    (`c50d50b`) and `43275912122` (`cb4c4c8`).
+- Start of session: `ok: the Survey matches the tree (1727 nodes, 20756 edges)`; `doctor --check` `ok: 29 check(s)
+  passed`.
+- Files and folders (`git diff --name-status cb4c4c8..HEAD`): M `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing added,
+  deleted or renamed. Nothing in the code changed.
+- Survey and doctor (after the last edit): in the commit message.
+- **Open / next:**
+  1. Read this commit's push run.
+  2. The rest is the entry above's *Open / next* from item 2: RW 2.50 and 2.51, then methods on a program's own types
+     (2.33), and on in D-V2-220's order; RW 3.33 soon; RW 2.52 and 2.53 when their basics come; then the reviews'
+     order. Still the owner's: whether 2.0 waits for the basics; `launch/2.0.0` stays prepared, not launched.
