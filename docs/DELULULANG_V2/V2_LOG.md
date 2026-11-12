@@ -12873,7 +12873,9 @@ doctor `ok` (26 checks) at the start.
   refusals in their words; `scripts/clippy.sh -j 4` clean; the reference in sync and coverage 411 of 411. (The
   commit's message says 25 and eight: a miscount, corrected here and in the sync-log entry.)
 - **Not evidence yet:** no other test target ran on this tree, and nothing else was written (the sync-log entry's
-  *Open / next* item 1). `ci.yml` run `43156380681` at `e13eb21a` was dispatched and is unread.
+  *Open / next* item 1). `ci.yml` run `43156380681` at `e13eb21a`, read at 05:04 UTC: 15 of 18 jobs complete, every one
+  success, the test jobs on Ubuntu, macOS, Windows and arm64 among them (arm64's ping-pong MEASURED 2.89x against
+  1.49x), so the existing suite holds on the work in progress; its three `miri-slow` jobs were still running, unread.
 
 **Found on the way.** FMT-INT-BASE-1, above. And the words of DL0202 for a line that begins with an operator, the
 half of RW 2.49 that needs no grammar change.

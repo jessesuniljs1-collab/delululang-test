@@ -9443,13 +9443,20 @@ Survey and doctor: in the commit below.
 - Survey and doctor (after the last edit): in the records commit's message.
 - **CI:** `ci.yml` (`jobs=everything`) was dispatched at `e13eb21a`: run **`43156380681`**, in progress when this was
   written, **unread**. It is the three-OS reading of what the half-built slice breaks. Its Miri jobs run for hours.
+  **Read at 05:04 UTC (the follow-up commit):** 15 of its 18 jobs were complete, every one success: `test` on Ubuntu,
+  macOS and Windows and `arm64` (the whole existing suite, on the work in progress), `lints`, `formal`,
+  `supply-chain`, `editor`, `fuzz`, `heavy-gates` (the job that runs the two-engine differential), `microvm`,
+  `microvm-reproducible`, `miri` (`delulu-diag`, `delulu-atlas`) and `miri-ffi`. arm64's ping-pong MEASURED 2.89x
+  against a bar of 1.49x; macOS, Ubuntu and Windows NOT MEASURED. **So the half-built slice breaks no existing test
+  on any runner.** Still running then, unread: `miri-slow` for `delulu-check`, `delulu-syntax` (it interprets the new
+  lexer, parser and formatter tests) and `delulu-broker`.
 - Redo on the laptop: delete `claude/peaceful-carson-ahal3y` on `origin` (in `master`'s history). Nothing else.
 - For the laptop's memory: `HANDOFF.md` §11.2 has one new lesson (*a fix to one arm of a function asks the question
   of its other arms*, FMT-INT-BASE-1) and §11.3 one fact (a session on Fable 5.2). `docs/CLOUD_ROUTINE.md` step 9 says
   how a slice stopped at the owner's word is left.
 - **Open / next, in order:**
-  1. **Finish RW 2.35 from `claude/eloquent-brown-7i7fhs`** (start there: it is `master` plus two commits). Read the
-     branch's run `43156380681` first, then:
+  1. **Finish RW 2.35 from `claude/eloquent-brown-7i7fhs`** (start there: it is `master` plus its commits). Its run
+     `43156380681` is green on the 15 jobs read above; read its three `miri-slow` jobs first, then:
      - **tests, each witnessed red on `6c156b2c` or by a mutant:** `delulu-check` (typing, and the five refusals'
        words); `delulu-runtime` (`prim::shift` against `i64`'s own shifts for every count 0 to 63, and the counts
        outside); a `bitwise_parity` target in `delulu-wasm` (answers and faults word for word on both engines,
