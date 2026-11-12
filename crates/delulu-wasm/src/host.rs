@@ -2691,6 +2691,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // RW 2.35: a shift whose count is outside 0 to 63. The guest calls this and then traps, and the run reports what is
+    // recorded here — the interpreter's own DL0908 (`prim::shift_count_fault`), word for word.
+    linker
+        .func_wrap("delulu:math", "shift_fault", |mut caller: Caller<'_, HostState>, count: i64, left: i32| {
+            caller.refuse_first(|| format!("DL0908: {}", delulu_runtime::prim::shift_count_fault(left != 0, count)));
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     // ----- RW 2.38 (D-V2-223): the `delulu:math` host interface (pure: neither traced nor gated) ---------------------
     // An `Int` or `Float` method (`codegen.rs`'s `INT_METHODS` and `FLOAT_METHODS`) run by the interpreter's own
     // `call_int_method` or `call_float_method`, so the WASM engine answers — and faults — exactly as the interpreter

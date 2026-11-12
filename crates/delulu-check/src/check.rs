@@ -3582,9 +3582,48 @@ impl<'a> Checker<'a> {
                 (t, r)
             }
             UnOp::Not => {
-                self.expect_type(&Type::Bool, &t, operand.span(), "`!` expects Bool");
+                // RW 2.35: `!n` on an `Int` is another language's bit flip; say which operator this one has.
+                if t == Type::Int {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0401",
+                            "`!` negates a `Bool`, and this is an `Int`: to flip an `Int`'s bits write `~`",
+                        )
+                        .with_span(operand.span(), "an `Int`: `~n` is its bits flipped, `n == 0` is whether it is zero"),
+                    );
+                } else {
+                    self.expect_type(&Type::Bool, &t, operand.span(), "`!` expects Bool");
+                }
                 (Type::Bool, r)
             }
+            // RW 2.35: `~n`, an `Int`'s bits flipped.
+            UnOp::BitNot => {
+                if t == Type::Bool {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0401",
+                            "`~` flips the bits of an `Int`, and this is a `Bool`: to negate a `Bool` write `!`",
+                        )
+                        .with_span(operand.span(), "a `Bool`"),
+                    );
+                } else {
+                    self.bitwise_operand(&t, operand.span(), "~");
+                }
+                (Type::Int, r)
+            }
+        }
+    }
+
+    /// RW 2.35: one operand of a bitwise operator is an `Int`. A `Float` is the likely mistake, and its refusal says
+    /// that a `Float` has no bits to work on and how one becomes an `Int`.
+    fn bitwise_operand(&mut self, t: &Type, span: Span, op: &str) {
+        if self.cx.apply_type(t) == Type::Float {
+            self.diags.push(
+                Diagnostic::error("DL0401", format!("`{op}` works on the bits of an `Int`, and this operand is a `Float`"))
+                    .with_span(span, "a `Float`: convert it first, `int(x)` (or `x.to_int()` to ask whether it fits)"),
+            );
+        } else {
+            self.expect_type(&Type::Int, t, span, &format!("`{op}` works on the bits of an `Int`"));
         }
     }
 
@@ -3653,6 +3692,39 @@ impl<'a> Checker<'a> {
                     );
                 }
                 Type::Str
+            }
+            // RW 2.35: the five bitwise operators, each of two `Int`s and an `Int`. Two `Bool`s are the likely mistake
+            // for `&`, `|` and `^` (other languages allow them there), said once with the operator a `Bool` takes.
+            BitAnd | BitOr | BitXor | Shl | Shr => {
+                let sym = match op {
+                    BitAnd => "&",
+                    BitOr => "|",
+                    BitXor => "^",
+                    Shl => "<<",
+                    _ => ">>",
+                };
+                let logical = match op {
+                    BitAnd => Some("`&&`"),
+                    BitOr => Some("`||`"),
+                    BitXor => Some("`!=`"),
+                    _ => None,
+                };
+                match logical {
+                    Some(logical) if lt == Type::Bool && rt == Type::Bool => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                format!("`{sym}` works on the bits of two `Int`s, and both sides are `Bool`: for `Bool`s write {logical}"),
+                            )
+                            .with_span(span, format!("two `Bool`s: write {logical}")),
+                        );
+                    }
+                    _ => {
+                        self.bitwise_operand(&lt, lhs.span(), sym);
+                        self.bitwise_operand(&rt, rhs.span(), sym);
+                    }
+                }
+                Type::Int
             }
         };
         (out, acc)

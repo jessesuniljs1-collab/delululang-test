@@ -2599,6 +2599,8 @@ impl Interp {
                 .ok_or_else(|| Escape::Fault(Fault::at("DL0901", "integer overflow negating Int::MIN", span))),
             (UnOp::Neg, Value::Float(f)) => Ok(Value::Float(-f)),
             (UnOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
+            // RW 2.35: every bit flipped, `-i - 1`: no `Int` is outside its answer.
+            (UnOp::BitNot, Value::Int(i)) => Ok(Value::Int(!i)),
             _ => Err(Escape::Fault(Fault::at("DL0907", "bad operand for unary operator", span))),
         }
     }
@@ -2672,6 +2674,7 @@ impl Interp {
             Range | RangeInclusive => self.range_value(&l, &r, op == RangeInclusive, span),
             Interp => Err(Escape::Fault(Fault::at("DL0907", "an f-string's text was not a `Str` (checker bug)", span))),
             Lt | Le | Gt | Ge => self.compare(op, l, r, span),
+            BitAnd | BitOr | BitXor | Shl | Shr => self.bitwise(op, l, r, span),
             // Unreachable because the `matches!(op, And | Or)` branch at the top of this function
             // returns unconditionally for exactly these two operators. That guard is twenty-five
             // lines away, which is far enough for the argument to rot, so it is written down here:
@@ -2724,6 +2727,24 @@ impl Interp {
             }
             _ => Err(Escape::Fault(Fault::at("DL0907", "arithmetic on non-numeric values", span))),
         }
+    }
+
+    /// RW 2.35: `&`, `|`, `^`, `<<` and `>>` of two `Int`s, on their 64 bits in two's complement. The first three
+    /// cannot fault; a shift's count is from 0 to 63, DL0908 otherwise, by the rule both engines run (`prim::shift`).
+    fn bitwise(&self, op: BinOp, l: Value, r: Value, span: delulu_diag::Span) -> R<Value> {
+        let (Value::Int(a), Value::Int(b)) = (l, r) else {
+            return Err(Escape::Fault(Fault::at("DL0907", "a bitwise operator on a value that is not an `Int`", span)));
+        };
+        let v = match op {
+            BinOp::BitAnd => a & b,
+            BinOp::BitOr => a | b,
+            BinOp::BitXor => a ^ b,
+            BinOp::Shl | BinOp::Shr => {
+                prim::shift(op == BinOp::Shl, a, b).map_err(|m| Escape::Fault(Fault::at("DL0908", m, span)))?
+            }
+            _ => unreachable!("`bitwise` is called for the five bitwise operators only"),
+        };
+        Ok(Value::Int(v))
     }
 
     fn compare(&self, op: BinOp, l: Value, r: Value, span: delulu_diag::Span) -> R<Value> {

@@ -73,7 +73,7 @@ pub enum TokenKind {
     FatArrow, // =>
     Bang,     // !   (effect-row marker in types; logical not in expressions)
     Question, // ?   (Result propagation)
-    Pipe,     // |   (sum variants; row-variable tail)
+    Pipe,     // |   (sum variants; row-variable tail; RW 2.35: the bitwise OR of two `Int`s)
     Underscore,
     At, // @   (attributes; reserved token, no attribute grammar in Stage 1)
     Eq, // =
@@ -97,6 +97,23 @@ pub enum TokenKind {
     PercentEq,
     AndAnd,
     OrOr,
+    /// RW 2.35: `&`, the bitwise AND of two `Int`s. (`&&` is the logical one.)
+    Amp,
+    /// RW 2.35: `^`, the bitwise exclusive OR of two `Int`s. A power is `n.pow(e)`.
+    Caret,
+    /// RW 2.35: `~`, every bit of an `Int` flipped (`~n` is `-n - 1`). `!` is the `Bool` one.
+    Tilde,
+    /// RW 2.35: `<<`, an `Int`'s bits moved left by a count from 0 to 63.
+    Shl,
+    /// RW 2.35: `>>`, an `Int`'s bits moved right by a count from 0 to 63, its sign kept.
+    Shr,
+    /// RW 2.35: `&=`, `|=`, `^=`, `<<=`, `>>=` — the bitwise operators' compound assignments (RW 2.34's rewrite). The
+    /// bitwise OR itself is `Pipe`, the token a sum type's variants already use.
+    AmpEq,
+    PipeEq,
+    CaretEq,
+    ShlEq,
+    ShrEq,
 
     /// Statement terminator: an explicit `;` or one inserted at a newline (§2.2).
     Term,
@@ -234,6 +251,16 @@ impl TokenKind {
             TokenKind::PercentEq => "`%=`".into(),
             TokenKind::AndAnd => "`&&`".into(),
             TokenKind::OrOr => "`||`".into(),
+            TokenKind::Amp => "`&`".into(),
+            TokenKind::Caret => "`^`".into(),
+            TokenKind::Tilde => "`~`".into(),
+            TokenKind::Shl => "`<<`".into(),
+            TokenKind::Shr => "`>>`".into(),
+            TokenKind::AmpEq => "`&=`".into(),
+            TokenKind::PipeEq => "`|=`".into(),
+            TokenKind::CaretEq => "`^=`".into(),
+            TokenKind::ShlEq => "`<<=`".into(),
+            TokenKind::ShrEq => "`>>=`".into(),
             TokenKind::Term => "end of statement".into(),
             TokenKind::Eof => "end of file".into(),
         }
@@ -396,6 +423,16 @@ pub fn token_index() -> Vec<TokenInfo> {
         ("PercentEq", TokenKind::PercentEq),
         ("AndAnd", TokenKind::AndAnd),
         ("OrOr", TokenKind::OrOr),
+        ("Amp", TokenKind::Amp),
+        ("Caret", TokenKind::Caret),
+        ("Tilde", TokenKind::Tilde),
+        ("Shl", TokenKind::Shl),
+        ("Shr", TokenKind::Shr),
+        ("AmpEq", TokenKind::AmpEq),
+        ("PipeEq", TokenKind::PipeEq),
+        ("CaretEq", TokenKind::CaretEq),
+        ("ShlEq", TokenKind::ShlEq),
+        ("ShrEq", TokenKind::ShrEq),
         ("Term", TokenKind::Term),
         ("Eof", TokenKind::Eof),
     ];
@@ -452,6 +489,16 @@ fn punctuation_lexeme(kind: &TokenKind) -> Option<&'static str> {
         TokenKind::PercentEq => "%=",
         TokenKind::AndAnd => "&&",
         TokenKind::OrOr => "||",
+        TokenKind::Amp => "&",
+        TokenKind::Caret => "^",
+        TokenKind::Tilde => "~",
+        TokenKind::Shl => "<<",
+        TokenKind::Shr => ">>",
+        TokenKind::AmpEq => "&=",
+        TokenKind::PipeEq => "|=",
+        TokenKind::CaretEq => "^=",
+        TokenKind::ShlEq => "<<=",
+        TokenKind::ShrEq => ">>=",
         _ => return None,
     })
 }

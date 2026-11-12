@@ -1599,6 +1599,12 @@ impl Parser {
             TokenKind::StarEq => BinOp::Mul,
             TokenKind::SlashEq => BinOp::Div,
             TokenKind::PercentEq => BinOp::Rem,
+            // RW 2.35: the bitwise operators' compound forms, by the same rewrite.
+            TokenKind::AmpEq => BinOp::BitAnd,
+            TokenKind::PipeEq => BinOp::BitOr,
+            TokenKind::CaretEq => BinOp::BitXor,
+            TokenKind::ShlEq => BinOp::Shl,
+            TokenKind::ShrEq => BinOp::Shr,
             _ => return None,
         })
     }
@@ -1745,11 +1751,21 @@ impl Parser {
             // (`parse_bin`).
             TokenKind::DotDot => (BinOp::Range, 5, false),
             TokenKind::DotDotEq => (BinOp::RangeInclusive, 5, false),
-            TokenKind::Plus => (BinOp::Add, 6, false),
-            TokenKind::Minus => (BinOp::Sub, 6, false),
-            TokenKind::Star => (BinOp::Mul, 7, false),
-            TokenKind::Slash => (BinOp::Div, 7, false),
-            TokenKind::Percent => (BinOp::Rem, 7, false),
+            // RW 2.35: the bitwise operators sit between a range and arithmetic, each tighter than the one before, in
+            // Rust's and Python's order: `|`, then `^`, then `&`, then the shifts. So all of them bind tighter than a
+            // comparison — `x & 1 == 0` is `(x & 1) == 0`, never C's `x & (1 == 0)` — and looser than arithmetic —
+            // `1 << n - 1` is `1 << (n - 1)` — and a range's bound may be one: `0..1 << n`. `|` is the token a sum
+            // type's variants use; no expression was ever followed by one.
+            TokenKind::Pipe => (BinOp::BitOr, 6, false),
+            TokenKind::Caret => (BinOp::BitXor, 7, false),
+            TokenKind::Amp => (BinOp::BitAnd, 8, false),
+            TokenKind::Shl => (BinOp::Shl, 9, false),
+            TokenKind::Shr => (BinOp::Shr, 9, false),
+            TokenKind::Plus => (BinOp::Add, 10, false),
+            TokenKind::Minus => (BinOp::Sub, 10, false),
+            TokenKind::Star => (BinOp::Mul, 11, false),
+            TokenKind::Slash => (BinOp::Div, 11, false),
+            TokenKind::Percent => (BinOp::Rem, 11, false),
             _ => return None,
         })
     }
@@ -1861,6 +1877,13 @@ impl Parser {
                 let operand = self.parse_unary(allow_struct);
                 let span = start.to(operand.span());
                 Expr::Unary { op: UnOp::Neg, operand: Box::new(operand), id: self.node_id(), span }
+            }
+            // RW 2.35: `~n`, an `Int`'s bits flipped, at the level of `-n` and `!b`.
+            TokenKind::Tilde => {
+                self.bump();
+                let operand = self.parse_unary(allow_struct);
+                let span = start.to(operand.span());
+                Expr::Unary { op: UnOp::BitNot, operand: Box::new(operand), id: self.node_id(), span }
             }
             TokenKind::Bang => {
                 self.bump();
@@ -2288,12 +2311,32 @@ impl Parser {
                 }
             }
             other => {
-                self.error(
-                    "DL0202",
-                    format!("expected an expression, found {}", other.describe()),
-                    start,
-                    "expected an expression",
-                );
+                // A statement that begins with a binary operator is the second line of an expression broken BEFORE
+                // its operator (`READ` on one line, `| WRITE` on the next — the usual way to stack flags). A newline
+                // ended the statement before it (§2.2; RW 2.49), so say what to write, not only what was found.
+                let continues = self.binop().is_some()
+                    && self.pos > 0
+                    && matches!(self.tokens[self.pos - 1].kind, TokenKind::Term)
+                    && self.tokens[self.pos - 1].span.start == self.tokens[self.pos - 1].span.end;
+                if continues {
+                    self.error(
+                        "DL0202",
+                        format!(
+                            "expected an expression, found {op} — a line break ended the expression before it: end the \
+                             line above with {op}, and the next line continues it",
+                            op = other.describe()
+                        ),
+                        start,
+                        "a line cannot begin with a binary operator",
+                    );
+                } else {
+                    self.error(
+                        "DL0202",
+                        format!("expected an expression, found {}", other.describe()),
+                        start,
+                        "expected an expression",
+                    );
+                }
                 // Produce a placeholder so callers keep making progress.
                 self.placeholder(start)
             }
@@ -3486,6 +3529,221 @@ mod range_tests {
             assert!(e.iter().any(|d| d.code == "DL0201" && d.message.contains("a range has one `..`")), "{src}: {e:?}");
         }
         assert!(errors("(0..3).concat(3..5)").is_empty());
+    }
+}
+
+/// RW 2.35 (D-V2-226): the bitwise operators — `|`, `^`, `&`, the shifts and `~` — four levels between a range and
+/// arithmetic, each left-associative, and their compound assignments.
+#[cfg(test)]
+mod bitwise_tests {
+    use super::*;
+
+    fn parse_src(src: &str) -> (Module, Vec<Diagnostic>) {
+        let (tokens, ldiags) = crate::lexer::lex(0, src);
+        assert!(ldiags.is_empty(), "lex: {ldiags:?}");
+        parse(0, tokens)
+    }
+
+    fn body(stmts: &str) -> Vec<Stmt> {
+        let (m, d) = parse_src(&format!("module m\nfn f() -> Int {{\n{stmts}\n0\n}}\n"));
+        assert!(!d.iter().any(|d| d.is_error()), "{stmts}: {d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!("expected a fn") };
+        f.body.stmts.clone()
+    }
+
+    fn errors(stmts: &str) -> Vec<Diagnostic> {
+        let (_, d) = parse_src(&format!("module m\nfn f() -> Int {{\n{stmts}\n0\n}}\n"));
+        d.into_iter().filter(|d| d.is_error()).collect()
+    }
+
+    /// An expression's shape, every operator's operands in parentheses, so a test names the tree and not a guess at it.
+    fn shape(e: &Expr) -> String {
+        match e {
+            Expr::Var { path, .. } => path.dotted(),
+            Expr::Lit { kind: LitKind::Int(v), .. } => v.to_string(),
+            Expr::Unary { op, operand, .. } => {
+                let o = match op {
+                    UnOp::Neg => "-",
+                    UnOp::Not => "!",
+                    UnOp::BitNot => "~",
+                };
+                format!("({o}{})", shape(operand))
+            }
+            Expr::Binary { op, lhs, rhs, .. } => {
+                let o = match op {
+                    BinOp::Add => "+",
+                    BinOp::Sub => "-",
+                    BinOp::Mul => "*",
+                    BinOp::Div => "/",
+                    BinOp::Rem => "%",
+                    BinOp::Eq => "==",
+                    BinOp::Ne => "!=",
+                    BinOp::Lt => "<",
+                    BinOp::Le => "<=",
+                    BinOp::Gt => ">",
+                    BinOp::Ge => ">=",
+                    BinOp::And => "&&",
+                    BinOp::Or => "||",
+                    BinOp::Range => "..",
+                    BinOp::RangeInclusive => "..=",
+                    BinOp::Interp => "f",
+                    BinOp::BitAnd => "&",
+                    BinOp::BitOr => "|",
+                    BinOp::BitXor => "^",
+                    BinOp::Shl => "<<",
+                    BinOp::Shr => ">>",
+                };
+                format!("({} {o} {})", shape(lhs), shape(rhs))
+            }
+            Expr::Method { recv, name, .. } => format!("{}.{}()", shape(recv), name.name),
+            other => panic!("shape: {other:?}"),
+        }
+    }
+
+    fn value_shape(src: &str) -> String {
+        let stmts = body(&format!("let v = {src}"));
+        let Stmt::Let { value, .. } = &stmts[0] else { panic!("{:?}", stmts[0]) };
+        shape(value)
+    }
+
+    /// Each operator is its own node, and each associates to the left: `a << b << c` shifts `a` twice.
+    #[test]
+    fn each_operator_is_its_own_node_and_left_associative() {
+        for op in ["&", "|", "^", "<<", ">>"] {
+            assert_eq!(value_shape(&format!("a {op} b")), format!("(a {op} b)"), "{op}");
+            assert_eq!(value_shape(&format!("a {op} b {op} c")), format!("((a {op} b) {op} c)"), "{op}");
+        }
+        assert_eq!(value_shape("a << b >> c"), "((a << b) >> c)", "the shifts share a level");
+        assert_eq!(value_shape("a >> b << c"), "((a >> b) << c)");
+        assert_eq!(value_shape("~a"), "(~a)");
+        assert_eq!(value_shape("~~a"), "(~(~a))");
+        assert_eq!(value_shape("-~a"), "(-(~a))");
+        assert_eq!(value_shape("~-a"), "(~(-a))");
+    }
+
+    /// The ladder, loosest first: `||`, `&&`, `==`, `<`, a range, `|`, `^`, `&`, a shift, `+`, `*`, a prefix operator, a
+    /// method. Written once in each order, so neither a table read upside down nor one level merged into its
+    /// neighbour gives both trees.
+    #[test]
+    fn the_levels_sit_between_a_range_and_arithmetic() {
+        assert_eq!(value_shape("a | b ^ c & d << e + f * g"), "(a | (b ^ (c & (d << (e + (f * g))))))");
+        assert_eq!(value_shape("a * b + c << d & e ^ f | g"), "((((((a * b) + c) << d) & e) ^ f) | g)");
+        // Each pair of neighbours, both ways round.
+        for (src, want) in [
+            ("a | b ^ c", "(a | (b ^ c))"),
+            ("a ^ b | c", "((a ^ b) | c)"),
+            ("a ^ b & c", "(a ^ (b & c))"),
+            ("a & b ^ c", "((a & b) ^ c)"),
+            ("a & b << c", "(a & (b << c))"),
+            ("a << b & c", "((a << b) & c)"),
+            ("a << b + c", "(a << (b + c))"),
+            ("a + b << c", "((a + b) << c)"),
+            ("a >> b - c", "(a >> (b - c))"),
+            // Tighter than every comparison (Python's and Rust's reading, never C's), `&&` and `||`.
+            ("x & 1 == 0", "((x & 1) == 0)"),
+            ("0 != x & m", "(0 != (x & m))"),
+            ("a < b | c", "(a < (b | c))"),
+            ("a | b >= c", "((a | b) >= c)"),
+            ("p && a ^ b == c", "(p && ((a ^ b) == c))"),
+            ("a | b || c & d == e", "((a | b) || ((c & d) == e))"),
+            // Looser than arithmetic and tighter than a range: a range's bound may be a shift or a mask.
+            ("1 << n - 1", "(1 << (n - 1))"),
+            ("0..1 << n", "(0 .. (1 << n))"),
+            ("a & 7..=b | 1", "((a & 7) ..= (b | 1))"),
+            // A prefix operator and a method bind tighter than all of them.
+            ("~a & b", "((~a) & b)"),
+            ("a & ~b", "(a & (~b))"),
+            ("-a << 2", "((-a) << 2)"),
+            ("~a.abs()", "(~a.abs())"),
+            ("a | b.abs()", "(a | b.abs())"),
+        ] {
+            assert_eq!(value_shape(src), want, "{src}");
+        }
+        // Parentheses still decide.
+        assert_eq!(value_shape("(a | b) & c"), "((a | b) & c)");
+        assert_eq!(value_shape("a << (b & c)"), "(a << (b & c))");
+    }
+
+    /// Each compound form is RW 2.34's rewrite with its own operator: the target read on the left, the whole right
+    /// side the right operand.
+    #[test]
+    fn each_compound_form_rewrites_into_its_assignment() {
+        for (op, bin, sym) in [
+            ("&=", BinOp::BitAnd, "&"),
+            ("|=", BinOp::BitOr, "|"),
+            ("^=", BinOp::BitXor, "^"),
+            ("<<=", BinOp::Shl, "<<"),
+            (">>=", BinOp::Shr, ">>"),
+        ] {
+            let stmts = body(&format!("x {op} a | b"));
+            let Stmt::Assign { target: LValue::Var(t), value, compound, .. } = &stmts[0] else {
+                panic!("{op}: expected an assignment, got {:?}", stmts[0])
+            };
+            assert_eq!(t.name, "x");
+            assert_eq!(*compound, Some(bin), "{op}");
+            assert_eq!(shape(value), format!("(x {sym} (a | b))"), "{op}: the right side is whole");
+        }
+        // A field and an index are targets too, and a target holding a call is refused as every compound form's is.
+        let stmts = body("p.flags |= 1 << 3\nxs[i] ^= m");
+        assert!(matches!(&stmts[0], Stmt::Assign { target: LValue::Field(..), compound: Some(BinOp::BitOr), .. }));
+        assert!(matches!(&stmts[1], Stmt::Assign { target: LValue::Index(..), compound: Some(BinOp::BitXor), .. }));
+        let e = errors("xs[next()] |= 1");
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].code == "DL0207" && e[0].message.contains("(`|=`)") && e[0].message.contains("bind the index first"));
+    }
+
+    /// A line that ends with an operator continues; a line that begins with one does not (§2.2, RW 2.49), and its
+    /// refusal says to end the line above with the operator. A `|` that begins a line is the usual way other languages
+    /// stack flags, so this is the first thing a writer of masks meets.
+    #[test]
+    fn a_line_beginning_with_an_operator_is_refused_with_the_way_to_write_it() {
+        assert_eq!(body("let v = a |\n    b |\n    c").len(), 2, "one `let` and the trailing `0`");
+        for op in ["|", "&", "^", "<<", ">>", "+", "*", "==", "&&"] {
+            let e = errors(&format!("let v = a\n    {op} b"));
+            assert!(!e.is_empty(), "{op}");
+            assert_eq!(e[0].code, "DL0202", "{op}: {e:?}");
+            assert!(
+                e[0].message.contains(&format!("found `{op}` — a line break ended the expression before it"))
+                    && e[0].message.contains(&format!("end the line above with `{op}`")),
+                "{op}: {}",
+                e[0].message
+            );
+        }
+        // The controls: an operator after an explicit `;`, or first in an argument, is not a continuation and keeps the
+        // plain words.
+        for src in ["let v = a; | b", "let v = h(| b)"] {
+            let e = errors(src);
+            assert!(e.iter().any(|d| d.code == "DL0202"), "{src}: {e:?}");
+            assert!(!e.iter().any(|d| d.message.contains("a line break ended")), "{src}: {e:?}");
+        }
+    }
+
+    /// `|` is still what separates a sum type's variants and what precedes a row's tail; neither is an expression.
+    #[test]
+    fn a_pipe_in_a_type_or_a_row_is_not_the_operator() {
+        let (m, d) = parse_src(
+            "module m\ntype Shape = Circle(Int) | Square(Int) | Dot\nfn f[e](g: fn() -> Int ! {Read | e}) -> Int ! {Read | e} {\n    g() | 1\n}\n",
+        );
+        assert!(!d.iter().any(|d| d.is_error()), "{d:?}");
+        let Item::Type(t) = &m.items[0] else { panic!("{:?}", m.items[0]) };
+        let TypeDeclKind::Sum(variants) = &t.kind else { panic!("{:?}", t.kind) };
+        assert_eq!(variants.len(), 3);
+        let Item::Fn(f) = &m.items[1] else { panic!() };
+        let Stmt::Expr(e) = &f.body.stmts[0] else { panic!("{:?}", f.body.stmts[0]) };
+        assert!(matches!(e, Expr::Binary { op: BinOp::BitOr, .. }), "{e:?}");
+    }
+
+    /// DIR's bytes: an operator that existed serializes as before, and each new one names itself.
+    #[test]
+    fn the_new_operators_serialize_by_name() {
+        let old = serde_json::to_string(&body("x + 1")[0]).unwrap();
+        assert!(old.contains(r#""op":"Add""#), "{old}");
+        for (src, name) in
+            [("a & b", "BitAnd"), ("a | b", "BitOr"), ("a ^ b", "BitXor"), ("a << b", "Shl"), ("a >> b", "Shr"), ("~a", "BitNot")]
+        {
+            let s = serde_json::to_string(&body(src)[0]).unwrap();
+            assert!(s.contains(&format!(r#""op":"{name}""#)), "{src}: {s}");
+        }
     }
 }
 

@@ -456,31 +456,39 @@ impl<'a> Lexer<'a> {
                     self.push(TokenKind::Bang, start);
                 }
             }
-            '<' => {
-                if self.peek() == Some('=') {
+            // RW 2.35: `<<` and `>>` are the shifts, each one token, and `<<=` and `>>=` their compound assignments.
+            // Type arguments are written in `[`…`]`, so two `<` or two `>` in a row never closed or opened anything,
+            // and no program that parsed held either.
+            '<' => match self.peek() {
+                Some('=') => {
                     self.bump();
                     self.push(TokenKind::Le, start);
-                } else {
-                    self.push(TokenKind::Lt, start);
                 }
-            }
-            '>' => {
-                if self.peek() == Some('=') {
+                Some('<') => {
+                    self.bump();
+                    self.op_or_compound(TokenKind::Shl, TokenKind::ShlEq, start);
+                }
+                _ => self.push(TokenKind::Lt, start),
+            },
+            '>' => match self.peek() {
+                Some('=') => {
                     self.bump();
                     self.push(TokenKind::Ge, start);
-                } else {
-                    self.push(TokenKind::Gt, start);
                 }
-            }
+                Some('>') => {
+                    self.bump();
+                    self.op_or_compound(TokenKind::Shr, TokenKind::ShrEq, start);
+                }
+                _ => self.push(TokenKind::Gt, start),
+            },
+            // RW 2.35: a lone `&` is the bitwise AND (it was DL0101, *"did you mean `&&`?"*; the checker now says so
+            // where a `Bool` meets it), and `&=`, `|=` and `^=` the compound assignments.
             '&' => {
                 if self.peek() == Some('&') {
                     self.bump();
                     self.push(TokenKind::AndAnd, start);
                 } else {
-                    self.diags.push(
-                        Diagnostic::error("DL0101", "unexpected character `&` (did you mean `&&`?)")
-                            .with_bare_span(self.span_from(start)),
-                    );
+                    self.op_or_compound(TokenKind::Amp, TokenKind::AmpEq, start);
                 }
             }
             '|' => {
@@ -488,9 +496,11 @@ impl<'a> Lexer<'a> {
                     self.bump();
                     self.push(TokenKind::OrOr, start);
                 } else {
-                    self.push(TokenKind::Pipe, start);
+                    self.op_or_compound(TokenKind::Pipe, TokenKind::PipeEq, start);
                 }
             }
+            '^' => self.op_or_compound(TokenKind::Caret, TokenKind::CaretEq, start),
+            '~' => self.push(TokenKind::Tilde, start),
             '"' => self.string(start),
             c if c.is_ascii_digit() => self.number(start),
             c if c.is_ascii_alphabetic() || c == '_' => self.ident(start),
@@ -534,12 +544,20 @@ impl<'a> Lexer<'a> {
     }
 
     fn number(&mut self, start: usize) {
-        // Hex: 0x[0-9a-fA-F_]+
-        if self.src[start..].starts_with("0x") || self.src[start..].starts_with("0X") {
-            self.bump(); // 'x'
+        // `0x`, `0o`, `0b`: an `Int` written in hexadecimal, octal or binary (RW 2.35 added the last two: a mask is
+        // read off its bits). The whole word is one literal — its digits, with `_` between them where the writer
+        // groups them — so a digit the base does not have is said once, as that, and never read as a second token.
+        let radix = match self.src.as_bytes()[start..] {
+            [b'0', b'x' | b'X', ..] => Some((16, "hex", "a hexadecimal")),
+            [b'0', b'o' | b'O', ..] => Some((8, "octal", "an octal")),
+            [b'0', b'b' | b'B', ..] => Some((2, "binary", "a binary")),
+            _ => None,
+        };
+        if let Some((radix, short, long)) = radix {
+            self.bump(); // the base's letter
             let digits_start = self.pos;
             while let Some(c) = self.peek() {
-                if c.is_ascii_hexdigit() || c == '_' {
+                if c.is_ascii_alphanumeric() || c == '_' {
                     self.bump();
                 } else {
                     break;
@@ -548,16 +566,35 @@ impl<'a> Lexer<'a> {
             let digits: String = self.src[digits_start..self.pos].chars().filter(|&c| c != '_').collect();
             if digits.is_empty() {
                 self.diags.push(
-                    Diagnostic::error("DL0104", "hex literal needs at least one digit").with_bare_span(self.span_from(start)),
+                    Diagnostic::error("DL0104", format!("{short} literal needs at least one digit"))
+                        .with_bare_span(self.span_from(start)),
                 );
                 self.push(TokenKind::Int(0), start);
                 return;
             }
-            match i64::from_str_radix(&digits, 16) {
+            if let Some(bad) = digits.chars().find(|c| !c.is_digit(radix)) {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL0104",
+                        format!("`{bad}` is not {long} digit, in the literal `{}`", &self.src[start..self.pos]),
+                    )
+                    .with_bare_span(self.span_from(start)),
+                );
+                self.push(TokenKind::Int(0), start);
+                return;
+            }
+            match i64::from_str_radix(&digits, radix) {
                 Ok(v) => self.push(TokenKind::Int(v), start),
                 Err(_) => {
+                    // A literal is an `Int`'s VALUE, in any base: one past `Int`'s largest is refused, never read as a
+                    // negative number. A pattern with the top bit set is written with the operators that make it.
                     self.diags.push(
-                        Diagnostic::error("DL0104", "integer literal overflows Int (i64)").with_bare_span(self.span_from(start)),
+                        Diagnostic::error(
+                            "DL0104",
+                            "integer literal overflows Int (i64): the largest is 0x7FFF_FFFF_FFFF_FFFF — for a bit pattern \
+                             with the top bit set, write `1 << 63`, or `~` of the bits it leaves clear (`~0` is every bit)",
+                        )
+                        .with_bare_span(self.span_from(start)),
                     );
                     self.push(TokenKind::Int(0), start);
                 }
@@ -1224,6 +1261,103 @@ mod tests {
         );
         // A range at a line's end continues onto the next line; one at a line's start does not begin a statement.
         assert_eq!(kinds("0..\n3")[..3], [TokenKind::Int(0), TokenKind::DotDot, TokenKind::Int(3)]);
+    }
+
+    /// RW 2.35: `&`, `|`, `^`, `~`, `<<` and `>>` are one token each, and so is each compound form. The tokens that
+    /// begin with the same character keep their meaning: `&&`, `||`, `<=`, `>=`, `<`, `>`, `->`.
+    #[test]
+    fn bitwise_operators_lex_as_one_token_each() {
+        for (src, op) in [
+            ("a&b", TokenKind::Amp),
+            ("a|b", TokenKind::Pipe),
+            ("a^b", TokenKind::Caret),
+            ("a<<b", TokenKind::Shl),
+            ("a>>b", TokenKind::Shr),
+            ("a&=b", TokenKind::AmpEq),
+            ("a|=b", TokenKind::PipeEq),
+            ("a^=b", TokenKind::CaretEq),
+            ("a<<=b", TokenKind::ShlEq),
+            ("a>>=b", TokenKind::ShrEq),
+            ("a&&b", TokenKind::AndAnd),
+            ("a||b", TokenKind::OrOr),
+            ("a<=b", TokenKind::Le),
+            ("a>=b", TokenKind::Ge),
+            ("a<b", TokenKind::Lt),
+            ("a>b", TokenKind::Gt),
+            ("a->b", TokenKind::Arrow),
+        ] {
+            assert_eq!(kinds(src)[..3], [ident("a"), op, ident("b")], "{src}");
+        }
+        assert_eq!(kinds("~a")[..2], [TokenKind::Tilde, ident("a")]);
+        assert_eq!(kinds("~-a")[..3], [TokenKind::Tilde, TokenKind::Minus, ident("a")]);
+        // Apart, they are two tokens, as before: a space is not nothing.
+        assert_eq!(kinds("a < < b")[..4], [ident("a"), TokenKind::Lt, TokenKind::Lt, ident("b")]);
+        assert_eq!(kinds("a > = b")[..4], [ident("a"), TokenKind::Gt, TokenKind::Eq, ident("b")]);
+        assert_eq!(kinds("a << = b")[..4], [ident("a"), TokenKind::Shl, TokenKind::Eq, ident("b")]);
+        // The longest token wins, left to right: `>>>` is `>>` then `>`, `&&&` is `&&` then `&`, `>>==` is `>>=` then `=`.
+        assert_eq!(kinds("a>>>b")[..4], [ident("a"), TokenKind::Shr, TokenKind::Gt, ident("b")]);
+        assert_eq!(kinds("a&&&b")[..4], [ident("a"), TokenKind::AndAnd, TokenKind::Amp, ident("b")]);
+        assert_eq!(kinds("a>>==b")[..4], [ident("a"), TokenKind::ShrEq, TokenKind::Eq, ident("b")]);
+        assert_eq!(kinds("a|||b")[..4], [ident("a"), TokenKind::OrOr, TokenKind::Pipe, ident("b")]);
+        // An operator at a line's end continues the expression onto the next line (§2.2): none of them ends a statement.
+        for op in ["&", "|", "^", "<<", ">>", "&=", "|=", "^=", "<<=", ">>="] {
+            let k = kinds(&format!("a {op}\nb"));
+            assert_eq!(k.len(), 5, "`{op}` at a line's end must not end the statement: {k:?}");
+            assert_eq!(k[2], ident("b"), "{op}");
+        }
+    }
+
+    /// RW 2.35: `0b` and `0o` literals beside `0x`, each one token whose value is the `Int` its digits spell, with `_`
+    /// between digits where the writer groups them. A digit the base does not have is one refusal naming it, and the
+    /// literal is read whole (nothing after it is read as a second token); a literal past `Int`'s largest is refused
+    /// in any base, never read as a negative number.
+    #[test]
+    fn binary_and_octal_literals_beside_hex() {
+        for (src, v) in [
+            ("0b0", 0),
+            ("0b101", 5),
+            ("0B11", 3),
+            ("0b1111_0000", 240),
+            ("0o17", 15),
+            ("0O7", 7),
+            ("0o7_7_7", 511),
+            ("0xff", 255),
+            ("0XAB", 171),
+            ("0xdead_BEEF", 0xdead_beef),
+            ("0x7FFF_FFFF_FFFF_FFFF", i64::MAX),
+            ("0b111111111111111111111111111111111111111111111111111111111111111", i64::MAX),
+            ("0o777777777777777777777", i64::MAX),
+        ] {
+            assert_eq!(kinds(src)[0], TokenKind::Int(v), "{src}");
+            assert_eq!(kinds(src).len(), 3, "{src} is one token");
+        }
+        // A method on a literal, and a range of two, still read as before: the literal ends at the `.`.
+        assert_eq!(kinds("0b11.abs()")[..3], [TokenKind::Int(3), TokenKind::Dot, ident("abs")]);
+        assert_eq!(kinds("0x0..0x10")[..3], [TokenKind::Int(0), TokenKind::DotDot, TokenKind::Int(16)]);
+        for (src, want) in [
+            ("0b102", "`2` is not a binary digit, in the literal `0b102`"),
+            ("0o18", "`8` is not an octal digit, in the literal `0o18`"),
+            ("0xFG", "`G` is not a hexadecimal digit, in the literal `0xFG`"),
+            ("0b1e3", "`e` is not a binary digit"),
+            ("0b", "binary literal needs at least one digit"),
+            ("0o_", "octal literal needs at least one digit"),
+            ("0x", "hex literal needs at least one digit"),
+            ("0x8000_0000_0000_0000", "overflows Int (i64)"),
+            ("0xFFFF_FFFF_FFFF_FFFF", "write `1 << 63`"),
+            ("0b1000000000000000000000000000000000000000000000000000000000000000", "overflows Int (i64)"),
+            ("0o1000000000000000000000", "overflows Int (i64)"),
+        ] {
+            let (tokens, d) = lex(0, src);
+            assert_eq!(d.len(), 1, "{src}: one refusal, {d:?}");
+            assert_eq!(d[0].code, "DL0104", "{src}");
+            assert!(d[0].message.contains(want), "{src}: {}", d[0].message);
+            let k: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+            assert_eq!(k, [TokenKind::Int(0), TokenKind::Term, TokenKind::Eof], "{src}: the literal is read whole");
+        }
+        // `0` followed by any other letter is what it was: an `Int` and then a name.
+        let (tokens, _) = lex(0, "0z1");
+        assert_eq!(tokens[0].kind, TokenKind::Int(0));
+        assert_eq!(tokens[1].kind, ident("z1"));
     }
 }
 

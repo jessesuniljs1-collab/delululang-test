@@ -1652,6 +1652,24 @@ pub fn step_by_fault(k: i64) -> String {
     format!("`step_by(k)` keeps every `k`th element, so it needs a step of 1 or more; it was given {k} — to count down, `reverse()` first")
 }
 
+/// RW 2.35: `a << n` (`left`) or `a >> n` — an `Int`'s 64 bits moved `n` places — or the DL0908 text, the same on both
+/// engines, for a count outside 0 to 63. A left shift brings zeros in on the right and drops the bits moved past the
+/// 64th: it moves bits and is not a checked multiplication, so `1 << 63` is `Int`'s smallest value, not a fault. A
+/// right shift copies the sign bit in on the left (arithmetic: `-8 >> 1` is `-4`, and `-1 >> 63` is `-1`). A count
+/// the 64 bits do not have is a fault, never a count taken modulo 64 (`1 << 64` is not `1`).
+pub fn shift(left: bool, a: i64, n: i64) -> Result<i64, String> {
+    if !(0..=63).contains(&n) {
+        return Err(shift_count_fault(left, n));
+    }
+    Ok(if left { a.wrapping_shl(n as u32) } else { a.wrapping_shr(n as u32) })
+}
+
+/// RW 2.35: the text of a shift's DL0908, the one both engines report for a count outside 0 to 63.
+pub fn shift_count_fault(left: bool, n: i64) -> String {
+    let op = if left { "<<" } else { ">>" };
+    format!("`{op}` moves an `Int`'s 64 bits by a count from 0 to 63; it was given a count of {n}")
+}
+
 /// The text of `rand.int`'s DL0908, the one both engines report for a range with no value in it (A15, D-V2-190).
 pub fn rand_int_range_fault(lo: i64, hi: i64) -> String {
     format!("rand.int(lo, hi) draws from lo up to but not including hi, so it needs lo < hi; it was given lo = {lo}, hi = {hi}")

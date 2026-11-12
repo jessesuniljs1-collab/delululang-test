@@ -79,6 +79,16 @@ be added, renamed or removed without this chapter changing with it.
 | `PercentEq` | `%=` | `%=` |
 | `AndAnd` | `&&` | `&&` |
 | `OrOr` | `||` | `\|\|` |
+| `Amp` | `&` | `&` |
+| `Caret` | `^` | `^` |
+| `Tilde` | `~` | `~` |
+| `Shl` | `<<` | `<<` |
+| `Shr` | `>>` | `>>` |
+| `AmpEq` | `&=` | `&=` |
+| `PipeEq` | `|=` | `\|=` |
+| `CaretEq` | `^=` | `^=` |
+| `ShlEq` | `<<=` | `<<=` |
+| `ShrEq` | `>>=` | `>>=` |
 | `Term` | *(literal)* | end of statement |
 | `Eof` | *(literal)* | end of file |
 

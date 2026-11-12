@@ -35,12 +35,61 @@ const INDENT: &str = "    ";
 /// refuses to touch.
 pub fn format_source(file: FileId, src: &str) -> Result<String, Vec<Diagnostic>> {
     let (tokens, mut diags, comments) = lex_with_comments(file, src);
+    let tokens_of_ints: Vec<delulu_diag::Span> =
+        tokens.iter().filter(|t| matches!(t.kind, crate::token::TokenKind::Int(_))).map(|t| t.span).collect();
     let (module, pdiags) = crate::parser::parse(file, tokens);
     diags.extend(pdiags);
     if diags.iter().any(|d| d.is_error()) {
         return Err(diags);
     }
+    let _spellings = IntSpellings::enter(src, &tokens_of_ints);
     Ok(Printer::new(src, comments).module(&module))
+}
+
+thread_local! {
+    /// FMT-INT-BASE-1: the spelling of each `Int` literal of the source being formatted that is not plain decimal
+    /// digits, by the offset it starts at. The AST holds a literal's VALUE (`LitKind::Int(i64)`, and DIR's bytes with
+    /// it), so the base it was written in reaches the printer beside the tree, as comments do — and by a literal's
+    /// span, since the flat printers below are free functions that take a node and nothing else. Set for the length
+    /// of one `format_source` call on the thread that makes it; empty at any other time, when an `Int` prints as its
+    /// decimal digits.
+    static INT_SPELLINGS: std::cell::RefCell<std::collections::HashMap<u32, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Holds [`INT_SPELLINGS`] for one `format_source` call, and puts back what was there when it ends.
+struct IntSpellings(std::collections::HashMap<u32, String>);
+
+impl IntSpellings {
+    /// `ints` are the spans of the source's `Int` tokens. One written in plain decimal digits is left out: its
+    /// value's digits are its spelling. Any other is kept as written — its digits and their `_` grouping — with the
+    /// base's letter in lower case (`0XFF` is `0xFF`).
+    fn enter(src: &str, ints: &[delulu_diag::Span]) -> IntSpellings {
+        let mut map = std::collections::HashMap::new();
+        for span in ints {
+            let Some(text) = src.get(span.start as usize..span.end as usize) else { continue };
+            if text.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            let mut spelled = text.to_string();
+            if let Some(base) = spelled.get(1..2).filter(|b| matches!(*b, "X" | "O" | "B")).map(str::to_ascii_lowercase) {
+                spelled.replace_range(1..2, &base);
+            }
+            map.insert(span.start, spelled);
+        }
+        IntSpellings(INT_SPELLINGS.with(|m| m.replace(map)))
+    }
+}
+
+impl Drop for IntSpellings {
+    fn drop(&mut self) {
+        INT_SPELLINGS.with(|m| *m.borrow_mut() = std::mem::take(&mut self.0));
+    }
+}
+
+/// The spelling the source gave the `Int` literal at `span`, when it was not plain decimal digits.
+fn int_spelling(span: delulu_diag::Span) -> Option<String> {
+    INT_SPELLINGS.with(|m| m.borrow().get(&span.start).cloned())
 }
 
 /// The identity-law projection: the AST serialized with every `span`/`id` field stripped,
@@ -701,14 +750,14 @@ impl<'a> Printer<'a> {
     fn try_break_outermost(&mut self, head: &str, value: &Expr) -> Option<()> {
         match value {
             Expr::Call { callee, args, .. } if !args.is_empty() => {
-                let c = expr_flat(callee, 8, false);
+                let c = expr_flat(callee, P_POSTFIX, false);
                 self.line(&format!("{head}{c}("));
                 self.break_args(args);
                 self.line(")");
                 Some(())
             }
             Expr::Method { recv, name, args, .. } if !args.is_empty() => {
-                let r = expr_flat(recv, 8, false);
+                let r = expr_flat(recv, P_POSTFIX, false);
                 self.line(&format!("{head}{r}.{}(", name.name));
                 self.break_args(args);
                 self.line(")");
@@ -845,7 +894,7 @@ fn lvalue_text(lv: &LValue) -> String {
 fn pattern_text(p: &Pattern) -> String {
     match p {
         Pattern::Wildcard(_) => "_".to_string(),
-        Pattern::Lit(k, _) => lit_text(k),
+        Pattern::Lit(k, span) => lit_text(k, *span),
         Pattern::Bind(i) => i.name.clone(),
         Pattern::Variant { path, fields, .. } => {
             if fields.is_empty() {
@@ -868,9 +917,12 @@ fn pattern_text(p: &Pattern) -> String {
     }
 }
 
-fn lit_text(k: &LitKind) -> String {
+fn lit_text(k: &LitKind, span: delulu_diag::Span) -> String {
     match k {
-        LitKind::Int(v) => v.to_string(),
+        // FMT-INT-BASE-1 (RW 2.35): an `Int` written in another base, or with its digits grouped, is printed as it was
+        // written (`int_spelling`), where `{}` printed its value in decimal — `0xFF00` became `65280`, a mask nobody
+        // can read. Any other `Int` is its decimal digits, as before.
+        LitKind::Int(v) => int_spelling(span).unwrap_or_else(|| v.to_string()),
         // FMT-FLOAT-EXP-1: the shortest digits that read back as `v`, with an exponent below 1e-4 and from 1e16 up, where
         // `{}` would print every digit (300 of them for `1.0e-300`) — and a fraction before it, since the lexer reads an
         // exponent only after one. RW 2.37: the runtime's `str` of a `Float` is the same function.
@@ -944,8 +996,8 @@ fn escape_str(s: &str) -> String {
     out
 }
 
-/// Operator precedence, mirroring the parser: `||` < `&&` < comparisons < ranges (RW 2.36) < `+ -` < `* / %`
-/// < unary (7) < postfix (8) < atoms (9).
+/// Operator precedence, mirroring the parser: `||` < `&&` < comparisons < ranges (RW 2.36) < `|` < `^` < `&` <
+/// `<< >>` (RW 2.35) < `+ -` < `* / %` < unary < postfix < atoms.
 fn bin_prec(op: BinOp) -> u8 {
     use BinOp::*;
     match op {
@@ -953,12 +1005,21 @@ fn bin_prec(op: BinOp) -> u8 {
         And => 2,
         Eq | Ne | Lt | Le | Gt | Ge => 3,
         Range | RangeInclusive => 4,
-        Add | Sub => 5,
-        Mul | Div | Rem => 6,
+        BitOr => 5,
+        BitXor => 6,
+        BitAnd => 7,
+        Shl | Shr => 8,
+        Add | Sub => 9,
+        Mul | Div | Rem => 10,
         // RW 2.37: an f-string is one primary expression.
-        Interp => 9,
+        Interp => P_ATOM,
     }
 }
+
+/// The levels above every binary operator: a unary operator's operand, a postfix form's receiver, and an atom.
+const P_UNARY: u8 = 11;
+const P_POSTFIX: u8 = 12;
+const P_ATOM: u8 = 13;
 
 fn bin_text(op: BinOp) -> &'static str {
     use BinOp::*;
@@ -978,6 +1039,11 @@ fn bin_text(op: BinOp) -> &'static str {
         Or => "||",
         Range => "..",
         RangeInclusive => "..=",
+        BitAnd => "&",
+        BitOr => "|",
+        BitXor => "^",
+        Shl => "<<",
+        Shr => ">>",
         // RW 2.37: never printed as an operator — `fstring_text` prints the chain as the f-string it was.
         Interp => "+",
     }
@@ -989,10 +1055,10 @@ fn bin_text(op: BinOp) -> &'static str {
 /// condition/scrutinee restriction: a record literal there must print parenthesized.
 fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
     let (text, prec) = match e {
-        Expr::Lit { kind, .. } => (lit_text(kind), 9),
-        Expr::Var { path, .. } => (path.dotted(), 9),
+        Expr::Lit { kind, span, .. } => (lit_text(kind, *span), P_ATOM),
+        Expr::Var { path, .. } => (path.dotted(), P_ATOM),
         Expr::List { items, .. } => {
-            (format!("[{}]", items.iter().map(|i| expr_flat(i, 0, false)).collect::<Vec<_>>().join(", ")), 9)
+            (format!("[{}]", items.iter().map(|i| expr_flat(i, 0, false)).collect::<Vec<_>>().join(", ")), P_ATOM)
         }
         Expr::Record { path, fields, .. } => {
             let body =
@@ -1002,27 +1068,33 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
             if no_struct {
                 return format!("({s})");
             }
-            (s, 9)
+            (s, P_ATOM)
         }
         Expr::Call { callee, args, .. } => {
-            let c = expr_flat(callee, 8, no_struct);
-            (format!("{c}({})", args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 8)
+            let c = expr_flat(callee, P_POSTFIX, no_struct);
+            (format!("{c}({})", args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), P_POSTFIX)
         }
         Expr::Method { recv, name, args, .. } => {
-            let r = expr_flat(recv, 8, no_struct);
-            (format!("{r}.{}({})", name.name, args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 8)
+            let r = expr_flat(recv, P_POSTFIX, no_struct);
+            (
+                format!("{r}.{}({})", name.name, args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")),
+                P_POSTFIX,
+            )
         }
-        Expr::Field { recv, name, .. } => (format!("{}.{}", expr_flat(recv, 8, no_struct), name.name), 8),
-        Expr::Index { recv, index, .. } => (format!("{}[{}]", expr_flat(recv, 8, no_struct), expr_flat(index, 0, false)), 8),
-        Expr::Try { inner, .. } => (format!("{}?", expr_flat(inner, 8, no_struct)), 8),
+        Expr::Field { recv, name, .. } => (format!("{}.{}", expr_flat(recv, P_POSTFIX, no_struct), name.name), P_POSTFIX),
+        Expr::Index { recv, index, .. } => {
+            (format!("{}[{}]", expr_flat(recv, P_POSTFIX, no_struct), expr_flat(index, 0, false)), P_POSTFIX)
+        }
+        Expr::Try { inner, .. } => (format!("{}?", expr_flat(inner, P_POSTFIX, no_struct)), P_POSTFIX),
         Expr::Unary { op, operand, .. } => {
             let o = match op {
                 UnOp::Neg => "-",
                 UnOp::Not => "!",
+                UnOp::BitNot => "~",
             };
-            (format!("{o}{}", expr_flat(operand, 7, no_struct)), 7)
+            (format!("{o}{}", expr_flat(operand, P_UNARY, no_struct)), P_UNARY)
         }
-        Expr::Binary { op: BinOp::Interp, .. } => (fstring_text(e), 9),
+        Expr::Binary { op: BinOp::Interp, .. } => (fstring_text(e), P_ATOM),
         // RW 2.36: a range is printed close, `0..n`, as Rust's and Kotlin's formatters print it; it does not chain,
         // so a range on its left keeps its parentheses too.
         Expr::Binary { op: op @ (BinOp::Range | BinOp::RangeInclusive), lhs, rhs, .. } => {
@@ -1079,15 +1151,15 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
         Expr::Block(b) => (block_flat(b), 0),
         Expr::Spawn { actor, args, .. } => (
             format!("spawn {}({})", actor.dotted(), args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")),
-            7,
+            P_UNARY,
         ),
-        Expr::Consume { name, .. } => (format!("consume {}", name.name), 7),
+        Expr::Consume { name, .. } => (format!("consume {}", name.name), P_UNARY),
         Expr::Recover { target, body, .. } => {
             let t = match target {
                 Some(r) => format!("{} ", r.name()),
                 None => String::new(),
             };
-            (format!("recover {t}{}", block_flat(body)), 7)
+            (format!("recover {t}{}", block_flat(body)), P_UNARY)
         }
     };
     if prec < min_prec {
@@ -1498,7 +1570,12 @@ fn f() -> Int { 1 }
 
     fn gen_expr(r: &mut Rng, depth: u32) -> String {
         if depth == 0 {
-            return match r.below(6) {
+            return match r.below(7) {
+                // RW 2.35 (FMT-INT-BASE-1): an `Int` in another base, or with its digits grouped, so the laws hold over
+                // a literal printed as it was written.
+                6 => ["0x1F", "0XAB", "0xdead_BEEF", "0b1010", "0B11", "0o17", "0O7", "1_000", "0x7FFF_FFFF_FFFF_FFFF"]
+                    [r.below(9) as usize]
+                    .to_string(),
                 0 => format!("{}", r.below(1000)),
                 1 => format!("{}.{}", r.below(50), r.below(10) + 1),
                 2 => ["true", "false"][r.below(2) as usize].to_string(),
@@ -1524,13 +1601,16 @@ fn f() -> Int { 1 }
                 f
             }
             0 => {
-                // RW 2.36: the range operators too, so the laws hold over `a..b` and `a..=b`.
-                let op =
-                    ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "..", "..="][r.below(15) as usize];
+                // RW 2.36: the range operators too, so the laws hold over `a..b` and `a..=b`. RW 2.35: and the five
+                // bitwise ones, at their four levels between a range and arithmetic.
+                let op = [
+                    "+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "..", "..=", "&", "|", "^", "<<", ">>",
+                ][r.below(20) as usize];
                 format!("{} {op} {}", gen_expr(r, d), gen_expr(r, d))
             }
             1 => format!("-{}", gen_expr(r, d)),
-            2 => format!("!{}", gen_expr(r, d)),
+            // RW 2.35: `~` beside `!`, both prefix.
+            2 => format!("{}{}", ["!", "~"][r.below(2) as usize], gen_expr(r, d)),
             3 => format!("h{}({})", r.below(3), gen_args(r, d)),
             4 => format!("x{}.m{}({})", r.below(4), r.below(3), gen_args(r, d)),
             5 => format!("x{}.f{}", r.below(4), r.below(3)),
@@ -1572,7 +1652,7 @@ fn f() -> Int { 1 }
                 1 => out.push_str(&format!("{indent}var x{} = {}\n", i, gen_expr(r, depth))),
                 // RW 2.34: an assignment is plain or compound, so the laws hold over `x op= e` too.
                 2 => {
-                    let op = ["=", "+=", "-=", "*=", "/=", "%="][r.below(6) as usize];
+                    let op = ["=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="][r.below(11) as usize];
                     out.push_str(&format!("{indent}x{} {op} {}\n", r.below(4), gen_expr(r, depth)))
                 }
                 3 if depth > 0 => {
@@ -1723,5 +1803,64 @@ fn f() -> Int { 1 }
     fn fmt_laws_100k_gate() {
         let n = std::env::var("DELULU_FMT_FUZZ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000);
         run_fuzz_gate(n);
+    }
+
+    /// RW 2.35: a bitwise expression prints with one space each side of its operator, `~` close to its operand, and
+    /// exactly the parentheses its levels need — the ones the source carried without needing them dropped, the ones
+    /// that change the tree kept — and each compound form as written.
+    #[test]
+    fn a_bitwise_expression_prints_with_the_parentheses_it_needs() {
+        let src = "module m\nfn f(x: Int, a: Int, b: Int, c: Int, n: Int) -> Bool {\n    var m = 0\n    m|=1<<n\n    m &= ~ (a+b)\n    m ^= (a | b)\n    m<<=2\n    m >>= (n)\n    let p = (a|b)&c\n    let q = a|(b&c)\n    let r = (1<<n)-1\n    let s = 1<<(n-1)\n    let t = a<<(b<<c)\n    let u = (a<<b)<<c\n    let v = - ~a\n    let w = (a ^ b) | (a & b) | (a >> 1)\n    for i in 0..(1<<n) {\n        m ^= i\n    }\n    (x&1)==0\n}\n";
+        let out = laws(src);
+        for line in [
+            "    m |= 1 << n\n",
+            "    m &= ~(a + b)\n",
+            "    m ^= a | b\n",
+            "    m <<= 2\n",
+            "    m >>= n\n",
+            "    let p = (a | b) & c\n",
+            "    let q = a | b & c\n",
+            "    let r = (1 << n) - 1\n",
+            "    let s = 1 << n - 1\n",
+            "    let t = a << (b << c)\n",
+            "    let u = a << b << c\n",
+            "    let v = -~a\n",
+            "    let w = a ^ b | a & b | a >> 1\n",
+            "    for i in 0..1 << n {\n",
+            "    x & 1 == 0\n",
+        ] {
+            assert!(out.contains(line), "expected {line:?} in:\n{out}");
+        }
+        assert!(!out.contains("m = m"), "the parser's rewrite is never printed:\n{out}");
+    }
+
+    /// FMT-INT-BASE-1 (RW 2.35): an `Int` literal written in hexadecimal, octal or binary, or with its digits grouped by
+    /// `_`, prints as it was written — its base's letter in lower case, its digits and their grouping untouched —
+    /// wherever a literal can stand: a value, a pattern, an index, a compound target, a flat block, an f-string's hole.
+    /// It printed as its value in decimal (`0xFF00` as `65280`). A literal in plain decimal digits is unchanged, and so
+    /// is every literal's value (the identity law).
+    #[test]
+    fn an_int_literal_keeps_the_base_it_was_written_in() {
+        let src = "module m\nlet MASK: Int = 0XFF00\nfn f(xs: ref List[Int], n: Int) -> Str {\n    let a = 0xdead_BEEF + 0b1010_0101 + 0o755 + 1_000_000 + 255 + 0B11 + 0O17\n    xs[0x1F] |= 0b1\n    let ys = xs.map(fn(i: Int) -> Int { let k = i & 0xF; k | 0b1000 })\n    let t = match n {\n        0x10 => \"sixteen\"\n        0b11 => \"three\"\n        7 => \"seven\"\n        _ => f\"{n & 0xFF} of {0o17}\"\n    }\n    t\n}\n";
+        let out = laws(src);
+        for part in [
+            "let MASK: Int = 0xFF00\n",
+            "    let a = 0xdead_BEEF + 0b1010_0101 + 0o755 + 1_000_000 + 255 + 0b11 + 0o17\n",
+            "    xs[0x1F] |= 0b1\n",
+            "{ let k = i & 0xF; k | 0b1000 }",
+            "        0x10 => \"sixteen\"\n",
+            "        0b11 => \"three\"\n",
+            "        7 => \"seven\"\n",
+            "f\"{n & 0xFF} of {0o17}\"",
+        ] {
+            assert!(out.contains(part), "expected {part:?} in:\n{out}");
+        }
+        for decimal in ["65280", "3735928559", "165", "493", "1000000", "31"] {
+            assert!(!out.contains(decimal), "a literal's value in decimal ({decimal}) must not replace its spelling:\n{out}");
+        }
+        // Outside a `format_source` call nothing is remembered: the spellings of one source never reach another's.
+        assert!(int_spelling(delulu_diag::Span::new(0, 0, 4)).is_none());
+        let plain = laws("module m\nfn f() -> Int {\n    65280 + 0\n}\n");
+        assert!(plain.contains("    65280 + 0\n"), "{plain}");
     }
 }

@@ -845,6 +845,10 @@ struct Imports {
     /// `delulu:math.float_to_fixed` — `Float.to_fixed(digits)`, the interpreter's own text, or its DL0908 (a trap) for
     /// a count of digits outside 0 to 100 (RW 2.37). After `str_find`. `u32::MAX` when no `to_fixed` is called.
     float_to_fixed: u32,
+    /// `delulu:math.shift_fault` — a shift whose count is outside 0 to 63 records the interpreter's DL0908 here, in
+    /// its words (`prim::shift_count_fault`), then the guest traps (RW 2.35). After `float_to_fixed`, so a module with
+    /// no `<<` or `>>` is unchanged. `u32::MAX` when the module shifts nothing.
+    shift_fault: u32,
     /// Does the module `pop` a list? Then every walk that runs code per element (`for`, `map`, `filter`, `find`, `fold`)
     /// walks a private copy of the slots, taken when it begins: a `pop` and then a `push` reuse the popped slot, which a
     /// walk of the list's own slots could still reach, where the interpreter's walk — a copy — never sees the change.
@@ -1569,6 +1573,7 @@ fn compile_module_typed(
         console_print: u32::MAX,
         str_find: u32::MAX,
         float_to_fixed: u32::MAX,
+        shift_fault: u32::MAX,
         pops_lists: false,
     };
     if needs_console {
@@ -1801,6 +1806,13 @@ fn compile_module_typed(
     let needs_to_fixed = module_any(&env, module, &|e| matches!(e, Expr::Method { name, .. } if name.name == "to_fixed"), false);
     if needs_to_fixed {
         imp.float_to_fixed = n_imports;
+        n_imports += 1;
+    }
+    // RW 2.35: decided from the syntax (a compound `<<=` is a `Binary` in its statement's value), so the untyped compile
+    // entry decides as the typed one does, and after every other import, so a module that shifts nothing is unchanged.
+    let needs_shift = module_any(&env, module, &|e| matches!(e, Expr::Binary { op: BinOp::Shl | BinOp::Shr, .. }), false);
+    if needs_shift {
+        imp.shift_fault = n_imports;
         n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -2129,6 +2141,12 @@ fn compile_module_typed(
         types.ty().function([ValType::F64, ValType::I64], [ValType::I32]); // float_to_fixed(x, digits) -> Str; DL0908 traps
         next_type += 1;
     }
+    let mut shift_fault_ty = 0;
+    if needs_shift {
+        shift_fault_ty = next_type;
+        types.ty().function([ValType::I64, ValType::I32], []); // shift_fault(count, left): records DL0908, then the guest traps
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -2324,6 +2342,9 @@ fn compile_module_typed(
     }
     if needs_to_fixed {
         imports.import("delulu:math", "float_to_fixed", EntityType::Function(to_fixed_ty));
+    }
+    if needs_shift {
+        imports.import("delulu:math", "shift_fault", EntityType::Function(shift_fault_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -4311,6 +4332,12 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 UnOp::Not if ty == Ty::I32 => {
                     cx.emit(Instruction::I32Eqz);
                     Ok(Ty::I32)
+                }
+                // RW 2.35: `~n` is every bit flipped, `n ^ -1`, as the interpreter's `!i`; it cannot fault.
+                UnOp::BitNot if ty == Ty::I64 => {
+                    cx.emit(Instruction::I64Const(-1));
+                    cx.emit(Instruction::I64Xor);
+                    Ok(Ty::I64)
                 }
                 _ => Err(CompileError::Unsupported("this unary operator on this type".into())),
             }
@@ -6451,6 +6478,28 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
     let (lt, rt) = compile_operands(op, lhs, rhs, cx)?;
     use BinOp::*;
     if lt == Ty::I64 && rt == Ty::I64 {
+        // RW 2.35: a shift's count is from 0 to 63, as the interpreter's `prim::shift` holds it. WebAssembly's `i64.shl`
+        // and `i64.shr_s` take a count modulo 64 (`1 << 64` would be `1`), so the count is checked first: one outside
+        // the 64 bits — read unsigned, so a negative one too — records the interpreter's DL0908 and traps.
+        if matches!(op, Shl | Shr) {
+            if cx.imp.shift_fault == u32::MAX {
+                return Err(CompileError::Unsupported("a shift in a module compiled without `delulu:math.shift_fault`".into()));
+            }
+            let n = cx.alloc_local(Ty::I64)?;
+            cx.emit(Instruction::LocalSet(n));
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I64Const(63));
+            cx.emit(Instruction::I64GtU);
+            cx.emit(Instruction::If(BlockType::Empty));
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I32Const(i32::from(op == Shl)));
+            cx.emit(Instruction::Call(cx.imp.shift_fault));
+            cx.emit(Instruction::Unreachable);
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(if op == Shl { Instruction::I64Shl } else { Instruction::I64ShrS });
+            return Ok(Ty::I64);
+        }
         // Checked arithmetic (parity with the interpreter, spec §3.3): +,-,*,% go through the
         // synthetic helpers that trap on overflow / INT_MIN%-1; / uses i64.div_s (already traps on
         // div-by-zero and INT_MIN/-1, matching `checked_div`). Comparisons emit directly.
@@ -6467,6 +6516,11 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Ge => (Instruction::I64GeS, Ty::I32),
             Eq => (Instruction::I64Eq, Ty::I32),
             Ne => (Instruction::I64Ne, Ty::I32),
+            // RW 2.35: the three that cannot fault are WebAssembly's own instructions, on the same 64 bits.
+            BitAnd => (Instruction::I64And, Ty::I64),
+            BitOr => (Instruction::I64Or, Ty::I64),
+            BitXor => (Instruction::I64Xor, Ty::I64),
+            Shl | Shr => unreachable!("a shift is compiled above, with its count's check"),
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
             Range | RangeInclusive => unreachable!("a range is compiled above, before either operand"),
             Interp => unreachable!("an f-string's step is compiled above, before either operand"),
@@ -6491,6 +6545,11 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Ge => (Instruction::F64Ge, Ty::I32),
             Eq => (Instruction::F64Eq, Ty::I32),
             Ne => (Instruction::F64Ne, Ty::I32),
+            // RW 2.35: the checker refuses a bitwise operator on a `Float` (DL0401); a module that reaches here
+            // without it is refused, never compiled to something.
+            BitAnd | BitOr | BitXor | Shl | Shr => {
+                return Err(CompileError::Unsupported("a bitwise operator on a `Float`".into()));
+            }
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
             Range | RangeInclusive => unreachable!("a range is compiled above, before either operand"),
             Interp => unreachable!("an f-string's step is compiled above, before either operand"),

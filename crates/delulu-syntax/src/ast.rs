@@ -453,6 +453,8 @@ pub enum LitKind {
 pub enum UnOp {
     Neg,
     Not,
+    /// RW 2.35: `~n`, every bit of an `Int` flipped — `-n - 1`, so it never faults.
+    BitNot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -482,6 +484,17 @@ pub enum BinOp {
     /// operand, so every walk of an expression — effects, authority, the Atlas — sees a hole without knowing f-strings
     /// exist. The formatter prints the chain back as the f-string.
     Interp,
+    /// RW 2.35: `a & b`, `a | b`, `a ^ b` — the bitwise AND, OR and exclusive OR of two `Int`s, on their 64 bits in
+    /// two's complement. None of them faults.
+    BitAnd,
+    BitOr,
+    BitXor,
+    /// RW 2.35: `a << n`, `a`'s bits moved left by `n` places, zeros entering on the right and the bits moved past the
+    /// 64th dropped (a shift moves bits; it is not a checked multiplication). `n` is from 0 to 63, DL0908 otherwise.
+    Shl,
+    /// RW 2.35: `a >> n`, `a`'s bits moved right by `n` places, its sign bit copied in on the left (an arithmetic
+    /// shift: `-8 >> 1` is `-4`). `n` is from 0 to 63, DL0908 otherwise.
+    Shr,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
