@@ -78,6 +78,13 @@ Related: [[head-chef-handoff]] rule 7, [[delulu-next-evolution-2026]].
 
 **Update 2026-10-17, Jesse:** *"Claude code cloud routine can run sonnet 5.5 and haiku 5.5 as sub agents if and whenever needed just like for u claude code local sessions, But it consumes more usage when running parallely"* — Haiku 5.5 (`claude-haiku-5-5`) is released; Sonnet 5.5 and Haiku 5.5 sous-chefs are allowed in routine runs and laptop sessions where they add value; prefer one at a time (parallel agents burn usage faster). Recorded in AGENTS.md and docs/CLOUD_ROUTINE.md.
 
+**Update 2026-11-12, Jesse:** *"I will be using different models as Head Chef or Sous Chef or Agents for building
+delululang"*.
+- Any model may hold any role, at the effort he sets; the repository pins neither.
+- Where he names no sous-chef model, use Sonnet 5.5 or Haiku 5.5.
+- Name the model each agent ACTUALLY ran.
+
+See [[models-effort-owners-choice-2026-11-12]].
 
 ## The index line this entry had in MEMORY.md until 2026-10-20 (kept whole)
 

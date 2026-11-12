@@ -8,6 +8,9 @@ commits. The owner's standing delegation (2026-09-17 → now): *"whatever is goo
 production-ready language of the future"* — keep working phase by phase without asking, except at stop
 points he sets. **Since 2026-10-17 the owner-reserved items are delegated too**, up to and including the public release
 (AGENTS.md, *The owner's delegation*; his commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md`).
+**Any model may hold either role** (owner, 2026-11-12: *"I will be using different models as Head Chef or Sous Chef or
+Agents for building delululang"*): the head chef is whichever model he starts, at the effort he sets, and the repository
+pins neither (AGENTS.md, *Running sub-agents*).
 
 ## Memory: there is no auto memory in a cloud session
 
@@ -51,9 +54,10 @@ everything using survey and doctor"*).
   *A routine run is one milestone, then a clean stop*, and its step 9) — never stopped by the clock or by one small task,
   never run on until the limit.
 - **A routine run** follows `docs/CLOUD_ROUTINE.md` and pushes to `master` — since 2026-10-17 the on-demand routine
-  `trig_01HFG6usfzmDAPQigiDu9DLq` (created paused; the owner switches it on when he cannot use the laptop; Opus 5.5 at
-  xhigh through `CLAUDE_CODE_EFFORT_LEVEL` in the cloud environment and `.claude/settings.json`, each run reading
-  `CLAUDE_EFFORT` to confirm it; one milestone per run; it does not launch — D-V2-146). **An interactive
+  `trig_01HFG6usfzmDAPQigiDu9DLq` (created paused; the owner switches it on when he cannot use the laptop; its model is
+  the routine's setting and its effort the `CLAUDE_CODE_EFFORT_LEVEL` line in its cloud environment, both the owner's
+  choice since 2026-11-12 — each run reads `CLAUDE_EFFORT` and its model and records them; one milestone per run; it
+  does not launch — D-V2-146). **An interactive
   cloud session** can push only its own branch → push, open a pull request into `master`, and record the
   change in `docs/CLOUD_SYNC_LOG.md` in the same pull request. The next session — laptop, routine or cloud — reads that
   branch's CI and merges it (`docs/CLOUD_ROUTINE.md` step 1, every branch), so no session's work is stranded.

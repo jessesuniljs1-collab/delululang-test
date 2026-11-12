@@ -9495,3 +9495,97 @@ Survey and doctor: in the commit below.
   6. Still the owner's: whether 2.0 waits for the basics, and the reviews' open decisions. `launch/2.0.0` stays
      prepared, not launched; it does not hold D-V2-210 onward. The documents still name Opus 5.5 as the head chef;
      whether Fable 5.2 is now the routine's model too is his to say (the trigger was not changed).
+
+### 2026-11-12 — the laptop: synced (routine run 24; the Fable 5.2 cloud session's branch); every run read green; the models and the effort made the owner's choice: the repository's effort pin removed, the routine's prompt updated
+- Session: `https://claude.ai/code/session_01Deh6W821P8QQeR4mbW1xdE`   Model: Claude Opus 5.5 (the laptop; no fallback
+  notice). Effort, read from the run: `CLAUDE_EFFORT=xhigh` (the session started while the repository still pinned it).
+  One web-fetch agent was started to read Claude Code's effort documentation. `agent_gate.py` refused both of its page
+  reads, so it did nothing, and the documentation was read through a search instead.
+- Branch: `master`, pushed directly (settings and records). Pull request: none.
+- Base: `6c156b2` = `origin/master` after `git fetch origin`. The laptop was fast-forwarded from `58f9d6b` over routine run
+  24's three commits (`53e1b85`, `cfea31c`, `6c156b2`: RW 2.37 strings, D-V2-225).
+- **The owner: *"Sync and stop. Also I did started a claude code cloud session (Not Routine) with fable 5.2 at xhigh
+  effort. I will be using different models as Head Chef or Sous Chef or Agents for building delululang. Also now for all
+  cloud routine runs it is showing xhigh effort, How can I change the effort for routine runs. Update docs and ur memory
+  files. Update routine prompt and settings."*** With three screenshots of the routine's cloud environment, asking
+  whether it needs updating.
+- **What came in.**
+  - **Routine run 24** (Opus 5.5, 2026-11-10) on `master`, as above.
+  - **The owner's cloud session on Fable 5.2** (2026-11-12, `session_01Deh6WBdGG7Ni78MxEdJHK6`), on
+    `claude/eloquent-brown-7i7fhs`. It pushed RW 2.35 (bitwise) as work in progress (`e13eb21`) and two records commits
+    (`39f1ca2`, `d4f1b42`). It stopped at the owner's word, did not merge and did not move `master`. **Its sync-log entry
+    is on that branch and lands with the slice.**
+  - `autosave/laptop`'s newest snapshot is `4271780` (2026-11-08), older than `master`'s last laptop commit, so there
+    was nothing to recover.
+  - Stashes: the same two.
+- **CI read, every run success:**
+  - **`58f9d6b`'s push run `42839085241`** (the previous laptop entry's unread run): 14 green, 2 skipped.
+  - `6c156b2`'s push run `42883429963`: 14 green, 2 skipped.
+  - The nightly runs on `6c156b2`: `43001793269` (2026-11-11) and `43201695604` (2026-11-12), 18 of 18 each.
+  - **The Fable session's branch run `43156380681`** (`ci.yml`, everything, at `e13eb21`) is **complete: 18 of 18
+    success.** The three `miri-slow` jobs its entry left unread finished green: `delulu-check` at 05:45, `delulu-syntax`
+    at 06:17 and `delulu-broker` at 06:34 UTC.
+- **Branch deleted:** `claude/peaceful-carson-ahal3y` on `origin`. Its tip `6c156b2` is `master`'s, checked with
+  `merge-base --is-ancestor` just before. Run 24 and the Fable session had both left it for the laptop.
+- **Why every run showed `xhigh`.**
+  - Since 2026-10-19, `.claude/settings.json` had set `env.CLAUDE_CODE_EFFORT_LEVEL=xhigh`, besides `effortLevel` and
+    `modelSettings`.
+  - That variable outranks `/effort`, `--effort` and both settings keys (Claude Code's model-configuration
+    documentation, read through a search on 2026-11-12).
+  - So every session that opened this repository ran at `xhigh` whatever was picked: laptop, routine and cloud.
+  - The routine's cloud environment also carries `CLAUDE_CODE_EFFORT_LEVEL=xhigh` (the owner, 2026-10-23).
+- **Changed.**
+  - **Settings:** `.claude/settings.json` lost all three effort keys; the SessionStart hook is kept. Nothing in the
+    repository pins a model or an effort now. A laptop session follows the owner's own `~/.claude/settings.json` and
+    `/effort`.
+  - **The routine's prompt** was updated by the API at 15:54 UTC. Its first paragraph now says the model and the effort
+    are the owner's: a run reads both from itself, records them, signs its commits with that model, and never changes
+    them. Removed: *"Work at maximum depth: Opus 5.5 at xhigh effort"* and *"if either is not xhigh, or the model is not
+    Opus 5.5, say so"*. The rest is word for word. Read back unchanged: `enabled: false`, model `claude-opus-5-5`,
+    environment `env_012Mxeiw6zvfyxPy9ZEEFf3p`, cron `25 */4 * * *`.
+  - **The documents:**
+    - `AGENTS.md`: the first bullet of *Running sub-agents*.
+    - `CLAUDE.md`: *Roles*, and the routine bullet.
+    - `docs/CLOUD_ROUTINE.md`: a new *Models and effort*; the old *Effort* paragraphs marked as history; *Models*;
+      step 0.
+    - `HANDOFF.md`: a new §11.1 bullet, and §11.3's *Models*.
+    - `docs/AI_ONBOARDING.md` §8: the instruction of 2026-11-12, and the sous-chef line.
+
+    Each edit stays clear of the Fable branch's hunks (`HANDOFF.md` near lines 939 and 1033, the onboarding file's
+    387–400, `CLOUD_ROUTINE.md`'s 314 and 666).
+- **How the owner changes a routine run's effort now** (also in `docs/CLOUD_ROUTINE.md`, *Models and effort*):
+  - **Where:** claude.ai → Scheduled → the routine → Edit → Cloud environment → Default's pencil → Environment
+    variables. Edit the line `CLAUDE_CODE_EFFORT_LEVEL=xhigh`.
+  - **Levels:** `low`, `medium`, `high`, `xhigh` or `max`. With `auto`, or the line deleted, the model's default
+    applies. A level the model lacks runs as the highest one below it.
+  - **Scope:** the line also holds every interactive cloud session in Default at that level, and `/effort` cannot
+    lower it from inside.
+  - **A different level for each:** give the routine its own environment (the same setup script, its own line),
+    select it as the routine's *Cloud environment*, and delete the line from Default.
+  - **The routine's model:** its own setting, in the same Edit dialog.
+- **The cloud environment, from the owner's screenshots:**
+  - **Setup script:** matches `rust-toolchain.toml`'s pin (1.96.1). No change.
+  - **Network access** Full, **network secrets** none, **repositories** none (each session names its own). No change
+    needed.
+  - **Environment variables:** the one line, now the routine's only effort lever.
+- Files and folders (`git diff --name-status 6c156b2..HEAD`): M `.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`,
+  `HANDOFF.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/assistant-memory/agent-usage-rule-2026-09-17.md`,
+  `docs/survey/*`. Nothing added, deleted or renamed.
+- Survey and doctor: at the start, `ok: the Survey matches the tree (1710 nodes, 20572 edges)`; after the last edit,
+  in the commit message.
+- For the laptop's memory: a new memory, *models and effort are the owner's choice (2026-11-12)*; the routine's memory
+  and the agent rule updated to match.
+- **Open / next:**
+  1. Read this commit's push run.
+  2. **Finish RW 2.35 from `claude/eloquent-brown-7i7fhs`.** Its own sync-log entry, on that branch, is the list. Its
+     run `43156380681` is now read whole: 18 of 18 green. When it is merged, this file and `docs/survey/*` need the
+     usual hand merge (both sides appended, the map regenerated). The other files this commit touched merge cleanly.
+  3. After 2.35, the next basics in D-V2-220's order: methods on a program's own types (2.33), tuples, sets, keyed
+     sorting and comprehensions (2.39), argv, environment, exit code and sleep (2.40), JSON (2.41), then interfaces
+     (2.33, 2.9) and RW 3.24, with run 24's notes (RW 2.50 and 2.51 before methods; RW 2.49, 6.85 and 6.86 with the
+     parser's or the formatter's next touch). Then the outcome contracts and the rest of the reviews' order.
+  4. Still the owner's:
+     - whether 2.0 waits for the basics (`launch/2.0.0` stays prepared, not launched);
+     - the routine's model and effort, and whether it gets its own cloud environment;
+     - when the routine is switched on.

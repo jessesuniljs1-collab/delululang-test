@@ -113,7 +113,33 @@ licence and `NOTICE` are the owner's); a workflow that exercises it downloads a 
 run time and ships nothing. Its §4.3 items are **hypotheses**: witness each red before fixing it,
 or record it refuted.
 
-**Effort.** The owner asked for Opus 5.5 at **xhigh** effort: the routine is set to Opus 5.5, and the
+**Models and effort — the owner's choice (since 2026-11-12).** The owner: *"I will be using different models as Head
+Chef or Sous Chef or Agents for building delululang"*, and he asked how to change a routine run's effort, which every
+run showed as `xhigh`. So nothing in the repository pins either any more. That day `.claude/settings.json` lost its
+`effortLevel`, `modelSettings` and `env.CLAUDE_CODE_EFFORT_LEVEL` keys. The last of them outranked `/effort`, `--effort`
+and every settings key, so it had held every session in this repository at `xhigh` whatever was picked: laptop, routine
+and cloud. What decides now:
+- **A routine run's model:** the routine's own setting (claude.ai → Scheduled → the routine → Edit → the model).
+  Opus 5.5 until the owner changes it.
+- **A routine run's effort:** the line `CLAUDE_CODE_EFFORT_LEVEL=<level>` among the Environment variables of the
+  routine's cloud environment (the routine → Edit → Cloud environment → its pencil → Environment variables). The levels
+  are `low`, `medium`, `high`, `xhigh` and `max`. With `auto`, or no line at all, Claude Code sends no level, so the
+  model's default applies. A level the model lacks runs as the highest one below it. The routine's settings have no
+  effort field and its API refuses environment variables (HTTP 400, 2026-10-19), so the environment's line is the one
+  lever. It outranks `/effort`, so a session in that environment cannot lower it from inside.
+- **One environment serves every session in it.** The Default environment (`env_012Mxeiw6zvfyxPy9ZEEFf3p`) serves the
+  routine and the owner's interactive cloud sessions alike, so its line sets both. For a different effort in each, give
+  the routine its own environment: the same setup script, the variable at the routine's level. Select it as the
+  routine's *Cloud environment*, then delete the line from Default, so an interactive session runs at the effort picked
+  in it.
+- **A laptop session** follows the owner's own `~/.claude/settings.json` and `/effort`.
+- **Every session** reads its model and its effort from the run (step 0) and records them. It never changes them, and
+  its commit trailer names the model actually running.
+
+The order and the levels come from Claude Code's model-configuration documentation (`code.claude.com/docs/en/model-config`),
+read through a search on 2026-11-12. The paragraphs below are the history up to that day.
+
+**Effort, 2026-09-28 → 2026-11-11 (history; the paragraph above supersedes it).** The owner asked for Opus 5.5 at **xhigh** effort: the routine is set to Opus 5.5, and the
 repository's `.claude/settings.json` sets `effortLevel` to `xhigh` for every session that opens it —
 without it Claude Code runs Opus 5.5 at `medium`, its default (official docs, read 2026-09-28). **Since 2026-10-17** the file also names the model (`modelSettings` → `claude-opus-5-5` → `effortLevel: xhigh`):
 the settings reference (read 2026-10-17) says a top-level `effortLevel` in a project file applies to every model, but Opus 5.5
@@ -160,8 +186,9 @@ anthropic can do something about it I guess."* So it is left, and step 0 only re
 `CLAUDE_EFFORT` and the `effort` field the transcript writes with every reply — at no cost. A **Run now** with
 `CHECK ONLY` does just that.
 
-**Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
-routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
+**Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef was **Opus 5.5 at xhigh** (the
+routine's setting) until 2026-11-12; since then it is the model the owner picks (*Models and effort*, above), and a
+sous-chef's too when he names one. **Where he names none, sous-chefs are Sonnet 5.5** (`claude-sonnet-5-5`, the
 `sonnet` alias — launched 2026-09-28). **Since 2026-10-17 Haiku 5.5 is released** (`claude-haiku-5-5`), and the owner
 said: *"Claude code cloud routine can run sonnet 5.5 and haiku 5.5 as sub agents if and whenever needed just like for u
 claude code local sessions, But it consumes more usage when running parallely"* — so a run may use a Sonnet 5.5 or
@@ -203,8 +230,9 @@ committed and pushed — the VM is discarded when the run ends, and anything unc
 **Read the effort in effect, from the run itself** (2026-10-26): `echo "CLAUDE_EFFORT=$CLAUDE_EFFORT"; grep -oh
 '"effort":"[a-z]*"' ~/.claude/projects/*/*.jsonl | sort | uniq -c`. Claude Code sets `CLAUDE_EFFORT` in every Bash
 command's environment to the effort level in effect (the environment-variable reference, read 2026-10-26), and the
-session's transcript records the level each reply was sent at. Write both into the sync-log entry; anything but `xhigh`
-is the run's first finding.
+session's transcript records the level each reply was sent at. Write both into the sync-log entry, with the model the
+run is on. **Since 2026-11-12 the owner sets the level** (*Models and effort*): no level is wrong in itself. If the run's
+level differs from the one his environment's line names, that is the run's first finding.
 
 **1. Orient.** Read `HANDOFF.md` §0, the newest entries of `docs/CLOUD_SYNC_LOG.md` (their "Open / next"
 lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE_STATUS.md`.

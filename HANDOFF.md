@@ -595,6 +595,14 @@ wins, and you should update the memory to match.
   (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`; its terms and limits are at the top of this file).
   Where a bullet below reserves something to the owner, read it through that commission. The owner's pronouns are
   he/his (stated 2026-10-17).
+- **The models and the effort are the owner's choice** (owner, 2026-11-12: *"I will be using different models as Head
+  Chef or Sous Chef or Agents for building delululang"*, asking at the same time how to change a routine run's effort).
+  Any current Claude model may be the head chef, a sous-chef or an agent, at the effort he sets. The repository pins
+  neither: `.claude/settings.json` lost its three effort keys that day, because its `env.CLAUDE_CODE_EFFORT_LEVEL`
+  outranked `/effort` and held every session at `xhigh`. A routine run's model is the routine's setting, and its effort
+  the `CLAUDE_CODE_EFFORT_LEVEL` line in its cloud environment (`docs/CLOUD_ROUTINE.md`, *Models and effort*). A
+  session reads its model and effort from the run, records them, signs its commits with that model, and never changes
+  either itself.
 - **Development never waits for the laptop** (owner, 2026-10-17): *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* Routine runs and interactive cloud
   sessions continue the work by `docs/CLOUD_ROUTINE.md`; a cloud session's pull request is merged by whoever comes next.
 - **A routine run is ONE milestone, then a clean stop** (owner, 2026-10-26: *"Update the routine instructions so that
@@ -982,6 +990,8 @@ wins, and you should update the memory to match.
   `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
   both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
   environment variables on a trigger; the owner set the variable in the routine's cloud environment on 2026-10-23.
+  **Since 2026-11-12 the repository sets no effort** (§11.1, *the models and the effort are the owner's choice*): the
+  three keys are gone, and the cloud environment's `CLAUDE_CODE_EFFORT_LEVEL` line is the routine's one lever.
   **Read the effort from the run, not a page** (2026-10-26): Claude Code sets `CLAUDE_EFFORT` in each Bash command's
   environment to the level in effect, and a transcript's every reply carries `"effort":"…"`; `docs/CLOUD_ROUTINE.md`
   step 0 records both each run. A cybersecurity-flagged
