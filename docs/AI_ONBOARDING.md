@@ -162,6 +162,11 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 ## 8. The memory, digested (the full files are in `docs/assistant-memory/`)
 
 **Owner instructions in force** (newest first):
+- **2026-11-12:** *"I will be using different models as Head Chef or Sous Chef or Agents for building delululang."* The
+  model and the effort are his choice. The repository pins neither (`.claude/settings.json` sets no effort since that
+  day). A routine run's effort is the `CLAUDE_CODE_EFFORT_LEVEL` line in its cloud environment
+  (`docs/CLOUD_ROUTINE.md`, *Models and effort*). Read your own model and effort from the run, record them, and sign
+  your commits with that model.
 - **2026-11-05:** *"I allow u to suggest any changes that is against current constitution.md, license or any other .md
   file rules and regulations"*. A recommendation may cross any rule; it names the rule and its cost, and stays a
   suggestion. Entrenched files change only by the recorded route (`HANDOFF.md` §11.1).
@@ -198,7 +203,8 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 - **2026-09-17:**
   - Push every verified commit to the test repository at once, without asking.
   - The banned word.
-  - Sous-chef agents only where they add real value, one at a time preferred. Claude's are Sonnet 5.5 or Haiku 5.5.
+  - Sous-chef agents only where they add real value, one at a time preferred. Claude's are the model the owner names, else Sonnet 5.5 or
+    Haiku 5.5 (2026-11-12).
     Judge an agent by its logs, never its summary, and re-run every claim against the current binary.
 - **2026-07-24:** Apache-2.0 + `NOTICE` + `TRADEMARK.md` (D27).
 

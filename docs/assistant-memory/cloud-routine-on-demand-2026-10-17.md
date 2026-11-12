@@ -43,3 +43,18 @@ Effort: the routine API stores no environment variables (CLAUDE_CODE_EFFORT_LEVE
 **2026-11-06 (Jesse): "Update claude code cloud routine … about new development and review files and what we are gonna build in DeluluLang. Let the routine remain paused"** → by API (03:06 UTC) one paragraph added, "WHAT TO BUILD NOW": development + the reviews' improvements first, the order RW 4.95/4.96/4.97 → 6.72/6.69, 3.28, 3.29, 6.73, 6.74 → 6.75, 6.77, 6.76, 6.78–6.81 → 4.93, 4.94, 5.7, 6.67, 6.68 → 6.50–6.52, 6.54–6.60, 4.88 → 7.28 → basics + 3.24; owner decisions wait; RW 7.25 never holds the order. Rest of the prompt verbatim; read back `enabled: false`. Update body that works: `{"enabled": false, "job_config": {"ccr": {environment_id, events:[{data:{message:{content, role:"user"}, parent_tool_use_id:null, session_id:"", type:"user", uuid}}], session_context}}}` — the server mirrors it into `session_request` and `derived_state.prompt`. Also `docs/CLOUD_ROUTINE.md` step 4 item 2 carries the same order.
 
 **Update 2026-11-02:** the trigger stays `enabled: false`, yet runs 17, 18 and 19 ran today (02:47, 04:37, 07:11 UTC) — Jesse fired them by hand ("Run now"); all idle by 11:20 UTC. A hand-fired run is his, not a surprise commit; still read `list_runs` before working so two AIs never overlap.
+
+**2026-11-12 (Jesse): the models and the effort are HIS choice** ([[models-effort-owners-choice-2026-11-12]]).
+- **What he said:** *"I will be using different models as Head Chef or Sous Chef or Agents … now for all cloud routine
+  runs it is showing xhigh effort, How can I change the effort for routine runs … Update routine prompt and settings."*
+- **The cause:** the committed `.claude/settings.json` had `env.CLAUDE_CODE_EFFORT_LEVEL=xhigh`, which outranks
+  `/effort`. All three effort keys were removed from it; the hook is kept.
+- **The prompt:** its first paragraph was rewritten by API at 15:54 UTC. The model and effort are the owner's; a run
+  reads and records both, signs its commits with that model, and never changes them. The rest is word for word.
+- **Read back:** `enabled: false`, `claude-opus-5-5`, environment Default, cron unchanged.
+- **The routine's ONE effort lever now:** the Default environment's `CLAUDE_CODE_EFFORT_LEVEL` line. It also pins his
+  interactive cloud sessions in Default; for separate levels, the routine needs its own environment.
+- **His environment screenshots** (same day): network Full, secrets none, repos none, the robust setup script
+  (1.96.1). No change needed.
+- **A Fable 5.2 cloud session** ran the same day (`session_01Deh6WBdGG7Ni78MxEdJHK6`, `claude/eloquent-brown-7i7fhs`,
+  RW 2.35 WIP). Its CI run `43156380681` was read whole: 18/18 green.

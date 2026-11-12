@@ -139,14 +139,19 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
 
 ## Running sub-agents — lessons already paid for
 
-- Use an agent only where it adds real, independent value; the owner watches usage. **Agents are
-  Sonnet 5.5** (the `sonnet` alias), **and Haiku 5.5 once it is released** — not Haiku 4.5 meanwhile
-  (owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*). Check the official models page before the first Haiku agent of a
-  run. The head chef is Opus 5.5 at xhigh. Name the model an agent ACTUALLY ran in every record of it.
-  **Since 2026-10-17 Haiku 5.5 is released** (`claude-haiku-5-5`), and the owner: *"Claude code cloud routine can run
-  sonnet 5.5 and haiku 5.5 as sub agents if and whenever needed just like for u claude code local sessions, But it
-  consumes more usage when running parallely"* — so a routine run and a laptop session alike may use Sonnet 5.5 or
-  Haiku 5.5 sous-chefs where one adds value; run them one at a time unless parallel work clearly pays for itself.
+- **The models and the effort are the owner's choice (2026-11-12):** *"I will be using different models as Head Chef or
+  Sous Chef or Agents for building delululang."* Any current Claude model may be the head chef, a sous-chef or an agent
+  (Opus 5.5, Fable 5.2, Sonnet 5.5 and Haiku 5.5 have each been used), at the effort he sets. **Nothing in this
+  repository pins a model or an effort:** since 2026-11-12 `.claude/settings.json` sets neither. A routine run's model
+  is the routine's setting and its effort the `CLAUDE_CODE_EFFORT_LEVEL` line of its cloud environment
+  (`docs/CLOUD_ROUTINE.md`, *Models and effort*). A session reads its own model and effort from the run and names them in
+  its records and its commit trailer; it never changes them itself.
+- Use an agent only where it adds real, independent value; the owner watches usage. Where he names no model for a
+  sous-chef, use **Sonnet 5.5 or Haiku 5.5** (owner, 2026-10-17: *"Claude code cloud routine can run sonnet 5.5 and haiku
+  5.5 as sub agents if and whenever needed just like for u claude code local sessions, But it consumes more usage when
+  running parallely"*); run them one at a time unless parallel work clearly pays for itself. Name the model an agent
+  ACTUALLY ran in every record of it. *(Before 2026-11-12 the head chef was Opus 5.5 at xhigh — the owner, 2026-09-28:
+  "run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents".)*
 - **Judge an agent by its logs, never its summary.** Haiku overclaimed; one "microVM TTL defect" was
   the agent's own test mistake; one "dead delegate" was really a stale secret store. Re-run every claim
   against the CURRENT binary before it is used or recorded.
