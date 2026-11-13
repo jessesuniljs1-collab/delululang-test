@@ -1,0 +1,46 @@
+name: fable-research
+
+# RESEARCH ONLY — the Fable 5.2 verification audit's own fixtures on four runners.
+#
+# This file exists only on the throwaway branch `laptop/fable-research-runner`, which is never merged
+# and is deleted once its runs are read. It builds `delulu` from this branch's source — the same
+# tree as `master` at ac2a162 for every crate, manifest and lock file — and runs benign programs
+# against it (research/fable-s1/run.py). It asserts nothing about the product: the job prints
+# observations, and fails only if the harness itself breaks.
+on:
+  push:
+    branches: ["laptop/fable-research-runner"]
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        if: matrix.os != 'ubuntu-24.04-arm'
+        with:
+          python-version: "3.13"
+      # As ci.yml's test job does, and only there: the arm64 runner keeps Ubuntu's default.
+      - name: Allow unprivileged user namespaces (Linux x86-64)
+        if: matrix.os == 'ubuntu-24.04'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Build delulu (locked, debug, default features, commit stamped)
+        shell: bash
+        run: |
+          export DELULU_BUILD_COMMIT="$(git rev-parse HEAD)"
+          cargo build -p delulu --locked
+      - name: Run the audit's fixtures
+        shell: bash
+        run: |
+          PY=python; command -v python > /dev/null 2>&1 || PY=python3
+          "$PY" research/fable-s1/run.py

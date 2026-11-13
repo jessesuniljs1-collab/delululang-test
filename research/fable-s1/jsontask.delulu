@@ -1,0 +1,352 @@
+module jsontask
+
+// T3 complete-program task: read input/doc.json, parse JSON, summarize, write output/out.json.
+// The specification and the expected outputs are in oracle.py (written first).
+
+type Json = JNull | JBool(Bool) | JInt(Int) | JNum(Str) | JStr(Str) | JArr(List[Json]) | JObj(List[Member])
+
+type Member {
+    key: Str,
+    value: Json,
+}
+
+type Step {
+    value: Json,
+    next: Int,
+}
+
+type StrStep {
+    text: Str,
+    next: Int,
+}
+
+type Fail = BadJson | BadSchema
+
+fn at(cs: List[Str], i: Int) -> Str {
+    match cs.get(i) {
+        Some(c) => c
+        None => ""
+    }
+}
+
+fn is_digit(c: Str) -> Bool {
+    c.len() == 1 && "0123456789".contains(c)
+}
+
+fn skip_ws(cs: List[Str], start: Int) -> Int {
+    var i = start
+    while i < cs.len() && " \n\r\t".contains(at(cs, i)) {
+        i += 1
+    }
+    i
+}
+
+fn parse_value(cs: List[Str], start: Int, depth: Int) -> Result[Step, Fail] {
+    if depth > 200 {
+        return Err(BadJson)
+    }
+    let i = skip_ws(cs, start)
+    let c = at(cs, i)
+    if c == "{" {
+        return parse_object(cs, i + 1, depth)
+    }
+    if c == "[" {
+        return parse_array(cs, i + 1, depth)
+    }
+    if c == "\"" {
+        let s = parse_string(cs, i + 1)?
+        return Ok(Step { value: JStr(s.text), next: s.next })
+    }
+    if c == "t" {
+        return parse_word(cs, i, "true", JBool(true))
+    }
+    if c == "f" {
+        return parse_word(cs, i, "false", JBool(false))
+    }
+    if c == "n" {
+        return parse_word(cs, i, "null", JNull)
+    }
+    parse_number(cs, i)
+}
+
+fn parse_word(cs: List[Str], i: Int, word: Str, value: Json) -> Result[Step, Fail] {
+    let n = word.len()
+    if i + n > cs.len() {
+        return Err(BadJson)
+    }
+    if cs.slice(i, i + n).join("") == word {
+        Ok(Step { value: value, next: i + n })
+    } else {
+        Err(BadJson)
+    }
+}
+
+fn parse_number(cs: List[Str], start: Int) -> Result[Step, Fail] {
+    var i = start
+    var text = ""
+    if at(cs, i) == "-" {
+        text = "-"
+        i += 1
+    }
+    let first = at(cs, i)
+    var digits = 0
+    while i < cs.len() && is_digit(at(cs, i)) {
+        text = text + at(cs, i)
+        i += 1
+        digits += 1
+    }
+    if digits == 0 {
+        return Err(BadJson)
+    }
+    if digits > 1 && first == "0" {
+        return Err(BadJson)
+    }
+    var integral = true
+    if at(cs, i) == "." {
+        integral = false
+        text = text + "."
+        i += 1
+        var frac = 0
+        while i < cs.len() && is_digit(at(cs, i)) {
+            text = text + at(cs, i)
+            i += 1
+            frac += 1
+        }
+        if frac == 0 {
+            return Err(BadJson)
+        }
+    }
+    if at(cs, i) == "e" || at(cs, i) == "E" {
+        integral = false
+        text = text + "e"
+        i += 1
+        if at(cs, i) == "+" || at(cs, i) == "-" {
+            text = text + at(cs, i)
+            i += 1
+        }
+        var exp = 0
+        while i < cs.len() && is_digit(at(cs, i)) {
+            text = text + at(cs, i)
+            i += 1
+            exp += 1
+        }
+        if exp == 0 {
+            return Err(BadJson)
+        }
+    }
+    if integral {
+        match parse_int(text) {
+            Some(n) => Ok(Step { value: JInt(n), next: i })
+            None => Err(BadJson)
+        }
+    } else {
+        Ok(Step { value: JNum(text), next: i })
+    }
+}
+
+fn parse_string(cs: List[Str], start: Int) -> Result[StrStep, Fail] {
+    var i = start
+    let parts: ref List[Str] = []
+    while i < cs.len() {
+        let c = at(cs, i)
+        if c == "\"" {
+            return Ok(StrStep { text: parts.join(""), next: i + 1 })
+        }
+        if c == "\\" {
+            let e = at(cs, i + 1)
+            if e == "\"" {
+                parts.push("\"")
+            } else if e == "\\" {
+                parts.push("\\")
+            } else if e == "/" {
+                parts.push("/")
+            } else if e == "n" {
+                parts.push("\n")
+            } else if e == "t" {
+                parts.push("\t")
+            } else if e == "r" {
+                parts.push("\r")
+            } else {
+                // \b, \f and \uXXXX: this program has no way to build a character from its number.
+                return Err(BadJson)
+            }
+            i += 2
+        } else {
+            if c == "\n" || c == "\r" || c == "\t" {
+                return Err(BadJson)
+            }
+            parts.push(c)
+            i += 1
+        }
+    }
+    Err(BadJson)
+}
+
+fn parse_array(cs: List[Str], start: Int, depth: Int) -> Result[Step, Fail] {
+    let items: ref List[Json] = []
+    var i = skip_ws(cs, start)
+    if at(cs, i) == "]" {
+        return Ok(Step { value: JArr(items), next: i + 1 })
+    }
+    while i < cs.len() {
+        let s = parse_value(cs, i, depth + 1)?
+        items.push(s.value)
+        i = skip_ws(cs, s.next)
+        let c = at(cs, i)
+        if c == "," {
+            i += 1
+        } else if c == "]" {
+            return Ok(Step { value: JArr(items), next: i + 1 })
+        } else {
+            return Err(BadJson)
+        }
+    }
+    Err(BadJson)
+}
+
+fn parse_object(cs: List[Str], start: Int, depth: Int) -> Result[Step, Fail] {
+    let members: ref List[Member] = []
+    var i = skip_ws(cs, start)
+    if at(cs, i) == "}" {
+        return Ok(Step { value: JObj(members), next: i + 1 })
+    }
+    while i < cs.len() {
+        i = skip_ws(cs, i)
+        if at(cs, i) != "\"" {
+            return Err(BadJson)
+        }
+        let k = parse_string(cs, i + 1)?
+        i = skip_ws(cs, k.next)
+        if at(cs, i) != ":" {
+            return Err(BadJson)
+        }
+        let v = parse_value(cs, i + 1, depth + 1)?
+        members.push(Member { key: k.text, value: v.value })
+        i = skip_ws(cs, v.next)
+        let c = at(cs, i)
+        if c == "," {
+            i += 1
+        } else if c == "}" {
+            return Ok(Step { value: JObj(members), next: i + 1 })
+        } else {
+            return Err(BadJson)
+        }
+    }
+    Err(BadJson)
+}
+
+fn parse_document(text: Str) -> Result[Json, Fail] {
+    let cs = text.chars()
+    let s = parse_value(cs, 0, 0)?
+    if skip_ws(cs, s.next) == cs.len() {
+        Ok(s.value)
+    } else {
+        Err(BadJson)
+    }
+}
+
+fn field(members: List[Member], key: Str) -> Result[Json, Fail] {
+    var found: Option[Json] = None
+    for m in members {
+        if m.key == key {
+            found = Some(m.value)
+        }
+    }
+    match found {
+        Some(v) => Ok(v)
+        None => Err(BadSchema)
+    }
+}
+
+fn as_obj(j: Json) -> Result[List[Member], Fail] {
+    match j {
+        JObj(ms) => Ok(ms)
+        _ => Err(BadSchema)
+    }
+}
+
+fn as_arr(j: Json) -> Result[List[Json], Fail] {
+    match j {
+        JArr(xs) => Ok(xs)
+        _ => Err(BadSchema)
+    }
+}
+
+fn as_str(j: Json) -> Result[Str, Fail] {
+    match j {
+        JStr(s) => Ok(s)
+        _ => Err(BadSchema)
+    }
+}
+
+fn as_int(j: Json) -> Result[Int, Fail] {
+    match j {
+        JInt(n) => Ok(n)
+        _ => Err(BadSchema)
+    }
+}
+
+fn esc(s: Str) -> Str {
+    s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
+}
+
+fn quote(s: Str) -> Str {
+    "\"" + esc(s) + "\""
+}
+
+fn summarize(doc: Json) -> Result[Str, Fail] {
+    let top = as_obj(doc)?
+    let items = as_arr(field(top, "items")?)?
+    var total = 0
+    let names: ref List[Str] = []
+    let counts: ref Map[Str, Int] = Map()
+    for it in items {
+        let obj = as_obj(it)?
+        let name = as_str(field(obj, "name")?)?
+        let qty = as_int(field(obj, "qty")?)?
+        let tags = as_arr(field(obj, "tags")?)?
+        for t in tags {
+            let label = as_str(t)?
+            let seen = match counts.get(label) {
+                Some(n) => n
+                None => 0
+            }
+            counts.insert(label, seen + 1)
+        }
+        total += qty
+        names.push(quote(name.to_upper()))
+    }
+    let pairs: ref List[Str] = []
+    for k in counts.keys().sort() {
+        let n = match counts.get(k) {
+            Some(v) => v
+            None => 0
+        }
+        pairs.push(quote(k) + ":" + str(n))
+    }
+    Ok("{\"count\":" + str(items.len()) + ",\"total_qty\":" + str(total) + ",\"names\":[" + names.join(",") + "],\"tag_counts\":{" + pairs.join(",") + "}}")
+}
+
+fn solve(text: Str) -> Result[Str, Fail] {
+    let doc = parse_document(text)?
+    summarize(doc)
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let reader = root.fs_read("./input")
+    let writer = root.fs_write("./output")
+    match reader.read_text("doc.json") {
+        Err(_) => out.println("{\"error\":\"input\"}")
+        Ok(text) => match solve(text) {
+            Ok(line) => match writer.write_text("out.json", line + "\n") {
+                Ok(_) => out.println(line)
+                Err(_) => out.println("{\"error\":\"output\"}")
+            }
+            Err(f) => match f {
+                BadJson => out.println("{\"error\":\"parse\"}")
+                BadSchema => out.println("{\"error\":\"schema\"}")
+            }
+        }
+    }
+}
