@@ -395,7 +395,8 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
       WASM's missing `match` on a `Str`, fixed, and RW 6.86) →
       ~~bitwise (2.35)~~ (done 2026-11-12, D-V2-226: begun by a cloud session on Fable 5.2 on
       `claude/eloquent-brown-7i7fhs`, finished by the laptop; its programs found RW 2.52, 2.53 and 3.33) →
-      methods on a program's own types (2.33, with RW 2.50 and 2.51 first) → tuples, sets, keyed sorting, comprehensions (2.39) →
+      methods on a program's own types (2.33, with RW 2.50 and 2.51 first; **RW 2.50 is half-built on
+      `claude/relaxed-brown-2l78i1`, `d5e647d`, 2026-11-13 — finish it from there**, the newest sync-log entry lists what is left) → tuples, sets, keyed sorting, comprehensions (2.39) →
       argv, environment, exit code, sleep (2.40) → JSON (2.41) → interfaces (2.33, 2.9) → RW 3.24.
     - Each is built as surface syntax and prelude over the core, so no RFC period applies; one that would change
       `DELULU_CORE.md` gets its own decision.

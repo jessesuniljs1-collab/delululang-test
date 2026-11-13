@@ -343,7 +343,9 @@ another OS, and then takes about seven minutes itself (run 5).
           done (the laptop, 2026-11-08, D-V2-222); ~~math and the checked forms (2.38)~~ — done (on-demand routine run 22,
           D-V2-223); ~~ranges (2.36)~~ — done (on-demand routine run 23, D-V2-224); ~~strings (2.37)~~ — done
           (on-demand routine run 24, D-V2-225); ~~bitwise (2.35)~~ — done (begun by a cloud session on Fable 5.2, finished by
-          the laptop, 2026-11-12, D-V2-226); methods on a program's own types (2.33, with RW 2.50 and 2.51 first); tuples, sets, keyed sorting and
+          the laptop, 2026-11-12, D-V2-226); methods on a program's own types (2.33, with RW 2.50 and 2.51 first — **RW 2.50 is half-built on
+          `claude/relaxed-brown-2l78i1`, `d5e647d`, on-demand routine run 25, 2026-11-13: finish it from that branch**, the
+          newest sync-log entry lists what is left); tuples, sets, keyed sorting and
           comprehensions (2.39); argv, environment, exit code and sleep (2.40); JSON (2.41); then interfaces (2.33, 2.9)
           and RW 3.24;
         - built as surface syntax and prelude over the core, so the core's answers do not move and no RFC period

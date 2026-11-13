@@ -9684,3 +9684,127 @@ Survey and doctor: in the commit below.
   2. The rest is the entry above's *Open / next* from item 2: RW 2.50 and 2.51, then methods on a program's own types
      (2.33), and on in D-V2-220's order; RW 3.33 soon; RW 2.52 and 2.53 when their basics come; then the reviews'
      order. Still the owner's: whether 2.0 waits for the basics; `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-13 — on-demand routine run 25 (Fable 5.2): RW 2.50's `Option` and `Result` methods built on both engines, WORK IN PROGRESS on `claude/relaxed-brown-2l78i1`; stopped at the owner's word
+- Session: `https://claude.ai/code/session_01Deh6WAE8CVi2MJ3Ky9jaBh`   Model: **Claude Fable 5.2** (`claude-fable-5-2`,
+  the routine's setting; no fallback notice; no sous-chef). Effort, read from the run: `CLAUDE_EFFORT=high`,
+  `CLAUDE_CODE_EFFORT_LEVEL=high` in the environment, and the transcript's `"effort":"high"` on every reply counted at
+  the start (3 of 3). The level is the one the environment's line names.
+- **The owner, mid-run: *"Wrap up and push everything"*.** So this run stopped inside its milestone, by
+  `docs/CLOUD_ROUTINE.md`'s *A slice stopped at the owner's word, mid-build*: one `WIP` commit that compiles and passes
+  `scripts/clippy.sh`, then these records, both on the session's branch. **`master` is not moved** (`ac2a162`).
+- Branch: `claude/relaxed-brown-2l78i1`. Pull request: none. Base: `ac2a162` = `origin/master` after `git fetch`.
+- Commits: `d5e647d` (the WIP slice), then this records commit.
+- **Housekeeping, done before the slice:**
+  - `git fetch` (unshallowed): `master` at `ac2a162`, nothing new; no `claude/*` branch ahead of it.
+    `origin/autosave/laptop`'s newest snapshot is of 2026-11-08, older than the laptop's commits of 2026-11-12 and 13
+    on `master`: nothing to recover. `laptop/stack-ladder-witness` (one commit, RW 3.29's witness alone, landed in
+    revised form) is as before.
+  - **`ac2a162`'s push run `43302145758`: read, success** (the previous entry's *Open / next* item 1). `gh` is
+    installed in this VM (`/usr/local/bin/gh`); CI was read with `curl` and the GitHub MCP tools.
+  - Start of session: `ok: the Survey matches the tree (1727 nodes, 20757 edges)`; `doctor --check` `ok: 26 check(s)
+    passed`.
+- **The milestone named:** RW 2.50 closed end to end — total, pure methods on `Option` and `Result` on both engines
+  (D-V2-227). **It is not finished.** What follows says exactly where it stands.
+- **Witnessed red first** (a debug build of `ac2a162`): `half(8).unwrap_or(0)`, `.is_some()`, `.is_none()`, `.map(…)`,
+  `.and_then(half)` on an `Option[Int]` and `.is_ok()`, `.is_err()`, `.unwrap_or(7)`, `.ok()` on a `Result[Int, Str]`
+  were each DL0405 *type `Option[Int]` has no method `unwrap_or`* (and so on), on both engines.
+- **What `d5e647d` holds:**
+  - **The decision, taken but not yet written into `V2_DECISION_LOG.md`** (the code's comments cite it as D-V2-227):
+    fourteen methods, every one total and pure, built as prelude over the core (rows of the primitive table; no
+    change to `DELULU_CORE.md`, no new `DL` code). `Option[T]`: `is_some()`, `is_none()`, `unwrap_or(default)`,
+    `map(f)`, `and_then(f)`, `ok_or(err)`. `Result[T, E]`: `is_ok()`, `is_err()`, `unwrap_or(default)`, `ok()`,
+    `err()`, `map(f)`, `map_err(f)`, `and_then(f)`. **No `unwrap`, no `expect`:** nothing faults on `None` or `Err`,
+    and `o.unwrap()` stays DL0405, now saying what to write (`unwrap_or`, `match`, `?`, or the question first). A value
+    argument (`unwrap_or`'s default, `ok_or`'s error) is evaluated whichever variant the receiver is, after the
+    receiver, as any argument is. A function is called at most once, for the one variant its method names. A method's
+    result has its type's default reference capability, as every method's has (`List.get`, `Map.get`); so
+    `o.unwrap_or([])` of a list is `val` — RW 2.51 (a)'s shape, left to RW 2.51.
+  - **The checker** (`check.rs`): the two `method_sig` arms; `callback_result` and `expect_callback_shape` (an
+    `and_then` function that answers a plain value is refused by the kind's name, not by an inference variable);
+    `higher_order_callback_arg` names the five that call a function, so R-4 joins the function's row at the call and
+    a function whose row is not known is refused (C88's rule); `prim_receiver_label` names `option` and `result`, so
+    the arity gate reads their rows; `faulting_unwrap_spelling` for the DL0405 words.
+  - **The primitive table** (`prim_table.rs`): 14 rows, `count_is_pinned` 137 → 151, both receivers bound in its
+    sweeps; `PRIM_TABLE_VERSION` 12 → 13 (`dir.rs`).
+  - **The interpreter:** `prim::call_variant_method` (the nine first-order methods) and, beside `List.map` in
+    `eval_method`, the three that call a function.
+  - **The WASM engine** (`codegen.rs`): `compile_option_method` and `compile_result_method`, in the guest, no import —
+    a tag test, the function inlined in the one branch that calls it. A cell of the variant a method does not read
+    (a `None` through `map`, an `Err` through `map` or `and_then`, an `Ok` through `map_err`) is handed on, not
+    copied: its bytes are the same at the call's type.
+  - **The instruments:** `delulu-fuzz`'s `HIGHER_ORDER` list and its bare-type-parameter family carry the five new
+    call sites (its emits-every-shape test names them); the differential's console generator draws a line through
+    the methods (`gen_option_method`), and `conformance_parity` counts each form.
+  - **Tests:** `crates/delulu-wasm/tests/option_result_parity.rs`, 5 tests: every answer on both engines against the
+    one worked by hand (36 cases); a function runs once for its variant and an argument either way (16 cases, seen by
+    what they print); a cell handed on reads as the call's type; both compile entries give the same bytes; a function
+    of a `Unit` payload is refused on WASM in words and the rest of a `Result[Unit, E]` compiles.
+- **Verified in the VM, on `d5e647d`'s tree:**
+  - `scripts/clippy.sh -j 4` clean (stamped); `cargo fmt --all` run.
+  - `option_result_parity` 5 passed; `delulu-check --lib prim_table` 11 passed; `delulu-fuzz`'s tests 5 passed;
+    `conformance_parity`'s `random_console_programs_match_across_engines` passed (2,000 programs, the new counters
+    held).
+  - A fuzz campaign, `cargo run --release -p delulu-fuzz -- 20000 20260804`: `generated=20000 accepted=12830
+    rejected=7170 unexpected_rejections=0`, *SOUND: no trace escaped its row across 12102 executed programs*.
+  - **Probed by hand on both engines, each answer checked by hand, the two outputs identical:** a 40-line behaviour
+    program (payloads of every scalar, a record, a list, a sum, a capability, a nested `Option`; chains; `==` and
+    `str` of what the methods make); a configuration loader chaining `ok_or`, `?`, `and_then` and `map`; a generic
+    `first_or[T]`; a `Result[Unit, IoErr]` from `write_text`.
+  - **The row law, by hand:** a function declared pure that hands an effectful function to `Option.map`,
+    `Option.and_then`, `Result.map`, `Result.and_then` or `Result.map_err` is DL0501, each of the five; a bare type
+    parameter handed to `map` is DL0401 (*its effect row must be known here*).
+  - **The refusals, by hand:** `unwrap`, `expect` (DL0405 with its words); a default of another type (DL0401); a
+    missing or surplus argument (DL0403, the gate's `` `option.unwrap_or` expects 1 argument(s)``); a function of the
+    wrong parameter type or count; `and_then` with a function answering a plain value, the other kind, or another
+    error type.
+- **NOT verified, NOT done — the branch is red on these until they are:**
+  - `delulu-conform -- --coverage` reports **14 gaps** (the new `ref.prim.option.*` and `ref.prim.result.*` anchors
+    have no accepting program and no witness rows), so the conformance gates fail; `docs/reference/` is not
+    regenerated, so `--check-reference` fails.
+  - **The full suite was not run.** No mutant was run. `scripts/check-other-os.sh` was not run (no OS `cfg` touched).
+  - No `D-V2-227` entry, no `CHANGELOG.md`, no documentation, no programs, no CLI test file.
+- **CI:** `ci.yml` dispatched at the branch with `jobs=everything`, run **`43389262361`** on `d5e647d` — **queued,
+  unread.** Expect it red at least on the conformance coverage and reference gates above.
+- **Found on the way (not yet rows):**
+  - **WASM refuses a function with a `Unit` parameter** (`fn f(u: Unit) -> Int` is DL1201 *a call to `f` (not a
+    compilable function)*; older than this slice), so `and_then` or `map` with a function over a `Result[Unit, E]`'s
+    `Ok` is DL1201 *a function applied to a payload of Unit*. The interpreter runs both. Record as RW 3.34.
+  - **WASM refuses a function value whose body ends in a bare `Ok(…)`** where no type is expected:
+    `r.and_then(fn(x: Int) -> Result[Float, Bad] { Ok(float(x)) })` is DL1201 *a call to `Ok` (not a compilable
+    function)*, though the lambda writes its result type; `if … { Ok(n) } else { Err("small") }` in the same place
+    compiles. The inlined function's declared result type is not used as the type its body is compiled at. Witness
+    it, then fix it or record it as a row; the parity test avoids the shape for now.
+  - An f-string hole cannot hold a string literal (`f"{parse_int(\"7\")}"` is DL0101): known and deliberate or a
+    gap, to be checked against RW 2.37's record.
+- Files and folders (`git diff --name-status ac2a162..HEAD`): M `crates/delulu-check/src/{check,dir,prim_table}.rs`,
+  `crates/delulu-fuzz/src/danger.rs`, `crates/delulu-runtime/src/{interp,prim}.rs`,
+  `crates/delulu-wasm/src/{codegen,gen}.rs`, `crates/delulu-wasm/tests/conformance_parity.rs`,
+  `docs/AI_ONBOARDING.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/option_result_parity.rs`. Nothing deleted
+  or renamed; no new markdown file.
+- Survey and doctor (after the last edit): in the commit message.
+- Loop engineering: none this run (stopped before step 8). One lesson for the next: `delulu-fuzz` takes no `--help`
+  — any first argument that is not a number starts the default 100,000-program campaign; its arguments are
+  `ITERATIONS SEED`.
+- **Open / next, in order:**
+  1. **Finish RW 2.50 from `claude/relaxed-brown-2l78i1`** (read run `43389262361` first):
+     a. conformance: `tests/conformance/accept/35_option_result.delulu` naming the 14 anchors, reject programs for the
+        refusals above, the 14 negative rows in `tests/conformance/witnesses.toml`
+        (`arity_column_matches_the_checker_gate`) with their `ENTRENCHED_CHANGE_RECORD.md` entry, then
+        `delulu-conform -- --reference` and `--coverage` (425 of 425 expected);
+     b. `crates/delulu/tests/option_result_cli.rs`: the row law for each of the five with its control, C88's shape,
+        one diagnostic for a non-function, the DL0405 words, the arity gate — each was probed by hand, none is a test;
+     c. the two WASM findings above (witness, fix or row);
+     d. mutants from **M1296**: each entry of `higher_order_callback_arg`, each tag test and branch of the two WASM
+        functions, each arm of `call_variant_method`, the interpreter's `calls` table, the two receiver labels;
+     e. the three programs on both engines (a one-liner, an everyday utility, a few-hundred-line program using every
+        basic so far), `delulu fmt` read on each; `numbers.delulu`'s `or_zero` becomes `unwrap_or`;
+     f. docs: the Skill, `GETTING_STARTED.md`, `docs/for-agents.md`, `STAGE1_SPECIFICATION.md`, `README.md`,
+        `CHANGELOG.md`; **D-V2-227** in `V2_DECISION_LOG.md`; `V2_PHASE_STATUS.md`; the counters in
+        `docs/AI_ONBOARDING.md` (the last decision, the last mutant, 425 anchors);
+     g. the full suite, the differential by hand (`cargo test -p delulu-wasm --release --test differential --
+        --ignored`), `core_invariance` read, then the runners, then `master` by fast-forward on green.
+  2. Then RW 2.51 (an rcap decision first), then methods on a program's own types (2.33), and on in D-V2-220's
+     order; RW 3.33 soon; RW 2.52 and 2.53 when their basics come; then the reviews' order.
+  3. Still the owner's: whether 2.0 waits for the basics; `launch/2.0.0` stays prepared, not launched.

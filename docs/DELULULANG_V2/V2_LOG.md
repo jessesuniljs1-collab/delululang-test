@@ -12951,3 +12951,28 @@ literals on both engines; a debug build answered a probe of all of them as Pytho
   `cli`) green; `delulu-conform --check-reference` in sync, `--coverage` 411 of 411. `scripts/clippy.sh -j 4` clean.
   `scripts/check-other-os.sh` was not run: no operating system's `cfg` is touched, and CI builds and tests on macOS,
   Windows and Linux (the run is named in `docs/CLOUD_SYNC_LOG.md`'s entry of this date).
+
+## 2026-11-13 — on-demand routine run 25 (Fable 5.2): RW 2.50's `Option` and `Result` methods built on both engines, work in progress on `claude/relaxed-brown-2l78i1`
+
+**What.** RW 2.50: fourteen total, pure methods — `Option`: `is_some`, `is_none`, `unwrap_or`, `map`, `and_then`,
+`ok_or`; `Result`: `is_ok`, `is_err`, `unwrap_or`, `ok`, `err`, `map`, `map_err`, `and_then` — in the checker, the
+interpreter and the WASM engine (`d5e647d`). No `unwrap`: nothing faults on `None` or `Err`. **Not finished and not on
+`master`:** the owner stopped the run mid-slice (*"Wrap up and push everything"*).
+
+**Why.** RW 2.50 is the first of the two rows before methods on a program's own types (D-V2-220's order): every use of
+an `Option` was a `match`, even for a default.
+
+**Evidence.** Red first on `ac2a162`: DL0405 *type `Option[Int]` has no method `unwrap_or`* and eight more, both
+engines. On `d5e647d`: `scripts/clippy.sh -j 4` clean; `option_result_parity` 5 passed (both engines against answers
+worked by hand, the function's one call, the handed-on cell, both compile entries); `prim_table`'s 11 passed (count
+151, `PRIM_TABLE_VERSION` 13); `delulu-fuzz`'s 5 passed and a 20,000-program campaign with the five new call sites
+SOUND (12,102 executed, 0 unexpected rejections); 2,000 generated console programs agree on both engines. The row law
+(DL0501 for each of the five function-calling methods; DL0401 for a bare type parameter) and the refusals were probed
+by hand and are not yet tests.
+
+**Open.** `delulu-conform --coverage` has 14 gaps and the reference is not regenerated, so the branch is red there;
+the full suite, the mutants, the programs, the documentation and D-V2-227's own entry are not done. CI run
+`43389262361` (`everything`, at `d5e647d`) is queued and unread. The finishing list is `docs/CLOUD_SYNC_LOG.md`'s
+entry of this date, *Open / next* item 1.
+
+**CI read this run.** `master`'s push run `43302145758` on `ac2a162`: success.
