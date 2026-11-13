@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1731 / 20757 |
+| Nodes / edges in this map | 1732 / 20757 |
 | Open discrepancies | 45 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests

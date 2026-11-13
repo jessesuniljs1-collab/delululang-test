@@ -13,7 +13,7 @@
     "registered_codes": 157,
     "rulings": 144,
     "findings_recorded": 92,
-    "files_walked": 1268
+    "files_walked": 1269
   },
   "nodes": [
     {"id":"code:DL0000","kind":"diagnostic_code","name":"DL0000"},
@@ -573,7 +573,7 @@
     {"id":"file:.github/workflows/ci.yml","kind":"other","name":"ci.yml","path":".github/workflows/ci.yml","lines":755},
     {"id":"file:.github/workflows/container.yml","kind":"other","name":"container.yml","path":".github/workflows/container.yml","lines":42},
     {"id":"file:.github/workflows/editor-e2e.yml","kind":"other","name":"editor-e2e.yml","path":".github/workflows/editor-e2e.yml","lines":39},
-    {"id":"file:.github/workflows/fable-research.yml","kind":"other","name":"fable-research.yml","path":".github/workflows/fable-research.yml","lines":46},
+    {"id":"file:.github/workflows/fable-research.yml","kind":"other","name":"fable-research.yml","path":".github/workflows/fable-research.yml","lines":66},
     {"id":"file:.github/workflows/host-capability-probe.yml","kind":"other","name":"host-capability-probe.yml","path":".github/workflows/host-capability-probe.yml","lines":686},
     {"id":"file:.github/workflows/ocsf.yml","kind":"other","name":"ocsf.yml","path":".github/workflows/ocsf.yml","lines":71},
     {"id":"file:.github/workflows/openshell.yml","kind":"other","name":"openshell.yml","path":".github/workflows/openshell.yml","lines":81},
@@ -802,7 +802,8 @@
     {"id":"file:release-artifacts/1.0.0/delulu-1.0.0.dwx","kind":"other","name":"delulu-1.0.0.dwx","path":"release-artifacts/1.0.0/delulu-1.0.0.dwx","lines":0},
     {"id":"file:release-artifacts/1.0.0/delulu-1.0.0.dwx.sig","kind":"other","name":"delulu-1.0.0.dwx.sig","path":"release-artifacts/1.0.0/delulu-1.0.0.dwx.sig","lines":0},
     {"id":"file:research/fable-s1/oracle.py","kind":"other","name":"oracle.py","path":"research/fable-s1/oracle.py","lines":117},
-    {"id":"file:research/fable-s1/run.py","kind":"other","name":"run.py","path":"research/fable-s1/run.py","lines":360},
+    {"id":"file:research/fable-s1/run.py","kind":"other","name":"run.py","path":"research/fable-s1/run.py","lines":522},
+    {"id":"file:research/fable-s1/t5.py","kind":"other","name":"t5.py","path":"research/fable-s1/t5.py","lines":296},
     {"id":"file:rust-toolchain.toml","kind":"other","name":"rust-toolchain.toml","path":"rust-toolchain.toml","lines":10},
     {"id":"file:rustfmt.toml","kind":"other","name":"rustfmt.toml","path":"rustfmt.toml","lines":6},
     {"id":"file:scripts/authority-corpus.py","kind":"other","name":"authority-corpus.py","path":"scripts/authority-corpus.py","lines":89},

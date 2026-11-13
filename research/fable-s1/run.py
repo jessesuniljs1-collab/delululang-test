@@ -20,8 +20,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = Path(os.environ.get("FABLE_REPO") or HERE.parent.parent)
 EXE = Path(os.environ.get("FABLE_EXE") or REPO / "target" / "debug" / ("delulu.exe" if os.name == "nt" else "delulu"))
+sys.dont_write_bytecode = True  # an import must not add files to the tree the Survey reads
 sys.path.insert(0, str(HERE))
 import oracle  # noqa: E402
+import statistics  # noqa: E402
 
 WORK = Path(tempfile.mkdtemp(prefix="fable-"))
 os.environ["DELULU_HOME"] = str(WORK / "state" / "home")
@@ -106,6 +108,8 @@ def sandbox_properties():
         out["backend"] = sb.get("backend")
         out["granted"] = sb.get("granted")
         out["properties"] = {k: (v.get("state") if isinstance(v, dict) else v) for k, v in (sb.get("properties") or {}).items()}
+        out["property_reasons"] = {k: clip(str(v.get("by") or v.get("why")), 160) for k, v in (sb.get("properties") or {}).items() if isinstance(v, dict)}
+        out["other_keys"] = {k: clip(json.dumps(v), 200) for k, v in sb.items() if k not in ("properties", "limits")}
     except Exception as e:
         out["report"] = f"unreadable: {e}"
     return out
@@ -329,22 +333,180 @@ def filesystem():
     return res
 
 
+
+# ---------------------------------------------------------------------------------------------
+def timings():
+    t = WORK / "timing"
+    t.mkdir()
+    (t / "hello.delulu").write_text(HELLO, encoding="utf-8", newline="\n")
+    run(["new", "demo"], t)
+
+    def med(args, cwd, n):
+        ms = [run(args, cwd)["ms"] for _ in range(n)]
+        return {"median_ms": statistics.median(ms), "min_ms": min(ms), "max_ms": max(ms), "n": n}
+
+    out = {
+        "version": med(["--version"], t, 11),
+        "check_hello": med(["check", "hello.delulu"], t, 11),
+        "run_hello_interp": med(["run", "hello.delulu", "--grant", "console", "--no-prompt"], t, 11),
+        "run_hello_wasm": med(["run", "hello.delulu", "--engine", "wasm", "--grant", "console", "--no-prompt"], t, 7),
+        "run_hello_sandbox": med(["run", "hello.delulu", "--sandbox", "--grant", "console", "--no-prompt"], t, 7),
+        "test_demo": med(["test", "."], t / "demo", 5),
+        "authority_hello": med(["authority", "hello.delulu", "--json"], t, 7),
+    }
+    r = run(["toolchain", "--json"], t)
+    out["toolchain_json_bytes"] = len(r["out"].encode("utf-8"))
+    r = run(["--help"], t)
+    out["help_bytes"] = len((r["out"] + r["err"]).encode("utf-8"))
+    return out
+
+
+def mcp():
+    import queue
+    import threading
+
+    def session(lines, wait=6.0, until_id=None):
+        p = subprocess.Popen([str(EXE), "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        q = queue.Queue()
+
+        def reader():
+            for ln in p.stdout:
+                q.put(ln)
+            q.put(None)
+
+        threading.Thread(target=reader, daemon=True).start()
+        for ln in lines:
+            try:
+                p.stdin.write(ln if isinstance(ln, bytes) else (json.dumps(ln) + "\n").encode())
+                p.stdin.flush()
+            except OSError:
+                break
+        last_id = until_id if until_id is not None else max((ln["id"] for ln in lines if isinstance(ln, dict) and "id" in ln), default=None)
+        replies, deadline, eof, seen = [], time.time() + wait, False, False
+        while time.time() < deadline and not seen:
+            try:
+                item = q.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if item is None:
+                eof = True
+                break
+            replies.append(item)
+            try:
+                seen = json.loads(item).get("id") == last_id
+            except Exception:
+                pass
+        try:
+            p.stdin.close()
+        except OSError:
+            pass
+        try:
+            code = p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            code = "killed"
+        parsed = []
+        for r in replies:
+            try:
+                parsed.append(json.loads(r))
+            except Exception:
+                parsed.append({"unparsed": True})
+        return parsed, code, eof, sum(len(r) for r in replies)
+
+    init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2026-07-28", "capabilities": {}, "clientInfo": {"name": "probe", "version": "0"}}}
+    inited = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+    out = {}
+    r, code, eof, n = session([init])
+    out["initialize_2026_07_28_answers"] = (r[0].get("result") or {}).get("protocolVersion") if r else None
+    r, code, eof, n = session([{"jsonrpc": "2.0", "id": 1, "method": "server/discover"}])
+    out["server_discover_error_code"] = (r[0].get("error") or {}).get("code") if r else None
+    r, code, eof, n = session([init, inited, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}], wait=10)
+    tools = next((x for x in r if x.get("id") == 2), {}).get("result", {}).get("tools", [])
+    out["tools"] = len(tools)
+    out["tools_list_bytes"] = n
+    r, code, eof, n = session([init, inited, b"\xff\x80\n", {"jsonrpc": "2.0", "id": 6, "method": "ping"}])
+    out["invalid_utf8_then_ping"] = {"ping_answered": any(x.get("id") == 6 for x in r), "exit": code, "server_closed_first": eof}
+    r, code, eof, n = session([init, inited, b"not json\n", {"jsonrpc": "2.0", "id": 5, "method": "ping"}])
+    out["malformed_then_ping"] = {"ping_answered": any(x.get("id") == 5 for x in r), "exit": code}
+    return out
+
+
+READ_NAMED = """module readnamed
+fn main(root: Root) ! {{Read, Write}} {{
+    let out = root.console()
+    let r = root.fs_read("./input")
+    match r.read_text("{name}") {{
+        Ok(text) => out.println("found")
+        Err(_) => out.println("missing")
+    }}
+}}
+"""
+
+
+def unicode_names():
+    import unicodedata
+    t = WORK / "uni"
+    (t / "input").mkdir(parents=True)
+    nfc = unicodedata.normalize("NFC", "café.txt")
+    nfd = unicodedata.normalize("NFD", "café.txt")
+    (t / "input" / nfc).write_bytes(b"x")
+    res = {"os_sees_nfd_name": (t / "input" / nfd).exists(), "names_on_disk": [ascii(n) for n in os.listdir(t / "input")]}
+    for label, name in (("nfc_literal", nfc), ("nfd_literal", nfd)):
+        (t / "one.delulu").write_text(READ_NAMED.format(name=name), encoding="utf-8", newline="\n")
+        c = run(["check", "one.delulu"], t)
+        r = run(["run", "one.delulu", "--grant", "console", "--grant", "fs.read=./input", "--no-prompt"], t)
+        res[label] = {"check_exit": c["exit"], "run_exit": r["exit"], "out": r["out"].strip(), "err": clip(r["err"], 160)}
+    return res
+
+
+def net_only():
+    """Run after rebuilding with --no-default-features --features net: what the Python-free binary is and does."""
+    t = WORK / "netonly"
+    (t / "input").mkdir(parents=True)
+    (t / "output").mkdir()
+    (t / "hello.delulu").write_text(HELLO, encoding="utf-8", newline="\n")
+    (t / "input" / "doc.json").write_bytes(oracle.fixtures()["f01_basic"])
+    want = oracle.expected(oracle.fixtures()["f01_basic"])
+    res = {"identity": identity()}
+    d = run(["doctor", "--check"], REPO)
+    res["doctor_python_line"] = next((clip(ln.strip(), 200) for ln in d["out"].splitlines() if "Python" in ln), None)
+    res["doctor_last"] = d["out"].strip().splitlines()[-1] if d["out"].strip() else ""
+    tool = ["ldd", str(EXE)] if sys.platform.startswith("linux") else ["otool", "-L", str(EXE)] if sys.platform == "darwin" else None
+    if tool:
+        try:
+            p = subprocess.run(tool, capture_output=True, timeout=60)
+            libs = [ln.split()[0] for ln in p.stdout.decode("utf-8", "replace").splitlines()[0 if tool[0] == "ldd" else 1:] if ln.strip()]
+            res["linked"] = libs
+            res["links_python"] = any("python" in x.lower() for x in libs)
+        except Exception as e:
+            res["linked"] = f"unavailable: {e}"
+    for mode, extra in (("interp", []), ("wasm", ["--engine", "wasm"]), ("sandbox", ["--sandbox"])):
+        r = run(["run", "hello.delulu"] + extra + ["--grant", "console", "--no-prompt"], t)
+        j = run(["run", HERE / "jsontask.delulu"] + extra + GRANTS, t)
+        res[mode] = {"hello_exit": r["exit"], "hello_out": r["out"].strip(), "json_task_matches_oracle": j["exit"] == 0 and j["out"] == want + "\n"}
+    return res
+
+
 def main():
     if not EXE.exists():
         print(f"harness error: no binary at {EXE}")
         return 1
     results = {"harness_errors": []}
-    for key, fn in (("identity", identity), ("doctor", doctor), ("sandbox_properties", sandbox_properties), ("json_task", json_task),
-                    ("outcomes", outcomes), ("extension", extension), ("filesystem", filesystem)):
+    sections = (("net_only", net_only),) if "--net-only" in sys.argv else (
+        ("identity", identity), ("doctor", doctor), ("sandbox_properties", sandbox_properties), ("json_task", json_task),
+        ("outcomes", outcomes), ("extension", extension), ("filesystem", filesystem), ("unicode_names", unicode_names),
+        ("timings", timings), ("mcp", mcp))
+    for key, fn in sections:
         try:
             results[key] = fn()
         except Exception as e:  # keep going: one broken section must not hide the others
             results["harness_errors"].append(f"{key}: {type(e).__name__}: {e}")
     text = json.dumps(results, indent=1, ensure_ascii=True)
-    print("===FABLE-RESULTS-BEGIN===")
+    tag = "NETONLY" if "--net-only" in sys.argv else "RESULTS"
+    print(f"===FABLE-{tag}-BEGIN===")
     print(text)
-    print("===FABLE-RESULTS-END===")
-    jt = results.get("json_task", {}).get("modes", {})
+    print(f"===FABLE-{tag}-END===")
+    jt = (results.get("json_task") or {}).get("modes", {})
     summary = "; ".join(f"{m} {v['passed']}/{v['passed'] + v['failed']}" for m, v in jt.items())
     line = f"json task: {summary} | harness errors: {len(results['harness_errors'])}"
     print(line)

@@ -5,7 +5,7 @@ name: fable-research
 # This file exists only on the throwaway branch `laptop/fable-research-runner`, which is never merged
 # and is deleted once its runs are read. It builds `delulu` from this branch's source — the same
 # tree as `master` at ac2a162 for every crate, manifest and lock file — and runs benign programs
-# against it (research/fable-s1/run.py). It asserts nothing about the product: the job prints
+# against it (research/fable-s1/). It asserts nothing about the product: the job prints
 # observations, and fails only if the harness itself breaks.
 on:
   push:
@@ -43,4 +43,24 @@ jobs:
         shell: bash
         run: |
           PY=python; command -v python > /dev/null 2>&1 || PY=python3
-          "$PY" research/fable-s1/run.py
+          "$PY" -B research/fable-s1/run.py
+      # Two principals as two real OS accounts with their own keys and homes (the audit's track T5).
+      # Disposable accounts on a disposable runner; nothing here touches a real credential.
+      - name: Two principals, two OS accounts (Linux x86-64)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          sudo useradd -m fable-a
+          sudo useradd -m fable-b
+          sudo install -m 0755 target/debug/delulu /usr/local/bin/delulu-fable
+          sudo mkdir -p /srv/fable-t5
+          sudo chown "$(id -un)" /srv/fable-t5
+          FABLE_EXE=/usr/local/bin/delulu-fable FABLE_T5_USER_A=fable-a FABLE_T5_USER_B=fable-b FABLE_T5_BASE=/srv/fable-t5 \
+            python -B research/fable-s1/t5.py
+      - name: Build the Python-free variant (net only) and probe it
+        shell: bash
+        run: |
+          export DELULU_BUILD_COMMIT="$(git rev-parse HEAD)"
+          cargo build -p delulu --locked --no-default-features --features net
+          PY=python; command -v python > /dev/null 2>&1 || PY=python3
+          "$PY" -B research/fable-s1/run.py --net-only
