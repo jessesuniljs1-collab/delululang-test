@@ -573,7 +573,7 @@
     {"id":"file:.github/workflows/ci.yml","kind":"other","name":"ci.yml","path":".github/workflows/ci.yml","lines":755},
     {"id":"file:.github/workflows/container.yml","kind":"other","name":"container.yml","path":".github/workflows/container.yml","lines":42},
     {"id":"file:.github/workflows/editor-e2e.yml","kind":"other","name":"editor-e2e.yml","path":".github/workflows/editor-e2e.yml","lines":39},
-    {"id":"file:.github/workflows/fable-research.yml","kind":"other","name":"fable-research.yml","path":".github/workflows/fable-research.yml","lines":66},
+    {"id":"file:.github/workflows/fable-research.yml","kind":"other","name":"fable-research.yml","path":".github/workflows/fable-research.yml","lines":49},
     {"id":"file:.github/workflows/host-capability-probe.yml","kind":"other","name":"host-capability-probe.yml","path":".github/workflows/host-capability-probe.yml","lines":686},
     {"id":"file:.github/workflows/ocsf.yml","kind":"other","name":"ocsf.yml","path":".github/workflows/ocsf.yml","lines":71},
     {"id":"file:.github/workflows/openshell.yml","kind":"other","name":"openshell.yml","path":".github/workflows/openshell.yml","lines":81},
