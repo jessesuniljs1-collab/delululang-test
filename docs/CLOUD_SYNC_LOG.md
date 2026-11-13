@@ -9684,3 +9684,30 @@ Survey and doctor: in the commit below.
   2. The rest is the entry above's *Open / next* from item 2: RW 2.50 and 2.51, then methods on a program's own types
      (2.33), and on in D-V2-220's order; RW 3.33 soon; RW 2.52 and 2.53 when their basics come; then the reviews'
      order. Still the owner's: whether 2.0 waits for the basics; `launch/2.0.0` stays prepared, not launched.
+
+### 2026-11-14 — the laptop: Fable 5.2's deep-verification commission, session 1 — research only, on `laptop/fable-deep-verification`
+- Session: `https://claude.ai/code/session_01Deh6W7uQFcBocBtPCa9htW`, continued as
+  `https://claude.ai/code/session_01Deh6WAKuTEjsuxTwsw1FJc`.   Model: Claude Fable 5.2 as the harness names it, effort `max`
+  as the owner set it.
+- Branch: `laptop/fable-deep-verification` (its own worktree, `D:\nelan\dl-fable-audit`; the owner's checkout stayed on
+  `codex/research-recovery` with Codex's uncommitted documents untouched).   Pull request: none.   Merged: not yet, and not to be
+  merged without the owner's word.
+- Base: `ac2a162`
+- Commits: `git log --oneline ac2a162..origin/laptop/fable-deep-verification`.
+- Files and folders: A `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (the rolling audit), A
+  `docs/review/fable-deep-verification-state.json` (the resume state), A
+  `docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md` (the owner's commission, as he wrote it),
+  M `docs/REPOSITORY_STRUCTURE.md` (the two directory rows name the new files), M `docs/CLOUD_SYNC_LOG.md`, M `docs/survey/*`.
+  No code, test, workflow or normative document changed.
+- Survey and doctor: at the start, clean worktree `ok: the Survey matches the tree (1727 nodes, 20757 edges)` and
+  `ok: 28 check(s) passed`; the owner's checkout exit 1 on the map's freshness alone (untracked documents). After the last
+  edit: in the commit message.
+- Verified: everything in the audit's sections 2 to 6, each marked executed, source, CI or not run. CI read: `43409171490`
+  18 of 18 green; `43302145758` green; `43389262361` red on two generated-file tests only.
+- For the laptop's memory: `wsl.exe -- bash -lc '<script>'` from Git Bash expands the script's `$` variables in an outer shell
+  first and runs in the Windows working directory; run WSL work from a script file with absolute paths.
+- **Open / next, in order:**
+  1. The owner's: whether Codex's recovery plan and the two other prompts are committed (they are still untracked on the laptop),
+     and whether a coding session is authorised for slice S1 (the audit's section 11).
+  2. The next research session: the state file's three commands.
+  3. Read this branch's CI run before any merge.

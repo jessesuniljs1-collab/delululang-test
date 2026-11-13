@@ -1,0 +1,69 @@
+{
+  "program": "Fable 5.2 multi-session deep verification (commission of 2026-11-14)",
+  "program_status": "IN_PROGRESS",
+  "commission": "docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md",
+  "commission_sha256": "fdef5972075d60349c2aa47342e65d85e57b2f449dbd83a357fe249ce644c8c0",
+  "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
+  "sessions_completed": 1,
+  "last_session": {
+    "date": "2026-11-14",
+    "where": "owner's laptop, Windows 11 x64, plus WSL2 Ubuntu 20.04",
+    "model_as_stated_by_harness": "claude-fable-5-2",
+    "effort_as_set_by_owner": "max",
+    "ended_by": "in progress when this checkpoint was written"
+  },
+  "last_verified_sha": "ac2a16202e790657810b819e882b8d721dc0aef4",
+  "branch": "laptop/fable-deep-verification",
+  "binaries": {
+    "windows_debug_default": {"sha256": "b0a3050c422d9f36c2b9bfadcfd2d93ea4b002dbdc5f290c32fbdc895db384b4", "reproducible": false},
+    "wsl_debug_default": {"sha256": "6fa1b995e2a0a3df281c6cee021aa370f75d92b43ae762e846f1cf96c0d71100", "reproducible": false}
+  },
+  "raw_evidence": {
+    "location": "D:\\nelan\\fable-audit-evidence on the owner's laptop, outside the repository; INDEX.tsv and INDEX.json hold full hashes",
+    "recoverable_from_another_machine": false
+  },
+  "not_committed_on_this_branch": [
+    "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md (Codex's, untracked in the owner's checkout; sha256 86a2629219fc10a8a749ace9ce9c06ca365133026f97fa3682476cf3280efb1d)",
+    "docs/prompt/DeluluLang_Codex_Research_Consolidation_and_Recovery_Prompt.md",
+    "docs/prompt/DeluluLang_Fable_5_2_Independent_Reality_Check.md",
+    "Codex's two added rows in docs/REPOSITORY_STRUCTURE.md"
+  ],
+  "workstreams": {
+    "A_ground_truth": "first pass done",
+    "B_language_semantics": "first pass started (complete-program task)",
+    "C_engines": "first pass started (three-mode parity on one task)",
+    "D_trust": "T1 by source only; no hostile artifacts built",
+    "E_surfaces": "T2 and T4 executed; MCP, LSP, Atlas, edit not run",
+    "F_platform": "Windows and WSL executed; no release archive exists",
+    "G_assurance": "not started",
+    "H_adoption": "not started"
+  },
+  "tracks": {
+    "T1": "CONFIRMED by source; run-time reach UNVERIFIED",
+    "T2": "CONFIRMED, wider than the plan",
+    "T3": "CONFIRMED for the library, NARROWED for the language",
+    "T4": "CONFIRMED with two additions",
+    "T5": "NOT RUN",
+    "T6": "PARTIAL (WSL build PASS; archive upgrade UNSUPPORTED)",
+    "T7": "PARTIAL",
+    "T8": "NOT RUN"
+  },
+  "proposed_queue": ["S1 artifact ingress, minimal", "S2 false-success exits", "S3 outcome contract, widened", "S4 arguments and JSON", "S5 .solulu in packages"],
+  "highest_risk_unknowns": [
+    "whether the id-keyed per-site table weakens rule R-Get for code inside a plugin (FABLE-008)",
+    "what a literal listed in Module.recovered does at run time (FABLE-007)",
+    "two independently authenticated principals (T5)",
+    "custody, sandbox and broker source, none of it read yet"
+  ],
+  "cleanup": {
+    "background_processes": "none left running",
+    "owner_checkout": "as found; one misdirected command's five stray entries were removed and verified (audit section 12)",
+    "wsl": "a clone and build remain under /home/user/fable-audit-s1 (safe to delete)"
+  },
+  "last_push_succeeded": "see the sync-log entry of 2026-11-14 and `git ls-remote origin laptop/fable-deep-verification`",
+  "next_three_commands": [
+    {"run": "git fetch origin && git log --oneline -3 origin/master origin/laptop/fable-deep-verification", "expect": "master still ac2a162, or re-read every FABLE entry's re-check column against the new commits"},
+    {"run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check", "expect": "ok on a clean checkout of the branch"},
+    {"run": "in WSL, as three separate Linux users with separate state directories: start the broker, delegate a narrower lease, use it, revoke it, replay it (T5; write the expected refusals first)", "expect": "one allowed read; refusals for the sibling path, the write, the wrong holder, the expired lease, the replay and the post-revocation use"}
+  ]
+}
