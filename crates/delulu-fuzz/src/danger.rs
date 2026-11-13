@@ -88,6 +88,14 @@ const HIGHER_ORDER: &[(&str, &str)] = &[
     ("filter", "xs.filter(fn(x: Int) -> Bool ! {ROW} { {OPS}; x > 1 })"),
     ("find", "xs.find(fn(x: Int) -> Bool ! {ROW} { {OPS}; x > 1 })"),
     ("fold", "xs.fold(0, fn(a: Int, x: Int) -> Int ! {ROW} { {OPS}; a + x })"),
+    // RW 2.50 (D-V2-227): the five methods of `Option` and `Result` that call a function. Each receiver is the variant
+    // its method calls the function for (`xs.get(0)` is `Some`, `xs.get(9)` is `None`, so its `ok_or` is an `Err`), so
+    // an honest program's trace holds the closure's effects and the harness compares them with its row.
+    ("option.map", "xs.get(0).map(fn(x: Int) -> Int ! {ROW} { {OPS}; x })"),
+    ("option.and_then", "xs.get(0).and_then(fn(x: Int) -> Option[Int] ! {ROW} { {OPS}; Some(x) })"),
+    ("result.map", "xs.get(0).ok_or(\"none\").map(fn(x: Int) -> Int ! {ROW} { {OPS}; x })"),
+    ("result.and_then", "xs.get(0).ok_or(\"none\").and_then(fn(x: Int) -> Result[Int, Str] ! {ROW} { {OPS}; Ok(x) })"),
+    ("result.map_err", "xs.get(9).ok_or(\"none\").map_err(fn(e: Str) -> Str ! {ROW} { {OPS}; e })"),
 ];
 
 /// Fill one [`HIGHER_ORDER`] template. Textual rather than a formatter — built with `.replace()`,
@@ -126,13 +134,19 @@ fn bare_type_param(rng: &mut Rng) -> Program {
     if rng.chance(1, 2) {
         // P3: the bare type parameter reaches a randomly chosen higher-order builtin, not always
         // `map`. The refusal must not depend on WHICH builtin will invoke the value — an undetermined
-        // row is not an empty row at any of the four call sites, and `fold`'s displaced callback is
+        // row is not an empty row at any of the nine call sites, and `fold`'s displaced callback is
         // the site where that was newly possible to get wrong.
-        let (method, call) = match rng.below(4) {
+        let (method, call) = match rng.below(9) {
             0 => ("map", "xs.map(f)"),
             1 => ("filter", "xs.filter(f)"),
             2 => ("find", "xs.find(f)"),
-            _ => ("fold", "xs.fold(0, f)"),
+            3 => ("fold", "xs.fold(0, f)"),
+            // RW 2.50: and at each of the five `Option` and `Result` sites.
+            4 => ("option.map", "xs.get(0).map(f)"),
+            5 => ("option.and_then", "xs.get(0).and_then(f)"),
+            6 => ("result.map", "xs.get(0).ok_or(\"none\").map(f)"),
+            7 => ("result.and_then", "xs.get(0).ok_or(\"none\").and_then(f)"),
+            _ => ("result.map_err", "xs.get(0).ok_or(\"none\").map_err(f)"),
         };
         let _ = method;
         let src = format!(
@@ -244,7 +258,7 @@ pub fn generate(rng: &mut Rng) -> Program {
 mod tests {
     use super::*;
 
-    /// A generator that silently stopped emitting one of the four [`HIGHER_ORDER`] shapes would
+    /// A generator that silently stopped emitting one of the nine [`HIGHER_ORDER`] shapes would
     /// leave that shape untested forever, and nothing would say so — the campaign would just look
     /// like it always does, quietly narrowed back to `.map` alone (the exact blind spot P3 closed).
     /// This pins that every method name is actually reachable from the generator's public entry
@@ -256,7 +270,18 @@ mod tests {
         for _ in 0..2000 {
             corpus.push_str(&higher_order_closure(&mut rng).src);
         }
-        for needle in ["\\.map(", "\\.filter(", "\\.find(", "\\.fold("] {
+        for needle in [
+            "xs\\.map(",
+            "\\.filter(",
+            "\\.find(",
+            "\\.fold(",
+            // RW 2.50: the five `Option` and `Result` shapes, each by the receiver that tells it from a list's.
+            "xs\\.get(0)\\.map(",
+            "xs\\.get(0)\\.and_then(",
+            "\\.ok_or(\"none\")\\.map(",
+            "\\.ok_or(\"none\")\\.and_then(",
+            "\\.map_err(",
+        ] {
             let plain = needle.replace('\\', "");
             assert!(
                 corpus.contains(&plain),

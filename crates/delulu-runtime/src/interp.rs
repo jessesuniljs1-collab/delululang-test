@@ -1536,6 +1536,38 @@ impl Interp {
             }
         }
 
+        // RW 2.50 (D-V2-227): the three methods of `Option` and `Result` that call a function. The function is
+        // evaluated whichever variant the receiver is, as any argument is, and called at most once: `map` and
+        // `and_then` for `Some` or `Ok` alone, `map_err` for `Err` alone. Any other variant is handed on as it is.
+        if let Value::Variant { name: variant, fields } = &recvv {
+            let calls = match (&**variant, name.name.as_str()) {
+                ("Some" | "Ok", "map" | "and_then") | ("Err", "map_err") => Some(true),
+                ("None" | "Err", "map" | "and_then") | ("Ok", "map_err") => Some(false),
+                _ => None,
+            };
+            if let Some(calls) = calls {
+                let Some(Value::Closure(clo)) = args.first().map(|a| self.eval_expr(a, env)).transpose()? else {
+                    return Err(Escape::Fault(Fault::at(
+                        "DL0907",
+                        format!("`{}` expects a function (checker bug)", name.name),
+                        span,
+                    )));
+                };
+                if !calls {
+                    return Ok(recvv.clone());
+                }
+                let made = self.call_closure(&clo, vec![fields.first().cloned().unwrap_or(Value::Unit)])?;
+                let v = match name.name.as_str() {
+                    // `and_then`'s function answers the whole `Option` or `Result`.
+                    "and_then" => made,
+                    "map_err" => Value::err(made),
+                    _ => Value::variant(variant, vec![made]),
+                };
+                self.note_alloc(&v);
+                return Ok(v);
+            }
+        }
+
         // Closure-taking methods are handled here (they call back into evaluation).
         if name.name == "map" {
             match &recvv {
@@ -1784,6 +1816,10 @@ impl Interp {
             Value::Float(x) => prim::call_float_method(*x, &name.name, &argvals, span),
             Value::List(l) => prim::call_list_method(l, &name.name, &argvals, span),
             Value::Map(m) => prim::call_map_method(m, &name.name, &argvals, span),
+            // RW 2.50 (D-V2-227): an `Option`'s and a `Result`'s first-order methods.
+            Value::Variant { name: variant, fields } if matches!(&**variant, "Some" | "None" | "Ok" | "Err") => {
+                prim::call_variant_method(variant, fields, &name.name, &argvals, span)
+            }
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),
         };
         // RW 4.62: an operation the trace recorded at its dispatch and that then FAULTED — a daemon's refusal of

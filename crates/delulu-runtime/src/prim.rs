@@ -1334,6 +1334,31 @@ enum SortKey {
     Str(String),
 }
 
+/// The first-order methods of `Option` and `Result` (RW 2.50, D-V2-227): the receiver is the variant `variant` with
+/// the payload `fields`. Every one is total: none faults on `None` or `Err`. The three that call a function (`map`,
+/// `and_then`, `map_err`) are the interpreter's own, beside `List.map`, because they call back into evaluation.
+///
+/// A receiver is told apart by its constructor's name, which is all a value carries: the checker gives these methods
+/// to `Option` and `Result` alone, so a variant of another type never reaches here from a checked program, and one
+/// that does is refused as any unknown method is.
+pub fn call_variant_method(variant: &str, fields: &[Value], method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+    let payload = || fields.first().cloned().unwrap_or(Value::Unit);
+    let arg = |what: &str| {
+        args.first().cloned().ok_or_else(|| Fault::at("DL0907", format!("`{method}` needs {what} (checker bug)"), span))
+    };
+    match (variant, method) {
+        ("Some", "is_some") | ("None", "is_none") | ("Ok", "is_ok") | ("Err", "is_err") => Ok(Value::Bool(true)),
+        ("None", "is_some") | ("Some", "is_none") | ("Err", "is_ok") | ("Ok", "is_err") => Ok(Value::Bool(false)),
+        ("Some" | "Ok", "unwrap_or") => Ok(payload()),
+        ("None" | "Err", "unwrap_or") => arg("a default"),
+        ("Some", "ok_or") => Ok(Value::ok(payload())),
+        ("None", "ok_or") => Ok(Value::err(arg("an error")?)),
+        ("Ok", "ok") | ("Err", "err") => Ok(Value::variant("Some", vec![payload()])),
+        ("Err", "ok") | ("Ok", "err") => Ok(Value::variant("None", vec![])),
+        _ => Err(Fault::at("DL0907", format!("type has no method `{method}` on a `{variant}`"), span)),
+    }
+}
+
 pub fn call_list_method(
     list: &Rc<std::cell::RefCell<Vec<Value>>>,
     method: &str,

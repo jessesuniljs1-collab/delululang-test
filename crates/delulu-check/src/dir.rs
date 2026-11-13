@@ -67,7 +67,10 @@ pub const DIR_VERSION: u32 = 1;
 /// 11 = **RW 2.36** (D-V2-224): `List.step_by(k)`, every `k`th element, a range's step. Additive; bumped for the same rule.
 /// 12 = **RW 2.37** (D-V2-225): the `Str` methods `ends_with`, `is_empty`, `trim_start`, `trim_end`, `find`, `rfind`,
 /// `count`, `repeat`, `pad_left` and `pad_right`, and `Float.to_fixed`. Additive; bumped for the same rule.
-pub const PRIM_TABLE_VERSION: u32 = 12;
+/// 13 = **RW 2.50** (D-V2-227): the total methods of `Option` (`is_some`, `is_none`, `unwrap_or`, `map`, `and_then`,
+/// `ok_or`) and of `Result` (`is_ok`, `is_err`, `unwrap_or`, `ok`, `err`, `map`, `map_err`, `and_then`). Additive; bumped
+/// for the same rule.
+pub const PRIM_TABLE_VERSION: u32 = 13;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

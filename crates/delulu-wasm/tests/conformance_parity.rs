@@ -117,6 +117,25 @@ fn random_console_programs_match_across_engines() {
     // Programs with a sum type of their own, those whose patterns name a lowercase constructor by its call form, and those
     // where a pattern tests a field against a literal (2026-11-01).
     let (mut sums, mut call_forms, mut field_tests) = (0u32, 0u32, 0u32);
+    // Programs with a line through the methods of `Option` and `Result` (RW 2.50), and how many of those lines held each
+    // of the five that call a function or the nine that do not.
+    const VARIANT_METHODS: [&str; 14] = [
+        ".unwrap_or(",
+        ".is_some(",
+        ".is_none(",
+        ".map(fn",
+        ".and_then(fn",
+        ".ok_or(",
+        ".is_ok(",
+        ".is_err(",
+        ".ok()",
+        ".err()",
+        ".map_err(fn",
+        "-> Option[Int]",
+        "-> Result[Int, Str]",
+        ".unwrap_or(\"nothing\")",
+    ];
+    let (mut variants, mut variant_calls) = (0u32, [0u32; VARIANT_METHODS.len()]);
     let mut mismatches: Vec<String> = Vec::new();
     for k in 0..2000u64 {
         let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -161,6 +180,12 @@ fn random_console_programs_match_across_engines() {
                     call_forms += u32::from(["leaf()", "empty()", "solo()", "cell()"].iter().any(|m| src.contains(m)));
                     field_tests += u32::from(src.lines().any(|l| l.contains("=> ") && (l.contains("(0") || l.contains(" 1)"))));
                 }
+                if src.contains("].get(") {
+                    variants += 1;
+                    for (n, m) in variant_calls.iter_mut().zip(VARIANT_METHODS) {
+                        *n += u32::from(src.contains(m));
+                    }
+                }
                 if src.contains(" == ") {
                     compares += 1;
                     equal += u32::from(wo.lines().last().is_some_and(|l| l.starts_with("true")));
@@ -195,6 +220,10 @@ fn random_console_programs_match_across_engines() {
     assert!(
         sums > 700 && call_forms > 300 && field_tests > 200,
         "sum types: {sums} programs, {call_forms} matching a lowercase constructor by its call form, {field_tests} testing a field"
+    );
+    assert!(
+        variants > 500 && variant_calls.iter().all(|n| *n > 30),
+        "Option and Result methods: {variants} programs, {VARIANT_METHODS:?} written in {variant_calls:?} of them"
     );
 }
 

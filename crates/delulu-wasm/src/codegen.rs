@@ -4909,6 +4909,13 @@ fn compile_expr_unplaced(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if let Ty::Map(k, v) = recv_ty {
                 return compile_map_method(k, v, &name.name, args, cx);
             }
+            // RW 2.50 (D-V2-227): the total methods of `Option` and `Result`, the receiver's cell on the stack.
+            if let Ty::Option(s) = recv_ty {
+                return compile_option_method(s, &name.name, args, cx);
+            }
+            if let Ty::Result(t, e) = recv_ty {
+                return compile_result_method(t, e, &name.name, args, cx);
+            }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
@@ -5529,6 +5536,237 @@ fn compile_index(recv: &Expr, index: &Expr, cx: &mut Cx) -> Result<Ty, CompileEr
     emit_slot_addr(cx, data, i32ix);
     load_scalar(cx, s);
     Ok(s.to_ty())
+}
+
+/// The tag of constructor `ctor` of the variant type `ty` (RW 2.50).
+fn ctor_tag(cx: &Cx, ty: Ty, ctor: &str) -> Result<i32, CompileError> {
+    cx.env
+        .ctors_of(ty)
+        .and_then(|cs| cs.iter().position(|(n, _)| n == ctor))
+        .map(|at| at as i32)
+        .ok_or_else(|| CompileError::Unsupported(format!("`{ctor}` is not a constructor of {ty:?}")))
+}
+
+/// Push whether the variant cell at the i32 local `cell` holds the constructor tagged `tag`.
+fn emit_tag_is(cx: &mut Cx, cell: u32, tag: i32) {
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Load(u32_at()));
+    cx.emit(Instruction::I32Const(tag));
+    cx.emit(Instruction::I32Eq);
+}
+
+/// Push the one payload, of scalar `s`, of the variant cell at the i32 local `cell`; a `Unit` occupies no slot.
+fn emit_payload(cx: &mut Cx, cell: u32, s: Scalar) {
+    if s != Scalar::Unit {
+        cx.emit(Instruction::LocalGet(cell));
+        cx.emit(Instruction::I32Const(field_offset(0)));
+        cx.emit(Instruction::I32Add);
+        load_scalar(cx, s);
+    }
+}
+
+/// A new cell of the variant type `ty` holding its constructor `ctor`, whose one payload of scalar `payload` is on the
+/// stack (nothing is, for a `Unit` or a constructor without one). Leaves the cell's pointer.
+fn emit_wrap(cx: &mut Cx, ty: Ty, ctor: &str, payload: Scalar) -> Result<(), CompileError> {
+    let tag = ctor_tag(cx, ty, ctor)?;
+    let ctors = cx.env.ctors_of(ty).expect("a type with a constructor has its constructors");
+    let held = match payload {
+        Scalar::Unit => None,
+        s => {
+            let l = cx.alloc_local(s.to_ty())?;
+            cx.emit(Instruction::LocalSet(l));
+            Some(l)
+        }
+    };
+    let rp = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(rp));
+    cx.emit(Instruction::LocalGet(rp));
+    cx.emit(Instruction::I32Const(tag));
+    cx.emit(Instruction::I32Store(u32_at()));
+    if let Some(l) = held {
+        cx.emit(Instruction::LocalGet(rp));
+        cx.emit(Instruction::I32Const(field_offset(0)));
+        cx.emit(Instruction::I32Add);
+        cx.emit(Instruction::LocalGet(l));
+        store_scalar(cx, payload);
+    }
+    cx.emit(Instruction::LocalGet(rp));
+    Ok(())
+}
+
+/// `unwrap_or(default)` (RW 2.50): the payload of the cell at `cell` when it holds the constructor tagged `tag`, else
+/// the default — which is computed first and whichever it is, as the interpreter computes an argument.
+fn emit_payload_or(cx: &mut Cx, cell: u32, tag: i32, s: Scalar, default: &Expr) -> Result<Ty, CompileError> {
+    let t = s.to_ty();
+    compile_expr_as(default, cx, t)?;
+    let Some(vt) = wasm_valtype(t) else { return Ok(Ty::Unit) };
+    let d = cx.alloc_local(t)?;
+    cx.emit(Instruction::LocalSet(d));
+    emit_tag_is(cx, cell, tag);
+    cx.emit(Instruction::If(BlockType::Result(vt)));
+    emit_payload(cx, cell, s);
+    cx.emit(Instruction::Else);
+    cx.emit(Instruction::LocalGet(d));
+    cx.emit(Instruction::End);
+    Ok(t)
+}
+
+/// `map`, `and_then` and `map_err` (RW 2.50): when the cell at `cell` holds the constructor tagged `tag`, the function
+/// value `c` inlined over its payload — `wrap` is handed the answer's type with the answer on the stack, leaves a
+/// pointer and says what type the whole call has — else the cell itself. A cell of another constructor is the same
+/// bytes at the call's type as at the receiver's (a tag, and a payload the call does not change), so it is handed on
+/// and not copied; the interpreter hands the same value on.
+fn emit_apply_or_same(
+    cx: &mut Cx,
+    cell: u32,
+    tag: i32,
+    s: Scalar,
+    c: &Callable,
+    wrap: &dyn Fn(&mut Cx, Ty) -> Result<Ty, CompileError>,
+) -> Result<Ty, CompileError> {
+    if s == Scalar::Unit {
+        return Err(CompileError::Unsupported("a function applied to a payload of Unit".into()));
+    }
+    emit_tag_is(cx, cell, tag);
+    cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
+    let x = cx.alloc_local(s.to_ty())?;
+    emit_payload(cx, cell, s);
+    cx.emit(Instruction::LocalSet(x));
+    let made = inline_apply(c, x, s.to_ty(), cx)?;
+    let out = wrap(cx, made)?;
+    cx.emit(Instruction::Else);
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::End);
+    Ok(out)
+}
+
+/// The scalar a function's answer of type `t` is held as in a new cell (`map`'s `Some(f(x))`).
+fn mapped_scalar(t: Ty, method: &str) -> Result<Scalar, CompileError> {
+    ty_to_scalar(t).ok_or_else(|| CompileError::Unsupported(format!("`{method}` to a {t:?}")))
+}
+
+/// A method of an `Option[s]` whose cell pointer is on the stack (RW 2.50, D-V2-227). Compiled in the guest, with no
+/// import: a tag test, and the function of `map` and `and_then` inlined in the `Some` branch alone, so it runs at most
+/// once and only for `Some`, as the interpreter's does.
+fn compile_option_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    let opt = Ty::Option(s);
+    let some = ctor_tag(cx, opt, "Some")?;
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalSet(cell));
+    match (method, args) {
+        ("is_some", []) => {
+            emit_tag_is(cx, cell, some);
+            Ok(Ty::I32)
+        }
+        ("is_none", []) => {
+            emit_tag_is(cx, cell, some);
+            cx.emit(Instruction::I32Eqz);
+            Ok(Ty::I32)
+        }
+        ("unwrap_or", [default]) => emit_payload_or(cx, cell, some, s, default),
+        ("map", [f]) => {
+            let c = resolve_callable(f, cx)?;
+            emit_apply_or_same(cx, cell, some, s, &c, &|cx: &mut Cx, t| {
+                let made = Ty::Option(mapped_scalar(t, "map")?);
+                emit_wrap(cx, made, "Some", mapped_scalar(t, "map")?)?;
+                Ok(made)
+            })
+        }
+        ("and_then", [f]) => {
+            let c = resolve_callable(f, cx)?;
+            emit_apply_or_same(cx, cell, some, s, &c, &|_, t| match t {
+                Ty::Option(_) => Ok(t),
+                other => Err(CompileError::Unsupported(format!("an `and_then` function that answers a {other:?}"))),
+            })
+        }
+        // `Some(x)` is `Ok(x)` and `None` is `Err(err)`; the error is computed first, whichever it is.
+        ("ok_or", [err]) => {
+            let et = compile_expr(err, cx)?;
+            let es = mapped_scalar(et, "ok_or")?;
+            let res = Ty::Result(s, es);
+            let e = match es {
+                Scalar::Unit => None,
+                _ => {
+                    let l = cx.alloc_local(et)?;
+                    cx.emit(Instruction::LocalSet(l));
+                    Some(l)
+                }
+            };
+            emit_tag_is(cx, cell, some);
+            cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
+            emit_payload(cx, cell, s);
+            emit_wrap(cx, res, "Ok", s)?;
+            cx.emit(Instruction::Else);
+            if let Some(l) = e {
+                cx.emit(Instruction::LocalGet(l));
+            }
+            emit_wrap(cx, res, "Err", es)?;
+            cx.emit(Instruction::End);
+            Ok(res)
+        }
+        _ => Err(CompileError::Unsupported(format!("the Option method `.{method}`"))),
+    }
+}
+
+/// A method of a `Result[t, e]` whose cell pointer is on the stack (RW 2.50, D-V2-227), compiled as an `Option`'s are:
+/// `map` and `and_then` inline their function in the `Ok` branch alone, `map_err` in the `Err` branch alone.
+fn compile_result_method(t: Scalar, e: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    let res = Ty::Result(t, e);
+    let (ok, err) = (ctor_tag(cx, res, "Ok")?, ctor_tag(cx, res, "Err")?);
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalSet(cell));
+    // `ok()` and `err()`: `Some` of the payload of the constructor asked for, `None` for the other.
+    let as_option = |cx: &mut Cx, tag: i32, s: Scalar| -> Result<Ty, CompileError> {
+        let opt = Ty::Option(s);
+        emit_tag_is(cx, cell, tag);
+        cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
+        emit_payload(cx, cell, s);
+        emit_wrap(cx, opt, "Some", s)?;
+        cx.emit(Instruction::Else);
+        emit_wrap(cx, opt, "None", Scalar::Unit)?;
+        cx.emit(Instruction::End);
+        Ok(opt)
+    };
+    match (method, args) {
+        ("is_ok", []) => {
+            emit_tag_is(cx, cell, ok);
+            Ok(Ty::I32)
+        }
+        ("is_err", []) => {
+            emit_tag_is(cx, cell, err);
+            Ok(Ty::I32)
+        }
+        ("unwrap_or", [default]) => emit_payload_or(cx, cell, ok, t, default),
+        ("ok", []) => as_option(cx, ok, t),
+        ("err", []) => as_option(cx, err, e),
+        ("map", [f]) => {
+            let c = resolve_callable(f, cx)?;
+            emit_apply_or_same(cx, cell, ok, t, &c, &|cx: &mut Cx, u| {
+                let made = Ty::Result(mapped_scalar(u, "map")?, e);
+                emit_wrap(cx, made, "Ok", mapped_scalar(u, "map")?)?;
+                Ok(made)
+            })
+        }
+        ("map_err", [f]) => {
+            let c = resolve_callable(f, cx)?;
+            emit_apply_or_same(cx, cell, err, e, &c, &|cx: &mut Cx, u| {
+                let made = Ty::Result(t, mapped_scalar(u, "map_err")?);
+                emit_wrap(cx, made, "Err", mapped_scalar(u, "map_err")?)?;
+                Ok(made)
+            })
+        }
+        // The function's `Err` is this `Result`'s, as the checker holds it.
+        ("and_then", [f]) => {
+            let c = resolve_callable(f, cx)?;
+            emit_apply_or_same(cx, cell, ok, t, &c, &|_, u| match u {
+                Ty::Result(_, e2) if e2 == e => Ok(u),
+                other => Err(CompileError::Unsupported(format!("an `and_then` function that answers a {other:?}"))),
+            })
+        }
+        _ => Err(CompileError::Unsupported(format!("the Result method `.{method}`"))),
+    }
 }
 
 /// A method of a `List[s]` whose header pointer is on the stack.

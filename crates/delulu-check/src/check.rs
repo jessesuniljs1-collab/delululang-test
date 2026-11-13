@@ -2626,6 +2626,9 @@ impl<'a> Checker<'a> {
                 name.name,
                 name.name
             )
+        } else if let Some(total) = faulting_unwrap_spelling(&rt, &name.name) {
+            // RW 2.50 (D-V2-227): `o.unwrap()` — no method faults on `None` or `Err`; say what is written instead.
+            format!("type `{}` has no method `{}`: {total}", self.ty(&rt), name.name)
         } else if let Some(other) = other_numeric_method(&rt, &name.name) {
             // RW 2.38 (D-V2-223): a math method of the other number type (`n.sqrt()` on an `Int`). Say which, and the
             // conversion that reaches it.
@@ -3371,6 +3374,69 @@ impl<'a> Checker<'a> {
                 }
                 _ => None,
             },
+            // RW 2.50 (D-V2-227): the methods of `Option`. Every one is TOTAL and pure: none faults on `None`, so there
+            // is no `unwrap` (the refusal for one says what to write). `map` and `and_then` call their function at
+            // most once, for `Some` alone; R-4 joins its row at the call site (`higher_order_callback_arg`).
+            Type::Option(inner) => match method {
+                "is_some" | "is_none" => Some((Type::Bool, None, None)),
+                // The default is an ordinary argument: it is evaluated whichever variant the receiver is.
+                "unwrap_or" => {
+                    self.expect_arg(args, 0, inner, span);
+                    Some(((**inner).clone(), None, None))
+                }
+                "map" => {
+                    let ret = self.callback_result(method, &[(**inner).clone()], args, span);
+                    Some((Type::Option(Box::new(ret)), None, None))
+                }
+                "and_then" => {
+                    let ret = self.callback_result(method, &[(**inner).clone()], args, span);
+                    let then = Type::Option(Box::new(self.cx.fresh_type()));
+                    self.expect_callback_shape(method, &then, &ret, args);
+                    Some((self.cx.apply_type(&then), None, None))
+                }
+                // `Some(x)` is `Ok(x)`; `None` is `Err(err)`. The error is evaluated either way, as any argument is.
+                "ok_or" => {
+                    let err = match args.first() {
+                        Some((t, _)) => self.cx.apply_type(t),
+                        None => {
+                            self.diags.push(
+                                Diagnostic::error("DL0403", "missing argument 1 (expected the error for `None`)")
+                                    .with_span(span, "too few arguments"),
+                            );
+                            self.cx.fresh_type()
+                        }
+                    };
+                    Some((Type::result((**inner).clone(), err), None, None))
+                }
+                _ => None,
+            },
+            // RW 2.50 (D-V2-227): the methods of `Result`, total and pure as `Option`'s are. `map` and `and_then`
+            // call their function for `Ok` alone, `map_err` for `Err` alone.
+            Type::Result(ok, err) => match method {
+                "is_ok" | "is_err" => Some((Type::Bool, None, None)),
+                "unwrap_or" => {
+                    self.expect_arg(args, 0, ok, span);
+                    Some(((**ok).clone(), None, None))
+                }
+                "ok" => Some((Type::Option(ok.clone()), None, None)),
+                "err" => Some((Type::Option(err.clone()), None, None)),
+                "map" => {
+                    let ret = self.callback_result(method, &[(**ok).clone()], args, span);
+                    Some((Type::result(ret, (**err).clone()), None, None))
+                }
+                "map_err" => {
+                    let ret = self.callback_result(method, &[(**err).clone()], args, span);
+                    Some((Type::result((**ok).clone(), ret), None, None))
+                }
+                // The function's `Err` is this `Result`'s: `and_then` chains steps that fail the same way.
+                "and_then" => {
+                    let ret = self.callback_result(method, &[(**ok).clone()], args, span);
+                    let then = Type::result(self.cx.fresh_type(), (**err).clone());
+                    self.expect_callback_shape(method, &then, &ret, args);
+                    Some((self.cx.apply_type(&then), None, None))
+                }
+                _ => None,
+            },
             // T-ForeignCall (spec §3): a method call on a lib handle types per the block's
             // signature, with row exactly `{ForeignCall}`.
             Type::Foreign(libname) => {
@@ -3470,6 +3536,54 @@ impl<'a> Checker<'a> {
                 Diagnostic::error("DL0403", format!("missing argument {} (expected a function)", at + 1))
                     .with_span(call_span, "too few arguments"),
             ),
+        }
+    }
+
+    /// The result type of the function a higher-order builtin is handed as its FIRST argument, its parameters checked
+    /// against what the builtin will pass it (R-4's argument half, MAP-PARAM-1). An argument that is no function was
+    /// refused by the R-4 gate in `check_method` already, and a missing one is refused here; either way the caller
+    /// gets a fresh type, so one mistake is one diagnostic (RW 2.50).
+    fn callback_result(&mut self, what: &str, params: &[Type], args: &[(Type, Span)], call_span: Span) -> Type {
+        match args.first().map(|(t, s)| (self.cx.apply_type(t), *s)) {
+            Some((Type::Fn { params: got, ret, .. }, aspan)) => {
+                self.expect_callback_params(what, params, &got, aspan);
+                *ret
+            }
+            Some(_) => self.cx.fresh_type(),
+            None => {
+                self.diags.push(
+                    Diagnostic::error("DL0403", "missing argument 1 (expected a function)")
+                        .with_span(call_span, "too few arguments"),
+                );
+                self.cx.fresh_type()
+            }
+        }
+    }
+
+    /// Hold the result of a higher-order builtin's function to the shape the builtin needs (`and_then`'s function
+    /// answers an `Option`, or a `Result` with this one's error), placed at the function argument.
+    fn expect_callback_shape(&mut self, what: &str, want: &Type, got: &Type, args: &[(Type, Span)]) {
+        let Some((Type::Fn { .. }, aspan)) = args.first().map(|(t, s)| (self.cx.apply_type(t), *s)) else { return };
+        // An answer of another kind altogether is refused by the kind's name: unifying it would print the
+        // payload this call has not settled as an inference variable (`Option['t2]`).
+        let got = self.cx.apply_type(got);
+        let kind = match (want, &got) {
+            (Type::Option(_), Type::Option(_) | Type::Var(_)) | (Type::Result(..), Type::Result(..) | Type::Var(_)) => None,
+            (Type::Option(_), _) => Some("an `Option`"),
+            _ => Some("a `Result`"),
+        };
+        match kind {
+            Some(kind) => self.diags.push(
+                Diagnostic::error(
+                    "DL0401",
+                    format!("`{what}` requires its function to return {kind}, found `{}`", self.ty(&got)),
+                )
+                .with_span(
+                    aspan,
+                    format!("`{what}` chains a step that may itself be absent or fail; for a plain value use `map`"),
+                ),
+            ),
+            None => self.expect_type(want, &got, aspan, &format!("`{what}` requires its function to return")),
         }
     }
 
@@ -5074,6 +5188,24 @@ fn math_method_spelling(path: &delulu_syntax::ast::Path) -> Option<String> {
     })
 }
 
+/// RW 2.50 (D-V2-227): for `o.unwrap()` or `r.expect("…")` on an `Option` or a `Result`, what is written instead —
+/// `None` for any other receiver or name. DeluluLang has no method that faults on `None` or `Err`: a value that may
+/// be absent is given a default, matched, or passed up with `?`.
+fn faulting_unwrap_spelling(recv: &Type, name: &str) -> Option<String> {
+    if !matches!(name, "unwrap" | "expect" | "unwrap_err" | "expect_err" | "get" | "value") {
+        return None;
+    }
+    let (empty, test) = match recv {
+        Type::Option(_) => ("`None`", "`is_some()`"),
+        Type::Result(..) => ("`Err`", "`is_ok()`"),
+        _ => return None,
+    };
+    Some(format!(
+        "no method faults on {empty} — give a default with `unwrap_or(default)`, `match` both cases, pass the failure up \
+         with `?`, or ask {test} first"
+    ))
+}
+
 /// RW 2.38 (D-V2-223): for `n.sqrt()` on an `Int` (or `x.checked_add(1)` on a `Float`), what the other number type's
 /// method of that name is and how to reach it — `None` when neither number type has it, or `recv` is not a number.
 fn other_numeric_method(recv: &Type, name: &str) -> Option<String> {
@@ -5112,6 +5244,8 @@ fn prim_receiver_label(recv: &Type) -> Option<&'static str> {
         Type::Float => "float",
         Type::List(_) => "list",
         Type::Map(_, _) => "map",
+        Type::Option(_) => "option",
+        Type::Result(_, _) => "result",
         Type::Plugin(_) => "plugin",
         // Finding **ARITY-LABEL-1**, found while adding `Map` and older than `Map`. These three were
         // in `PRIM_TABLE` — whose own documentation calls the arity column NORMATIVE and says "the
@@ -5174,6 +5308,11 @@ fn higher_order_callback_arg(recv: &Type, method: &str) -> Option<usize> {
         (Type::List(_), "map") | (Type::List(_), "filter") | (Type::List(_), "find") => Some(0),
         (Type::List(_), "fold") => Some(1),
         (Type::Secret(_), "map") => Some(0),
+        // RW 2.50 (D-V2-227): the `Option` and `Result` methods that call a function. Each calls it at most once, and
+        // only for the variant it reads — but the row joins the caller's whichever variant the value turns out to be,
+        // because the checker cannot know.
+        (Type::Option(_), "map" | "and_then") => Some(0),
+        (Type::Result(..), "map" | "map_err" | "and_then") => Some(0),
         _ => None,
     }
 }

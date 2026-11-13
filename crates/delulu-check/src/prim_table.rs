@@ -21,7 +21,8 @@ pub struct PrimEntry {
     /// A stable receiver label used in the anchor id. Matches the receiver `Type` in `method_sig`:
     /// `root` = `Root`; `console`/`fs_read`/`fs_write`/`http`/`clock`/`rand` = the matching
     /// `Cap[_]`; `python` = `Cap[Python]`; `pyobj` = `PyObj`; `secret` = `Secret[_]`;
-    /// `str`/`list`/`map` = the builtin `Str`/`List`/`Map`; `plugin` = `Plugin[_]`.
+    /// `str`/`list`/`map` = the builtin `Str`/`List`/`Map`; `option`/`result` = the prelude's `Option[_]` and
+    /// `Result[_, _]`; `plugin` = `Plugin[_]`.
     pub receiver: &'static str,
     /// The method name, exactly as `method_sig` matches it.
     pub method: &'static str,
@@ -231,6 +232,24 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "map", method: "remove", arity: 1 },
     PrimEntry { receiver: "map", method: "keys", arity: 0 },
     PrimEntry { receiver: "map", method: "values", arity: 0 },
+    // Option[T] (RW 2.50, D-V2-227). Total and pure: none faults on `None`, so there is no `unwrap`. `map` and
+    // `and_then` call their function for `Some` alone (`higher_order_callback_arg`).
+    PrimEntry { receiver: "option", method: "is_some", arity: 0 },
+    PrimEntry { receiver: "option", method: "is_none", arity: 0 },
+    PrimEntry { receiver: "option", method: "unwrap_or", arity: 1 },
+    PrimEntry { receiver: "option", method: "map", arity: 1 },
+    PrimEntry { receiver: "option", method: "and_then", arity: 1 },
+    PrimEntry { receiver: "option", method: "ok_or", arity: 1 },
+    // Result[T, E] (RW 2.50, D-V2-227), total and pure as `Option`'s are. `map` and `and_then` call their function
+    // for `Ok` alone, `map_err` for `Err` alone.
+    PrimEntry { receiver: "result", method: "is_ok", arity: 0 },
+    PrimEntry { receiver: "result", method: "is_err", arity: 0 },
+    PrimEntry { receiver: "result", method: "unwrap_or", arity: 1 },
+    PrimEntry { receiver: "result", method: "ok", arity: 0 },
+    PrimEntry { receiver: "result", method: "err", arity: 0 },
+    PrimEntry { receiver: "result", method: "map", arity: 1 },
+    PrimEntry { receiver: "result", method: "map_err", arity: 1 },
+    PrimEntry { receiver: "result", method: "and_then", arity: 1 },
 ];
 
 #[cfg(test)]
@@ -263,7 +282,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            137,
+            151,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );
@@ -296,6 +315,9 @@ mod tests {
             "float" => "let recv = 2.5;",
             "list" => "let recv = [1];",
             "map" => "let recv = Map();",
+            // RW 2.50: an `Option` and a `Result`, each with both of its type arguments known.
+            "option" => "let recv = Some(1);",
+            "result" => "let recv: Result[Int, Str] = Ok(1);",
             // The three device receivers. They were NOT here until P3, and that omission is finding
             // ARITY-LABEL-1: `receiver_binding` fell through to `_ => return None`, so both the
             // resolve guard and the arity gate's own test SKIPPED them — and the arity gate turned
@@ -415,7 +437,8 @@ mod tests {
     /// the "every listed primitive resolves" guard above would be vacuously satisfiable.
     #[test]
     fn unknown_method_is_dl0405_on_every_constructible_receiver() {
-        let receivers = ["root", "console", "fs_read", "fs_write", "http", "clock", "rand", "secret", "str", "list"];
+        let receivers =
+            ["root", "console", "fs_read", "fs_write", "http", "clock", "rand", "secret", "str", "list", "option", "result"];
         for r in receivers {
             let binding = receiver_binding(r).unwrap();
             assert!(

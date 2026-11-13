@@ -214,6 +214,14 @@ pub fn random_console_program(seed: u64) -> String {
     if w.chance(1, 3) {
         body.push_str(&format!("  out.println(str({}))\n", gen_bits(&mut w, 3, &gen_bits_literal, true)));
     }
+    // RW 2.50 (D-V2-227): a line through the methods of `Option` and `Result`, from a stream of its own. The receiver is
+    // `[a, b].get(k)` — `Some` for the two places the list has, `None` for the two past its end — and its `ok_or` for a
+    // `Result`, so both variants of both types are drawn. No `parse_int(` and no ` == `: the lines that count those stay
+    // the only ones that write them.
+    let mut o = Rng::new(seed ^ 0x1F83_D9AB_FB41_BD6B);
+    if o.chance(1, 3) {
+        body.push_str(&format!("  out.println({})\n", gen_option_method(&mut o)));
+    }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.
     let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);
@@ -295,6 +303,29 @@ fn gen_sum(r: &mut Rng) -> (String, String) {
     let line =
         format!("  out.println({})\n", values.iter().map(|v| format!("str(pick({v}))")).collect::<Vec<_>>().join(" + \" \" + "));
     (decls, line)
+}
+
+/// One `Str` made through a method of `Option` or `Result` (RW 2.50): total, so fault-free. A function it hands over
+/// is fault-free too (`&` and `|` with a literal never overflow).
+fn gen_option_method(r: &mut Rng) -> String {
+    let int = |r: &mut Rng| (r.below(100) as i64 - 20).to_string();
+    let opt = format!("[{}, {}].get({})", int(r), int(r), r.below(4));
+    let res = format!("{opt}.ok_or(\"absent\")");
+    let d = int(r);
+    match r.below(10) {
+        0 => format!("str({opt}.unwrap_or({d}))"),
+        1 => format!("str({opt}.is_some()) + str({opt}.is_none())"),
+        2 => format!("str({opt}.map(fn(n: Int) -> Int {{ n & 255 }}).unwrap_or({d}))"),
+        3 => format!("str({opt}.and_then(fn(n: Int) -> Option[Int] {{ if n > {d} {{ Some(n | 1) }} else {{ None }} }}))"),
+        4 => format!("str({res})"),
+        5 => format!("str({res}.is_ok()) + str({res}.is_err()) + str({res}.ok()) + str({res}.err())"),
+        6 => format!("str({res}.unwrap_or({d}))"),
+        7 => format!("str({res}.map(fn(n: Int) -> Str {{ str(n & 15) }}).map_err(fn(e: Str) -> Int {{ len(e) }}))"),
+        8 => {
+            format!("str({res}.and_then(fn(n: Int) -> Result[Int, Str] {{ if n > {d} {{ Ok(n) }} else {{ Err(\"small\") }} }}))")
+        }
+        _ => format!("{opt}.map(fn(n: Int) -> Str {{ \"got \" + str(n) }}).unwrap_or(\"nothing\")"),
+    }
 }
 
 fn gen_str_expr(r: &mut Rng, depth: u32) -> String {
