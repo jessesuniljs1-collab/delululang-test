@@ -1216,3 +1216,163 @@ fn run_report_does_not_follow_a_planted_link() {
     assert_eq!(std::fs::read_to_string(d.join("victim.txt")).unwrap(), "keep", "the link's target is untouched");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// A scratch directory with a program that performs one effect — it writes `out/made.txt` — and then prints `done`.
+/// The file is the witness on the far side: whether the program ran is read from the disk, never from the command's
+/// own words.
+fn effect_fixture(name: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("delulu-report-sink-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("out")).unwrap();
+    std::fs::create_dir_all(d.join("rep")).unwrap();
+    std::fs::write(
+        d.join("w.delulu"),
+        "module w\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    \
+         let w = root.fs_write(\"./out\")\n    let _ = w.write_text(\"made.txt\", \"effect\")\n    out.println(\"done\")\n}\n",
+    )
+    .unwrap();
+    d
+}
+
+fn run_effect(d: &std::path::Path, extra: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(["run", "w.delulu", "--grant", "console", "--grant", "fs.write=./out"])
+        .args(extra)
+        .current_dir(d)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .output()
+        .expect("the delulu binary must run")
+}
+
+/// RW 6.77: a `--report-out` the runtime cannot write is refused BEFORE the program starts — exit 2, and nothing done.
+/// It used to be found out after `main` had returned: the program's effects stood, and the command then exited 2, the
+/// code that says *"your invocation was wrong; the program was never examined"* — so a caller that corrected its path
+/// and ran again did everything twice. Two spellings an ordinary mistake produces: a path that is a directory, and a
+/// path in a directory that does not exist.
+#[test]
+fn a_report_that_cannot_be_written_is_refused_before_the_program_runs() {
+    let d = effect_fixture("pre");
+    for (what, path) in [("an existing directory", "rep"), ("a directory that does not exist", "nowhere/r.json")] {
+        for json in [false, true] {
+            let mut extra = vec!["--report-out", path];
+            if json {
+                extra.push("--json");
+            }
+            let o = run_effect(&d, &extra);
+            let err = String::from_utf8_lossy(&o.stderr);
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            assert_eq!(o.status.code(), Some(2), "{what}: {err}");
+            assert!(err.contains("nothing ran"), "{what}: the refusal says nothing ran: {err}");
+            assert!(!d.join("out/made.txt").exists(), "{what}: the program's effect happened before the refusal");
+            assert!(!stdout.contains("done"), "{what}: the program printed: {stdout}");
+            if json {
+                assert_eq!(count_json_values(&stdout), 1, "{what}: one envelope: {stdout}");
+                let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+                assert_eq!(v["error"]["kind"], "usage", "{v}");
+                assert_eq!(v["error"]["exit"], 2, "{v}");
+            }
+        }
+    }
+    // The trace file is the runtime's too, and is proved the same way.
+    let o = run_effect(&d, &["--trace-effects", "--trace-out", "nowhere/t.txt"]);
+    assert_eq!(o.status.code(), Some(2), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(!d.join("out/made.txt").exists(), "an unwritable trace path let the program run");
+    // The control, so the refusals above are about the path and nothing else: a writable report, and the program runs.
+    let o = run_effect(&d, &["--report-out", "rep/ok.json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::read_to_string(d.join("out/made.txt")).unwrap(), "effect");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.join("rep/ok.json")).unwrap()).unwrap();
+    assert_eq!(v["outcome"], serde_json::json!({ "ran": true, "exit": 0 }), "{v}");
+    // A device. Linux's `/dev/null` takes the report: a device is not probed, and the write succeeds. Windows' `NUL`
+    // cannot be examined, so the no-follow write could never use it — witnessed with the proof passing it: the program
+    // ran, then *"Incorrect function"* — and it is refused before the run.
+    if cfg!(windows) {
+        std::fs::remove_file(d.join("out/made.txt")).unwrap();
+        let o = run_effect(&d, &["--report-out", "NUL"]);
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(2), "{err}");
+        assert!(err.contains("nothing ran"), "{err}");
+        assert!(!d.join("out/made.txt").exists(), "`NUL` as the report let the program run");
+        std::fs::write(d.join("out/made.txt"), "effect").unwrap();
+    } else {
+        let o = run_effect(&d, &["--report-out", "/dev/null"]);
+        assert_eq!(o.status.code(), Some(0), "a discarding device as the report: {}", String::from_utf8_lossy(&o.stderr));
+    }
+    // An existing file that refuses writing is refused before the run, and is left exactly as it was.
+    let locked = d.join("rep").join("locked.json");
+    std::fs::write(&locked, "kept").unwrap();
+    let mut perms = std::fs::metadata(&locked).unwrap().permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(&locked, perms).unwrap();
+    std::fs::remove_file(d.join("out/made.txt")).unwrap();
+    let o = run_effect(&d, &["--report-out", "rep/locked.json"]);
+    // A privileged account (root in a container) opens a read-only file anyway; then the run simply proceeds.
+    if o.status.code() == Some(2) {
+        assert!(String::from_utf8_lossy(&o.stderr).contains("nothing ran"), "{}", String::from_utf8_lossy(&o.stderr));
+        assert!(!d.join("out/made.txt").exists(), "a read-only report path let the program run");
+        assert_eq!(std::fs::read_to_string(&locked).unwrap(), "kept", "the proof changed the file it examined");
+    } else {
+        assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    }
+    let mut perms = std::fs::metadata(&locked).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    std::fs::set_permissions(&locked, perms).unwrap();
+    // Proving a path writable leaves nothing behind where a run is then refused for another reason.
+    let o = run_effect(&d, &["--report-out", "rep/probe.json", "--limits", "cpu=0"]);
+    assert_eq!(o.status.code(), Some(2), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(!d.join("rep/probe.json").exists(), "the probe left a file behind");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// RW 6.77, the other half: a report that is lost AFTER the program ran is a failure of a run that happened — exit 1
+/// and `failed`, with words that say the effects stand — never exit 2 and `usage`. `/dev/full` is a path that opens
+/// and then refuses every byte, so the loss happens exactly where it cannot be foreseen.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_report_lost_after_the_program_ran_is_a_failure_never_a_usage_error() {
+    let d = effect_fixture("post");
+    let o = run_effect(&d, &["--report-out", "/dev/full"]);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(std::fs::read_to_string(d.join("out/made.txt")).unwrap(), "effect", "the program ran: {err}");
+    assert_eq!(o.status.code(), Some(1), "a run that happened is never exit 2: {err}");
+    assert!(err.contains("the program ran"), "the message says the effects stand: {err}");
+    let _ = std::fs::remove_file(d.join("out/made.txt"));
+    let o = run_effect(&d, &["--report-out", "/dev/full", "--json"]);
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    assert_eq!(o.status.code(), Some(1), "{}", String::from_utf8_lossy(&o.stderr));
+    let envelope = stdout.lines().skip_while(|l| !l.starts_with('{')).collect::<Vec<_>>().join("\n");
+    let v: serde_json::Value = serde_json::from_str(&envelope).unwrap_or_else(|e| panic!("one envelope ({e}): {stdout}"));
+    assert_eq!(v["error"]["kind"], "failed", "{v}");
+    assert_eq!(v["error"]["exit"], 1, "{v}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// RW 6.83 (the in-process half): a run the checker refuses writes a report that says WHY — the checker's own
+/// diagnostics — where it used to say `ran: false, exit: 1` beside an empty `diagnostics`.
+#[test]
+fn a_run_the_checker_refuses_reports_its_diagnostics() {
+    let d = effect_fixture("checker");
+    std::fs::write(
+        d.join("bad.delulu"),
+        "module bad\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(nope)\n}\n",
+    )
+    .unwrap();
+    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(["run", "bad.delulu", "--grant", "console", "--report-out", "rep/bad.json"])
+        .current_dir(&d)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(1), "{}", String::from_utf8_lossy(&o.stderr));
+    let text = std::fs::read_to_string(d.join("rep/bad.json")).expect("a refused run still writes its report");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(v["outcome"], serde_json::json!({ "ran": false, "exit": 1 }), "{v}");
+    let errors = v["diagnostics"].as_array().unwrap().iter().filter(|x| x["severity"] == "error").count();
+    assert!(errors >= 1, "the report names the checker's refusal: {v}");
+    assert!(v["diagnostics"][0]["code"].as_str().is_some_and(|c| c.starts_with("DL")), "{v}");
+    assert_eq!(v["summary"]["errors"].as_u64(), Some(errors as u64), "the count is the diagnostics' own: {v}");
+    let _ = std::fs::remove_dir_all(&d);
+}

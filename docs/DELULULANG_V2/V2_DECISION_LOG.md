@@ -6737,3 +6737,59 @@ rejects), 489 lines added, none removed or changed.
 build; the tests; the mutants; the differential; the programs `rgb` (one line), `chmod` (an everyday utility, against
 Python's `stat.filemode` and an independent implementation; the interpreter alone until RW 3.33) and `ipcalc` (421
 lines, every basic so far, against Python's `ipaddress`, line for line, on both engines).
+
+## D-V2-227 — RW 6.77 and RW 6.83: a run's own record — the report and trace paths are proved writable before the program starts, so exit 2 is true again; a record lost after the run is exit 1 and says the program ran; a refused run's report carries what refused it, on the sandboxed route too — TAKEN (head chef, 2026-11-14, under the owner's delegation)
+
+**Context.** The first code slice under the owner's continuation commission of 2026-11-14
+(`docs/prompt/DeluluLang_Fable_5_2_Engineering_Architecture_Continuation_Prompt.md`), on
+`laptop/fable-deep-verification`; the head chef is Fable 5.2. Two rows of `docs/REMAINING_WORK.md`, both about the one
+file the runtime writes for a caller to trust. Witnessed again on 2026-11-14 on this branch's debug build (Windows),
+before any change:
+- `run w.delulu --grant console --grant fs.write=./out --report-out rep`, where `rep` is a directory: the program
+  wrote `out/made.txt` and printed, and the command then exited **2** — under `--json`, `error.kind: usage`, the answer
+  [agents.exit-codes] reserves for *"the program was never examined"*. A caller that believed it ran the program again.
+- `run bad.delulu --report-out r.json`, a program the checker refuses: the report said `ran: false`, `exit: 1` and
+  `"diagnostics": []`. The reason was on the terminal and nowhere a program could read it.
+- `run bad.delulu --sandbox --report-out r.json`: no report at all (RW 6.83).
+- Read in the code, not run on Windows: the sandboxed route wrote its report with `std::fs::write` and, when that
+  failed, printed one line and returned the guest's exit code — a clean run that lost its report exited **0**.
+
+**Decision.**
+1. **Proved before the run.** `run_cmd::refuse_unwritable_runtime_paths` decides `--report-out` and `--trace-out` on
+   both routes, after D-V2-21's refusal of the command line's write scopes and before an engine or a guest exists. A
+   directory and a symbolic link are refused, as the write itself refuses them; an existing ordinary file is opened for
+   writing and left as it is; a path that names nothing must lie in a directory that exists, and a file is created there
+   and removed again — the one honest test of a directory's permission; a device or a pipe is not probed, because
+   opening one can block or act; a path that cannot be examined at all is refused, because the no-follow write
+   examines what it opened and could not use it either (Windows' `NUL`: it failed after the run before, and with this
+   proof passing it — witnessed). The refusal is exit 2 and says *nothing ran*.
+2. **Lost after the run.** `run_cmd::report_lost` is the one answer when a report cannot be written after the run was
+   decided: if the program started, exit **1** (a program's own failing code is kept) and a sentence that says *the
+   program ran* and its effects stand; if it did not start, exit 2. The budget watchdog's report and `--trace-out` are
+   held to it: a clean run that lost the trace it was asked for exits 1.
+3. **The sandboxed route is held to both**, and writes its reports with `write_nofollow` — D-V2-21's second rule
+   (never through a link at the last component), which this route had not followed.
+4. **A refused run's report says why.** The one printer every route uses (`cli::print_diagnostics`) keeps what a `run`
+   printed (`run_cmd::note_refusal`); `run_report` carries those diagnostics when the run ended on them, and `summary`
+   counts them. On the sandboxed route one wrapper (`guest::cmd_run_sandboxed` around `run_sandboxed`) writes a report
+   for every non-zero return made after the run's policy is known and before the conversation's own report:
+   `outcome.ran: false`, the exit code, the diagnostics, `missing_grants` for a `--preflight` refusal, and the
+   `sandbox` object as `--mode audit` previews it — `backend: none`, nothing claimed applied. One place, because a
+   rule enforced at each return is a rule the next return forgets.
+5. **The scope refusal names the ordinary mistake.** A path whose directory does not exist was refused with *"a
+   dangling link on the way?"*; it now says the directory does not exist, and *nothing ran*.
+6. **No new `DL` code and no schema change.** A lost record is a failed command (`kind: failed`), not a language
+   diagnostic. The refusal report is the shipped `run-report` schema's, checked by `delulu schema validate`.
+
+**What it changes for a caller.** A report lost after a clean run: exit 2 becomes 1 on the ordinary route, 0 becomes 1
+on the sandboxed one. A path that cannot be written: refused before the program instead of after it. A refused run's
+report gains its diagnostics; a refused sandboxed run gains a report. Nothing a reader of the `run-report` schema
+relied on moves; every field added was already in it.
+
+**What is not decided here.** `--signoff`, the third file the runtime writes, has none of these rules (RW 6.87, new).
+A usage error decided before the policy is known — an unknown flag, a budget that cannot be meant — writes no report
+on either route, and `docs/for-agents.md` now says so. RW 6.68 (a run stopped by a signal) and RW 6.84 (a guest that
+ends without its goodbye) are as they were.
+
+**Evidence.** `V2_LOG.md`'s entry of 2026-11-14 (the laptop, Fable 5.2): each test red before its fix, the two
+Linux-only tests named as not run on the laptop, and the CI run that ran them.

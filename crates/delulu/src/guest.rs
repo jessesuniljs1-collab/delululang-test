@@ -769,7 +769,35 @@ fn with_attestation_required(mut sandbox: serde_json::Value, isolation: Isolatio
 /// Refusals come first and are explicit, because the one thing a sandbox flag must never do is
 /// quietly not apply: an unknown profile, limits that cannot be read, a surface the channel does not
 /// carry, or a host with no jail at all are each refused with a reason and a way forward.
-pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[String]) -> i32 {
+pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, rest: &[String]) -> i32 {
+    let mut preview = None;
+    let code = run_sandboxed(file, opts, rest, &mut preview);
+    // RW 6.83: a run refused after its policy was decided and before a report was written — by the checker, a manifest,
+    // `--preflight`, a lease, a surface the channel cannot carry, a guest that could not be launched — writes its report
+    // here, at the one place every such return passes, so a refusal added later cannot forget it.
+    match preview {
+        Some(p) if code != 0 && !REPORT_HANDLED.swap(true, std::sync::atomic::Ordering::Relaxed) => {
+            refusal_report(opts, &p, code)
+        }
+        _ => code,
+    }
+}
+
+/// What a sandboxed run's policy would have been, known once its flags are read — kept so a run refused before a guest
+/// exists can still report the boundary it asked for ([`refusal_report`]).
+#[derive(Clone, Copy)]
+struct Preview {
+    isolation: Isolation,
+    profile: crate::policy::Profile,
+    limits: crate::jail::Limits,
+    mode: crate::policy::Mode,
+}
+
+/// Whether this run's report has been written, or its loss recorded — by the conversation with the guest
+/// ([`serve_under`]) or by [`refusal_report`]. One process runs one program.
+static REPORT_HANDLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[String], preview: &mut Option<Preview>) -> i32 {
     if let Some(code) = refuse_what_the_guest_does_not_apply(opts) {
         return code;
     }
@@ -777,6 +805,11 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     // a scope the command line grants the program to write is refused before anything else — a dry run's too, since it
     // says what the run would do. A lease's scopes are checked once it is redeemed, below.
     if let Some(code) = crate::run_cmd::refuse_runtime_paths_in_command_line_scopes(opts) {
+        return code;
+    }
+    // RW 6.77: and a report path that cannot be written at all is refused here, before a guest exists — while exit 2
+    // ("nothing ran") is still true.
+    if let Some(code) = crate::run_cmd::refuse_unwritable_runtime_paths(opts) {
         return code;
     }
     let Some(file) = file else {
@@ -858,6 +891,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             return 2;
         }
     };
+    *preview = Some(Preview { isolation, profile, limits, mode });
     if mode == crate::policy::Mode::Audit {
         let policy =
             crate::policy::SandboxPolicy::derive(isolation.level(), profile, Some(limits), mode).requesting(isolation.level());
@@ -880,8 +914,13 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         let text = serde_json::to_string_pretty(&report).expect("the audit report serializes");
         match opts.report_out.as_deref() {
             Some(path) => {
-                if let Err(e) = std::fs::write(path, format!("{text}\n")) {
-                    eprintln!("error: cannot write the audit report to `{path}`: {e}");
+                // The dry run's report is its own; a refusal report must not follow it.
+                REPORT_HANDLED.store(true, std::sync::atomic::Ordering::Relaxed);
+                // D-V2-21's second rule, on this route as on the ordinary one: never through a link at the last component.
+                if let Err(e) = crate::run_cmd::write_nofollow(path, format!("{text}\n").as_bytes()) {
+                    eprintln!(
+                        "error: cannot write the audit report to `{path}`: {e} — a dry run performs nothing, so nothing ran"
+                    );
                     return 2;
                 }
             }
@@ -967,6 +1006,10 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             Ok(c) => custody = Some(c),
             Err(code) => return code,
         }
+    }
+    // A lease may have narrowed the limits: the preview a refusal would report follows them.
+    if let Some(p) = preview.as_mut() {
+        p.limits = limits;
     }
     // D-V2-21, the second time (A18): the grants are final now, a lease's included, and the report may not lie in a scope
     // they let the program write — decided before a root is issued or a guest exists.
@@ -1098,7 +1141,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             eprintln!("sign-off withheld: the run did not complete cleanly, so `{path}` was not written");
         }
     }
-    match served {
+    let code = match served {
         Ok(exit) => exit,
         // D-V2-59: the profile's refusal, before the program was sent.
         Err(e) if crate::boundary::is_refusal(&e) => {
@@ -1109,6 +1152,52 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             eprintln!("error: the sandboxed run failed: {e}");
             1
         }
+    };
+    // RW 6.77: the report was asked for and lost. Whether the program was sent decides what the exit code may say.
+    match (opts.report_out.as_deref(), REPORT_LOSS.lock().ok().and_then(|mut g| g.take())) {
+        (Some(path), Some((why, sent))) => crate::run_cmd::report_lost(path, &why, sent, code),
+        _ => code,
+    }
+}
+
+/// RW 6.77: why the run report could not be written, and whether the guest had been sent its program — set where the
+/// report is written ([`serve_under`]) and read once by [`cmd_run_sandboxed`], which owns the exit code.
+static REPORT_LOSS: std::sync::Mutex<Option<(String, bool)>> = std::sync::Mutex::new(None);
+
+/// RW 6.83: the report of a sandboxed run refused BEFORE a guest existed — by the checker, a manifest, `--preflight`.
+/// The ordinary run always wrote one (`outcome.ran: false`); this route wrote none, so a caller reading the report
+/// could not tell a refused run from one that never happened. It carries the diagnostics that refused the run, exactly
+/// as `--json` prints them, the policy that would have been in force (as a dry run reports it: no backend was started,
+/// so `backend` is `none` and nothing is claimed applied), and the grants the run lacked when the refusal is one.
+/// Returns the exit code the caller should use: `exit`, unless the report itself cannot be written.
+fn refusal_report(opts: &crate::cli::Opts, preview: &Preview, exit: i32) -> i32 {
+    let Some(path) = opts.report_out.as_deref() else { return exit };
+    if crate::run_cmd::runtime_path_was_refused() {
+        return exit;
+    }
+    let Preview { isolation, profile, limits, mode } = *preview;
+    let policy =
+        crate::policy::SandboxPolicy::derive(isolation.level(), profile, Some(limits), mode).requesting(isolation.level());
+    let (diagnostics, lacking) = crate::run_cmd::refusal_for_report();
+    let mut report = serde_json::json!({
+        "command": "run",
+        "schema": 1,
+        "delulu_version": env!("CARGO_PKG_VERSION"),
+        "summary": {
+            "errors": crate::run_cmd::count_severity(&diagnostics, "error").max(1),
+            "warnings": crate::run_cmd::count_severity(&diagnostics, "warning"),
+        },
+        "diagnostics": diagnostics,
+        "sandbox": with_attestation_required(policy.to_json("none", &[]), isolation),
+        "outcome": { "ran": false, "exit": exit },
+    });
+    if !lacking.is_empty() {
+        report["missing_grants"] = serde_json::json!(lacking);
+    }
+    let text = serde_json::to_string_pretty(&report).expect("the refusal report serializes");
+    match crate::run_cmd::write_nofollow(path, format!("{text}\n").as_bytes()) {
+        Ok(()) => exit,
+        Err(e) => crate::run_cmd::report_lost(path, &e, false, exit),
     }
 }
 
@@ -1707,6 +1796,8 @@ fn serve_under(
         *g = diagnostics.clone();
     }
     if let Some(ReportTo { path, lacking, .. }) = report_out {
+        // The report is this conversation's from here on: written below, or its loss recorded ([`REPORT_LOSS`]).
+        REPORT_HANDLED.store(true, std::sync::atomic::Ordering::Relaxed);
         let exit = if refused { 2 } else { served.as_ref().copied().unwrap_or(1) };
         let mut outcome = serde_json::json!({ "ran": sent, "exit": exit });
         if let Some(s) = &stop {
@@ -1776,8 +1867,13 @@ fn serve_under(
             }
         }
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
-        if let Err(e) = std::fs::write(path, format!("{text}\n")) {
-            eprintln!("error: cannot write the run report to `{path}`: {e}");
+        // RW 6.77: a report that cannot be written is kept for the caller, which owns the exit code — this used to be
+        // one line on stderr and an exit of 0, a run that reported success without the record it was asked for.
+        // D-V2-21's second rule too: never through a link at the last component, as the ordinary run writes it.
+        if let Err(e) = crate::run_cmd::write_nofollow(path, format!("{text}\n").as_bytes()) {
+            if let Ok(mut g) = REPORT_LOSS.lock() {
+                *g = Some((e.to_string(), sent));
+            }
         }
     }
     let status = status?;

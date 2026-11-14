@@ -9741,3 +9741,44 @@ Survey and doctor: in the commit below.
   CI on `b3142a1`: run `43506016428`, 18 of 18.
 - **Open / next, in order:** the code slices of the plan's queue, on this branch, each its own commit with a witness that fails
   first; then the Survey's architecture views. The audit's section 13 lists what has landed.
+
+### 2026-11-14 — the laptop: Fable 5.2, checkpoint 3 — the first code slice: a run's report is proved before the run and never lost quietly (RW 6.77, RW 6.83; D-V2-227)
+- Session: `https://claude.ai/code/session_01Deh6W9qF2oxkvTVET8c51r` (the conversation of the two entries above, continued
+  after a compaction). Model: Claude Fable 5.2 as the harness names it, effort `max` as the owner set it. No sub-agent
+  wrote code or ran a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base of this entry: `919114e`. Nothing new on `origin/master` (`ac2a162`) or any `origin/claude/*` branch at the fetch.
+- **What changed for a user:** `run --report-out F` and `--trace-out F` are refused before the program starts when `F`
+  cannot be written (exit 2, nothing ran). A report or trace lost after the run is exit 1 with *the program ran* —
+  it was exit 2 on the ordinary route and exit 0 on the sandboxed one. A refused run's report carries what refused it,
+  and a sandboxed run refused before its guest starts writes a report at all. `CHANGELOG.md` has the entry.
+- Files and folders: M `crates/delulu/src/run_cmd.rs`, M `crates/delulu/src/guest.rs`, M `crates/delulu/src/cli.rs`,
+  M `crates/delulu/tests/json_contract.rs` (three tests), M `crates/delulu/tests/sandbox_run_cli.rs` (four tests),
+  M `docs/for-agents.md` ([agents.json-envelope]), M `CHANGELOG.md`, M `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-227), M `docs/DELULULANG_V2/V2_LOG.md`, M `docs/REMAINING_WORK.md` (6.77 and 6.83 closed; 6.87 new),
+  M `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (section 13.1, Appendix B),
+  M `docs/review/fable-deep-verification-state.json`, M `docs/CLOUD_SYNC_LOG.md`, M `docs/survey/*`. No file added,
+  deleted or renamed; no workflow, no entrenched file.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227` and RW `6.87`. `origin/claude/relaxed-brown-2l78i1`
+  (RW 2.50, unfinished) has neither; whoever finishes it takes the next ones.
+- **Not edited on purpose:** `docs/DELULULANG_V2/V2_PHASE_STATUS.md`. Its release row is one 15 KB line that `master`
+  also edits; a sentence added here would conflict on merge. The sentence belongs to the merge.
+- Tests on the laptop (Windows, `-j 4`): `json_contract` 15 of 15 and `sandbox_run_cli` 26 of 26 on the final code;
+  `scripts/clippy.sh -j 4` clean and stamped after the last `.rs` edit; before the last two edits, the 22 targets that
+  use `--report-out` or `--trace-out` (253 passed, 11 gated microVM tests ignored). Each new test was red first or
+  falsified: the record is `V2_LOG.md`'s entry of this date.
+- **Not run on the laptop:** the two Linux-only tests (`/dev/full`), the rest of the workspace suite, macOS. CI at this
+  commit is dispatched after the push (`ci.yml`, `jobs=everything`); its result is the next entry's first line, and
+  nothing here says green until it is read.
+- Survey and doctor after the last edit: `wrote docs/survey/ — 1734 nodes, 20951 edges, 47 discrepancies (0 error,
+  10 warning)`; `ok: the Survey matches the tree (1734 nodes, 20951 edges)`; `findings`: 0 errors, the ten warnings of
+  checkpoint 2 unchanged; `doctor --check` as the commit message states it.
+- A rule not kept, recorded: the Survey's `impact` was asked after the edits, not before (111 nodes for each of the
+  two modules: the crate and its 109 test nodes).
+- Research since the entry above (private notes; the decision table is the next checkpoint's): three more repositories
+  the owner named, read at pinned commits — cloudflare/security-audit-skill `c1c8a8c1`, anthropics/oss-scanner
+  `2084acae`, google/cybernetic-agent-governance-engine `f0ca9f4d`.
+- **Open / next, in order:** (1) read this commit's CI run and record it; (2) a multi-agent experiment — many runs at
+  once against one broker, the owner's stated first users being several agents and machines at the same time;
+  (3) the competitor decision table in the audit; (4) the Survey's architecture views, slice 1; (5) RW 6.87 and the
+  recovery plan's next truthful-outcome rows (`test` with a missing path, `fix --dry-run`, `schema validate`).

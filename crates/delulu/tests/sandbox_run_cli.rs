@@ -1151,3 +1151,146 @@ fn a_sandboxed_refusal_names_every_grant_the_run_lacked() {
     assert_eq!(rep["missing_grants"], want, "{rep}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 6.77 on the sandboxed route: a `--report-out` the runtime cannot write is refused before a guest exists — exit 2,
+/// nothing done — where the guest used to run, the host perform its effects, and the report then fail to be written.
+#[test]
+fn a_sandboxed_run_proves_its_report_path_before_a_guest_exists() {
+    let dir = tmp("sink-pre");
+    let (src, scope) = writer(&dir);
+    std::fs::create_dir_all(dir.join("rep")).unwrap();
+    let is_a_directory = dir.join("rep");
+    let no_such_directory = dir.join("nowhere").join("r.json");
+    for (what, path) in [("an existing directory", &is_a_directory), ("a directory that does not exist", &no_such_directory)] {
+        let o = delulu(&[
+            "run",
+            src.to_str().unwrap(),
+            "--sandbox",
+            "--grant",
+            &format!("fs.write={scope}"),
+            "--report-out",
+            path.to_str().unwrap(),
+        ]);
+        assert_eq!(o.status.code(), Some(2), "{what}: {}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("nothing ran"), "{what}: {}", out(&o));
+        assert!(!dir.join("out/made.txt").exists(), "{what}: the host performed the guest's effect before refusing");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.77, after the run, on the sandboxed route: the guest ran and the host performed its effects, and then the report
+/// could not be written. That is a failure of a run that happened — exit 1, with words that say so. It used to be exit
+/// 0, with one line on standard error and no report: a success with nothing behind the thing that was asked for.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_sandboxed_run_whose_report_is_lost_fails_and_says_it_ran() {
+    let dir = tmp("sink-post");
+    let (src, scope) = writer(&dir);
+    let o = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        "/dev/full",
+    ]);
+    assert_eq!(std::fs::read_to_string(dir.join("out/made.txt")).unwrap(), "sandboxed", "the program ran: {}", out(&o));
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("the program ran"), "{}", out(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.83: a sandboxed run the checker refuses writes its report — `ran: false`, exit 1, the checker's diagnostics —
+/// as the ordinary run does. It used to write none, so a harness reading the report learned nothing, not even that
+/// nothing ran.
+#[test]
+fn a_sandboxed_run_the_checker_refuses_still_writes_its_report() {
+    let dir = tmp("checker-report");
+    let src = dir.join("bad.delulu");
+    std::fs::write(
+        &src,
+        "module bad\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(nope)\n}\n",
+    )
+    .unwrap();
+    let report = dir.join("rep.json");
+    let o = delulu(&["run", src.to_str().unwrap(), "--sandbox", "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let rep = report_of(&report);
+    assert_eq!(rep["command"], "run", "{rep}");
+    assert_eq!(rep["outcome"], serde_json::json!({ "ran": false, "exit": 1 }), "{rep}");
+    let errors = rep["diagnostics"].as_array().unwrap().iter().filter(|x| x["severity"] == "error").count();
+    assert!(errors >= 1, "the report names the checker's refusal: {rep}");
+    assert_eq!(rep["summary"]["errors"].as_u64(), Some(errors as u64), "{rep}");
+    // Nothing was launched, so nothing is claimed about a jail: the policy that would have held, applied by no backend.
+    assert_eq!(rep["sandbox"]["backend"], "none", "{rep}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// RW 6.83, every other refusal this route makes before a guest exists: a manifest's (DL0701), `--preflight`'s
+/// (DL0703, with the grants the run lacked), and a surface the channel cannot carry (exit 2, a usage refusal with no
+/// diagnostic). Each writes a report that says nothing ran, with the exit code the process returned, and each report
+/// is the documented `run-report` — checked by the schema the binary ships. One wrapper writes them all
+/// (`cmd_run_sandboxed`), so the three are here to hold it to that, not to list the returns.
+#[test]
+fn every_refusal_before_a_guest_exists_writes_its_report() {
+    let dir = tmp("early-refusals");
+    let report = dir.join("rep.json");
+    let rep_path = report.to_str().unwrap();
+    let validates = |what: &str| {
+        let o = delulu(&["schema", "validate", "run-report", rep_path, "--json"]);
+        assert_eq!(o.status.code(), Some(0), "{what}: the refusal report is not the documented run-report: {}", out(&o));
+    };
+
+    // A manifest that declares no effects refuses a file whose `main` performs one.
+    let single = dir.join("single");
+    std::fs::create_dir_all(&single).unwrap();
+    std::fs::write(
+        single.join("delulu.toml"),
+        "[package]\nname = \"one\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects = []\n",
+    )
+    .unwrap();
+    let f = single.join("main.delulu");
+    std::fs::write(&f, "module one\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"one\")\n}\n").unwrap();
+    let o = delulu(&["run", f.to_str().unwrap(), "--sandbox", "--grant", "console", "--report-out", rep_path]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let rep = report_of(&report);
+    assert_eq!(rep["outcome"], serde_json::json!({ "ran": false, "exit": 1 }), "the manifest's refusal: {rep}");
+    assert_eq!(rep["diagnostics"][0]["code"], "DL0701", "{rep}");
+    assert!(o.stdout.is_empty(), "nothing ran: {}", out(&o));
+    validates("a manifest's refusal");
+    std::fs::remove_file(&report).unwrap();
+
+    // `--preflight`: the program's text asks for a grant this run lacks, decided before a guest exists.
+    let (src, _scope) = writer(&dir);
+    let o = delulu(&["run", src.to_str().unwrap(), "--sandbox", "--preflight", "--grant", "console", "--report-out", rep_path]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let rep = report_of(&report);
+    assert_eq!(rep["outcome"], serde_json::json!({ "ran": false, "exit": 1 }), "the preflight's refusal: {rep}");
+    assert_eq!(rep["diagnostics"][0]["code"], "DL0703", "{rep}");
+    assert!(rep["missing_grants"].as_array().is_some_and(|g| !g.is_empty()), "the grants the run lacked are named: {rep}");
+    assert!(!dir.join("out").join("made.txt").exists(), "a preflight refusal ran the program");
+    validates("a preflight refusal");
+    std::fs::remove_file(&report).unwrap();
+
+    // A surface the channel does not carry: refused in words, exit 2, and still a report — nothing ran, and it says so.
+    let actor = dir.join("actor.delulu");
+    std::fs::write(
+        &actor,
+        "module a\n\nactor Counter {\n    state n: Int = 0\n\n    on bump() {\n        self.n = self.n + 1\n    }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&["run", actor.to_str().unwrap(), "--sandbox", "--grant", "console", "--report-out", rep_path]);
+    if o.status.code() == Some(2) && out(&o).contains("cannot carry this program") {
+        let rep = report_of(&report);
+        assert_eq!(rep["outcome"], serde_json::json!({ "ran": false, "exit": 2 }), "the surface refusal: {rep}");
+        assert_eq!(rep["summary"]["errors"], 1, "a refusal is never zero errors: {rep}");
+        assert!(o.stdout.is_empty(), "nothing ran: {}", out(&o));
+        validates("a surface refusal");
+    } else {
+        // The fixture must reach the refusal it is here for; anything else is a broken fixture, said loudly.
+        panic!("the actor fixture did not reach the channel's refusal: exit {:?}: {}", o.status.code(), out(&o));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

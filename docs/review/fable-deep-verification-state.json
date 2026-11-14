@@ -2,13 +2,21 @@
   "program": "Fable 5.2 multi-session deep verification and engineering (commissions of 2026-11-14)",
   "program_status": "IN_PROGRESS",
   "commissions": [
-    {"file": "docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md", "sha256": "fdef5972075d60349c2aa47342e65d85e57b2f449dbd83a357fe249ce644c8c0", "scope": "research; T1 to T8"},
-    {"file": "docs/prompt/DeluluLang_Fable_5_2_Engineering_Architecture_Continuation_Prompt.md", "sha256": "5b5e851b3aaf37d172e7c158ef529c021fe2752c6280968e280c754b32f5fcd3", "scope": "adds bounded, tested code changes on a non-default branch; the source-derived architecture views; four projects to compare"}
+    {
+      "file": "docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md",
+      "sha256": "fdef5972075d60349c2aa47342e65d85e57b2f449dbd83a357fe249ce644c8c0",
+      "scope": "research; T1 to T8"
+    },
+    {
+      "file": "docs/prompt/DeluluLang_Fable_5_2_Engineering_Architecture_Continuation_Prompt.md",
+      "sha256": "5b5e851b3aaf37d172e7c158ef529c021fe2752c6280968e280c754b32f5fcd3",
+      "scope": "adds bounded, tested code changes on a non-default branch; the source-derived architecture views; four projects to compare"
+    }
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 2,
-  "checkpoint_note": "End of the research-only part of session 1. Code changes begin after this commit, each in its own commit.",
+  "checkpoint": 3,
+  "checkpoint_note": "The first code slice has landed on this branch: RW 6.77 and RW 6.83 (D-V2-227). Each later slice is its own commit; the audit's section 13 lists them.",
   "last_session": {
     "date": "2026-11-14",
     "where": "owner's laptop (Windows 11 x64, WSL2 Ubuntu 20.04) and GitHub-hosted runners of the test repository",
@@ -35,10 +43,24 @@
     "conflicts_between_the_two": "none in source; both regenerate docs/survey/SURVEY.md and survey.json, which are derived files"
   },
   "binaries": {
-    "windows_debug_default": {"sha256": "b0a3050c422d9f36c2b9bfadcfd2d93ea4b002dbdc5f290c32fbdc895db384b4", "reproducible": false},
-    "wsl_debug_default": {"sha256": "6fa1b995e2a0a3df281c6cee021aa370f75d92b43ae762e846f1cf96c0d71100", "reproducible": false},
-    "wsl_release_python_free": {"bytes": 42259176, "sha256_prefix": "e9652acf"},
-    "windows_release_archive": {"file": "delulu-1.0.0-x86_64-pc-windows-msvc.tar.gz", "bytes": 12556366, "sha256": "919ed414904d598bfea3d47eb2eff65a03c63c8414f7851c897dc2390b0c0847", "binary_bytes": 36079104}
+    "windows_debug_default": {
+      "sha256": "b0a3050c422d9f36c2b9bfadcfd2d93ea4b002dbdc5f290c32fbdc895db384b4",
+      "reproducible": false
+    },
+    "wsl_debug_default": {
+      "sha256": "6fa1b995e2a0a3df281c6cee021aa370f75d92b43ae762e846f1cf96c0d71100",
+      "reproducible": false
+    },
+    "wsl_release_python_free": {
+      "bytes": 42259176,
+      "sha256_prefix": "e9652acf"
+    },
+    "windows_release_archive": {
+      "file": "delulu-1.0.0-x86_64-pc-windows-msvc.tar.gz",
+      "bytes": 12556366,
+      "sha256": "919ed414904d598bfea3d47eb2eff65a03c63c8414f7851c897dc2390b0c0847",
+      "binary_bytes": 36079104
+    }
   },
   "raw_evidence": {
     "location": "D:\\nelan\\fable-audit-evidence on the owner's laptop, outside the repository; INDEX.tsv (396 files) and INDEX.json hold full hashes; tools/reindex.py rebuilds them",
@@ -61,8 +83,48 @@
     "worktree": "D:\\nelan\\dl-fable-audit keeps target/debug and target/release (ignored; safe to delete)"
   },
   "next_three_commands": [
-    {"run": "git fetch origin && git log --oneline -5 origin/master origin/laptop/fable-deep-verification", "expect": "master still ac2a162, or re-read every FABLE entry's re-check column against the new commits"},
-    {"run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check", "expect": "ok on a clean checkout of the branch"},
-    {"run": "read the queue in docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md and this branch's newest sync-log entry", "expect": "the next open slice, with its failing witness named"}
-  ]
+    {
+      "run": "git fetch origin && gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
+      "expect": "the ci.yml run dispatched at checkpoint 3's commit; read every job, the two /dev/full tests among them, and record it"
+    },
+    {
+      "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
+      "expect": "ok on a clean checkout of this branch"
+    },
+    {
+      "run": "cargo test --locked -p delulu --test json_contract --test sandbox_run_cli -j 4",
+      "expect": "15 and 26 passed on Windows; on Linux two more tests run (/dev/full)"
+    }
+  ],
+  "engineering": {
+    "slices_landed": [
+      {
+        "id": "report-sinks",
+        "rows": [
+          "RW 6.77",
+          "RW 6.83"
+        ],
+        "decision": "D-V2-227",
+        "base": "919114e647e1764b08bd7f88890e9853e6e75ddc",
+        "verified_on_laptop": "json_contract 15 of 15, sandbox_run_cli 26 of 26, clippy clean (Windows, debug)",
+        "not_verified_on_laptop": "two Linux-only tests (/dev/full), the rest of the workspace suite, macOS",
+        "ci": "dispatched after the push; read and recorded in the next sync-log entry"
+      }
+    ],
+    "found_not_fixed": [
+      "RW 6.87: --signoff has none of the report's rules"
+    ],
+    "numbers_taken": {
+      "decision": "D-V2-227",
+      "remaining_work_row": "6.87"
+    }
+  },
+  "research_since_checkpoint_2": {
+    "pins": {
+      "cloudflare/security-audit-skill": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+      "anthropics/oss-scanner": "2084acae60ff5834a56da86b82b585491d0890db",
+      "google/cybernetic-agent-governance-engine": "f0ca9f4d216b62847bea0a20963bfb7ad2b7f184"
+    },
+    "status": "read at these commits; the decision table is not yet in the audit"
+  }
 }

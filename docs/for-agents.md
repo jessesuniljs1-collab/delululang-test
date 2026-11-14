@@ -205,6 +205,17 @@ Every `--json` command emits one object:
   "stopped from outside", not as a crash of the program.
   A run stopped by its **budget** (`--limits`) exits 1 with **nothing** on standard output, even under `--json`;
   the report's `outcome.stopped_by` says which budget (row 6.60). Read the report, not standard output, for the outcome.
+  **The report path is proved before the program starts** (since 2026-11-14, D-V2-227): a `--report-out` or
+  `--trace-out` that names a directory, lies in a directory that does not exist, or cannot be opened for writing is
+  refused with exit `2` — nothing ran, so correcting the path and running again repeats nothing. If the report or the
+  trace is lost *after* the program ran (the disk filled, the path changed under it), the exit is `1` and `failed`,
+  never `2`: stderr says *the program ran*, and a program's own failing code is kept. Do not re-run for the record alone
+  unless repeating the program's effects is safe.
+  **A run refused before its program started says why in the report:** `outcome.ran` is `false`, `diagnostics`
+  carries what refused it (the checker's diagnostics, a manifest's `DL0701`, `--preflight`'s `DL0703` with
+  `missing_grants`), and `summary` counts them — on the sandboxed route as on the ordinary one, where
+  `sandbox.backend` is `none` because no backend was started. A usage error in the command line itself (an unknown
+  flag, a budget that cannot be meant) is decided before any of this and may leave no report: read exit `2`.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
   diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
   parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of

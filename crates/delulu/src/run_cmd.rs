@@ -533,7 +533,8 @@ fn stop_for_budget(ctx: &BudgetRun, breach: crate::budget::Breach) -> ! {
         env["summary"]["errors"] = json!(1);
         let text = serde_json::to_string_pretty(&env).expect("the run report serializes");
         if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
-            eprintln!("error: cannot write the run report to `{path}`: {e}");
+            // RW 6.77: the same sentence as a run that ended on its own — the program ran, and the exit below is 1.
+            let _ = report_lost(path, &e, true, 1);
         }
     }
     // What the program already printed is flushed if it can be — but not waited on forever: a
@@ -588,7 +589,15 @@ pub(crate) fn refuse_runtime_paths_in_write_scopes(opts: &Opts, write_roots: &[s
             p.to_path_buf()
         };
         let Some(target) = delulu_runtime::prim::resolve_for_decision(&p) else {
-            eprintln!("error: {flag} `{path}` cannot be resolved (a dangling link on the way?) — refused before the run");
+            // Say which it is. A directory that is not there is the ordinary mistake, and the one sentence this had
+            // ("a dangling link on the way?") misled for it (RW 6.77).
+            let dir = p.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+            let why = if dir.exists() {
+                "it cannot be resolved (a dangling link on the way?)".to_string()
+            } else {
+                format!("its directory `{}` does not exist, or is a link to nothing", dir.display())
+            };
+            eprintln!("error: {flag} `{path}` cannot be used: {why}. Refused before the run — nothing ran.");
             RUN_STATE.with(|s| s.set((s.get().0, true)));
             return Some(2);
         };
@@ -598,7 +607,7 @@ pub(crate) fn refuse_runtime_paths_in_write_scopes(opts: &Opts, write_roots: &[s
             let Some(r) = delulu_runtime::prim::resolve_for_decision(root) else {
                 eprintln!(
                     "error: {flag} `{path}` cannot be checked against the write scope `{}`, which does not \
-                     resolve — refused before the run",
+                     resolve — refused before the run; nothing ran",
                     root.display()
                 );
                 RUN_STATE.with(|s| s.set((s.get().0, true)));
@@ -631,6 +640,159 @@ pub(crate) fn refuse_runtime_paths_in_command_line_scopes(opts: &Opts) -> Option
         let _ = g.add(spec);
     }
     refuse_runtime_paths_in_write_scopes(opts, &g.build_root().fs_write)
+}
+
+/// RW 6.77: prove, BEFORE a program runs, that the files the runtime will write for it can be written. A report path
+/// that names a directory, or lies in a directory that does not exist or refuses a new file, used to be discovered
+/// only after the program's effects had happened — and was then reported with exit 2, the code that promises the
+/// program was never examined ([agents.exit-codes]). A caller that believed the code ran the program again and
+/// repeated every effect. Decided here, the refusal is a true exit 2: nothing ran. On every route that runs a program
+/// (the sandboxed one too), after D-V2-21's refusal of the command line's write scopes — so a path those grants let
+/// the program write is refused without being touched — and before an engine or a guest exists. A lease's or a
+/// manifest's scopes are known only later and are refused then; the proof leaves nothing behind for them to find.
+pub(crate) fn refuse_unwritable_runtime_paths(opts: &Opts) -> Option<i32> {
+    for (flag, path) in [("--report-out", &opts.report_out), ("--trace-out", &opts.trace_out)] {
+        let Some(path) = path else { continue };
+        if let Err(why) = prove_writable(path) {
+            eprintln!(
+                "error: {flag} `{path}` cannot be written: {why}. Refused before the run — nothing ran, so \
+                 correcting the path and running again repeats nothing."
+            );
+            RUN_STATE.with(|s| s.set((s.get().0, true)));
+            return Some(2);
+        }
+    }
+    None
+}
+
+/// Whether [`write_nofollow`] can be expected to succeed at `path`, decided without leaving anything behind. An
+/// existing ordinary file is opened for writing and left as it is. A path that names nothing is created and removed
+/// again, which is the only honest test of a directory's permission (its mode bits and ACLs are not the whole answer
+/// on any system). A directory and a symbolic link are refused, as the write itself refuses them. Anything else that
+/// exists — a device, a pipe — is not probed: opening one can block or have an effect, so it is left to the write, and
+/// a write that then fails is reported as what it is ([`report_lost`]).
+fn prove_writable(path: &str) -> Result<(), String> {
+    let p = std::path::Path::new(path);
+    match std::fs::symlink_metadata(p) {
+        Ok(m) if m.file_type().is_symlink() => Err("it is a symbolic link, which the runtime will not follow".to_string()),
+        Ok(m) if m.is_dir() => Err("it is a directory, and the report is one file".to_string()),
+        Ok(m) if m.is_file() => std::fs::OpenOptions::new()
+            .write(true)
+            .open(p)
+            .map(drop)
+            .map_err(|e| format!("the file cannot be opened for writing ({e})")),
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let dir = match p.parent() {
+                Some(d) if !d.as_os_str().is_empty() => d,
+                _ => std::path::Path::new("."),
+            };
+            if !dir.is_dir() {
+                return Err(format!(
+                    "its directory `{}` does not exist (the runtime creates the file, never a directory)",
+                    dir.display()
+                ));
+            }
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(p) {
+                Ok(f) => {
+                    drop(f);
+                    let _ = std::fs::remove_file(p);
+                    Ok(())
+                }
+                // Something appeared at the path between the two looks: the write decides, and says so.
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+                Err(e) => Err(format!("a file cannot be created in `{}` ({e})", dir.display())),
+            }
+        }
+        // What cannot be examined cannot be written either: the no-follow write examines the file it opened and stops
+        // when it cannot. Windows' `NUL` is the everyday case — it was never a report sink here; it failed after the
+        // run (witnessed 2026-11-14, with this arm passing it: *"Incorrect function"*, the program already run).
+        Err(e) => Err(format!("it cannot be examined ({e})")),
+    }
+}
+
+/// RW 6.77: the run's own record could not be written AFTER the run was decided. What the exit code may say depends on
+/// one fact — whether the program started. If it did, its effects stand, and the code is a failure (1, never 2: exit 2
+/// promises the program was never examined), with a sentence that says the program ran so nobody repeats it for the
+/// sake of the report. If it did not, nothing happened and the usage code is true. A program's own failing exit code is
+/// kept either way: losing the report never hides it.
+pub(crate) fn report_lost(path: &str, why: &dyn std::fmt::Display, ran: bool, code: i32) -> i32 {
+    if ran {
+        eprintln!(
+            "error: the program ran (it ended with exit {code}) and whatever it did stands, but the run report could \
+             not be written to `{path}`: {why}. Do not run it again for the report alone unless repeating its effects \
+             is safe."
+        );
+        if code == 0 {
+            1
+        } else {
+            code
+        }
+    } else {
+        eprintln!("error: cannot write the run report to `{path}`: {why} — the program did not start, so nothing ran");
+        if code == 0 {
+            2
+        } else {
+            code
+        }
+    }
+}
+
+/// RW 6.83: the diagnostics that refused this run before its program started, as the envelope's own objects — kept
+/// for the run report. A run the checker refused used to leave a report saying `ran: false` with an empty
+/// `diagnostics` array: the reason was on the terminal and nowhere a program could read it. The first refusal is kept
+/// (a run is refused once); one process runs one program ([`cmd_run`] has a single caller), so nothing is carried
+/// from another run.
+static RUN_REFUSAL: std::sync::Mutex<Vec<Json>> = std::sync::Mutex::new(Vec::new());
+
+/// Keep the diagnostics a `run` printed, for its report ([`RUN_REFUSAL`]). Called from the one printer every route
+/// uses, so a new refusal cannot forget it.
+pub(crate) fn note_refusal(diags: &[Diagnostic], map: &SourceMap) {
+    if let Ok(mut g) = RUN_REFUSAL.lock() {
+        if g.is_empty() {
+            *g = crate::cli::diagnostics_json(diags, map);
+        }
+    }
+}
+
+/// The diagnostics [`note_refusal`] kept — empty when the run printed none.
+pub(crate) fn refusal_diagnostics() -> Vec<Json> {
+    RUN_REFUSAL.lock().map(|g| g.clone()).unwrap_or_default()
+}
+
+/// What refused a run before its program started, for a report written by the other route (the sandboxed run's
+/// refusal report): the fault and the grants it lacked when `--preflight` refused it ([`RUN_FAULT`], [`RUN_LACKING`]),
+/// else the diagnostics the run printed.
+pub(crate) fn refusal_for_report() -> (Vec<Json>, Vec<String>) {
+    let lacking = RUN_LACKING.lock().map(|g| g.clone()).unwrap_or_default();
+    match RUN_FAULT.lock().ok().and_then(|g| g.clone()) {
+        Some(fault) => (vec![fault], lacking),
+        None => (refusal_diagnostics(), lacking),
+    }
+}
+
+/// Whether a runtime-written path was refused on this run — a refused report path is never written, not even with
+/// the refusal (D-V2-21).
+pub(crate) fn runtime_path_was_refused() -> bool {
+    RUN_STATE.with(|s| s.get().1)
+}
+
+/// RW 6.77, for the trace: `--trace-out` was asked for and could not be written after the program ran. Set where the
+/// trace is written, read once by [`cmd_run`], which owns the exit code — a run that lost the record it was asked for
+/// is not a success.
+static TRACE_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn trace_lost(path: &str, why: &std::io::Error) {
+    eprintln!(
+        "error: the program ran and whatever it did stands, but the effect trace could not be written to `{path}`: \
+         {why}. Do not run it again for the trace alone unless repeating its effects is safe."
+    );
+    TRACE_LOST.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How many of `diags` (envelope diagnostic objects) carry `severity`.
+pub(crate) fn count_severity(diags: &[Json], severity: &str) -> usize {
+    diags.iter().filter(|d| d["severity"] == severity).count()
 }
 
 /// Write a runtime-owned file without following a symbolic link at its final component.
@@ -711,6 +873,16 @@ fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog
     }
     if let Some(d) = RUN_FAULT.lock().ok().and_then(|g| g.clone()) {
         env["diagnostics"] = json!([d]);
+    } else if exit != 0 {
+        // RW 6.83: a run that ended on diagnostics says them in its report — the checker's (or a manifest's) for a run
+        // refused before its program started, the trace assertion's for one that ran — exactly as `--json` prints
+        // them, and a summary that counts them.
+        let refused = refusal_diagnostics();
+        if !refused.is_empty() {
+            env["summary"]["errors"] = json!(count_severity(&refused, "error").max(1));
+            env["summary"]["warnings"] = json!(count_severity(&refused, "warning"));
+            env["diagnostics"] = json!(refused);
+        }
     }
     // RW 6.73: what the run lacked, so the report says it as the envelope does.
     if let Some(lines) = RUN_LACKING.lock().ok().map(|g| g.clone()).filter(|l| !l.is_empty()) {
@@ -810,7 +982,7 @@ fn emit_wasm_trace(sink: &Option<delulu_runtime::TraceSink>, opts: &Opts) {
     match &opts.trace_out {
         Some(path) => {
             if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
-                eprintln!("error: cannot write trace to `{path}`: {e}");
+                trace_lost(path, &e);
             }
         }
         None => eprintln!("{lines}"),
@@ -1185,6 +1357,10 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     if let Some(code) = refuse_runtime_paths_in_command_line_scopes(&opts) {
         return code;
     }
+    // RW 6.77: and a path that cannot be written at all is refused now, while exit 2 is still true.
+    if let Some(code) = refuse_unwritable_runtime_paths(&opts) {
+        return code;
+    }
     // PS-B-01 (D-V2-25): the main program's budgets, decided before anything runs — a budget that
     // cannot be meant (zero, or a dimension nobody enforces) is refused here, not discovered later.
     // The sandboxed path above keeps its own rule: there `--limits` may only narrow a profile.
@@ -1223,10 +1399,14 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             let text =
                 serde_json::to_string_pretty(&run_report(&opts, code, &egress, &budget)).expect("the run report serializes");
             if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
-                eprintln!("error: cannot write the run report to `{path}`: {e}");
-                return if code == 0 { 2 } else { code };
+                return report_lost(path, &e, RUN_STATE.with(|s| s.get().0), code);
             }
         }
+    }
+    // RW 6.77: a trace that was asked for and lost makes a clean run a failure (its sentence is already on stderr);
+    // a program's own failing code is kept.
+    if code == 0 && TRACE_LOST.load(std::sync::atomic::Ordering::Relaxed) {
+        return 1;
     }
     code
 }
@@ -1907,7 +2087,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             match &opts.trace_out {
                 Some(path) => {
                     if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
-                        eprintln!("error: cannot write trace to `{path}`: {e}");
+                        trace_lost(path, &e);
                     }
                 }
                 None => eprintln!("{lines}"),

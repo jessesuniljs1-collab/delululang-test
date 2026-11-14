@@ -12951,3 +12951,56 @@ literals on both engines; a debug build answered a probe of all of them as Pytho
   `cli`) green; `delulu-conform --check-reference` in sync, `--coverage` 411 of 411. `scripts/clippy.sh -j 4` clean.
   `scripts/check-other-os.sh` was not run: no operating system's `cfg` is touched, and CI builds and tests on macOS,
   Windows and Linux (the run is named in `docs/CLOUD_SYNC_LOG.md`'s entry of this date).
+
+## 2026-11-14 — the laptop (Fable 5.2): the report sinks (RW 6.77, RW 6.83; D-V2-227) — the first code slice of the continuation commission
+
+**The owner:** *"resume real engineering: fix verified critical defects … implement it, test it thoroughly, challenge the
+result and document exactly what is verified and what remains unfinished."* Branch `laptop/fable-deep-verification`;
+the head chef is Fable 5.2 at the effort the owner set (`max`). No sub-agent wrote code or ran a test.
+
+**Why this slice first.** It is the smallest of the recovery plan's truthful-outcome defects with an effect behind it:
+a caller that trusts exit 2 runs a program twice. The Survey's `impact` for `mod:crates/delulu/src/run_cmd.rs` and
+`mod:crates/delulu/src/guest.rs`: 111 nodes each — `main.rs`, `crate:delulu` and its 109 test nodes, no other crate.
+**Asked after the edits and before the commit; the rule is before the edit, and I did not keep it.** The answer is
+also the coarsest the map can give (a module reaches its crate, the crate reaches every test in it), which is the
+first thing the architecture work on this branch has to improve.
+
+**Red before the change** (Windows, the debug build of `919114e`, 2026-11-14):
+- `json_contract::a_report_that_cannot_be_written_is_refused_before_the_program_runs` — *"error: cannot write the run
+  report to `rep`: Access is denied. (os error 5)"*, exit 2, `out/made.txt` already written.
+- `json_contract::a_run_the_checker_refuses_reports_its_diagnostics` — the report held `"diagnostics":[]`.
+- The three sandboxed tests were written with the change and falsified afterwards (below), because their old behaviour
+  was already on record in RW 6.83.
+
+**The change** (D-V2-227): `run_cmd.rs` — `refuse_unwritable_runtime_paths`, `prove_writable`, `report_lost`,
+`note_refusal` / `refusal_diagnostics` / `refusal_for_report`, `TRACE_LOST`; the scope refusal's sentence for a missing
+directory. `cli.rs` — `print_diagnostics` keeps what a `run` printed; one line of `run --help`. `guest.rs` — the proof
+on the sandboxed route; `cmd_run_sandboxed` is now a wrapper around `run_sandboxed` that writes a refusal report for
+every non-zero return after the policy is known; `REPORT_LOSS`; both report writes through `write_nofollow`.
+`docs/for-agents.md` [agents.json-envelope] says the new contract.
+
+**Challenged, and what it found.**
+- *Falsified:* with `guest.rs`'s half reverted, `a_sandboxed_run_proves_its_report_path_before_a_guest_exists` and
+  `a_sandboxed_run_the_checker_refuses_still_writes_its_report` fail (2 of 2); with the wrapper's condition disabled,
+  the latter and `every_refusal_before_a_guest_exists_writes_its_report` fail on a missing `rep.json` (2 of 2).
+- *A first design that put the refusal report at five returns* was replaced by the one wrapper before it was committed:
+  the row asks for every early refusal, and five call sites is how the sixth is forgotten.
+- *A wrong assumption of mine, caught by a probe:* I took Windows' `NUL` for a working report sink and made the proof
+  pass what it cannot examine. The run then lost its report after the program ran (*"Incorrect function"*): `NUL` was
+  never a sink here, because the no-follow write examines the file it opened. The proof refuses it before the run, and
+  the test pins both that and Linux's `/dev/null`, which works.
+- *The row's own sentence held:* a missing parent directory was already refused before the run, by the scope check; only
+  its words were wrong (*"a dangling link on the way?"*).
+- *Found beside it, not fixed:* `--signoff` has none of these rules (RW 6.87, new).
+
+**Tests** (Windows laptop, `-j 4`; logs kept outside the repository, their SHA-256 prefixes in the audit's Appendix B):
+- `json_contract` 15 of 15 and `sandbox_run_cli` 26 of 26 on the final code; `scripts/clippy.sh -j 4` clean, stamped
+  after the last `.rs` edit.
+- Before the last two edits (the `NUL` correction and its test): the 22 test targets that use `--report-out` or
+  `--trace-out`, 253 passed, 11 ignored (the gated microVM tests), cargo exit 0; then ten targets, 199 passed.
+- **Not run on the laptop:** the two Linux-only tests (`/dev/full`: a report and a trace lost after the run, on each
+  route), the rest of the workspace suite, macOS. They are CI's, named in the sync-log entry once read.
+
+**What remains.** RW 6.87 (`--signoff`). A lease's refusal and a guest that cannot be launched pass the wrapper and
+have no test of their own. RW 6.68 and RW 6.84 are unchanged. The exit codes a caller sees change in two places
+(D-V2-227, *What it changes for a caller*), so the entry is in `CHANGELOG.md`.

@@ -11,6 +11,24 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the run's own record, 2026-11-14
+
+- **Fixed (RW 6.77, D-V2-227): a report that cannot be written no longer costs a second run.** `run --report-out F`
+  and `--trace-out F` are proved writable before the program starts: a path that is a directory, lies in a directory
+  that does not exist, or cannot be opened for writing is refused with exit 2, and nothing ran. Before, the program ran
+  first, its effects stood, and the command then exited 2 — the code that says the program was never examined.
+- **Changed: a report or trace lost after the program ran is exit 1, never 2 or 0.** Standard error says *the program
+  ran*, and a program's own failing code is kept. On the sandboxed route a clean run that lost its report used to exit
+  0; it exits 1.
+- **Fixed (RW 6.83): a refused run's report says why.** A program the checker refuses, a manifest's `DL0701` and
+  `--preflight`'s `DL0703` are in the report's `diagnostics`, with `summary` counting them; before, the report said
+  `diagnostics: []`. A sandboxed run refused before its guest starts now writes a report (`outcome.ran: false`,
+  `sandbox.backend: none`); it wrote none.
+- **Hardened:** the sandboxed route writes its report without following a symbolic link at the path's last component,
+  as the ordinary route always has (D-V2-21).
+- **Words:** a `--report-out` in a directory that does not exist is refused by naming the directory, where it said
+  *"a dangling link on the way?"*.
+
 ## Unreleased — bitwise operators, 2026-11-12
 
 - **Added (RW 2.35, D-V2-226):** bitwise operators, on both engines.

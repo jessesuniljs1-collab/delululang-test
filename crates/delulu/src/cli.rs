@@ -1507,7 +1507,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (PS-A-10: --mode and --sandbox-profile are REFUSED without --sandbox rather than\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ignored, and a command line saying both --sandbox and --sandbox=off is refused in either order)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--report-out F]  (the runtime writes the run report there — sandbox level, mode, outcome —\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 in every outcome; never on stdout, which the program could forge; refused inside a writable grant)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 in every outcome; never on stdout, which the program could forge; refused inside a writable grant,\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and before the run — exit 2, nothing ran — if it cannot be written; lost after the run, exit 1)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
@@ -3408,6 +3409,10 @@ pub(crate) fn print_success_envelope(command: &str, report: Json) {
 }
 
 pub(crate) fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, authority: Option<Json>, json: bool) {
+    // RW 6.83: what refuses a `run` is kept for its report, at the one printer every route passes through.
+    if command == "run" && errors(diags) > 0 {
+        crate::run_cmd::note_refusal(diags, map);
+    }
     if json {
         // Machine channel: never colored (addendum §2.5 / criterion 8), never localized
         // (invariant 39 — the envelope API cannot even see a catalog).

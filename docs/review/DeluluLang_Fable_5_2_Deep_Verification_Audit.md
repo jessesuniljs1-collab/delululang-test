@@ -741,9 +741,25 @@ its own branch; they assert nothing by themselves and are not part of the reposi
 ## 13. Engineering changes on this branch
 
 Authorised by the owner's continuation of 14 November 2026: bounded, tested changes on this non-default branch;
-no merge, tag, release or change to the default branch. **At this commit (checkpoint 2): none yet.** Each later
+no merge, tag, release or change to the default branch. **At checkpoint 2: none. From checkpoint 3 on, each is listed below.** Each later
 change gets one row here — its failing witness before the change, the smallest repair, the negative control, the
 tests and CI run read, and what is still unverified — and its own commit.
+
+### 13.1 The report sinks — RW 6.77 and RW 6.83 (D-V2-227), checkpoint 3
+
+| | |
+|---|---|
+| Defect | A report path that cannot be written was discovered after the program's effects, and reported with exit 2 (*"the program was never examined"*); on the sandboxed route a lost report was exit 0. A refused run's report had no diagnostics; a refused sandboxed run had no report. |
+| Failing witness before the change | `json_contract` `a_report_that_cannot_be_written_is_refused_before_the_program_runs` and `a_run_the_checker_refuses_reports_its_diagnostics`, red on the debug build of `919114e` (Windows). |
+| Repair | The path is proved before the run on both routes; a record lost after the run is exit 1 and says the program ran; reports carry what refused the run; one wrapper writes the sandboxed route's refusal report. `run_cmd.rs`, `guest.rs`, `cli.rs`; no new `DL` code, no schema change. |
+| Negative controls | The sandboxed tests fail with the guest's half reverted (2 of 2) and with the wrapper disabled (2 of 2). A writable path still runs and reports (`rep/ok.json`). The proof leaves no file behind. |
+| What the challenge found | Windows' `NUL` was never a working report sink (I had assumed it was); it is refused before the run now, and pinned. `--signoff` has none of these rules: RW 6.87, open. |
+| Tests read | Laptop, Windows: `json_contract` 15 of 15, `sandbox_run_cli` 26 of 26, clippy clean; earlier in the slice, the 22 targets that use a report or a trace (253 passed, 11 gated microVM tests ignored). |
+| Still unverified here | The two Linux-only tests (`/dev/full`), the rest of the workspace suite, macOS — CI's; the run is named in `docs/CLOUD_SYNC_LOG.md` once read. A lease's refusal and a guest that cannot launch pass the wrapper untested. |
+
+New since checkpoint 2, from the three repositories the owner named on 14 November (read at pinned commits; the
+table of decisions is the next checkpoint's): cloudflare/security-audit-skill `c1c8a8c1`, anthropics/oss-scanner
+`2084acae`, google/cybernetic-agent-governance-engine `f0ca9f4d`.
 
 ---
 
@@ -818,3 +834,7 @@ A session elsewhere must treat this document's statements as historical and re-r
 | G1, G2 | network refusals (laptop); the loopback HTTPS control (WSL) | `f2e67808b38682de`; `24f679c4944c0e31` |
 | X1–X7 | external sources as fetched: A2A releases and specification, OpenShell and Wasmtime releases, Wasmtime advisories, MCP changelog and versioning page | `41ec6e2cf7c0187e`, `e3704e45b19da780`, `45cb8ee480688583`, `6b64dc3ca763c92c`, `b327e576f4c96b34`, `bc02f271700bdecd`, `627ccfe6ffb1be2c` |
 | H1 | the misdirected build's log | `6117ae2f4ad7e687` |
+| E1, E2 | report-sink tests after the fix (first green); the sandboxed tests with the guest's half reverted (red) | `d267e63357c65af1`; `9eb5689a280e6ba2` |
+| E3, E7 | the 22 report-related targets (253 passed); ten targets on the formatted code (199 passed) | `cdfab9a1e20bbd8a`; `4d79c4e95581dcda` |
+| E4, E5 | the wrapper's tests green; the same with the wrapper disabled (red) | `607bd77c22b73658`; `2b848c13933d2bab` |
+| E8, E6 | the two targets on the final code (15 and 26 passed); clippy and the format check, clean | `6f6f1f829d4534c0`; `43bc01ecc923b16e` |
