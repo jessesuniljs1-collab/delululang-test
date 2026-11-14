@@ -9711,3 +9711,33 @@ Survey and doctor: in the commit below.
      and whether a coding session is authorised for slice S1 (the audit's section 11).
   2. The next research session: the state file's three commands.
   3. Read this branch's CI run before any merge.
+
+### 2026-11-14 — the laptop: Fable 5.2, checkpoint 2 — the research part closed; the plan and three prompts committed as found
+- Session: `https://claude.ai/code/session_01Deh6W9tXE8pfGqMtS8oiaX` (the same conversation as the entry above, continued).
+  Model: Claude Fable 5.2 as the harness names it, effort `max` as the owner set it.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base: `ac2a162`; the branch's first commit is `b3142a1`.
+- The owner's second instruction of the day, `docs/prompt/DeluluLang_Fable_5_2_Engineering_Architecture_Continuation_Prompt.md`,
+  **authorises bounded, tested code changes on this non-default branch** (no merge, tag, release or default-branch change) and
+  asks for the two Fable branches to be reconciled first. Reconciled: both start at `ac2a162`, neither contains the other;
+  `laptop/fable-research-runner` (`fd79554`) holds one workflow and four research files and no crate change — a harness, never
+  to be merged; this branch is the working branch. The matrix is in the audit's section 2 and in the state file.
+- Files and folders: M `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (rewritten since `b3142a1`: T2 to T8
+  executed, the two-account custody test, the platform matrix, the queue, section 13 opened), M
+  `docs/review/fable-deep-verification-state.json`, A `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` (Codex's plan, **byte for byte
+  as found untracked on the laptop**, SHA-256 `86a26292…fb1d`), A
+  `docs/prompt/DeluluLang_Codex_Research_Consolidation_and_Recovery_Prompt.md` (`ac236d0e…2324`), A
+  `docs/prompt/DeluluLang_Fable_5_2_Independent_Reality_Check.md` (`e8e2860e…989f`), A
+  `docs/prompt/DeluluLang_Fable_5_2_Engineering_Architecture_Continuation_Prompt.md` (`5b5e851b…fcd3`), M
+  `docs/REPOSITORY_STRUCTURE.md` (their rows), M `docs/CLOUD_SYNC_LOG.md`, M `docs/survey/*`. No code, test or workflow.
+- Why the plan is committed now: the owner's continuation names it the standing queue and asks for it to be updated rather than
+  a second roadmap written. The laptop's untracked copies are identical to these and were not touched.
+- Survey and doctor after the last edit: `wrote docs/survey/ — 1734 nodes, 20911 edges, 47 discrepancies (0 error, 10 warning)`;
+  `ok: the Survey matches the tree (1734 nodes, 20911 edges)`; `ok: 28 check(s) passed`. Two of the warnings are new and are the
+  count heuristic reading the plan's line 124 (file counts of the whole tree against the Rust-file count); left as written.
+- Verified since the entry above: the two-account custody matrix (28 of 31 steps as expected; FABLE-022), the release dry run
+  `43508844764` (four package jobs green), the portable archive built and installed on the Windows laptop by `INSTALL.md`'s own
+  block, a loopback HTTPS control for network grants (eight of eight), the WSL packaging failure under Python 3.8 (FABLE-032).
+  CI on `b3142a1`: run `43506016428`, 18 of 18.
+- **Open / next, in order:** the code slices of the plan's queue, on this branch, each its own commit with a witness that fails
+  first; then the Survey's architecture views. The audit's section 13 lists what has landed.

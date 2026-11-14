@@ -9,15 +9,15 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
-| warning | `prose-cites-missing-path` | 10 |
-| warning | `stale-count` | 1 |
+| warning | `prose-cites-missing-path` | 7 |
+| warning | `stale-count` | 3 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
 | note | `dependency-never-used-in-source` | 3 |
 | note | `ruling-cited-without-its-stage` | 1 |
 
-## warning — `prose-cites-missing-path` (10)
+## warning — `prose-cites-missing-path` (7)
 
 **What to do:** correct the path, or say plainly that it no longer exists
 
@@ -28,14 +28,13 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/assistant-memory/release-program-progress.md:105` — prose names `docs/release/CHECKLIST-2.0.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
-- `docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md:7` — prose names `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, which is nowhere in the tree
-- `docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md:96` — prose names `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, which is nowhere in the tree
-- `docs/prompt/DeluluLang_Fable_5_2_Multi_Session_Deep_Verification_Commission.md:96` — prose names `docs/prompt/DeluluLang_Fable_5_2_Independent_Reality_Check.md`, which is nowhere in the tree
 
-## warning — `stale-count` (1)
+## warning — `stale-count` (3)
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 1268 Rust files; the tree has 349
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 28 Rust files; the tree has 349
 - `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 349
 
 ## note — `c-token-not-a-campaign-finding` (1)
