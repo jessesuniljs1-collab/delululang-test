@@ -13004,3 +13004,61 @@ every non-zero return after the policy is known; `REPORT_LOSS`; both report writ
 **What remains.** RW 6.87 (`--signoff`). A lease's refusal and a guest that cannot be launched pass the wrapper and
 have no test of their own. RW 6.68 and RW 6.84 are unchanged. The exit codes a caller sees change in two places
 (D-V2-227, *What it changes for a caller*), so the entry is in `CHANGELOG.md`.
+
+## 2026-11-15 — the laptop (Fable 5.2): many runs at once against one broker — it holds at 64; it stopped for good behind an unread standard error (FABLE-038, fixed: D-V2-228, RW 4.99); past 64 simultaneous requests it sheds them (FABLE-039, open: RW 4.100)
+
+**The owner, 2026-11-14:** *"Main users of DeluluLang are AI, LLMs, Multiple AI Agents at same time, Autonomous
+vehicles, satellites, drones, Multiple Robots at same time … Multiple of these users will be using DeluluLang at same
+time."* No test in the tree ran more than a handful of clients against one daemon from outside the process, so this
+was asked of the binary. Windows laptop, the night of 14 to 15 November; the debug build of `4f2af3f` and, for the
+last table, the release build of `ac2a162`. Fable 5.2 at the effort the owner set; no sub-agent.
+
+**M1 — N runs at the same moment, one daemon, each run its own write scope** (five brokered file writes and one
+line, `--broker daemon`; the daemon's standard error in a file):
+
+| N at once | wall time | runs that exited 0 | files written, whole and in their own scope | audit chain |
+|---|---|---|---|---|
+| 1 | 93 ms | 1 of 1 | 5 of 5 | verifies, 9 records |
+| 4 | 275 ms | 4 of 4 | 20 of 20 | verifies, 33 |
+| 8 | 504 ms | 8 of 8 | 40 of 40 | verifies, 65 |
+| 16 | 1,021 ms | 16 of 16 | 80 of 80 | verifies, 129 |
+| 32 | 1,992 ms | 32 of 32 | 160 of 160 | verifies, 257 |
+| 64, four rounds | 3,716 to 3,804 ms | 64 of 64, each round | 320 of 320, none stray | verifies, 513 |
+| 64, one shared scope, one file name | 3,842 ms | 64 of 64 | the file holds one run's last write, whole | verifies, 513 |
+
+What it says: **correct under 64 at once** — no lost effect, no write outside a run's own scope, one chain that
+verifies. **Serial by design** — the wall time is linear in N, about 7 ms an audited decision, and every run waits for
+all the others: the slowest of 64 took 3.8 s for six effects. The release build is no faster (81 ms, 919 ms and
+3,641 ms at 1, 16 and 64): the time is the chain's append, not the interpreter.
+
+**FABLE-038, found by my own mistake.** The first pass of M1 lost 5 of 64 runs to DL1401 after a 32 s stall, and
+`broker stop` hung. The cause was my harness: it started the daemon with its standard error as a pipe and never read
+it. I took it first for the broker's defect, then for my harness's alone; it is both. With a control
+(M2): standard error in a file — 64 of 64, twice, 16 KB and 24 KB of late-answer lines written; an unread pipe — 3 of
+64 and 31 of 64, `status` and `stop` unanswered, the pipe holding 4,073 and 4,103 bytes (19 lines). Every line was a
+blocking write on the thread that said it. D-V2-228 hands lines to one writer thread with a 50 ms deadline; a reader
+that stops reading costs lines, never the broker.
+- Test, red first by construction: `broker_cli::a_daemon_whose_standard_error_nobody_reads_keeps_serving` — 1,600
+  connections that close without a request, each one line, nobody reading. Without the writer: *"after 731 unread
+  lines the daemon no longer answers"* (33.8 s). With it: `status` answers, a run goes through, and once the test
+  reads, the daemon says how many lines it dropped (1.9 s).
+- The original scenario on the fixed build: an unread pipe, 64 at once, three rounds, twice — 64 of 64 every round,
+  `status` in 14 ms, `stop` in 39 ms.
+- Suites after the change (Windows, `-j 4`): the binary's 211 unit tests (the daemon's among them), `broker_cli` 21,
+  `dead_man_cli`, `estop_cli`, `monitor_cli`, `guard_e2e`, `grants_cli`, `device_delegation_cli`, `sandbox_guard_e2e`
+  — 293 passed, cargo exit 0; `scripts/clippy.sh -j 4` clean. Not run here: Linux, macOS, Miri — CI's.
+- Two mistakes of mine on the way, both this project's known traps: the unread pipe itself, and a shell here-document
+  that halved the `\\` of a pipe name in the new test (the test then opened nothing; fixed with a direct edit).
+
+**FABLE-039, open.** Past 64 simultaneous requests the daemon drops a connection at once (`MAX_READERS`, by design:
+a flood must not grow threads without bound). Release build, daemon's standard error in a file: at 128 at once 112 of
+128 runs succeeded, at 256 at once 123 of 256; the daemon wrote *"64 connections already reading (dropping this
+one)"* 49 and 277 times. Each dropped request fails its run with *"DL1401: broker unreachable: PeekNamedPipe: win32
+error 233 — start it with `delulu broker start`"* — the broker was running — and the run has already performed the
+effects before it (46 of 640 files missing at 128: runs that stopped part-way). The chain verified every time and
+nothing was granted that should not have been: this is availability and words, not custody. It is RW 4.100: a bound
+is right, but a request refused at the bound was never read and is safe to ask again, and the client is told neither.
+
+**What this does not show.** One laptop, Windows only, a debug and a release build, runs of six effects. No Linux or
+macOS number (the socket's backlog changes what a 65th client sees), no device, no network effect, no run longer than
+a few seconds, no second broker. The serial handler's ceiling in decisions a second is a property of this disk.

@@ -27,6 +27,14 @@ use delulu_check::Effect;
 use crate::broker_ipc::{read_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION};
 use crate::broker_transport::{self, Connection, Listener};
 
+/// `eprintln!` for the daemon: the same line, through [`log_line`], so a standard error nobody reads never stops a
+/// thread that serves (FABLE-038; the reason is on [`DaemonLog`]). Every line the daemon says after it starts uses it.
+macro_rules! blog {
+    ($($arg:tt)*) => {
+        log_line(format!($($arg)*))
+    };
+}
+
 // ----- state-dir + file paths (the only place ~/.delulu is resolved) -----------------------------
 
 /// Resolve the broker state directory: `--state-dir`/`DELULU_STATE_DIR` if set, else `~/.delulu`.
@@ -98,7 +106,7 @@ fn load_guard_policy(state: &Path) -> (delulu_broker::GuardPolicy, bool) {
 fn persist_guard_policy(state: &Path, policy: &delulu_broker::GuardPolicy) {
     let text = serde_json::to_string_pretty(&policy.to_json()).unwrap_or_default();
     if let Err(e) = std::fs::write(guard_policy_path(state), text) {
-        eprintln!("delulu broker: could not persist guard policy (edit stands in memory, audited): {e}");
+        blog!("delulu broker: could not persist guard policy (edit stands in memory, audited): {e}");
     }
 }
 
@@ -403,7 +411,7 @@ fn persist_adoption_revocations(broker: &Broker, state_dir: &Path) {
     let fps = broker.revoked_adoption_fps_snapshot();
     if !fps.is_empty() {
         if let Err(e) = persist_revoked_certs(state_dir, &fps) {
-            eprintln!(
+            blog!(
                 "delulu broker: WARNING (ADOPT-REPLAY-1) — a certificate revocation is \
                  effective now but could NOT be persisted to `{}` ({e}); it may not \
                  survive a daemon restart. Fix the state directory and re-run the revoke.",
@@ -558,7 +566,7 @@ impl HearingClock {
             let mut state = inner.state.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(gap) = state.look_at(inner.start.elapsed()) {
                 if gap >= HEARING_LOGGED {
-                    eprintln!(
+                    blog!(
                         "delulu broker: this daemon did not run for {} ms (stopped, or not scheduled) — its dead-men do not \
                          count that time as their holders' silence (DEADMAN-DEAF-1)",
                         gap.as_millis()
@@ -707,9 +715,7 @@ fn fire_deadmen(
     }
     // RW 4.58: the revocations are in force either way; the log says when the chain does not hold them.
     if !fired.is_empty() && failed.get() {
-        eprintln!(
-            "delulu broker: WARNING (RW 4.58) — a dead-man's revocation is in force but its audit record could not be written"
-        );
+        blog!("delulu broker: WARNING (RW 4.58) — a dead-man's revocation is in force but its audit record could not be written");
     }
     fired.iter().map(|f| f.node.as_str().to_string()).collect()
 }
@@ -982,7 +988,7 @@ fn deadman_refused(node: &GrantId, r: &delulu_broker::DeadmanRefusal) -> Respons
 
 /// One line in `broker.log` for each dead-man that fired — the chain holds the record; the log says it happened.
 fn log_fired(f: &delulu_broker::Fired) {
-    eprintln!(
+    blog!(
         "delulu broker: the dead-man on `{}` fired — no beat within {} ms (armed at seq {}, {} beat(s)); revoked {} node(s) by audit seq {}",
         delulu_diag::terminal_line(f.node.as_str()),
         f.period.as_millis(),
@@ -1882,11 +1888,126 @@ fn guard_policy_edited(
 /// the child's serve does NOT reprint it (so `<state>/broker.log` never contains it — criterion 9).
 const OWNER_ENV: &str = "DELULU_BROKER_OWNER_CODE_INTERNAL";
 
+// ----- the daemon's own words: never a reason to stop serving (FABLE-038) ------------------------
+
+/// How long one line may hold the thread that says it. A file, a terminal and a pipe that is being read take a line in
+/// microseconds, and the thread waits for exactly that — so the log is in order and complete before the next step,
+/// as it always was. A reader that has stopped reading costs one such wait, once; after it the daemon does not wait.
+const LOG_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
+/// Lines kept for a reader that has fallen behind; past this they are counted and dropped, never waited for.
+const LOG_KEPT: usize = 256;
+
+/// The daemon's standard error, written by a thread of its own.
+///
+/// FABLE-038 (2026-11-14): every line the daemon said was a blocking `eprintln!` on the thread that said it — the
+/// serve loop, the accept loop, a reader. A foreground daemon whose standard error is a pipe nobody reads (a
+/// supervisor, an agent's harness, a script that starts the broker and ignores its output) therefore stopped for good
+/// the moment the pipe filled: on Windows after 4 KB, about 19 of the lines it writes when it is busy. Witnessed with
+/// 64 runs at once: 3 of 64 and 31 of 64 succeeded, `broker status` got no answer, `broker stop` hung, and every
+/// client failed closed with DL1401 after 15 s — an e-stop's revocation among the requests it would never read. With
+/// the same daemon's standard error in a file: 64 of 64, twice. Being busy is exactly when it writes most, so the
+/// load itself pulled the trigger.
+///
+/// Now a line is handed to one writer thread and waited for at most [`LOG_WAIT`]. When the writer does not finish in
+/// that time the log is *behind*: lines queue up to [`LOG_KEPT`] and are then counted and dropped, and no thread
+/// waits for them. When the reader returns, the writer says how many lines were lost and carries on. Custody never
+/// depended on this log — every decision is in the audit chain, whose append is the fail-stop (invariant 26) — so a
+/// lost line loses a diagnostic, never a record.
+struct DaemonLog {
+    lines: std::sync::mpsc::SyncSender<(u64, String)>,
+    /// The sequence of the last line handed over; held while handing one over, so the queue is in sequence order.
+    handed: std::sync::Mutex<u64>,
+    /// The sequence of the last line the writer finished.
+    written: std::sync::Mutex<u64>,
+    wrote: std::sync::Condvar,
+    behind: std::sync::atomic::AtomicBool,
+    dropped: std::sync::atomic::AtomicU64,
+    /// No writer thread could be started: every line is printed by the thread that says it, as before.
+    direct: std::sync::atomic::AtomicBool,
+}
+
+static DAEMON_LOG: std::sync::OnceLock<DaemonLog> = std::sync::OnceLock::new();
+
+/// Start the writer. Called once, by the daemon ([`serve`]); every other process that runs code in this file — the
+/// `broker` commands, a unit test driving [`serve_inner`] — has no writer, and [`log_line`] prints directly.
+fn install_daemon_log() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (lines, queue) = std::sync::mpsc::sync_channel::<(u64, String)>(LOG_KEPT);
+    let log = DaemonLog {
+        lines,
+        handed: std::sync::Mutex::new(0),
+        written: std::sync::Mutex::new(0),
+        wrote: std::sync::Condvar::new(),
+        behind: std::sync::atomic::AtomicBool::new(false),
+        dropped: std::sync::atomic::AtomicU64::new(0),
+        direct: std::sync::atomic::AtomicBool::new(false),
+    };
+    if DAEMON_LOG.set(log).is_err() {
+        return;
+    }
+    let spawned = std::thread::Builder::new().name("delulu-broker-log".into()).spawn(move || {
+        let Some(log) = DAEMON_LOG.get() else { return };
+        for (seq, line) in queue {
+            let lost = log.dropped.swap(0, SeqCst);
+            if lost > 0 {
+                eprintln!(
+                    "delulu broker: {lost} line(s) of this log were dropped — standard error was not being read, and the \
+                     broker does not stop serving to wait for it (the audit chain is complete; `delulu audit verify`)"
+                );
+            }
+            eprintln!("{line}");
+            *log.written.lock().unwrap_or_else(|e| e.into_inner()) = seq;
+            log.behind.store(false, SeqCst);
+            log.wrote.notify_all();
+        }
+    });
+    // No writer thread: say so the old way, once, and let every later line print directly — never silently nowhere.
+    if spawned.is_err() {
+        eprintln!("delulu broker: could not start the log writer; lines are written by the thread that says them");
+        if let Some(log) = DAEMON_LOG.get() {
+            log.direct.store(true, SeqCst);
+        }
+    }
+}
+
+/// Say one line on the daemon's standard error without ever stopping for it ([`DaemonLog`]).
+pub(crate) fn log_line(line: String) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let Some(log) = DAEMON_LOG.get().filter(|l| !l.direct.load(SeqCst)) else {
+        eprintln!("{line}");
+        return;
+    };
+    let seq = {
+        let mut handed = log.handed.lock().unwrap_or_else(|e| e.into_inner());
+        match log.lines.try_send((*handed + 1, line)) {
+            Ok(()) => {
+                *handed += 1;
+                *handed
+            }
+            // The queue is full (the reader is far behind) or the writer is gone: counted, never waited for.
+            Err(_) => {
+                log.dropped.fetch_add(1, SeqCst);
+                return;
+            }
+        }
+    };
+    if log.behind.load(SeqCst) {
+        return;
+    }
+    let written = log.written.lock().unwrap_or_else(|e| e.into_inner());
+    let (_written, waited) = log.wrote.wait_timeout_while(written, LOG_WAIT, |w| *w < seq).unwrap_or_else(|e| e.into_inner());
+    if waited.timed_out() {
+        log.behind.store(true, SeqCst);
+    }
+}
+
 // ----- the serve loop ----------------------------------------------------------------------------
 
 /// Run the broker daemon serve loop. Resolves the guard owner code (inherited from a detached parent
 /// via [`OWNER_ENV`], or generated + printed here for a foreground/direct start), then serves.
 pub fn serve(state_dir: &Path, bypass: bool) -> io::Result<()> {
+    // FABLE-038: from here on the daemon's lines never hold a thread that serves.
+    install_daemon_log();
     let (owner, print_owner) = match std::env::var(OWNER_ENV) {
         Ok(c) => (c, false), // the parent already minted + printed it (detached child)
         Err(_) => (delulu_broker::generate_owner_code(), true),
@@ -1965,19 +2086,19 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     let listener = Listener::bind(state_dir)?;
     let pid = std::process::id();
     std::fs::write(pid_path(state_dir), pid.to_string())?;
-    eprintln!("delulu broker: serving on `{}` (pid {pid}, state `{}`)", listener.address(), state_dir.display());
+    blog!("delulu broker: serving on `{}` (pid {pid}, state `{}`)", listener.address(), state_dir.display());
     // The guard digest (mode + rules) goes to broker.log always; the owner code prints ONLY when
     // this process is the one the user is watching (foreground/direct start) — never in the detached
     // child (the parent printed it; broker.log must not contain it — criterion 9).
-    eprintln!("delulu guard: {}", guard_digest(&broker));
+    blog!("delulu guard: {}", guard_digest(&broker));
     if adopt_poisoned {
-        eprintln!(
+        blog!(
             "delulu broker: revoked-certificate memory `{}` is UNREADABLE — adoptions are refused \
              (fail closed) until it is repaired or removed (ADOPT-REPLAY-1).",
             revoked_certs_path(state_dir).display()
         );
     } else if revoked_count > 0 {
-        eprintln!(
+        blog!(
             "delulu broker: {revoked_count} revoked certificate fingerprint(s) reloaded — re-adoption \
              of a revoked credential stays refused across this restart (ADOPT-REPLAY-1)."
         );
@@ -1988,32 +2109,32 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // absence of a line is not a report, least of all in a detached start whose operator reads
     // `broker.log`. A downgrade is exactly the event worth seeing, so it now says so out loud.
     if let Some(anchor) = &strict {
-        eprintln!(
+        blog!(
             "delulu broker: STRICT root-issuance mode ON (DISC-1) — roots require an anchored \
              certificate verifying against `{anchor}`; unsigned issuance is refused DL1421. Residual: \
              protect the anchor PRIVATE key and `{}` from same-uid access (category 7).",
             root_policy_path(state_dir).display()
         );
     } else if root_policy_poisoned {
-        eprintln!(
+        blog!(
             "delulu broker: root policy `{}` EXISTS but is UNREADABLE — refusing to create root \
              authority by ANY path (unsigned issuance DL1421, adoptions poisoned) until it is \
              repaired or removed. A policy that cannot be read is not a missing policy (ROOTPOLICY-1).",
             root_policy_path(state_dir).display()
         );
     } else {
-        eprintln!(
+        blog!(
             "delulu broker: root-issuance mode LEGACY — unsigned `Issue` may create root authority \
              (DISC-1). Turn on the gate with `broker start --require-anchored-roots <anchor-pubkey>`."
         );
     }
     if print_owner {
-        eprintln!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
+        blog!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
     }
     // Enabling bypass ALWAYS prints the banner (addendum §2.6). Foreground: the user's terminal.
     // Detached: this lands in broker.log AND the parent prints it to the terminal (`start_detached`).
     if bypass {
-        eprintln!("{}", delulu_diag::GUARD_BYPASS_BANNER);
+        blog!("{}", delulu_diag::GUARD_BYPASS_BANNER);
     }
 
     // The serve loop never propagates an error via `?` (transient accept/frame errors `continue`;
@@ -2078,7 +2199,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                         return;
                     }
                     // A transient accept error (e.g. a peer that vanished) should not kill the daemon.
-                    eprintln!("delulu broker: accept error (continuing): {e}");
+                    blog!("delulu broker: accept error (continuing): {e}");
                     continue;
                 }
             };
@@ -2088,7 +2209,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             }
             if reading.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= MAX_READERS {
                 reading.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-                eprintln!("delulu broker: {MAX_READERS} connections already reading (dropping this one)");
+                blog!("delulu broker: {MAX_READERS} connections already reading (dropping this one)");
                 continue;
             }
             let (whole, revocation, reading, clock) = (whole.clone(), revocation.clone(), reading.clone(), clock.clone());
@@ -2115,7 +2236,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                             let _ = whole.try_send(None);
                         }
                         if let Some(line) = reader_delays(kind, stamped.saturating_duration_since(accepted), stamped.elapsed()) {
-                            eprintln!("{line}");
+                            blog!("{line}");
                         }
                     }
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
@@ -2137,10 +2258,10 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                         handover_seam::before_hand_over(&seam_dir, &stamped_request.1);
                         drop(whole.send(Some(stamped_request)));
                         if let Some(line) = reader_delays(kind, stamped.saturating_duration_since(accepted), stamped.elapsed()) {
-                            eprintln!("{line}");
+                            blog!("{line}");
                         }
                     }
-                    Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
+                    Err(why) => blog!("delulu broker: {why} (dropping connection)"),
                 }
                 // Counted until its request is handed over, not only while it reads: a reader waiting on a busy
                 // handler is a thread too, and a flood of whole requests grew one per connection (240 threads
@@ -2208,7 +2329,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         for node in fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of) {
             let handed_over = waiting.len() + usize::from(urgent.is_some());
             let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
-            eprintln!("{}", beat_times.judged(&node, serving, taken, handed_over, readers));
+            blog!("{}", beat_times.judged(&node, serving, taken, handed_over, readers));
         }
         let Some((mut conn, req, arrived, heard)) = urgent.or_else(|| waiting.pop_front()) else { continue };
         let kind = req.body.kind();
@@ -2255,10 +2376,10 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                     if let Err(e) =
                         write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &refusal)
                     {
-                        eprintln!("delulu broker: response write failed (dropping connection): {e}");
+                        blog!("delulu broker: response write failed (dropping connection): {e}");
                     }
                 }
-                None => eprintln!("delulu broker: response write failed (dropping connection): {e}"),
+                None => blog!("delulu broker: response write failed (dropping connection): {e}"),
             }
         }
         drop(conn);
@@ -2279,14 +2400,14 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                 // A beat that came after its deadline fired the dead-man itself: name the beats before it as well.
                 if fired_it {
                     let readers = reading.load(std::sync::atomic::Ordering::SeqCst);
-                    eprintln!("{}", beat_times.judged(&node, serving, taken, waiting.len(), readers));
+                    blog!("{}", beat_times.judged(&node, serving, taken, waiting.len(), readers));
                 }
             }
         }
         // An answer that was not written already has its line above.
         let late = arrived.elapsed();
         if written.is_ok() && late >= SLOW_ANSWER {
-            eprintln!(
+            blog!(
                 "delulu broker: a {kind} request was answered {} ms after it arrived: {} ms waiting for the requests ahead of \
                  it, {} ms handling and answering it (a device's authority probe waits 1000 ms)",
                 late.as_millis(),

@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the broker under many clients, 2026-11-15
+
+- **Fixed (FABLE-038, RW 4.99, D-V2-228): a broker whose standard error nobody reads no longer stops.** A foreground
+  daemon (`delulu broker start --foreground`) started by a supervisor that keeps its standard error as a pipe and does
+  not read it stopped answering every client once the pipe filled — after about 19 lines on Windows — and each client
+  then failed closed with DL1401 after 15 s. The daemon now hands its lines to a writer thread and waits at most 50 ms
+  for one; when nobody is reading it keeps serving, drops the lines it cannot say, and says how many once it is read
+  again. The audit chain was never affected and is still the record. A detached daemon (`broker start`), whose
+  standard error is `broker.log`, was not affected.
+- **Known (FABLE-039, RW 4.100, open): more than 64 simultaneous requests are shed.** The daemon drops a connection
+  past that bound at once, by design; the run that sent it fails with DL1401 — in words that say to start a broker
+  that is running — after whatever it had already done. Measured on one Windows laptop: 64 runs at once all succeed;
+  at 128 at once 112 did. Keep a fleet of agents under one broker below that until it is fixed.
+
 ## Unreleased — the run's own record, 2026-11-14
 
 - **Fixed (RW 6.77, D-V2-227): a report that cannot be written no longer costs a second run.** `run --report-out F`

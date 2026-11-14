@@ -1914,3 +1914,168 @@ fn a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once() {
         std::mem::forget(guard);
     }
 }
+
+/// Kills a foreground daemon on drop: a failed assertion must not leave it holding the pipe.
+struct KillOnDrop(std::process::Child);
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// One connection that says nothing and closes: the daemon answers it with one line on its standard error
+/// (*"… (dropping connection)"*). `false` when the endpoint would not take a client this instant (a Windows pipe with
+/// every instance busy).
+#[cfg(unix)]
+fn knock(state: &Path) -> bool {
+    std::os::unix::net::UnixStream::connect(state.join("broker.sock")).is_ok()
+}
+#[cfg(windows)]
+fn knock(state: &Path) -> bool {
+    let canon = std::fs::canonicalize(state).unwrap_or_else(|_| state.to_path_buf());
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in canon.to_string_lossy().to_lowercase().bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    std::fs::OpenOptions::new().read(true).write(true).open(format!(r"\\.\pipe\delulu-broker-{h:016x}")).is_ok()
+}
+
+/// Why a knock fails, for a failure message.
+#[cfg(unix)]
+fn knock_error(state: &Path) -> Option<String> {
+    std::os::unix::net::UnixStream::connect(state.join("broker.sock")).err().map(|e| e.to_string())
+}
+#[cfg(windows)]
+fn knock_error(state: &Path) -> Option<String> {
+    let canon = std::fs::canonicalize(state).unwrap_or_else(|_| state.to_path_buf());
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in canon.to_string_lossy().to_lowercase().bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    let pipe = format!(r"\\.\pipe\delulu-broker-{h:016x}");
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&pipe)
+        .err()
+        .map(|e| format!("{pipe}: {e} (state `{}`)", canon.display()))
+}
+
+/// FABLE-038: a foreground daemon whose standard error nobody reads keeps serving, and says what it could not say
+/// once somebody reads again.
+///
+/// Every line the daemon wrote was a blocking write on the thread that wrote it. Started by a supervisor that keeps
+/// its standard error as a pipe and does not read it — an agent's harness, a script — the daemon stopped for good when
+/// the pipe filled: a reader thread blocked holding standard error's lock, the next 64 readers behind it, then the
+/// accept loop itself, and no client was ever answered again (each failed closed with DL1401 after 15 s). Found with
+/// 64 runs at once on Windows, where a pipe holds 4 KiB: 3 of 64 succeeded. Here the lines are the cheapest the daemon
+/// writes — one for a connection that closes without a request — and there are far more of them than a pipe holds
+/// (64 KiB on Linux). Then the daemon must still answer `status`, still run a program, and — once this test starts
+/// reading — name the lines it dropped.
+#[test]
+fn a_daemon_whose_standard_error_nobody_reads_keeps_serving() {
+    use std::io::Read as _;
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dle-{}-{}", std::process::id(), t % 1_000_000_000));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        cwd.join("p.delulu"),
+        "module p\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"served\")\n}\n",
+    )
+    .unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&cwd)
+        .env("DELULU_STATE_DIR", &state)
+        .args(["broker", "start", "--foreground"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("start the daemon in the foreground");
+    let mut daemon = KillOnDrop(child);
+    let guard = DaemonGuard { state: state.clone() };
+    let up = (0..150).any(|_| {
+        let ok = delulu_in(&cwd, &state, &["broker", "status"]).status.success();
+        if !ok {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        ok
+    });
+    assert!(up, "the foreground daemon did not come up");
+
+    // The flood: each knock is one line of about 100 bytes, and nobody reads them. 1,600 of them is past what this
+    // pipe holds on any system here (64 KiB: Linux, and Rust's own pipes on Windows) plus the lines the daemon keeps
+    // for a reader that is behind. On its own thread, with a deadline: against a daemon that HAS stopped, a knock
+    // waits in the socket's backlog for ever (Unix) or is refused (Windows), and the assertion below must still be
+    // reached to say so.
+    let wanted = 1600;
+    let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    {
+        let (state, count) = (state.clone(), count.clone());
+        std::thread::spawn(move || {
+            for _ in 0..wanted * 20 {
+                if knock(&state) {
+                    if count.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 >= wanted {
+                        break;
+                    }
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            }
+        });
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while count.load(std::sync::atomic::Ordering::SeqCst) < wanted && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let knocked = count.load(std::sync::atomic::Ordering::SeqCst);
+
+    // Still serving: an answer, promptly, and a whole run through it.
+    let asked = std::time::Instant::now();
+    let o = delulu_in(&cwd, &state, &["broker", "status"]);
+    assert!(
+        o.status.success(),
+        "after {knocked} unread lines the daemon no longer answers (it blocked on its own standard error): {}",
+        stderr(&o)
+    );
+    assert!(asked.elapsed() < std::time::Duration::from_secs(10), "`status` took {:?}", asked.elapsed());
+    let o = delulu_in(&cwd, &state, &["run", "p.delulu", "--broker", "daemon", "--grant", "console"]);
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "served\n"), "{}", stderr(&o));
+    // And the flood was a flood: a daemon that kept serving took every knock.
+    assert_eq!(knocked, wanted, "the endpoint took only {knocked} of {wanted} connections: {:?}", knock_error(&state));
+
+    // Now somebody reads: the daemon says how many lines it dropped, on the next line it writes.
+    let mut pipe = daemon.0.stderr.take().expect("the daemon's standard error");
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = pipe.read_to_string(&mut text);
+        text
+    });
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    for _ in 0..50 {
+        if knock(&state) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "stop"]);
+    assert!(o.status.success(), "broker stop: {}", stderr(&o));
+    std::mem::forget(guard);
+    let _ = daemon.0.wait();
+    let said = reader.join().expect("the reader thread");
+    assert!(said.contains("delulu broker: serving on"), "the daemon's first line is there: {said:.300}");
+    assert!(
+        said.contains("of this log were dropped"),
+        "a daemon that dropped lines says how many once it is read again; it said {} bytes, ending: {}",
+        said.len(),
+        &said[said.len().saturating_sub(400)..]
+    );
+    let _ = std::fs::remove_dir_all(&base);
+}

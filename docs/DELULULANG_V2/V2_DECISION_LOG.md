@@ -6793,3 +6793,51 @@ ends without its goodbye) are as they were.
 
 **Evidence.** `V2_LOG.md`'s entry of 2026-11-14 (the laptop, Fable 5.2): each test red before its fix, the two
 Linux-only tests named as not run on the laptop, and the CI run that ran them.
+
+## D-V2-228 — FABLE-038 (RW 4.99): the broker daemon never stops serving to write its own log — a line is handed to a writer thread and waited for at most 50 ms; a reader that has stopped reading costs lines, never the broker — TAKEN (head chef, 2026-11-15, under the owner's delegation)
+
+**Context.** The owner, 2026-11-14: *"Main users of DeluluLang are AI, LLMs, Multiple AI Agents at same time,
+Autonomous vehicles, satellites, drones, Multiple Robots at same time … Multiple of these users will be using
+DeluluLang at same time."* So the first experiment after the report slice was many runs at once against one broker
+(`V2_LOG.md`, 2026-11-15). The broker held: 64 runs at once, each with its own write scope, four rounds — every run
+exit 0, every file written whole and in its own scope, the audit chain verified. It also stopped once, for good, and
+the cause was mine before it was the broker's: my harness started the daemon with its standard error as a pipe and
+never read it. That is a mistake a supervisor makes easily — and what it exposed is the broker's:
+
+- Every line the daemon said was a blocking `eprintln!` on the thread that said it (`brokerd.rs`: the serve loop, the
+  accept loop, each reader). With standard error a pipe nobody reads, the first line past the pipe's capacity blocks
+  its thread holding standard error's lock; the next 64 readers block behind it holding their slots; the accept loop
+  then blocks on its own line; nothing is ever answered again.
+- **Witnessed with a control** (Windows, debug build of `4f2af3f`, 64 runs at once, five brokered file writes each):
+  standard error in a file — 64 of 64, twice, the daemon having written 16 KB and then 24 KB of late-answer lines;
+  standard error an unread pipe — 3 of 64 and 31 of 64, `broker status` unanswered after 15 s, `broker stop`
+  unanswered after 30 s, and the pipe holding 4,073 and 4,103 bytes: 19 late-answer lines. Every failed run had
+  already written its files, and failed closed (DL1401) at its next request.
+- The daemon writes most when it is busiest (a late answer is a line), so load alone pulls the trigger; and a client
+  needs no authority to make it write (a connection that closes without a request is a line).
+- Custody held throughout: no authority was gained, every client failed closed. What was lost is availability — every
+  agent's, and an e-stop's revocation among the requests the daemon would never read.
+
+**Decision.**
+1. **One writer thread, a short deadline** (`brokerd.rs` `DaemonLog`, `install_daemon_log`, `log_line`, `blog!`). A
+   line is handed to the writer and the thread that said it waits at most 50 ms for it to be written. A file, a
+   terminal and a pipe that is read take a line in microseconds, so the log is complete and in order before the next
+   step, exactly as before — which is why no existing test of `broker.log` needed to change.
+2. **A reader that has stopped reading costs lines, never the broker.** When the writer misses the deadline the log is
+   *behind*: lines queue (256) and are then counted and dropped; no thread waits. When the reader returns, the writer
+   says how many lines were dropped, then carries on.
+3. **Every line the daemon says after it starts goes this way** — 24 call sites, all of `serve_inner` and the helpers
+   it calls. The `broker` commands in the same file run in other processes and print as before; so does a unit test
+   that drives `serve_inner` directly (the writer is installed only by `serve`, the daemon's own entry).
+4. **What is not weakened.** The audit chain is the record and its append is still the fail-stop (invariant 26): a
+   decision that cannot be recorded is still refused. A dropped line is a diagnostic. No new `DL` code.
+
+**Why not a non-blocking standard error.** On Unix `O_NONBLOCK` belongs to the open file description, shared with
+whoever else holds it — a supervisor's terminal among them — and `eprintln!` panics on a write that would block.
+
+**What it does not do.** A line written by another module of the same process straight to standard error (a panic's
+message among them) can still block its own thread. The detached daemon (`broker start`) was never affected: its
+standard error is `broker.log`, a file.
+
+**Evidence.** `V2_LOG.md`'s entry of 2026-11-15 (the laptop, Fable 5.2): the experiment, the control, the
+test red without the writer (the daemon stops after 731 unread lines) and green with it.

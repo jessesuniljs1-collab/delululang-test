@@ -9782,3 +9782,40 @@ Survey and doctor: in the commit below.
   once against one broker, the owner's stated first users being several agents and machines at the same time;
   (3) the competitor decision table in the audit; (4) the Survey's architecture views, slice 1; (5) RW 6.87 and the
   recovery plan's next truthful-outcome rows (`test` with a missing path, `fix --dry-run`, `schema validate`).
+
+### 2026-11-15 — the laptop: Fable 5.2, checkpoint 4 — many runs at once: the broker holds at 64, no longer stops behind an unread standard error (FABLE-038, D-V2-228), and sheds requests past 64 (FABLE-039, open); the competitor decision table
+- Session: `https://claude.ai/code/session_01Deh6W9qF2oxkvTVET8c51r` (the conversation of the entry above, continued).
+  Model: Claude Fable 5.2 as the harness names it, effort `max` as the owner set it. No sub-agent wrote code or ran a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base of this entry: `4f2af3f`. Nothing new on `origin/master` (`ac2a162`) at the last fetch.
+- **CI of the entry above** (`4f2af3f`, run `43625167177`, `ci.yml` with `jobs=everything`): **15 of 18 jobs succeeded
+  when this was written** — `test` on Ubuntu, macOS and Windows, `lints`, `arm64`, `heavy-gates`, `formal`, `fuzz`,
+  `microvm`, `microvm-reproducible`, `supply-chain`, `editor`, `miri-ffi`, and `miri` for two crates. The three
+  `miri-slow` jobs were still running. **Not yet read:** the Ubuntu job's log (GitHub releases a job's log when the
+  whole run ends), so the two Linux-only `/dev/full` tests are confirmed by the job's result, not yet by their names.
+  Neither is said to be green here; the next entry reads the run whole.
+- **What changed for a user:** a foreground broker started by something that does not read its standard error keeps
+  serving (it stopped for good after about 19 lines on Windows). `CHANGELOG.md` has the entry, and names the limit that
+  is still there: more than 64 simultaneous requests are shed.
+- Files and folders: M `crates/delulu/src/brokerd.rs` (the log writer; 24 call sites), M
+  `crates/delulu/tests/broker_cli.rs` (one test, two helpers), M `CHANGELOG.md`, M
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-228), M `docs/DELULULANG_V2/V2_LOG.md`, M `docs/REMAINING_WORK.md`
+  (4.99 found and closed, 4.100 new and open), M `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md`
+  (section 8.1, the decision table for the projects the owner named; section 13.2; FABLE-038 to FABLE-040; Appendix B),
+  M `docs/review/fable-deep-verification-state.json`, M `docs/CLOUD_SYNC_LOG.md`, M `docs/survey/*`. No file added,
+  deleted or renamed; no workflow, no entrenched file.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227`, `D-V2-228`; RW `6.87`, `4.99`, `4.100`.
+- Tests on the laptop (Windows, `-j 4`): the new test red without the writer and green with it; the binary's 211 unit
+  tests and seven suites that use the daemon, 293 passed, cargo exit 0; `scripts/clippy.sh -j 4` clean and stamped
+  after the last `.rs` edit. The experiment's numbers are `V2_LOG.md`'s entry of this date.
+- **Not run on the laptop:** Linux, macOS, Miri for this change; the load experiment on any system but this one. CI at
+  this commit is dispatched after the push; nothing here says green for it.
+- Survey and doctor after the last edit: as the commit message states them.
+- Mistakes of mine recorded where they happened: a harness that did not read the daemon's standard error (it found
+  FABLE-038, and for a while I blamed the broker alone, then the harness alone); a here-document that halved the
+  backslashes of a pipe name in the new test.
+- **Open / next, in order:** (1) read run `43625167177` whole, then this commit's run, and record both; (2) the
+  Survey's architecture views, slice 1 — the commission's next item, and `impact` answering *"the crate and its 109
+  tests"* for any module is the first thing it has to improve; (3) RW 4.100 (a busy answer at the bound, a client that
+  asks again) — its own decision, a wire change; (4) RW 6.87 (`--signoff`) and the plan's next truthful-outcome rows;
+  (5) the three small items of the audit's section 8.1 (version identity, `llms.txt`, a standalone audit verifier).

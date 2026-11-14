@@ -15,10 +15,10 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 3,
-  "checkpoint_note": "The first code slice has landed on this branch: RW 6.77 and RW 6.83 (D-V2-227). Each later slice is its own commit; the audit's section 13 lists them.",
+  "checkpoint": 4,
+  "checkpoint_note": "Two code slices on this branch: the report sinks (D-V2-227) and the broker's log writer (D-V2-228). The audit's section 13 lists them; section 8.1 holds the decision table for the projects the owner named.",
   "last_session": {
-    "date": "2026-11-14",
+    "date": "2026-11-15",
     "where": "owner's laptop (Windows 11 x64, WSL2 Ubuntu 20.04) and GitHub-hosted runners of the test repository",
     "model_as_stated_by_harness": "claude-fable-5-2",
     "effort_as_set_by_owner": "max"
@@ -84,16 +84,16 @@
   },
   "next_three_commands": [
     {
-      "run": "git fetch origin && gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the ci.yml run dispatched at checkpoint 3's commit; read every job, the two /dev/full tests among them, and record it"
+      "run": "gh run view 43625167177 -R jessesuniljs1-collab/delululang-test --json status,conclusion,jobs",
+      "expect": "completed; then read the Ubuntu job's log for the two /dev/full tests by name, and record the run"
+    },
+    {
+      "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
+      "expect": "the run dispatched at checkpoint 4's commit; read every job, a_daemon_whose_standard_error_nobody_reads_keeps_serving on three systems"
     },
     {
       "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
-      "expect": "ok on a clean checkout of this branch"
-    },
-    {
-      "run": "cargo test --locked -p delulu --test json_contract --test sandbox_run_cli -j 4",
-      "expect": "15 and 26 passed on Windows; on Linux two more tests run (/dev/full)"
+      "expect": "ok on a clean checkout of this branch; then the architecture views, slice 1"
     }
   ],
   "engineering": {
@@ -108,15 +108,34 @@
         "base": "919114e647e1764b08bd7f88890e9853e6e75ddc",
         "verified_on_laptop": "json_contract 15 of 15, sandbox_run_cli 26 of 26, clippy clean (Windows, debug)",
         "not_verified_on_laptop": "two Linux-only tests (/dev/full), the rest of the workspace suite, macOS",
+        "ci": "run 43625167177 at 4f2af3f: 15 of 18 jobs succeeded when last read (the three test jobs among them); three miri-slow jobs still running; the Ubuntu log not yet readable"
+      },
+      {
+        "id": "broker-log-writer",
+        "rows": [
+          "RW 4.99 (FABLE-038)"
+        ],
+        "decision": "D-V2-228",
+        "base": "4f2af3f324a0c5ec2bd18458235726f2eded32e0",
+        "verified_on_laptop": "the new broker_cli test red without the writer and green with it; 293 tests of the daemon and its users; clippy clean (Windows, debug)",
+        "not_verified_on_laptop": "Linux, macOS, Miri",
         "ci": "dispatched after the push; read and recorded in the next sync-log entry"
       }
     ],
     "found_not_fixed": [
-      "RW 6.87: --signoff has none of the report's rules"
+      "RW 6.87: --signoff has none of the report's rules",
+      "RW 4.100 (FABLE-039): past 64 simultaneous requests the broker sheds them and the client is told to start a broker that is running"
     ],
     "numbers_taken": {
-      "decision": "D-V2-227",
-      "remaining_work_row": "6.87"
+      "decisions": [
+        "D-V2-227",
+        "D-V2-228"
+      ],
+      "remaining_work_rows": [
+        "6.87",
+        "4.99",
+        "4.100"
+      ]
     }
   },
   "research_since_checkpoint_2": {
@@ -126,5 +145,24 @@
       "google/cybernetic-agent-governance-engine": "f0ca9f4d216b62847bea0a20963bfb7ad2b7f184"
     },
     "status": "read at these commits; the decision table is not yet in the audit"
+  },
+  "experiments": {
+    "M1_many_runs_one_broker": {
+      "where": "the Windows laptop; debug build of 4f2af3f and release build of ac2a162",
+      "holds_at": 64,
+      "sheds_past": 64,
+      "wall_ms_at_1_16_64": [
+        93,
+        1021,
+        3800
+      ],
+      "audit_chain": "verified at every level tried, to 256 at once",
+      "not_run_on": [
+        "Linux",
+        "macOS",
+        "any device",
+        "any network effect"
+      ]
+    }
   }
 }
