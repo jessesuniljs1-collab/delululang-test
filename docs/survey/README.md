@@ -141,6 +141,28 @@ direction, and `path` prints one chain in full. `--depth N` bounds the first two
 at all. Each reached node names the node it came from and the file and line the hop was read from,
 so the whole chain can be walked back and disagreed with.
 
+**Commands are nodes** (since 2026-11-15, D-V2-229). Every `delulu` command is a `verb:` node read
+from the one `match` that dispatches them, with a `dispatches-to` edge to the module that handles it:
+
+```
+cargo run -p delulu-survey -- query verb:run                                   # its handler, and who drives it
+cargo run -p delulu-survey -- impact mod:crates/delulu/src/run_cmd.rs --depth 2  # a module's commands and their suites
+```
+
+Before them, a module's `impact` reached its crate and then every test file the crate has — the
+same answer for any module. Now it reaches the command first, and the test suites that drive that
+command.
+
+**Read, or guessed.** Those suite-to-command edges (`exercises`) are the one kind this map
+**infers**: a suite is linked to a command when its text holds the command as the first string of an
+argument list. It is how the suites call the binary, so it is right often enough to choose which
+tests to run — and it is a reading of a string, so it misses a suite that builds its arguments
+elsewhere and counts a list that merely begins with the same word. Every such edge says
+`(inferred)` where a person reads it and `"confidence": "inferred"` where a program does; the map
+counts them (`facts.edges_inferred`), and an edge without the word is the construct on its line.
+An internal subcommand dispatched through a constant gets a node named after the constant, marked
+`DYNAMIC`: its spelling is not on the line, and is not guessed.
+
 One caveat worth knowing when you read a raw in-degree: **documents are part of the map, so writing
 about a file changes how many edges point at it.** `check.rs` had one incoming edge before this
 paragraph existed and eight after, because several documents now mention it by name — each a real,

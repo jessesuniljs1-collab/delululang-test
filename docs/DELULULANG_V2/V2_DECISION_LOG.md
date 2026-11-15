@@ -6841,3 +6841,53 @@ standard error is `broker.log`, a file.
 
 **Evidence.** `V2_LOG.md`'s entry of 2026-11-15 (the laptop, Fable 5.2): the experiment, the control, the
 test red without the writer (the daemon stops after 731 unread lines) and green with it.
+
+## D-V2-229 — Architecture slice 1, first part: the CLI's commands are nodes of the Survey, read from the dispatch; an edge says whether it was read or inferred; every tracked file is held to the map by a gate — TAKEN (head chef, 2026-11-15, under the owner's delegation)
+
+**Context.** The owner's commission of 2026-11-14 (§3, §7 item 2) asks for a source-derived architecture system and
+says where to build it: *"Extend or reuse [Survey and Atlas] instead of creating a parallel source-of-truth system."*
+Inspected first, as it asks: the Survey already has `build`, `check`, `query`, `rdeps`, `impact`, `affected-by`,
+`path` and `diff`, each with `--json`; 1,734 nodes and 20,969 edges, every edge citing a file and line; a freshness
+gate; `doctor` renders its health. So the commission's suggested `architecture build | check | explain | path`
+verbs exist under other names, and none was added. What the map lacked was in the model:
+- **Nothing stood between a module and a test.** `impact mod:crates/delulu/src/run_cmd.rs` reached `main.rs`, the
+  crate, and then every test file the crate has: 111 nodes, the same answer for any module of the CLI crate — I
+  recorded that on 2026-11-14 while closing RW 6.77, having asked it too late. `NodeKind::CliVerb` was declared in
+  the model and no extractor produced one.
+- **Every edge claimed the same certainty.** The one law was *an edge cites its line*, which does not distinguish
+  *"`mod x;` is on this line"* from *"this string looks like a command"*.
+- **The inventory had no gate from git's side.** The freshness gate compares the map with what the map chose to
+  read, so a file the scanner silently skipped could not fail it.
+
+**Decision.**
+1. **Commands are nodes** (`crates/delulu-survey/src/verbs.rs`). Each arm of the dispatch `match` in
+   `crates/delulu/src/cli.rs` (`run_inner`) is a `verb:<name>` node whose summary is the arm, verbatim, and whose
+   `dispatches-to` edge names the handler's module and cites the arm's line. An arm nested inside an arm is a
+   sub-verb and is not read. An internal subcommand dispatched through a constant gets a node named after the
+   constant, marked `DYNAMIC`: its spelling is not on the line, and is not guessed. If the dispatch is not where the
+   extractor reads it, the map says so (`cli-dispatch-not-found`) instead of holding no verbs.
+2. **An edge says how it is known** (`Confidence`: `source-derived` or `inferred`). Absent from `survey.json` when
+   source-derived, so the edges that always were are unchanged byte for byte; always present in a `--json` answer
+   (`via.confidence`); and printed as *"(inferred)"* beside the kind wherever a person reads an edge. The map counts
+   its own guesses (`facts.edges_inferred`).
+3. **One inferred kind: `exercises`, test suite → command.** A suite is linked to a command when its text holds the
+   command as the first string of an argument list — how every integration suite here calls the binary. It misses a
+   suite that builds its arguments elsewhere and counts a list that merely begins with the same word, and the
+   Survey's README says so. It is there because it turns `impact` from *every suite* into *the suites that drive this
+   command*, and it is labelled because it is not evidence of coverage.
+4. **Both new kinds compose in a walk**: a handler's change reaches its command, and a command's reaches the suites
+   that drive it.
+5. **The inventory is gated from git's side** (`tests/accounting.rs`): every file `git ls-files` names is a node, or
+   is excluded by a rule that carries its reason. Measured: 1,275 tracked files, 1,274 nodes, one exclusion
+   (`.claude/settings.json`, agent scratch space).
+6. **No new source of truth, no new command, no schema break.** `survey/1` stays: two node and edge kinds, one
+   optional edge field and two facts are additions. `SURVEY.md` gains a generated *commands* table.
+
+**What this is not.** It is not a call graph: which functions a command reaches after its handler needs name
+resolution, which the Survey does not do — it reads text so that it opens when the compiler does not build. It is not
+coverage. And it is the first part of slice 1, not the slice: the 276 files of kind `other` (workflows, scripts,
+manifests, fixtures, proofs) are accounted for and not yet classified by role, and CI workflows, features and
+`cfg` gates are not yet nodes.
+
+**Evidence.** `V2_LOG.md`'s entry of 2026-11-15 (architecture slice 1): the four `verbs` tests and the accounting
+gate, each seen red under a deliberate defect; the measurements.

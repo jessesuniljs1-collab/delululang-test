@@ -15,8 +15,8 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 4,
-  "checkpoint_note": "Two code slices on this branch: the report sinks (D-V2-227) and the broker's log writer (D-V2-228). The audit's section 13 lists them; section 8.1 holds the decision table for the projects the owner named.",
+  "checkpoint": 5,
+  "checkpoint_note": "Three code slices on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), and architecture slice 1's first part — commands in the Survey, read-or-inferred edges, the inventory gate (D-V2-229).",
   "last_session": {
     "date": "2026-11-15",
     "where": "owner's laptop (Windows 11 x64, WSL2 Ubuntu 20.04) and GitHub-hosted runners of the test repository",
@@ -84,16 +84,16 @@
   },
   "next_three_commands": [
     {
-      "run": "gh run view 43625167177 -R jessesuniljs1-collab/delululang-test --json status,conclusion,jobs",
-      "expect": "completed; then read the Ubuntu job's log for the two /dev/full tests by name, and record the run"
+      "run": "gh run view 43654591666 -R jessesuniljs1-collab/delululang-test --json status,conclusion,jobs",
+      "expect": "completed; then read a_daemon_whose_standard_error_nobody_reads_keeps_serving by name on the three test jobs"
     },
     {
       "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the run dispatched at checkpoint 4's commit; read every job, a_daemon_whose_standard_error_nobody_reads_keeps_serving on three systems"
+      "expect": "the run dispatched at checkpoint 5's commit; read the Survey's tests (verbs, accounting) on Linux and macOS"
     },
     {
-      "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
-      "expect": "ok on a clean checkout of this branch; then the architecture views, slice 1"
+      "run": "cargo run -p delulu-survey -- query verb:run && cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
+      "expect": "the handler and 61 inferred suites; ok; ok — then classify the files of kind other by role (the rest of slice 1)"
     }
   ],
   "engineering": {
@@ -108,7 +108,7 @@
         "base": "919114e647e1764b08bd7f88890e9853e6e75ddc",
         "verified_on_laptop": "json_contract 15 of 15, sandbox_run_cli 26 of 26, clippy clean (Windows, debug)",
         "not_verified_on_laptop": "two Linux-only tests (/dev/full), the rest of the workspace suite, macOS",
-        "ci": "run 43625167177 at 4f2af3f: 15 of 18 jobs succeeded when last read (the three test jobs among them); three miri-slow jobs still running; the Ubuntu log not yet readable"
+        "ci": "run 43625167177 at 4f2af3f: completed, 18 of 18 jobs; the two Linux-only /dev/full tests ok by name in the Ubuntu log"
       },
       {
         "id": "broker-log-writer",
@@ -119,7 +119,18 @@
         "base": "4f2af3f324a0c5ec2bd18458235726f2eded32e0",
         "verified_on_laptop": "the new broker_cli test red without the writer and green with it; 293 tests of the daemon and its users; clippy clean (Windows, debug)",
         "not_verified_on_laptop": "Linux, macOS, Miri",
-        "ci": "dispatched after the push; read and recorded in the next sync-log entry"
+        "ci": "run 43654591666 at b1eaeae: in progress when last read (11 of 18 jobs succeeded)"
+      },
+      {
+        "id": "architecture-slice-1-part-1",
+        "rows": [
+          "commission section 3 and section 7 item 2"
+        ],
+        "decision": "D-V2-229",
+        "base": "b1eaeae0d8f34ecb8ee736056240325bf5449f9c",
+        "verified_on_laptop": "the Survey's suite (81 tests) and its consumers in the CLI crate (45); each new test seen red under a deliberate defect; clippy clean",
+        "not_verified_on_laptop": "Linux, macOS",
+        "ci": "dispatched after the push"
       }
     ],
     "found_not_fixed": [
@@ -129,7 +140,8 @@
     "numbers_taken": {
       "decisions": [
         "D-V2-227",
-        "D-V2-228"
+        "D-V2-228",
+        "D-V2-229"
       ],
       "remaining_work_rows": [
         "6.87",
@@ -164,5 +176,28 @@
         "any network effect"
       ]
     }
+  },
+  "architecture": {
+    "owner_of_the_repository_graph": "delulu-survey (extended, no second source of truth)",
+    "freshness": "cargo run -p delulu-survey -- check; doctor --check",
+    "inventory": {
+      "tracked_files": 1275,
+      "nodes_for_them": 1274,
+      "excluded_by_named_rule": 1
+    },
+    "cli_verbs": 47,
+    "edges_inferred": 399,
+    "explicit_unknowns": [
+      "5 internal subcommands dispatched through constants (DYNAMIC)",
+      "exercises edges are a reading of a string",
+      "no call graph beyond a handler's module"
+    ],
+    "not_yet": [
+      "roles for the 276 files of kind other",
+      "CI workflows, features and cfg gates as nodes",
+      "layered generated views",
+      "doctor: selected binary against the checkout",
+      "the dogfood exercise"
+    ]
   }
 }

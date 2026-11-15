@@ -10,6 +10,11 @@ repository's own text.
 > and every edge whose target is a path was checked to exist. Nothing here is inferred from
 > name similarity, embeddings, or proximity. A relation that cannot be pointed at in the
 > text is not in the map — it is a [discrepancy](DISCREPANCIES.md) instead.
+>
+> **Read, or guessed.** An edge is the construct on its line (a dependency, a `mod` item, a
+> link, an arm of the dispatch) unless it says **inferred**. One kind is: *a test suite drives
+> a command*, read from a string at the head of an argument list. Those edges are counted
+> below, and no renderer prints one without the word.
 
 Not to be confused with the **Atlas** (`crates/delulu-atlas`), which maps a checked Delulu
 *program* from compiler facts. The Atlas needs the compiler to work; the Survey reads
@@ -23,17 +28,19 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 349 |
-| Rust lines | 210536 |
-| Rust files outside `src/` (test/bench targets) | 178 |
+| Rust files | 352 |
+| Rust lines | 211059 |
+| Rust files outside `src/` (test/bench targets) | 180 |
 | Markdown documents | 331 |
-| Markdown lines | 116042 |
+| Markdown lines | 116229 |
 | DeluluLang programs | 317 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1734 / 20969 |
-| Open discrepancies | 47 |
+| CLI verbs, read from the dispatch | 47 |
+| Nodes / edges in this map | 1784 / 21448 |
+| … edges that are **inferred**, not read (each says so) | 399 |
+| Open discrepancies | 49 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -340,22 +347,23 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 13 files, 4714 lines
+- **Modules:** 14 files, 4982 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/answers.rs` | 133 | The machine answers to the questions asked of the map: `query`/`rdeps` (one hop) and |
+| `src/answers.rs` | 144 | The machine answers to the questions asked of the map: `query`/`rdeps` (one hop) and |
 | `src/codeowners.rs` | 190 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/diff.rs` | 197 | `delulu-survey diff <git-ref>` (P4-06): what a change touched, and everything that breaks because |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 657 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 496 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/lib.rs` | 714 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/main.rs` | 498 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 266 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 528 | Reading Markdown. |
 | `src/paths.rs` | 342 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
-| `src/render.rs` | 292 | The three channels the Survey publishes on. |
+| `src/render.rs` | 338 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 482 | Reading Rust source as text. |
 | `src/scan.rs` | 214 | Walking the tree and deciding what each file *is*. |
+| `src/verbs.rs` | 152 | The CLI's verbs, read from the one `match` that dispatches them — and the tests that drive each. |
 | `src/verify.rs` | 640 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`
@@ -397,6 +405,69 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 | `src/lib.rs` | 1196 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 | `src/reify.rs` | 449 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |
+
+## The commands
+
+Every `delulu` command, read from the one `match` that dispatches them. **Handled in** is read from
+the arm on the cited line. **Test suites that drive it** is *inferred*: a suite is counted when its
+text holds the command as the first string of an argument list, which is how the suites call the
+binary — a guess good enough to choose which tests to run, never evidence that a path is covered.
+Ask for the list with `delulu-survey query verb:<name>`, and for a module's commands and their
+suites with `delulu-survey impact mod:<path> --depth 2`.
+
+| Command | Handled in | Arm | Test suites that drive it (inferred) |
+|---|---|---|---:|
+| `add` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1257` | 3 |
+| `atlas` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1265` | 10 |
+| `audit` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1267` | 19 |
+| `authority` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1263` | 39 |
+| `broker` | `crates/delulu/src/brokerd.rs` | `crates/delulu/src/cli.rs:1270` | 19 |
+| `build` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1259` | 15 |
+| `check` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1243` | 40 |
+| `completions` | `crates/delulu/src/completions.rs` | `crates/delulu/src/cli.rs:1303` | 2 |
+| `deploy` | `crates/delulu/src/deploy.rs` | `crates/delulu/src/cli.rs:1256` | 4 |
+| `device` | `crates/delulu/src/device_cmd.rs` | `crates/delulu/src/cli.rs:1289` | 4 |
+| `doctor` | `crates/delulu/src/doctor.rs` | `crates/delulu/src/cli.rs:1280` | 5 |
+| `edit` | `crates/delulu/src/edit.rs` | `crates/delulu/src/cli.rs:1245` | 3 |
+| `examples` | `crates/delulu/src/examples.rs` | `crates/delulu/src/cli.rs:1288` | 4 |
+| `explain` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1279` | 7 |
+| `fix` | `crates/delulu/src/fix.rs` | `crates/delulu/src/cli.rs:1244` | 3 |
+| `fleet` | `crates/delulu/src/fleet.rs` | `crates/delulu/src/cli.rs:1275` | 1 |
+| `fmt` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1246` | 10 |
+| `grants` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1268` | 18 |
+| `guard` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1269` | 8 |
+| `help` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1307` | 0 |
+| `keygen` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1252` | 11 |
+| `locale` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1277` | 3 |
+| `lock` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1260` | 4 |
+| `login` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1258` | 3 |
+| `lsp` | `crates/delulu/src/lsp.rs` | `crates/delulu/src/cli.rs:1250` | 1 |
+| `mcp` | `crates/delulu/src/mcp.rs` | `crates/delulu/src/cli.rs:1251` | 0 |
+| `monitor` | `crates/delulu/src/monitor_cmd.rs` | `crates/delulu/src/cli.rs:1290` | 2 |
+| `morph` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1278` | 4 |
+| `new` | `crates/delulu/src/new.rs` | `crates/delulu/src/cli.rs:1242` | 4 |
+| `plugin` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1262` | 8 |
+| `publish` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1255` | 2 |
+| `repl` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1266` | 1 |
+| `run` | `crates/delulu/src/run_cmd.rs` | `crates/delulu/src/cli.rs:1261` | 61 |
+| `sandbox` | `crates/delulu/src/sandbox.rs` | `crates/delulu/src/cli.rs:1271` | 19 |
+| `schema` | `crates/delulu/src/schema.rs` | `crates/delulu/src/cli.rs:1287` | 16 |
+| `secrets` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1276` | 9 |
+| `sign` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1253` | 5 |
+| `skill` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1285` | 2 |
+| `test` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1247` | 7 |
+| `toolchain` | `crates/delulu/src/toolchain.rs` | `crates/delulu/src/cli.rs:1286` | 6 |
+| `verify-sig` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1254` | 4 |
+| `why` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1264` | 13 |
+
+Internal subcommands — spawned by the host, never typed. Each is dispatched through a constant, so
+its spelling is **not read here** (`DYNAMIC`): the map names the constant and does not guess its value.
+
+- `foreign_worker::WORKER_SUBCOMMAND` → `crates/delulu/src/foreign_worker.rs` (`crates/delulu/src/cli.rs:1274`)
+- `guest::GUEST_SUBCOMMAND` → `crates/delulu/src/guest.rs` (`crates/delulu/src/cli.rs:1295`)
+- `guest::SANDBOX_RUN_SUBCOMMAND` → `crates/delulu/src/guest.rs` (`crates/delulu/src/cli.rs:1296`)
+- `jail::HOST_WATCH_SUBCOMMAND` → `crates/delulu/src/jail.rs` (`crates/delulu/src/cli.rs:1302`)
+- `microvm::REAPER_SUBCOMMAND` → `crates/delulu/src/microvm.rs` (`crates/delulu/src/cli.rs:1299`)
 
 ## Diagnostic codes
 

@@ -3,7 +3,7 @@
 //! Exit codes follow the project's convention (`docs/for-agents.md`): `0` success, `1` the check
 //! failed, `2` the invocation was wrong.
 
-use delulu_survey::{EdgeKind, Repair, Survey, OUTPUT_DIR};
+use delulu_survey::{Repair, Survey, OUTPUT_DIR};
 use std::path::{Path, PathBuf};
 
 fn main() {
@@ -82,7 +82,8 @@ fn print_help() {
          it reaches the whole workspace. Reach for `impact` when the question is blast radius.\n\n\
          IDS\n  \
            crate:delulu-check  mod:crates/delulu-check/src/ty.rs  doc:README.md\n  \
-           code:DL0501         ruling:S10-D64                     finding:C69\n\n\
+           code:DL0501         ruling:S10-D64                     finding:C69\n  \
+           verb:run            (a `delulu` command: its handler, and the test suites that drive it)\n\n\
          MACHINE OUTPUT\n  \
            Add `--json` to any verb above for ONE object on stdout, carrying `tool`, `verb` and\n  \
            `schema` so a caller can branch before reading anything else. Every edge and every hop\n  \
@@ -201,7 +202,7 @@ fn render_hops(reached: &[delulu_survey::Reached<'_>]) {
             let kids: Vec<_> = wave.iter().filter(|r| r.from == p).collect();
             println!("    from {p}");
             for r in kids.iter().take(MAX_PER_PARENT) {
-                println!("      {:<52} {:<15} @ {}:{}", r.id, kind_word(r.via.kind), r.via.file, r.via.line);
+                println!("      {:<52} {:<15} @ {}:{}", r.id, edge_word(r.via), r.via.file, r.via.line);
             }
             if let Some(hidden) = kids.len().checked_sub(MAX_PER_PARENT).filter(|n| *n > 0) {
                 println!("      … {hidden} more from this node (of {})", kids.len());
@@ -282,7 +283,7 @@ fn path(root: &Path, a: &str, b: &str) {
     }
     println!("{from} -> {to}  ({} hop(s))", chain.len());
     for e in &chain {
-        println!("  {:<44} --{}--> {:<44} @ {}:{}", e.from, kind_word(e.kind), e.to, e.file, e.line);
+        println!("  {:<44} --{}--> {:<44} @ {}:{}", e.from, edge_word(e), e.to, e.file, e.line);
     }
 }
 
@@ -477,7 +478,7 @@ fn group(edges: &[&delulu_survey::Edge], incoming: bool) -> Vec<String> {
         .iter()
         .map(|e| {
             let other = if incoming { &e.from } else { &e.to };
-            format!("{:<20} {:<48} @ {}:{}", kind_word(e.kind), other, e.file, e.line)
+            format!("{:<20} {:<48} @ {}:{}", edge_word(e), other, e.file, e.line)
         })
         .collect();
     out.sort();
@@ -485,8 +486,9 @@ fn group(edges: &[&delulu_survey::Edge], incoming: bool) -> Vec<String> {
     out
 }
 
-fn kind_word(k: EdgeKind) -> &'static str {
-    delulu_survey::answers::kind_word(k)
+/// An edge's kind as printed: the word, with "(inferred)" beside it when it is a heuristic's reading.
+fn edge_word(e: &delulu_survey::Edge) -> String {
+    delulu_survey::answers::edge_word(e)
 }
 
 fn usage(msg: &str) -> ! {

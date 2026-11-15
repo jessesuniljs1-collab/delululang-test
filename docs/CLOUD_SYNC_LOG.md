@@ -9819,3 +9819,34 @@ Survey and doctor: in the commit below.
   tests"* for any module is the first thing it has to improve; (3) RW 4.100 (a busy answer at the bound, a client that
   asks again) — its own decision, a wire change; (4) RW 6.87 (`--signoff`) and the plan's next truthful-outcome rows;
   (5) the three small items of the audit's section 8.1 (version identity, `llms.txt`, a standalone audit verifier).
+
+### 2026-11-15 — the laptop: Fable 5.2, checkpoint 5 — architecture slice 1, first part: the commands are in the map and an edge says whether it was read or inferred (D-V2-229); the report slice's CI read whole, 18 of 18
+- Session: `https://claude.ai/code/session_01Deh6W9qF2oxkvTVET8c51r` (the conversation of the entry above, continued).
+  Model: Claude Fable 5.2 as the harness names it, effort `max` as the owner set it. No sub-agent wrote code or ran a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base of this entry: `b1eaeae`. Nothing new on `origin/master` (`ac2a162`) at the last fetch.
+- **CI read since the entry above.** Run `43625167177` at `4f2af3f` (checkpoint 3): **completed, 18 of 18 jobs
+  succeeded.** The Ubuntu job's log read by name: the two Linux-only `/dev/full` tests and the five others, all
+  `ok`; 201 test binaries `ok`, none failed. Run `43654591666` at `b1eaeae` (checkpoint 4): **in progress** when this
+  was written — 11 of 18 jobs succeeded, the three `test` jobs, `arm64` and the three `miri-slow` jobs still
+  running. Nothing here says green for it.
+- **What changed for a user:** `cargo run -p delulu-survey -- query verb:run` answers which module handles a command
+  and which test suites drive it; `impact mod:<path> --depth 2` reaches a module's commands and their suites instead
+  of every test in the crate; `--json` answers carry `via.confidence`. `docs/survey/README.md` says how to read it.
+- Files and folders: **A** `crates/delulu-survey/src/verbs.rs`, **A** `crates/delulu-survey/tests/verbs.rs`, **A**
+  `crates/delulu-survey/tests/accounting.rs`; M `crates/delulu-survey/src/lib.rs`, `answers.rs`, `main.rs`, `diff.rs`,
+  `render.rs`; M `docs/survey/README.md`; M `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-229),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (section 13.3),
+  `docs/review/fable-deep-verification-state.json`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing deleted or
+  renamed; no workflow, no entrenched file; no crate but the Survey.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227` to `D-V2-229`; RW `6.87`, `4.99`, `4.100`.
+- Tests on the laptop (Windows, `-j 4`): the Survey's suite (81 tests) and its consumers in the CLI crate (45);
+  `scripts/clippy.sh -j 4` clean and stamped after the last `.rs` edit. Each new test was seen red under a deliberate
+  defect — `V2_LOG.md`'s entry of this date names each.
+- Survey and doctor after the last edit: as the commit message states them. One new warning, left as written: the
+  recovery plan's line 124 counts the Rust files as they were; the tree has three more since.
+- **Open / next, in order:** (1) read run `43654591666` whole (the new broker test on three systems), then this
+  commit's run; (2) the rest of architecture slice 1 — classify the 276 `other` files by role, CI workflows and their
+  jobs as nodes; (3) slice 2 — the layered views generated from the map, `doctor`'s line for the selected binary
+  against the checkout, the dogfood exercise; (4) RW 4.100, RW 6.87 and the plan's next truthful-outcome rows;
+  (5) the three small items of the audit's section 8.1.

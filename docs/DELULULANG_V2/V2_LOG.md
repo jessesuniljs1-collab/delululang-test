@@ -13062,3 +13062,58 @@ is right, but a request refused at the bound was never read and is safe to ask a
 **What this does not show.** One laptop, Windows only, a debug and a release build, runs of six effects. No Linux or
 macOS number (the socket's backlog changes what a 65th client sees), no device, no network effect, no run longer than
 a few seconds, no second broker. The serial handler's ceiling in decisions a second is a property of this disk.
+
+## 2026-11-15 — the laptop (Fable 5.2): architecture slice 1, first part — commands in the map, read-or-inferred on every edge, the inventory gated from git's side (D-V2-229); the CI of the report slice read whole
+
+**Why now.** The commission's order after the truthfulness blockers is *"Architecture slice 1: complete inventory
+and trustworthy graph model. Reuse Survey … Don't start with a beautiful static drawing."* And the Survey had just
+given me its coarsest answer: any module of the CLI crate reaches *the crate and its 109 test files*.
+
+**Inspected before anything was written** (the commission's first instruction for this work): the Survey's schema
+(`survey/1`: `facts`, `nodes`, `edges`, `findings`), its twelve node kinds and twelve edge kinds as generated, its
+verbs, its tests (`architecture`, `clean_checkout`, `diff`, `entrenchment`, `freshness`, `machine_channel`,
+`traversal`), and how `doctor` reads it. Found: the verbs the commission suggests exist already under other names;
+`NodeKind::CliVerb` is declared and nothing produces one; 276 files are nodes of kind `other`.
+
+**Built** (D-V2-229): `crates/delulu-survey/src/verbs.rs` (the extractor); `lib.rs` (`EdgeKind::DispatchesTo`,
+`EdgeKind::Exercises`, `Confidence`, `Edge::confidence`, `Builder::edge_with`, two facts); `answers.rs` (`via_json`
+takes the edge and always says its confidence; `edge_word`); `main.rs`, `diff.rs` (their renders); `render.rs` (the
+*commands* table and the *read, or guessed* paragraph of `SURVEY.md`); `docs/survey/README.md`.
+
+**What the map answers now.** `query verb:run`: handled in `mod:crates/delulu/src/run_cmd.rs`, by the arm at
+`crates/delulu/src/cli.rs:1261`; driven by 61 test suites, each edge *inferred* and cited. `impact
+mod:crates/delulu/src/run_cmd.rs --depth 2`: 64 nodes — `main.rs`, `verb:run`, the crate, and those 61 suites —
+where it was 111 for every module. 47 commands, 5 of them internal and marked `DYNAMIC`; 399 inferred edges, counted
+in the map's own facts; by this reading no suite drives `help` or `mcp` (their suites call the binary another way —
+the reading's limit, said rather than hidden).
+
+**Tests, each seen red** (`crates/delulu-survey/tests/verbs.rs`, `accounting.rs`):
+- `the_dispatch_is_mapped_verb_by_verb_with_the_arm_it_was_read_from` — red when an arm is cited one line late.
+- `an_inferred_edge_says_so_everywhere_it_is_shown` — red when `exercises` claims to be source-derived.
+- `impact_of_a_handler_reaches_the_tests_that_drive_its_verb` — red when `dispatches-to` does not compose.
+- `the_map_follows_the_dispatch_when_a_command_is_renamed_or_the_dispatch_is_lost` (a synthetic tree: a rename moves
+  the node and drops the stale test edge; a lost dispatch is a finding) — red when a nested arm is read as a verb.
+  My first version of it survived all three defects above; it was strengthened until one killed it.
+- `every_tracked_file_is_a_node_or_is_excluded_by_a_named_rule` — red, naming twelve files, when the scanner is made
+  to skip `.github` silently.
+- The Survey's whole suite: 81 tests, green once the map is regenerated; its consumers in the CLI crate
+  (`doctor_cli`, `mcp_cli`, `evidence_claims`, `repository_structure`, `json_contract`, `schema_cli`): 45 passed;
+  `scripts/clippy.sh -j 4` clean. Windows laptop; Linux and macOS are CI's.
+
+**Measured** (the commission asks for it; debug build, this laptop): `build` 3.2 s; `check` 3.2 s; a query about
+3.1 s, because every query rebuilds the map from the tree; `impact --depth 2 --json` 17.9 KB and the unbounded
+`impact --json` 31 KB; `survey.json` 3.86 MB (it was 3.78 MB); `SURVEY.md` 37 KB. Inventory: 1,275 tracked files,
+1,274 nodes, 1 named exclusion. One new warning, left as written: Codex's recovery plan counts the Rust files as they
+were, and the tree now has three more.
+
+**CI of the report slice, read whole.** Run `43625167177` at `4f2af3f`: **18 of 18 jobs succeeded.** In the Ubuntu
+job's log (56,612 lines; 201 test binaries `ok`, none failed), by name and each `ok`:
+`a_report_lost_after_the_program_ran_is_a_failure_never_a_usage_error` and
+`a_sandboxed_run_whose_report_is_lost_fails_and_says_it_ran` — the two Linux-only `/dev/full` tests the laptop could
+not run — and the other five new tests; on macOS and Windows the cross-platform ones. RW 6.77's and RW 6.83's Linux
+half is now witnessed.
+
+**Left of slice 1, and slice 2.** Classify the 276 `other` files by role (workflow, script, manifest, fixture,
+proof); CI workflows and their jobs as nodes with the commands they run; features and `cfg` gates. Then slice 2:
+the layered views (context, compiler flow, execution and trust) generated from these nodes, `doctor`'s line for the
+selected binary against the checkout, and the dogfood exercise.

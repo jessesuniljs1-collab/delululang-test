@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the repository map knows the commands, 2026-11-15
+
+- **Added (D-V2-229): `delulu-survey` maps every `delulu` command.** `query verb:run` names the module that handles
+  a command and the test suites that drive it; `impact mod:<path> --depth 2` now reaches a module's commands and
+  their suites instead of every test in the crate. `docs/survey/SURVEY.md` has a generated *commands* table.
+- **Added: an edge says whether it was read or inferred.** `--json` answers (and `delulu mcp`'s `survey_query` and
+  `survey_impact`) carry `via.confidence`, `source-derived` or `inferred`; the human rendering prints *(inferred)*
+  beside the one kind that is — *a test suite drives a command*. Additive: nothing that was there moved.
+
 ## Unreleased — the broker under many clients, 2026-11-15
 
 - **Fixed (FABLE-038, RW 4.99, D-V2-228): a broker whose standard error nobody reads no longer stops.** A foreground

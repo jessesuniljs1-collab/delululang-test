@@ -10,12 +10,13 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 | Severity | Class | Count |
 |---|---|---:|
 | warning | `prose-cites-missing-path` | 7 |
-| warning | `stale-count` | 3 |
+| warning | `stale-count` | 4 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `cites-archived-path` | 31 |
 | note | `code-cited-but-not-allocated` | 1 |
 | note | `dependency-never-used-in-source` | 3 |
 | note | `ruling-cited-without-its-stage` | 1 |
+| note | `test-count-quoted-but-unverifiable` | 1 |
 
 ## warning — `prose-cites-missing-path` (7)
 
@@ -29,13 +30,14 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:142` — prose names `docs/design/OLD_PLAN.md`, which is nowhere in the tree
 - `docs/design/DeluluLang_V2_Execution_Master_Prompt.md:145` — prose names `docs/archive/v1/design/OLD_PLAN.md`, which is nowhere in the tree
 
-## warning — `stale-count` (3)
+## warning — `stale-count` (4)
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 1268 Rust files; the tree has 349
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 28 Rust files; the tree has 349
-- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 349
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 1268 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 28 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:124` — says 349 Rust files; the tree has 352
+- `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 352
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
@@ -47,7 +49,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** a current document should cite the archived path
 
-- `CHANGELOG.md:2773` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
+- `CHANGELOG.md:2782` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:30` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:31` — prose names `docs/design/PRODUCTION_READINESS_REVIEW.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:32` — prose names `docs/design/PRODUCTION_READINESS_2026-08-09.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md` in V2-0; the citation is historical and left as written
@@ -98,4 +100,10 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 **What to do:** write the stage when you mean an earlier one — `S9-D21` — as the Stage-10 ledger already does
 
 - `docs/design` — 370 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
+
+## note — `test-count-quoted-but-unverifiable` (1)
+
+**What to do:** re-run the suite and update these by hand; the Survey deliberately does not guess
+
+- `README.md` — these lines quote a test count, which is produced by `cargo test` and cannot be read out of the tree — verify them against a suite run: docs/DELULULANG_V2/V2_LOG.md:13084
 

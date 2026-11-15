@@ -134,7 +134,7 @@ pub fn diff_json(survey: &Survey, rev: &str, changes: &[Change], depth: u32) -> 
                 "depth": r.depth,
                 "from": r.from,
                 "origin": origin(&parent, r.id),
-                "via": via_json(r.via.kind, &r.via.file, r.via.line),
+                "via": via_json(r.via),
             })
         })
         .collect();

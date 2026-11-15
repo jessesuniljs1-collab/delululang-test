@@ -44,6 +44,7 @@ pub mod paths;
 pub mod render;
 pub mod rust;
 pub mod scan;
+pub mod verbs;
 pub mod verify;
 
 /// The machine channel's schema id. Versioned and additive, in the manner of `atlas/1` and the
@@ -182,6 +183,41 @@ pub enum EdgeKind {
     References,
     /// test suite → crate. The crate whose `tests/` directory holds it.
     TestsCrate,
+    /// CLI verb → rust module. Read from the arm of the CLI's dispatch `match` that names the handler.
+    DispatchesTo,
+    /// test suite → CLI verb. **Inferred** ([`Confidence::Inferred`]): the test's text holds the verb as
+    /// the first string of an argument list. See [`crate::verbs`] for what that does and does not show.
+    Exercises,
+}
+
+/// How an edge is known.
+///
+/// Every edge cites the file and line it was read from; that was the only law, and it let one kind of
+/// claim hide inside another. *"`mod x;` is on this line"* and *"this string looks like a command"* are
+/// both readings of a line, and only the first is a fact about the program. So an edge now says which
+/// it is, and a renderer must say so beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Confidence {
+    /// The relation is the construct on the cited line: a manifest dependency, a `mod` item, a link.
+    #[default]
+    SourceDerived,
+    /// A heuristic over the text of the cited line. True often enough to navigate by; never evidence.
+    Inferred,
+}
+
+impl Confidence {
+    /// Absent from the JSON when source-derived, so the 20,000 edges that always were are unchanged.
+    pub fn is_source_derived(&self) -> bool {
+        *self == Confidence::SourceDerived
+    }
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Confidence::SourceDerived => "source-derived",
+            Confidence::Inferred => "inferred",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -220,6 +256,9 @@ pub struct Edge {
     pub file: String,
     /// The 1-based line within `file`. Every edge has one; that is the law.
     pub line: u32,
+    /// How the relation is known. Absent in the JSON means source-derived ([`Confidence`]).
+    #[serde(skip_serializing_if = "Confidence::is_source_derived")]
+    pub confidence: Confidence,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -279,6 +318,11 @@ pub struct RepoFacts {
     pub rulings: u32,
     pub findings_recorded: u32,
     pub files_walked: u32,
+    /// The CLI's verbs, read from its dispatch ([`crate::verbs`]).
+    pub cli_verbs: u32,
+    /// Edges that are a heuristic's reading, not a construct on the cited line ([`Confidence::Inferred`]).
+    /// Counted here so nobody has to wonder how much of the map is a guess: this many, and no more.
+    pub edges_inferred: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -328,6 +372,9 @@ impl Survey {
                 _ => {}
             }
         }
+
+        // The CLI's verbs and the tests that drive them: one pass over the dispatch and the test texts.
+        verbs::extract(&files, &mut b);
 
         // Entrenchment marks existing nodes rather than creating any, so it runs after every
         // extractor has had its say and before the cross-check that judges the result.
@@ -503,7 +550,10 @@ impl EdgeKind {
             | EdgeKind::DependsOnExternal
             | EdgeKind::DeclaresModule
             | EdgeKind::Uses
-            | EdgeKind::TestsCrate => true,
+            | EdgeKind::TestsCrate
+            // A handler's change reaches its verb, and a verb's reaches the tests that drive it.
+            | EdgeKind::DispatchesTo
+            | EdgeKind::Exercises => true,
             // Narrative and registry relations: true at one hop, meaningless in a chain.
             EdgeKind::DefinesCode
             | EdgeKind::RaisesCode
@@ -599,7 +649,12 @@ impl Builder {
     }
 
     pub fn edge(&mut self, kind: EdgeKind, from: &str, to: &str, file: &str, line: u32) {
-        self.edges.insert(Edge { kind, from: from.to_string(), to: to.to_string(), file: file.to_string(), line });
+        self.edge_with(Confidence::SourceDerived, kind, from, to, file, line);
+    }
+
+    /// An edge with its confidence said. [`Builder::edge`] is the source-derived case, which is nearly all of them.
+    pub fn edge_with(&mut self, confidence: Confidence, kind: EdgeKind, from: &str, to: &str, file: &str, line: u32) {
+        self.edges.insert(Edge { kind, from: from.to_string(), to: to.to_string(), file: file.to_string(), line, confidence });
     }
 
     pub fn finding(&mut self, severity: Severity, class: &str, file: &str, line: u32, message: String, remedy: &str) {
@@ -651,6 +706,8 @@ impl Builder {
         facts.registered_codes = self.defined_codes.len() as u32;
         facts.rulings = self.defined_rulings.len() as u32;
         facts.findings_recorded = self.defined_findings.len() as u32;
+        facts.cli_verbs = nodes.iter().filter(|n| n.kind == NodeKind::CliVerb).count() as u32;
+        facts.edges_inferred = self.edges.iter().filter(|e| e.confidence == Confidence::Inferred).count() as u32;
 
         Survey { schema: SCHEMA, facts, nodes, edges: self.edges.into_iter().collect(), findings: self.findings }
     }

@@ -61,7 +61,12 @@ pub fn markdown(s: &Survey) -> String {
          > **The provenance law.** Every edge in this map names the file and line it was read from,\n\
          > and every edge whose target is a path was checked to exist. Nothing here is inferred from\n\
          > name similarity, embeddings, or proximity. A relation that cannot be pointed at in the\n\
-         > text is not in the map — it is a [discrepancy](DISCREPANCIES.md) instead.\n\n\
+         > text is not in the map — it is a [discrepancy](DISCREPANCIES.md) instead.\n\
+         >\n\
+         > **Read, or guessed.** An edge is the construct on its line (a dependency, a `mod` item, a\n\
+         > link, an arm of the dispatch) unless it says **inferred**. One kind is: *a test suite drives\n\
+         > a command*, read from a string at the head of an argument list. Those edges are counted\n\
+         > below, and no renderer prints one without the word.\n\n\
          Not to be confused with the **Atlas** (`crates/delulu-atlas`), which maps a checked Delulu\n\
          *program* from compiler facts. The Atlas needs the compiler to work; the Survey reads\n\
          files, so it still opens when the tree does not build.\n\n",
@@ -94,7 +99,10 @@ pub fn markdown(s: &Survey) -> String {
     let _ = writeln!(o, "| Registered diagnostic codes | {} |", f.registered_codes);
     let _ = writeln!(o, "| Recorded rulings | {} |", f.rulings);
     let _ = writeln!(o, "| Recorded campaign findings | {} |", f.findings_recorded);
+    let _ = writeln!(o, "| CLI verbs, read from the dispatch | {} |", f.cli_verbs);
     let _ = writeln!(o, "| Nodes / edges in this map | {} / {} |", s.nodes.len(), s.edges.len());
+    // The map's own guesses, counted beside its size: this many edges are a heuristic's reading, and no more.
+    let _ = writeln!(o, "| … edges that are **inferred**, not read (each says so) | {} |", f.edges_inferred);
     let _ = writeln!(o, "| Open discrepancies | {} |", s.findings.len());
     o.push_str(
         "\nLines are counted as text lines. Test *counts* are not here: the number of passing tests\n\
@@ -160,6 +168,44 @@ pub fn markdown(s: &Survey) -> String {
     }
 
     // --- diagnostic codes ----------------------------------------------------------------------
+    // --- the commands ---------------------------------------------------------------------------
+    let verbs: Vec<&crate::Node> = s.nodes.iter().filter(|n| n.kind == NodeKind::CliVerb).collect();
+    if !verbs.is_empty() {
+        o.push_str(
+            "## The commands\n\n\
+             Every `delulu` command, read from the one `match` that dispatches them. **Handled in** is read from\n\
+             the arm on the cited line. **Test suites that drive it** is *inferred*: a suite is counted when its\n\
+             text holds the command as the first string of an argument list, which is how the suites call the\n\
+             binary — a guess good enough to choose which tests to run, never evidence that a path is covered.\n\
+             Ask for the list with `delulu-survey query verb:<name>`, and for a module's commands and their\n\
+             suites with `delulu-survey impact mod:<path> --depth 2`.\n\n\
+             | Command | Handled in | Arm | Test suites that drive it (inferred) |\n|---|---|---|---:|\n",
+        );
+        let mut internal: Vec<&crate::Node> = Vec::new();
+        for v in &verbs {
+            if v.name.contains("::") {
+                internal.push(v);
+                continue;
+            }
+            let Some(arm) = s.out(&v.id).into_iter().find(|e| e.kind == EdgeKind::DispatchesTo) else { continue };
+            let suites = s.into_(&v.id).into_iter().filter(|e| e.kind == EdgeKind::Exercises).count();
+            let handler = arm.to.strip_prefix("mod:").unwrap_or(&arm.to);
+            let _ = writeln!(o, "| `{}` | `{handler}` | `{}:{}` | {suites} |", v.name, arm.file, arm.line);
+        }
+        if !internal.is_empty() {
+            o.push_str(
+                "\nInternal subcommands — spawned by the host, never typed. Each is dispatched through a constant, so\n\
+                 its spelling is **not read here** (`DYNAMIC`): the map names the constant and does not guess its value.\n\n",
+            );
+            for v in internal {
+                let Some(arm) = s.out(&v.id).into_iter().find(|e| e.kind == EdgeKind::DispatchesTo) else { continue };
+                let handler = arm.to.strip_prefix("mod:").unwrap_or(&arm.to);
+                let _ = writeln!(o, "- `{}` → `{handler}` (`{}:{}`)", v.name, arm.file, arm.line);
+            }
+        }
+        o.push('\n');
+    }
+
     o.push_str("## Diagnostic codes\n\n");
     o.push_str(
         "Allocated in `crates/delulu-diag/src/codes.rs` and never reused. Below, each code's\n\

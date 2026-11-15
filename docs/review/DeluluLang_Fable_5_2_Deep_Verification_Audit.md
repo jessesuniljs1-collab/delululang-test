@@ -805,6 +805,24 @@ at this disk's append rate; that is a number to publish, not to hide. A request 
 so it can be asked again safely — the client needs to be told (RW 4.100). The audit chain stayed whole under every
 load tried, including the ones the broker did not survive.
 
+### 13.3 Architecture slice 1, first part — commands in the map (D-V2-229), checkpoint 5
+
+| | |
+|---|---|
+| Asked | The commission's §3 and §7 item 2: a complete inventory and a trustworthy graph model, by extending the Survey. |
+| Inspected first | The Survey's schema, kinds, verbs, tests and `doctor` link. Its verbs already answer what the commission's suggested `architecture …` verbs would; none was added. `NodeKind::CliVerb` was declared and never produced. |
+| Failing witness | `impact` for any module of the CLI crate: 111 nodes — `main.rs`, the crate, all 109 test files (recorded 2026-11-14). |
+| Built | 47 `verb:` nodes read from the dispatch, each with a cited `dispatches-to` edge; `exercises` edges from the suites that drive a command, marked **inferred** in the data, the JSON and the words; `facts.edges_inferred` (399); a generated *commands* table. |
+| Now | `impact mod:crates/delulu/src/run_cmd.rs --depth 2`: `verb:run` and the 61 suites that drive it. |
+| Inventory | 1,275 tracked files; 1,274 are nodes; 1 excluded by a named rule. Gated from git's side (`tests/accounting.rs`). |
+| Negative controls | Each of the five new tests seen red under a deliberate defect; one had to be strengthened before any defect killed it. |
+| Explicit unknowns | Five internal subcommands are `DYNAMIC` (dispatched through constants). `exercises` is a reading of a string: it misses suites that build their arguments elsewhere (`help`, `mcp` show none). No call graph beyond the handler's module. |
+| Cost | `build` and `check` 3.2 s each on this laptop (debug); `survey.json` 3.86 MB (+2%); every query rebuilds the map (about 3 s). |
+| Not done | The 276 `other` files are not classified by role; CI workflows, features and `cfg` gates are not nodes; no layered views yet (slice 2); `doctor` does not yet compare the selected binary with the checkout. |
+
+**CI of 13.1, read whole:** run `43625167177` at `4f2af3f`, 18 of 18 jobs; the two Linux-only `/dev/full` tests
+`ok` by name in the Ubuntu log. **CI of 13.2** (`b1eaeae`, run `43654591666`): in progress when this was written.
+
 ---
 
 ## Appendix A. Evidence registry
@@ -888,3 +906,5 @@ A session elsewhere must treat this document's statements as historical and re-r
 | M1 | many runs at once: the first pass (with my harness's unread pipe), four rounds at 64, the release build to 256 | `26705d3026f272ee`; `0295860506d1e72e`; `177fe1084d558555` |
 | M2 | the broker and its standard error: a file (control), an unread pipe, the heavier workload with each, and the fixed build twice | `557c9aabb2f6c0cf`; `8c0a406f8fbf6ddc`; `5bf5abac0ee21260`; `6ccf3ff9dac8df7e`, `b638fbd699e90a19`; `76738e912a7fd5d4`, `37a92d77b713fa04` |
 | E9–E12 | the new broker test green; the same without the log writer (red); the daemon's unit tests and seven suites (293 passed); clippy | `2b7d204eeec76a98`; `56e3ef12583e23e1`; `45ccf3a9240e3ff1`; `fceee525806f5841` |
+| E13–E16 | the Survey's suite with the new tests; the same under three deliberate defects (red); its consumers in the CLI crate (45 passed); clippy | `c80a46cad8d83ad4`; `3a37991282282fe5`; `802195d1f0cbf0d2`; `12d6c9b6c0fda330` |
+| CI-1 | the Ubuntu job's log of run `43625167177` (56,612 lines): the seven new tests by name | `737e68433e7abe73` |

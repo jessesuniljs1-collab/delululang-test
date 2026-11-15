@@ -26,6 +26,18 @@ pub fn kind_word(k: EdgeKind) -> &'static str {
         EdgeKind::LinksTo => "links-to",
         EdgeKind::References => "references",
         EdgeKind::TestsCrate => "tests",
+        EdgeKind::DispatchesTo => "dispatches-to",
+        EdgeKind::Exercises => "exercises",
+    }
+}
+
+/// An edge's kind as a person reads it: the word, and **"(inferred)" beside it when the edge is a
+/// heuristic's reading** ([`crate::Confidence`]). One function, so no renderer can print an inferred
+/// relation in the same words as a derived one.
+pub fn edge_word(e: &crate::Edge) -> String {
+    match e.confidence {
+        crate::Confidence::SourceDerived => kind_word(e.kind).to_string(),
+        crate::Confidence::Inferred => format!("{} (inferred)", kind_word(e.kind)),
     }
 }
 
@@ -34,8 +46,9 @@ pub fn kind_word(k: EdgeKind) -> &'static str {
 /// The provenance law — *"a relation that cannot be pointed at in the text is not in the map"* — is
 /// not a property of the human rendering. It has to survive into the machine channel, or an agent
 /// reading this map has strictly less ability to check it than a human reading the same map.
-pub fn via_json(kind: EdgeKind, file: &str, line: u32) -> Value {
-    json!({ "kind": kind_word(kind), "file": file, "line": line })
+/// `confidence` is always present here, so a caller never has to know that absence means derived.
+pub fn via_json(e: &crate::Edge) -> Value {
+    json!({ "kind": kind_word(e.kind), "file": e.file, "line": e.line, "confidence": e.confidence.word() })
 }
 
 /// The object every `--json` answer is: the tool, the verb and the schema first, so a caller can
@@ -70,7 +83,7 @@ pub fn query_json(survey: &Survey, id: &str, rdeps_only: bool) -> Option<Value> 
             .iter()
             .map(|e| {
                 let other = if incoming { &e.from } else { &e.to };
-                json!({ "node": other, "via": via_json(e.kind, &e.file, e.line) })
+                json!({ "node": other, "via": via_json(e) })
             })
             .collect()
     };
@@ -116,10 +129,8 @@ pub fn walk_json(survey: &Survey, id: &str, reverse: bool, depth: u32) -> Option
     let dir = if reverse { Dir::Incoming } else { Dir::Outgoing };
     let reached = survey.walk(id, dir, depth);
     let question = if reverse { "what breaks if this changes" } else { "what this rests on" };
-    let hops: Vec<Value> = reached
-        .iter()
-        .map(|r| json!({ "id": r.id, "depth": r.depth, "from": r.from, "via": via_json(r.via.kind, &r.via.file, r.via.line) }))
-        .collect();
+    let hops: Vec<Value> =
+        reached.iter().map(|r| json!({ "id": r.id, "depth": r.depth, "from": r.from, "via": via_json(r.via) })).collect();
     Some(envelope(
         if reverse { "impact" } else { "affected-by" },
         json!({
