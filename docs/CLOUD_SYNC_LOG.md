@@ -9882,3 +9882,34 @@ Survey and doctor: in the commit below.
   roles for the 276 `other` files, CI workflows and their jobs as nodes; (4) slice 2 — the layered views, `doctor`'s
   line for the selected binary against the checkout; (5) RW 6.87 and the plan's next truthful-outcome rows; (6) the
   three small items of the audit's section 8.1.
+
+### 2026-11-15 — the laptop: Fable 5.2, checkpoint 7 — RW 7.30 for RW 4.98's two timing tests: the beat is timed where it is stamped and an uncounted attempt is measured again (D-V2-230); the runner's stall reproduced, 14 of 96 red before and 0 of 96 after; checkpoint 6's CI read whole, 18 of 18
+- Session: `https://claude.ai/code/session_01Deh6WBfcuEFDhVPAwyDEVf` (the same conversation; the harness gave it a new
+  link when the owner sent his instruction again). Model: Claude Fable 5.2 as the harness names it; effort `max`
+  for the work of this entry up to the records, `xhigh` from the records on, each as the owner set it. No sub-agent
+  wrote code or ran a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base of this entry: `bb2cfb1`. Nothing new on `origin/master` (`ac2a162`) at the last fetch.
+- **CI read since the entry above, whole and by name.** Run `43678784062` at `bb2cfb1` (checkpoint 6): **18 of 18**;
+  `a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker ... ok` on Windows, Ubuntu and macOS.
+  `master`'s scheduled run of today, `43703463838` at `ac2a162`: **success** — green, red, green on three days at
+  one commit.
+- **What changed for a user:** nothing a user runs. Two tests of the daemon stop failing a run for a runner's stall,
+  and cannot pass by it either.
+- Files and folders: M `crates/delulu/src/brokerd.rs` (the test-only seam and the tests module; the serve loop is
+  untouched); M `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-230), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (RW 7.30's row), `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (sections
+  8.1, 13.3, 13.4, both appendices), `docs/review/fable-deep-verification-state.json`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*` (regenerated). Nothing added, deleted or renamed; no workflow, no entrenched file.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227` to `D-V2-230`; RW `6.87`, `4.99`, `4.100`.
+- Tests on the laptop (Windows, `-j 4`): the CLI crate's unit-test target, 212 of 212; `scripts/clippy.sh -j 4` clean
+  and stamped after the last `.rs` edit. Falsified both ways and reproduced under a stall — `V2_LOG.md`'s entry of
+  this date has the table.
+- Survey and doctor after the last edit: as the commit message states them.
+- **Open / next, in order:** (1) RW 4.100 — the broker answers a connection it turns away at its bound (*busy, not
+  read*) and the client asks again; drafted, not built: the wire variant is additive, and the precedent for *"not
+  processed, so safe to send again"* is RFC 9113 §8.7; (2) the rest of RW 7.30 — `a_busy_daemon_still_fires_an_unbeaten_dead_man`
+  is red 16 of 16 with four copies of the target on one processor, and the row now says how; (3) the rest of
+  architecture slice 1, then slice 2; (4) RW 6.87 and the plan's next truthful-outcome rows; (5) the three small items
+  of the audit's section 8.1. **For the owner to weigh, not for an agent to patch:** under load a dead-man's firing is
+  late by the wait of the broker's line (`V2_LOG.md`, this date).

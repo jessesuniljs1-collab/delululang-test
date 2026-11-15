@@ -15,13 +15,13 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 6,
-  "checkpoint_note": "Four commits of code on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), architecture slice 1's first part (D-V2-229), and the dogfood test that walks the map from a command to the checker, both engines and the broker. The CI of the first three is read whole: 18 of 18 each.",
+  "checkpoint": 7,
+  "checkpoint_note": "Five commits of code on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), architecture slice 1's first part (D-V2-229), its dogfood test, and RW 4.98's two timing tests (D-V2-230). The CI of the first four is read whole: 18 of 18 each.",
   "last_session": {
     "date": "2026-11-15",
     "where": "owner's laptop (Windows 11 x64, WSL2 Ubuntu 20.04) and GitHub-hosted runners of the test repository",
     "model_as_stated_by_harness": "claude-fable-5-2",
-    "effort_as_set_by_owner": "max"
+    "effort_as_set_by_owner": "max until checkpoint 7's records, then xhigh"
   },
   "source_under_audit": "ac2a16202e790657810b819e882b8d721dc0aef4",
   "branch": "laptop/fable-deep-verification",
@@ -85,15 +85,15 @@
   "next_three_commands": [
     {
       "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the run dispatched at checkpoint 6's commit; read a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker by name on the three test jobs"
+      "expect": "the run dispatched at checkpoint 7's commit; read RW 4.98's witness, its twin and an_attempt_counts_only_when_its_own_measurements_show_the_shape by name on the three test jobs"
     },
     {
-      "run": "cargo test -p delulu --bin delulu brokerd::tests::a_beat -- --nocapture",
-      "expect": "the RW 4.98 witness and its twin; then time the stamp where the reader makes it and measure an inconclusive attempt again (RW 7.30)"
+      "run": "cargo test -p delulu --bin delulu -j 4 -- brokerd::tests",
+      "expect": "green; then RW 4.100: Response::Busy for a connection turned away at the bound, and request_timed asking again"
     },
     {
       "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
-      "expect": "ok; ok — then RW 4.100: a busy answer at the bound and a client that asks again"
+      "expect": "ok; ok"
     }
   ],
   "engineering": {
@@ -141,19 +141,32 @@
         "base": "3e834cc0b1724d273cf46432cb1a63c2a84fc608",
         "verified_on_laptop": "the Survey's suite, 82 of 82; the new test red when every handler is attributed to cli.rs; clippy clean",
         "not_verified_on_laptop": "Linux, macOS",
+        "ci": "run 43678784062 at bb2cfb1: completed, 18 of 18 jobs; the test ok by name on Windows, Ubuntu and macOS"
+      },
+      {
+        "id": "rw-7-30-two-timing-tests",
+        "rows": [
+          "RW 7.30 (RW 4.98's witness and its twin)"
+        ],
+        "decision": "D-V2-230",
+        "base": "bb2cfb1",
+        "verified_on_laptop": "the CLI crate's unit-test target, 212 of 212; red at once with the defect back; red after three attempts when the shape never holds; under processors stalled together the old tests failed 14 of 96 and the new 0 of 96; clippy clean",
+        "not_verified_on_laptop": "Linux, macOS",
         "ci": "dispatched after the push"
       }
     ],
     "found_not_fixed": [
       "RW 6.87: --signoff has none of the report's rules",
       "RW 4.100 (FABLE-039): past 64 simultaneous requests the broker sheds them and the client is told to start a broker that is running",
-      "RW 7.30, a new instance: master's scheduled run 43582084749 (ac2a162, 2026-11-14) red on Windows — the two RW 4.98 timing tests failed as 'inconclusive, not red' on a starved runner; they time the stamp where the test hears of it and do not measure again"
+      "RW 7.30 (FABLE-042): a_busy_daemon_still_fires_an_unbeaten_dead_man is red 16 of 16 with four copies of the target on one pinned processor; its window is fixed at 1.5 s and the firing waits for the line",
+      "for the owner to weigh: under load a dead-man's firing is late by the wait of the broker's line (a reading of the serve loop, not tested by a change)"
     ],
     "numbers_taken": {
       "decisions": [
         "D-V2-227",
         "D-V2-228",
-        "D-V2-229"
+        "D-V2-229",
+        "D-V2-230"
       ],
       "remaining_work_rows": [
         "6.87",
@@ -168,7 +181,15 @@
       "anthropics/oss-scanner": "2084acae60ff5834a56da86b82b585491d0890db",
       "google/cybernetic-agent-governance-engine": "f0ca9f4d216b62847bea0a20963bfb7ad2b7f184"
     },
-    "status": "read at these commits; the decision table is the audit's section 8.1"
+    "status": "read at these commits; the decision table is the audit's section 8.1",
+    "read_as_abstract_pages_only": [
+      "arXiv 2603.00991 v2 (Tracking Capabilities for Safer Agents)",
+      "arXiv 2611.00729 v1 (AgentCap)"
+    ],
+    "read_for_rw_4_100": [
+      "RFC 9113 section 8.7 (a request that was not processed may be sent again)",
+      "grpc.io/docs/guides/retry (transparent retry)"
+    ]
   },
   "experiments": {
     "M1_many_runs_one_broker": {
@@ -212,5 +233,10 @@
       "a walk below the crate (the dogfood test stops at the crate: no function-level edge)"
     ],
     "dogfood_test": "crates/delulu-survey/tests/verbs.rs: a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker"
+  },
+  "scheduled_runs_on_master_at_ac2a162": {
+    "2026-11-13": "43409171490 success",
+    "2026-11-14": "43582084749 failure (Windows; the two RW 4.98 timing tests, inconclusive)",
+    "2026-11-15": "43703463838 success"
   }
 }

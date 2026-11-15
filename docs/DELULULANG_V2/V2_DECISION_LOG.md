@@ -6891,3 +6891,46 @@ manifests, fixtures, proofs) are accounted for and not yet classified by role, a
 
 **Evidence.** `V2_LOG.md`'s entry of 2026-11-15 (architecture slice 1): the four `verbs` tests and the accounting
 gate, each seen red under a deliberate defect; the measurements.
+
+## D-V2-230 — RW 7.30, for RW 4.98's witness and its twin: the beat is timed where it is stamped; an attempt counts only by its own measurements; a counted attempt is never measured again, and one that does not count is, three in all — TAKEN (head chef, 2026-11-15, under the owner's delegation)
+
+**Context.** `master`'s scheduled run `43582084749` (2026-11-14, at `ac2a162`) is red on Windows and nowhere else;
+the scheduled run of the day before was green at the same commit. Two unit tests of the daemon failed, in their own
+words: `a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man` (RW 4.98's witness, D-V2-209) and its twin,
+each *"inconclusive, not red: the beat was stamped 2.1475011s into its 2 s period, outside 1.3 s to 1.9 s"* (the
+witness: 2.2995038 s). The daemon's own lines in that log say what the runner did:
+- in the twin, *"a Beat request's reader held it 646 ms between stamping it and handing it to the handler"*. The
+  reader stamped the beat about 1.5 s in, as the test intends. The test's thread, which lets the reader go, was not
+  given the processor for 646 ms — and then read **its own clock** and called that the beat's stamp;
+- in the witness, the dead-man was judged at +2,012 ms with *"none since it was armed … 1 connection(s) were being
+  read"*: the request the test sends 1.5 s in had not been read whole by then. That beat really was late.
+
+So one attempt was measured wrongly and the other was honestly inconclusive, and both failed the run. This is RW
+7.30's class — an in-process daemon test whose bound reads a runner's stall as the product's — and the row's remedy is
+a control measured on the same machine. These two tests had the control; it was timed in the wrong place, and a
+single uncounted attempt was final.
+
+**Decision.**
+1. **The stamp is the reader's.** The test-only seam (`handover_seam`) hands the test the instant the reader stamped
+   the beat, instead of telling it only that a stamp happened. The test no longer times its own wake-up.
+2. **The stamp is counted from just before the arming was asked for.** The daemon arms somewhere inside that
+   request, so a beat stamped under 1.9 s is in time wherever the arming fell; the old code counted from after the
+   answer, which a slow answer made later than the arming.
+3. **An attempt counts only if its own measurements show the shape** (`shape_held`): the beat stamped 1.3 s to 1.9 s
+   in, **and** the chain in the test's hands less than 1.9 s after the stamp. The second condition is new: the beat
+   sets a deadline 2 s after its stamp, and a chain read that late shows that deadline's firing too — which the old
+   test would have reported as RW 4.98's defect.
+4. **A counted attempt is the verdict, red or green, and is never measured again.** An attempt that does not count is
+   named and measured again, three attempts in all.
+5. **Three attempts that do not count fail the test**, naming each. A runner that can never hold the shape is a red
+   run that says so, not a pass.
+
+**What this is not.** Not a longer window and not a skip. The windows are the ones the tests had (stamped 1.3 s to
+1.9 s; the chain read at 2.4 s). The only way to pass is still a counted attempt in which the dead-man did not fire;
+the only thing that changed for a daemon that fires early is that it is caught on the first counted attempt, as
+before. It does not repair the other tests of RW 7.30, and it does not explain RW 7.25.
+
+**Evidence.** `V2_LOG.md`'s entry of 2026-11-15 (checkpoint 7): the judge's own test on the failed run's numbers; the
+witness red on its first attempt with the defect back; three uncounted attempts failing the test; and the stall
+reproduced on the laptop — the old tests inconclusive 14 times in 96, the new ones 0 in 96 with 19 attempts measured
+again, no false red in either.

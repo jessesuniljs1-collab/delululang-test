@@ -937,9 +937,10 @@ mod handover_seam {
     use std::path::{Path, PathBuf};
     use std::sync::mpsc::{Receiver, Sender};
     use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
 
     struct Hold {
-        stamped: Sender<()>,
+        stamped: Sender<Instant>,
         release: Receiver<()>,
     }
 
@@ -948,23 +949,25 @@ mod handover_seam {
         HOLDS.get_or_init(Default::default)
     }
 
-    /// Hold the next beat the daemon on `state` reads: the first channel hears when its reader has stamped it; sending on
-    /// the second lets the reader hand it over.
-    pub(super) fn hold_next_beat(state: &Path) -> (Receiver<()>, Sender<()>) {
+    /// Hold the next beat the daemon on `state` reads: the first channel hears when its reader has stamped it, and is
+    /// told the stamp itself — the reader's, not the moment the listener was next given the processor (RW 7.30: a
+    /// runner held a listener 646 ms, and the listener's own clock read that as the beat's lateness). Sending on the
+    /// second lets the reader hand it over.
+    pub(super) fn hold_next_beat(state: &Path) -> (Receiver<Instant>, Sender<()>) {
         let (stamped_tx, stamped_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         holds().lock().unwrap().insert(state.to_path_buf(), Hold { stamped: stamped_tx, release: release_rx });
         (stamped_rx, release_tx)
     }
 
-    /// Called by a reader after it stamped `req` and before it hands it over.
-    pub(super) fn before_hand_over(state: &Path, req: &super::Request) {
+    /// Called by a reader after it stamped `req` at `stamped` and before it hands it over.
+    pub(super) fn before_hand_over(state: &Path, req: &super::Request, stamped: Instant) {
         if !matches!(req.body, super::ReqBody::Beat { .. }) {
             return;
         }
         let hold = holds().lock().unwrap().remove(state);
         if let Some(hold) = hold {
-            let _ = hold.stamped.send(());
+            let _ = hold.stamped.send(stamped);
             let _ = hold.release.recv();
         }
     }
@@ -2255,7 +2258,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                         let stamped_request = (conn, req, stamped, heard);
                         // RW 4.98's witness holds a beat here, stamped and not yet handed over. Test builds only.
                         #[cfg(test)]
-                        handover_seam::before_hand_over(&seam_dir, &stamped_request.1);
+                        handover_seam::before_hand_over(&seam_dir, &stamped_request.1, stamped_request.2);
                         drop(whole.send(Some(stamped_request)));
                         if let Some(line) = reader_delays(kind, stamped.saturating_duration_since(accepted), stamped.elapsed()) {
                             blog!("{line}");
@@ -3759,45 +3762,102 @@ mod tests {
         let _ = std::fs::remove_dir_all(&state);
     }
 
+    /// What one attempt at RW 4.98's shape measured: when the beat was stamped, the dead-man's revocations as the chain
+    /// held them when it was read, and the beat's answer.
+    type BeatLate = (std::time::Duration, Vec<delulu_broker::audit::AuditRecord>, io::Result<Response>);
+
+    /// Whether one attempt held RW 4.98's shape, by its own measurements — or why not. `stamped` is the reader's stamp,
+    /// counted from just before the test asked for the dead-man to be armed: the daemon armed no earlier, so a beat
+    /// stamped under 1.9 s was in time wherever inside that request the arming fell. `read` is when the test had the
+    /// chain in hand, counted from the stamp: the beat set a new deadline 2 s after it, and a chain read that late shows
+    /// that deadline's firing as well as the first one's.
+    fn shape_held(stamped: std::time::Duration, read: std::time::Duration) -> Result<(), String> {
+        let ms = std::time::Duration::from_millis;
+        if !(ms(1300)..ms(1900)).contains(&stamped) {
+            return Err(format!("the beat was stamped {stamped:?} into its 2 s period, outside 1.3 s to 1.9 s"));
+        }
+        if read >= ms(1900) {
+            return Err(format!("the chain was read {read:?} after the beat's stamp, at or past the deadline the beat set"));
+        }
+        Ok(())
+    }
+
     /// RW 4.98's shape, shared by its witness and its twin. A dead-man armed with a 2 s period is beaten once, about 1.5 s in:
     /// a beat that extends it to about 3.5 s. Its reader is held (`hold`) or not past the first deadline, 2 s, and the chain is
     /// read at 2.4 s — after that deadline, before the one the beat set. Returns when the beat was stamped, the dead-man's
     /// revocations read at 2.4 s, and the beat's answer.
-    fn beat_late_in_its_period(
-        name: &str,
-        hold: bool,
-    ) -> (std::time::Duration, Vec<delulu_broker::audit::AuditRecord>, io::Result<Response>) {
+    ///
+    /// **Measured again when the runner, not the daemon, broke the shape** (RW 7.30). `master`'s scheduled run
+    /// `43582084749` failed here on a Windows runner that left two threads without the processor for over half a second:
+    /// one beat really was late, and the other was stamped on time and timed late, because the test read its own clock
+    /// when it heard of the stamp. So the stamp is the reader's own, and an attempt counts only if `shape_held` says its
+    /// measurements show the shape. **An attempt that counts is the verdict, red or green, and is never measured again**;
+    /// one that does not is named and measured again, up to `ATTEMPTS` in all; if none counts the test fails and says
+    /// so. Nothing here can turn a daemon that fires early into a pass: only a counted attempt returns.
+    fn beat_late_in_its_period(name: &str, hold: bool) -> BeatLate {
+        const ATTEMPTS: usize = 3;
+        let mut not_counted = Vec::new();
+        for attempt in 1..=ATTEMPTS {
+            match beat_late_in_its_period_once(&format!("{name}{attempt}"), hold) {
+                Ok(measured) => return measured,
+                Err(why) => {
+                    eprintln!("attempt {attempt} of {ATTEMPTS} did not hold the shape and is not counted: {why}");
+                    not_counted.push(format!("attempt {attempt}: {why}"));
+                }
+            }
+        }
+        panic!("inconclusive, not red: in {ATTEMPTS} attempts this runner never held the shape — {}", not_counted.join("; "));
+    }
+
+    /// One attempt: its measurements if they show the shape, or why they do not.
+    fn beat_late_in_its_period_once(name: &str, hold: bool) -> Result<BeatLate, String> {
         let ms = std::time::Duration::from_millis;
         let state = temp_state(name);
         let handle = start_daemon(&state);
         let watched = issue(&state);
+        // The daemon arms somewhere inside this request: no earlier than `asked`, no later than `armed`.
+        let asked = std::time::Instant::now();
         let key = arm(&state, &watched, 2000);
         let armed = std::time::Instant::now();
-        std::thread::sleep((armed + ms(1500)).saturating_duration_since(std::time::Instant::now()));
+        std::thread::sleep((asked + ms(1500)).saturating_duration_since(std::time::Instant::now()));
         let (stamped, release) = handover_seam::hold_next_beat(&state);
         let beat = {
             let (state, node) = (state.clone(), watched.clone());
             std::thread::spawn(move || request(&state, ReqBody::Beat { node, key }))
         };
-        stamped.recv_timeout(std::time::Duration::from_secs(10)).expect("the beat's reader stamped it");
-        let stamped_at = armed.elapsed();
+        let stamp = stamped.recv_timeout(std::time::Duration::from_secs(10)).expect("the beat's reader stamped it");
         if !hold {
             release.send(()).expect("the reader waits to be let go");
         }
+        // After the first deadline wherever the arming fell: 400 ms past the latest it can be.
         std::thread::sleep((armed + ms(2400)).saturating_duration_since(std::time::Instant::now()));
         let fired = deadman_revocations(&state, &watched);
+        let read = stamp.elapsed();
         if hold {
             release.send(()).expect("the reader still waits");
         }
         let beat = beat.join().unwrap();
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
-        // The shape holds only if the beat was stamped after the first second and well before the first deadline.
-        assert!(
-            (ms(1300)..ms(1900)).contains(&stamped_at),
-            "inconclusive, not red: the beat was stamped {stamped_at:?} into its 2 s period, outside 1.3 s to 1.9 s"
-        );
-        (stamped_at, fired, beat)
+        let stamped_at = stamp.saturating_duration_since(asked);
+        shape_held(stamped_at, read).map(|()| (stamped_at, fired, beat))
+    }
+
+    /// The shape's own judge, on the numbers of the run that found the old one wanting (`master`'s scheduled run
+    /// `43582084749`, Windows). The witness's beat was stamped 2.2995 s in: late, and that attempt does not count. The
+    /// twin's reader stamped about 1.5 s in and the test heard of it 646 ms later: timed at the stamp, that attempt
+    /// counts. And a chain read at or past the deadline the beat set does not count, whatever it shows.
+    #[test]
+    fn an_attempt_counts_only_when_its_own_measurements_show_the_shape() {
+        let ms = std::time::Duration::from_millis;
+        assert!(shape_held(ms(1501), ms(900)).is_ok(), "stamped late in its period and in time, read before the next deadline");
+        assert!(shape_held(ms(1300), ms(1899)).is_ok(), "both edges count");
+        let late = shape_held(ms(2299), ms(100)).unwrap_err();
+        assert!(late.contains("2.299s") && late.contains("outside 1.3 s to 1.9 s"), "{late}");
+        assert!(shape_held(ms(1900), ms(100)).is_err(), "within 100 ms of the first deadline is not surely in time");
+        assert!(shape_held(ms(1299), ms(100)).is_err(), "not late in its period");
+        let read_late = shape_held(ms(1501), ms(1900)).unwrap_err();
+        assert!(read_late.contains("1.9s") && read_late.contains("the deadline the beat set"), "{read_late}");
     }
 
     /// **RW 4.98 (D-V2-209): a beat stamped in time and handed over late keeps its dead-man.** A reader stamps a beat and

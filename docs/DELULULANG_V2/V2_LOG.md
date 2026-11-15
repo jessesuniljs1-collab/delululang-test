@@ -13166,3 +13166,75 @@ runner. The next commit takes both; a red verdict will not be measured again.
 
 **Session note.** The conversation was compacted between checkpoints 5 and 6 while the owner had the session's model
 set to Opus 5.5; he set it back to Fable 5.2 before this work, and the work of this entry is Fable 5.2's.
+
+### 2026-11-15 — RW 7.30, two of its tests: RW 4.98's witness and its twin time the beat where it is stamped and measure an uncounted attempt again (D-V2-230); the runner's stall reproduced on the laptop, 14 of 96 red before and 0 of 96 after; a third test of the class is red 16 of 16 under load (Fable 5.2, checkpoint 7)
+
+**Why.** `master`'s scheduled run `43582084749` is red on Windows (the entry above). A scheduled run that goes red
+on a runner's stall teaches whoever reads it next to stop reading scheduled runs.
+
+**What was wrong, from the failed run's own log.** Two tests, one process, the same moment. In the twin the reader
+stamped the beat on time (about 1.5 s into a 2 s period) and the TEST's thread was not scheduled for 646 ms; the test
+then read its own clock and reported the beat as stamped at 2.1475 s. In the witness the request the test sends 1.5 s
+in had not been read whole when the dead-man was judged at +2,012 ms, so that beat was late and the attempt was
+honestly inconclusive. Both failed the job. Neither is the daemon's doing.
+
+**Changed** (`crates/delulu/src/brokerd.rs`; test code and the test-only seam — the daemon a user runs is the same):
+- `handover_seam` hands the test the reader's own stamp (an `Instant`), not only the news of it.
+- `beat_late_in_its_period` is now up to three attempts of `beat_late_in_its_period_once`. An attempt counts only if
+  `shape_held` says its own measurements show the shape: the beat stamped 1.3 s to 1.9 s after the arming was asked
+  for, and the chain in the test's hands less than 1.9 s after the stamp (new: later than that it shows the deadline
+  the beat itself set). **A counted attempt is the verdict and is never measured again.** Three that do not count
+  fail the test and name each.
+- `an_attempt_counts_only_when_its_own_measurements_show_the_shape` pins the judge on the failed run's numbers.
+
+**Falsified, each seen.**
+- *The defect back* (the beats readers note are not counted — RW 4.98 before D-V2-209): the witness is **red on its
+  first attempt**, in 2.4 s (*"the dead-man fired while a beat its reader had stamped 1.500691s into a 2 s period
+  waited to be handed over"*); the twin stays green. A red verdict is not measured again.
+- *A shape that never holds* (the beat aimed at 1.95 s): three attempts, each named, then *"inconclusive, not red: in
+  3 attempts this runner never held the shape"* — a failure, 7.3 s. It does not pass.
+
+**The stall, reproduced** (Windows laptop, 16 logical processors; the old and the new test binary built from the
+same tree but for this change; harnesses outside the repository).
+
+| What ran | Old tests | New tests |
+|---|---|---|
+| The whole target, two copies side by side on two pinned processors, four test threads, three rounds | both `ok` in 6 of 6 | both `ok` in 6 of 6 |
+| The whole target, four copies on ONE pinned processor, eight test threads, two rounds | both `ok` in 8 of 8 | both `ok` in 8 of 8 |
+| The two tests alone, four copies at once on two pinned processors that a higher-priority load stalls **together**, 600 ms on and 600 ms off, eight rounds | 11 of 64 results failed, all *"inconclusive"* | 6 of 64 failed, all *"in 3 attempts"*; 26 attempts measured again |
+| The same with each processor stalled on its own schedule (so one is always free) | 96 of 96 `ok` | 96 of 96 `ok`, nothing measured again |
+| The same, stalled together for 300 to 900 ms at random, gaps of 300 to 900 ms, twelve rounds | **14 of 96 failed**, all *"inconclusive"* | **0 of 96 failed**; 19 attempts measured again |
+
+Three things to read off it. Ordinary load — many test threads, few processors — did not produce the failure here
+(my guess at why, not measured: a thread waking from a wait is run ahead of threads that are computing). A stall of
+every processor at once does, which is what the runner's log shows. And a strictly periodic stall puts each re-measurement at the phase of the
+attempt before it (an attempt lasts about two periods), which is my harness's artifact and why the third row improves
+less than the fifth. **No result in either binary, in any row, was a false red.**
+
+**Found on the way: a third test of RW 7.30's class, red every time under that load.** With four copies of the whole
+target on one processor, `brokerd::tests::a_busy_daemon_still_fires_an_unbeaten_dead_man` failed **16 of 16** — both
+binaries — with *"a stream of requests must not hold a dead-man off (25 requests)"*: no dead-man fired within 1.5 s
+of a 300 ms one being armed. The daemon's lines in those logs: *"a List request was answered 934 ms after it arrived:
+704 ms waiting for the requests ahead of it, 229 ms handling and answering it"*. **My reading of the serve loop, not
+tested by a change:** dead-men are judged as of the earliest request still waiting (DEADMAN-BUSY-1), so an unbeaten
+one fires when a request that arrived after its deadline reaches the head of the line — its deadline plus the line's
+wait. Eight clients at about 230 ms an answer is a wait of about 1.7 s, past the test's fixed 1.5 s; on a quiet
+machine the wait is milliseconds. Two consequences, recorded and not acted on:
+- the test's window should be measured against the line's wait, which the daemon logs (RW 7.30);
+- **for many users at once, a dead-man's firing is late by the line's wait.** By the loop's order a request that
+  arrived after the deadline is still decided after the firing, so I did not find authority used past a deadline
+  through the broker; what is late is the record in the chain and what a client that caches the epoch sees. Judging
+  as of now instead would fire early for a beat whose reader is starved — the false firing RW 4.98 removed — so this
+  is a trade to decide with the owner's priorities, not a patch.
+
+**Verified on the laptop** (Windows, `-j 4`): the CLI crate's unit-test target, 212 of 212; `scripts/clippy.sh -j 4`
+clean. NOT run here: Linux, macOS — CI.
+
+**Research read this checkpoint** (abstract pages only; both rows are in the audit's §8.1): *Tracking Capabilities for
+Safer Agents* (Odersky and others, arXiv 2603.00991 v2) — agents writing code in a capability-safe language, with
+*no significant loss in task performance* reported; and *AgentCap* (arXiv 2611.00729) — capability tokens that only
+attenuate, checked at the tool, evaluated on two public prompt-injection benchmarks. Read for the next slice
+(RW 4.100): RFC 9113 §8.7, *"Requests that have not been processed have not failed; clients MAY automatically retry
+them, even those with non-idempotent methods … A server MUST NOT indicate that a stream has not been processed unless
+it can guarantee that fact"*; and gRPC's retry guide on transparent retry, *"only if gRPC is certain the RPCs have
+not been processed by a server"*.
