@@ -166,3 +166,39 @@ fn the_map_follows_the_dispatch_when_a_command_is_renamed_or_the_dispatch_is_los
     assert!(!said[0].remedy.is_empty(), "and what to do about it");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The dogfood exercise of the commission's §3.4, as far as this slice reaches: with the map alone, a
+/// newcomer starts at the command a person types and walks to the checker, to both engines and to the
+/// broker — two hops each, every hop the construct on its cited line — and the machine answer is small
+/// enough to hand to an agent whole. (Which function inside each crate does the work is not here yet:
+/// the map names the crate and the line of the `use`, and says no more than it read.)
+#[test]
+fn a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker() {
+    let root = repo_root();
+    let s = Survey::build(&root);
+    for (what, target) in [
+        ("the checker", "crate:delulu-check"),
+        ("the interpreter and the host's primitives", "crate:delulu-runtime"),
+        ("the WebAssembly engine", "crate:delulu-wasm"),
+        ("leases, the Guard and the audit chain", "crate:delulu-broker"),
+    ] {
+        let path = s.shortest_path("verb:run", target).unwrap_or_else(|| panic!("the map has no way from `run` to {what}"));
+        assert_eq!(path.len(), 2, "`run` reaches {what} through its handler: {path:?}");
+        assert_eq!((path[0].kind, path[1].kind), (EdgeKind::DispatchesTo, EdgeKind::Uses), "{path:?}");
+        for hop in &path {
+            assert_eq!(hop.confidence, Confidence::SourceDerived, "a hop on this walk is read, never guessed: {hop:?}");
+            // The citation is real: the line exists, and names what the edge says it names.
+            let cited = line_of(&root, &hop.file, hop.line);
+            let named = hop.to.rsplit(['/', ':']).next().unwrap().trim_end_matches(".rs").replace('-', "_");
+            assert!(cited.contains(&named), "`{}` is not on the line cited for {hop:?}: {cited}", named);
+        }
+    }
+    // `check` alone — the compiler's first gate — is a command too, and rests on the checker.
+    assert!(s.shortest_path("verb:check", "crate:delulu-check").is_some(), "`check` reaches the checker");
+
+    // Bounded: what `run` rests on, two hops deep, as one small object with every hop cited.
+    let w = answers::walk_json(&s, "verb:run", false, 2).expect("verb:run is a node");
+    let bytes = serde_json::to_string(&w).unwrap().len();
+    assert!(bytes < 4096, "the answer an agent reads first is {bytes} bytes; it must stay small");
+    assert!(w["hops"].as_array().is_some_and(|h| h.len() >= 5 && h.iter().all(|x| x["via"]["line"].as_u64() > Some(0))), "{w}");
+}

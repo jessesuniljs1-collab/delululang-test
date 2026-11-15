@@ -15,8 +15,8 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 5,
-  "checkpoint_note": "Three code slices on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), and architecture slice 1's first part — commands in the Survey, read-or-inferred edges, the inventory gate (D-V2-229).",
+  "checkpoint": 6,
+  "checkpoint_note": "Four commits of code on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), architecture slice 1's first part (D-V2-229), and the dogfood test that walks the map from a command to the checker, both engines and the broker. The CI of the first three is read whole: 18 of 18 each.",
   "last_session": {
     "date": "2026-11-15",
     "where": "owner's laptop (Windows 11 x64, WSL2 Ubuntu 20.04) and GitHub-hosted runners of the test repository",
@@ -84,16 +84,16 @@
   },
   "next_three_commands": [
     {
-      "run": "gh run view 43654591666 -R jessesuniljs1-collab/delululang-test --json status,conclusion,jobs",
-      "expect": "completed; then read a_daemon_whose_standard_error_nobody_reads_keeps_serving by name on the three test jobs"
-    },
-    {
       "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the run dispatched at checkpoint 5's commit; read the Survey's tests (verbs, accounting) on Linux and macOS"
+      "expect": "the run dispatched at checkpoint 6's commit; read a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker by name on the three test jobs"
     },
     {
-      "run": "cargo run -p delulu-survey -- query verb:run && cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
-      "expect": "the handler and 61 inferred suites; ok; ok — then classify the files of kind other by role (the rest of slice 1)"
+      "run": "cargo test -p delulu --bin delulu brokerd::tests::a_beat -- --nocapture",
+      "expect": "the RW 4.98 witness and its twin; then time the stamp where the reader makes it and measure an inconclusive attempt again (RW 7.30)"
+    },
+    {
+      "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
+      "expect": "ok; ok — then RW 4.100: a busy answer at the bound and a client that asks again"
     }
   ],
   "engineering": {
@@ -119,7 +119,7 @@
         "base": "4f2af3f324a0c5ec2bd18458235726f2eded32e0",
         "verified_on_laptop": "the new broker_cli test red without the writer and green with it; 293 tests of the daemon and its users; clippy clean (Windows, debug)",
         "not_verified_on_laptop": "Linux, macOS, Miri",
-        "ci": "run 43654591666 at b1eaeae: in progress when last read (11 of 18 jobs succeeded)"
+        "ci": "run 43654591666 at b1eaeae: completed, 18 of 18 jobs; the new broker test ok by name on macOS, Ubuntu and Windows"
       },
       {
         "id": "architecture-slice-1-part-1",
@@ -130,12 +130,24 @@
         "base": "b1eaeae0d8f34ecb8ee736056240325bf5449f9c",
         "verified_on_laptop": "the Survey's suite (81 tests) and its consumers in the CLI crate (45); each new test seen red under a deliberate defect; clippy clean",
         "not_verified_on_laptop": "Linux, macOS",
+        "ci": "run 43656019101 at 3e834cc: completed, 18 of 18 jobs; the four verbs tests and the two accounting tests ok by name on macOS, Ubuntu and Windows"
+      },
+      {
+        "id": "architecture-dogfood-test",
+        "rows": [
+          "commission section 3.4"
+        ],
+        "decision": "none (a test)",
+        "base": "3e834cc0b1724d273cf46432cb1a63c2a84fc608",
+        "verified_on_laptop": "the Survey's suite, 82 of 82; the new test red when every handler is attributed to cli.rs; clippy clean",
+        "not_verified_on_laptop": "Linux, macOS",
         "ci": "dispatched after the push"
       }
     ],
     "found_not_fixed": [
       "RW 6.87: --signoff has none of the report's rules",
-      "RW 4.100 (FABLE-039): past 64 simultaneous requests the broker sheds them and the client is told to start a broker that is running"
+      "RW 4.100 (FABLE-039): past 64 simultaneous requests the broker sheds them and the client is told to start a broker that is running",
+      "RW 7.30, a new instance: master's scheduled run 43582084749 (ac2a162, 2026-11-14) red on Windows — the two RW 4.98 timing tests failed as 'inconclusive, not red' on a starved runner; they time the stamp where the test hears of it and do not measure again"
     ],
     "numbers_taken": {
       "decisions": [
@@ -156,7 +168,7 @@
       "anthropics/oss-scanner": "2084acae60ff5834a56da86b82b585491d0890db",
       "google/cybernetic-agent-governance-engine": "f0ca9f4d216b62847bea0a20963bfb7ad2b7f184"
     },
-    "status": "read at these commits; the decision table is not yet in the audit"
+    "status": "read at these commits; the decision table is the audit's section 8.1"
   },
   "experiments": {
     "M1_many_runs_one_broker": {
@@ -197,7 +209,8 @@
       "CI workflows, features and cfg gates as nodes",
       "layered generated views",
       "doctor: selected binary against the checkout",
-      "the dogfood exercise"
-    ]
+      "a walk below the crate (the dogfood test stops at the crate: no function-level edge)"
+    ],
+    "dogfood_test": "crates/delulu-survey/tests/verbs.rs: a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker"
   }
 }

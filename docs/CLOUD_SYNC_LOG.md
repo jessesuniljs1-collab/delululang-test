@@ -9850,3 +9850,35 @@ Survey and doctor: in the commit below.
   jobs as nodes; (3) slice 2 — the layered views generated from the map, `doctor`'s line for the selected binary
   against the checkout, the dogfood exercise; (4) RW 4.100, RW 6.87 and the plan's next truthful-outcome rows;
   (5) the three small items of the audit's section 8.1.
+
+### 2026-11-15 — the laptop: Fable 5.2, checkpoint 6 — the architecture's dogfood exercise held by a test; the CI of checkpoints 4 and 5 read whole, 18 of 18 each; `master`'s scheduled run of 14 November found red on Windows (two timing tests, inconclusive)
+- Session: `https://claude.ai/code/session_01Deh6W9qF2oxkvTVET8c51r` (the conversation of the entry above, continued
+  after a compaction). Model: Claude Fable 5.2 as the harness names it, effort `max` as the owner set it; the
+  compaction itself ran while he had the model set to Opus 5.5. No sub-agent wrote code or ran a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base of this entry: `3e834cc`. Nothing new on `origin/master` (`ac2a162`) at the last fetch.
+- **CI read since the entry above, whole and by name.** Run `43654591666` at `b1eaeae` (checkpoint 4): **18 of 18**;
+  `a_daemon_whose_standard_error_nobody_reads_keeps_serving ... ok` on macOS, Ubuntu and Windows. Run `43656019101`
+  at `3e834cc` (checkpoint 5): **18 of 18**; the four `verbs` tests and the two `accounting` tests `ok` on the same
+  three systems.
+- **`master`'s scheduled run `43582084749` (at `ac2a162`, 2026-11-14 09:45 UTC) is RED: 17 of 18, `test
+  (windows-latest)` failed.** Nobody had read it. The day before, the scheduled run at the same SHA was green. Two
+  RW 4.98 timing tests in `brokerd::tests` failed as *"inconclusive, not red"* on a runner that left two threads
+  without the processor for over half a second (the daemon's own lines: a reader held 646 ms; a request not read whole
+  at +2,012 ms). RW 7.30's class. `V2_LOG.md`'s entry of this date has the reading. Not fixed in this commit.
+- **What changed for a user:** nothing a user runs. One test: the Survey's map is walked from `verb:run` to the
+  checker, both engines and the broker, each hop cited and opened.
+- Files and folders: M `crates/delulu-survey/tests/verbs.rs`; M `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (section 13.3, Appendix B),
+  `docs/review/fable-deep-verification-state.json`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (regenerated). Nothing
+  added, deleted or renamed; no workflow, no entrenched file.
+- Tests on the laptop (Windows, `-j 4`): the Survey's suite, 82 of 82; `scripts/clippy.sh -j 4` clean and stamped
+  after the last `.rs` edit. The new test was seen red under a deliberate defect (every handler attributed to
+  `cli.rs`).
+- Survey and doctor after the last edit: as the commit message states them.
+- **Open / next, in order:** (1) the two RW 4.98 tests — time the stamp where it is made, and measure an inconclusive
+  attempt again without ever re-measuring a red one (RW 7.30); (2) RW 4.100 — a busy answer at the bound and a client
+  that asks again, the owner's *"multiple of these users … at the same time"*; (3) the rest of architecture slice 1 —
+  roles for the 276 `other` files, CI workflows and their jobs as nodes; (4) slice 2 — the layered views, `doctor`'s
+  line for the selected binary against the checkout; (5) RW 6.87 and the plan's next truthful-outcome rows; (6) the
+  three small items of the audit's section 8.1.

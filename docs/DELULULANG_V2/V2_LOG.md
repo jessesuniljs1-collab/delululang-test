@@ -13117,3 +13117,52 @@ half is now witnessed.
 proof); CI workflows and their jobs as nodes with the commands they run; features and `cfg` gates. Then slice 2:
 the layered views (context, compiler flow, execution and trust) generated from these nodes, `doctor`'s line for the
 selected binary against the checkout, and the dogfood exercise.
+
+### 2026-11-15 — the architecture's dogfood exercise held by a test; the CI of checkpoints 4 and 5 read whole, 18 of 18 each; `master`'s scheduled run of 14 November read: red on Windows, two timing tests that called themselves inconclusive (Fable 5.2, checkpoint 6)
+
+**The dogfood exercise** (the commission's §3.4: *"Build at least one end-to-end regression/dogfood test"*).
+`crates/delulu-survey/tests/verbs.rs` gains
+`a_newcomer_walks_from_a_command_to_the_checker_both_engines_and_the_broker`. With the map alone it starts at the
+command a person types, `verb:run`, and reaches the checker, the interpreter's crate, the WebAssembly engine and the
+broker: two hops each (`dispatches-to`, then `uses`), every hop read from source and none inferred, and every cited
+line opened and found to name what the edge says it names. `verb:check` reaches the checker. The machine answer for
+what `run` rests on, two hops deep, is under 4,096 bytes with every hop cited — small enough to hand to an agent
+whole. **Seen red:** with every handler attributed to `cli.rs` instead of the module its arm names, all five tests of
+the file fail. **What it does not reach**, and says in its own comment: the map names the crate and the line of the
+`use`; which function inside the crate does the work is not an edge yet, so the walk stops at the crate.
+
+**Verified on the laptop** (Windows, `-j 4`): the Survey's suite, 82 of 82; `scripts/clippy.sh -j 4` clean. Linux and
+macOS are CI's.
+
+**CI read whole, each new test by name.**
+
+- Run `43654591666` at `b1eaeae` (checkpoint 4): **18 of 18 jobs succeeded.**
+  `a_daemon_whose_standard_error_nobody_reads_keeps_serving ... ok` in the macOS, the Ubuntu and the Windows log.
+  FABLE-038's repair (D-V2-228) is witnessed on three systems.
+- Run `43656019101` at `3e834cc` (checkpoint 5): **18 of 18 jobs succeeded.** The four tests of `verbs.rs` and the two
+  of `accounting.rs` are `ok` by name in the macOS, the Ubuntu and the Windows log.
+
+**A red run that is not this branch's, read for the first time.** Run `43582084749`, the scheduled run on `master` at
+`ac2a162`, 2026-11-14 09:45 UTC: **17 of 18; `test (windows-latest)` failed.** The scheduled run of the day before,
+`43409171490`, was green at the same SHA, and `master` has not moved. Two unit tests of the daemon —
+`a_beat_stamped_in_time_but_handed_over_late_keeps_its_dead_man` (RW 4.98's witness, D-V2-209) and its twin
+`a_beat_late_in_its_period_handed_over_at_once_keeps_its_dead_man_past_the_first_deadline` — failed in their own
+words: *"inconclusive, not red: the beat was stamped 2.1475011s into its 2 s period, outside 1.3 s to 1.9 s"* (the
+witness: 2.2995038 s). Both ran in one process at the same moment. The daemon's own lines in the log say what happened:
+
+- In the twin, *"a Beat request's reader held it 646 ms between stamping it and handing it to the handler"*. The
+  reader stamped the beat about 1.5 s in, as intended; the TEST's thread, which lets the reader go, was not given the
+  processor for 646 ms; and the test then read its own clock, not the reader's stamp. Its 2.1475 s is when the test
+  heard of the stamp.
+- In the witness, the dead-man was judged at +2,012 ms with *"none since it was armed … 1 connection(s) were being
+  read or handed over"*: the client's request, sent at 1.5 s, had not been read whole half a second later.
+
+A runner that left two threads without the processor for more than half a second. Both tests are `ok` on Windows in
+the two runs of this branch whose logs were read (`b1eaeae`, `3e834cc`), and on macOS and Ubuntu. This is RW 7.30's
+class (the daemon's in-process tests reading a runner's stall as the product's), in two tests that row does not name.
+Two things are wrong, in the tests and not in the daemon: the stamp is timed where the test hears of it, not where it
+is made; and one inconclusive attempt fails the whole run, where RW 7.30's remedy is a control that reports the
+runner. The next commit takes both; a red verdict will not be measured again.
+
+**Session note.** The conversation was compacted between checkpoints 5 and 6 while the owner had the session's model
+set to Opus 5.5; he set it back to Fable 5.2 before this work, and the work of this entry is Fable 5.2's.
