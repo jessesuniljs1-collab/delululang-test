@@ -13365,3 +13365,36 @@ comment after denial, DL1413 for a sealed rule, DL1403 after a revoke; `audit ve
 `--grant plugin=.`, and the WASM engine and the sandbox refuse a plugin host in words. Two small findings opened:
 RW 2.54 (DL0405 for a method under another language's name says nothing of the name this language uses) and RW 7.32
 (the Survey's `exercises` edge misses a test that builds its command with `.arg("verb")`).
+
+## 2026-11-17 — the laptop (Fable 5.2, effort high): checkpoint 9's CI read green, 18 of 18; the branch is held as an integration candidate for independent review (D-V2-233, pull request #145); the recovery plan rewritten as the one continuation guide
+
+**1. Checkpoint 9's CI run, read whole: green.** Run `43938925325` at `df9feb5`, `jobs=everything`: **18 of 18**.
+Read by name on `test (ubuntu-24.04)`, `test (windows-latest)`, `test (macos-latest)` and `arm64`: the six tests that
+were red at `11c0cce` (`broker_cli` 2, `estop_cli` 1, `monitor_cli` 3), the new
+`a_command_turned_away_at_the_brokers_bound_asks_again_and_is_never_told_to_start_a_broker`, and D-V2-232's four —
+eleven tests, `ok` on each of the four jobs (44 of 44). Each of those jobs has 203 passing test-result lines and no
+failing one. `Invalid argument`, the text of the macOS failure, appears in none of the four logs. So D-V2-231's
+amendment, written *"macOS: not run when this was written"*, is now run there and holds.
+
+**2. The integration, decided: a candidate, not a merge (D-V2-233).** The owner's commission of 2026-11-17 authorises
+merging verified work into `master` when CI, independent review, governance and branch protection are satisfied, and
+says what to do when a reviewer is missing: keep the candidate on a review branch and write the blocker down. CI is
+satisfied; there is no branch protection; **`CONTRIBUTING.md` §4's independent review of a risk-class change is not
+satisfied and this session cannot satisfy it** — its author is the only party that has read the work. So `master`
+stays at `ac2a162`, and pull request #145 (`laptop/fable-deep-verification` into `master`) is open with the blocker
+stated, the changes that need reading named, and the way to land it without rewriting a cited hash.
+
+The entry above this one, and checkpoint 9's sync-log entry, say *"integrate what is verified into `master`"* as the
+next step. That was the plan before the conditions were checked one by one; this entry is what was done.
+
+**3. The recovery plan is now the guide the commission asks for** (`docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`).
+Part I is new: where the project actually stands (one table, each area split into tested / incomplete / only
+written down), the architecture and the three tools that know it, every Fable commit with its decision and CI run,
+the twelve open issues that matter, a ten-item build queue with the files, tests and finish line of each, the
+testing procedure, what stands between this and a public testing release, where the repository can shrink, a first
+hour for a newcomer, and exact next actions. Part II is Codex's plan of 13 November, kept as written under a note
+of which statuses changed. `AI_ONBOARDING.md` §10 and the structure index point to it.
+
+**Not done in this entry:** no code changed. The next code is the plan's Q1 (Verified-artifact ingress).
+
+**Survey and doctor after the last edit:** as the commit message states them.

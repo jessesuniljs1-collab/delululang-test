@@ -9980,3 +9980,41 @@ Survey and doctor: in the commit below.
   integrate the branch into `master` as the owner's commission of 2026-11-17 authorises, recording exactly what was
   and was not independently reviewed; (3) rewrite `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` as the one guide for
   whoever continues; (4) then code, in the order that guide gives.
+
+### 2026-11-17 — the laptop: Fable 5.2, checkpoint 10 — checkpoint 9's CI read GREEN (18 of 18); the branch held as an integration candidate for independent review (D-V2-233, pull request #145), `master` not moved; the recovery plan rewritten as the one continuation guide
+- Session: `https://claude.ai/code/session_01Deh6W7reoWHo3LdCNCuzka` (the same work, continued after a context
+  compaction; the link changed with it). Model: Claude Fable 5.2 as the harness names it; effort `high`, as the owner
+  set it. No sub-agent wrote, ran or reviewed anything.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: **#145** into
+  `master`, open.   Merged: **no — held, see below.**
+- Base of this entry: `df9feb5`. Nothing new on `origin/master` (`ac2a162`) at the fetch that preceded this entry.
+- **CI read since the entry above, whole and by name.** Run `43938925325` at `df9feb5` (checkpoint 9): **18 of 18**.
+  On the three `test` jobs and `arm64`: the six tests red at `11c0cce`, the bound's own test, and D-V2-232's four are
+  `ok` by name on each (44 of 44); 203 passing test-result lines per job, none failing; the macOS failure's text
+  appears nowhere.
+- **What was merged, pushed, kept local, blocked — in the commission's words:**
+  - *Merged into `master`:* **nothing.**
+  - *Pushed:* everything, to `origin/laptop/fable-deep-verification`. Pull request #145 opened.
+  - *Kept local:* nothing but raw evidence outside the repository (`D:\nelan\fable-audit-evidence`).
+  - *Blocked:* the merge, on **`CONTRIBUTING.md` §4 items 2 and 3 — a risk-class change needs a sponsor who is not
+    its author and who has read it.** D-V2-232 (exit codes; `STABILITY.md` §1) and D-V2-231 (the broker's wire and
+    client) are in a risk class; nobody but their author has read them. The owner's commission says a missing
+    reviewer means a review branch and a written blocker, not a merge. D-V2-233 has the conditions one by one.
+- **What changed for a user:** nothing in the product. `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` is now the one
+  guide: Part I (status, architecture, the Fable commits and their CI, open issues, the build queue, testing, release
+  gates, simplification, onboarding, next actions) and Part II (Codex's plan of 13 November, kept as written).
+- Files and folders: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` (Part I new; Codex's text is Part II, unchanged but
+  for its title line, which Part II's heading replaces), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-233),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/AI_ONBOARDING.md` (§10 points to the guide), `docs/REPOSITORY_STRUCTURE.md`
+  (one row), `docs/review/fable-deep-verification-state.json`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`
+  (regenerated). Nothing added, deleted or renamed; no code, no workflow, no entrenched file.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227` to `D-V2-233`; RW `6.87`, `6.88`, `4.99`, `4.100`,
+  `4.101`, `2.54`, `7.32`.
+- Tests: none needed a re-run for a documents-only commit beyond the two that read documents — the Survey's freshness
+  test and `doctor_cli` — which the commit message reports. This commit's full CI run is dispatched after the push
+  and is **not read when this is written**.
+- Survey and doctor after the last edit: as the commit message states them.
+- **Open / next, in order:** (1) the owner: pull request #145 — a second party's reading, or his change to the rule;
+  (2) read this commit's CI run to its end and write it into the guide's §3 table; (3) the guide's Q1, Verified-artifact
+  ingress, red-first in `crates/delulu-check/src/dir.rs` — the guide's §10 says where to start; (4) then Q3 and Q4.
+  **Start from this branch, not from `master`**, until #145 lands.

@@ -1,4 +1,367 @@
-# DeluluLang AI-first recovery plan
+# DeluluLang — engineering recovery and continuation guide
+
+**The one guide for whoever continues DeluluLang — Claude, Codex, Gemini, any model, or a person.** Read Part I and
+you can start work. Part II is the research it rests on (Codex, 13 November 2026), kept as written.
+
+| | |
+|---|---|
+| Maintained by | the head chef of each session; this revision by Claude Fable 5.2, 17 November 2026, under the owner's commission of 2026-11-17 ([the commission](prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md)) |
+| True of | the branch **`laptop/fable-deep-verification`** in `jessesuniljs1-collab/delululang-test` (the only repository anyone pushes to) — the integration candidate of pull request [#145](https://github.com/jessesuniljs1-collab/delululang-test/pull/145). **`master` is still `ac2a162` and has none of §3's work, this file included, until that pull request lands** |
+| Keep it true | when you land a change, edit the rows it touches here in the same commit — §3's table, §4's list, §5's queue, §10. Do not append a diary: the diary is `docs/DELULULANG_V2/V2_LOG.md` |
+| Words | **tested** = a named test or command was run and its result read; **source** = read in the code, not run; **CI** = the named run was read job by job; **proposed** = nobody has built it |
+
+**Contents.** Part I: [1 status](#1-where-the-project-actually-stands) · [2 architecture](#2-architecture-and-the-tools-that-know-it) ·
+[3 the Fable work](#3-what-the-fable-52-sessions-built-and-what-became-of-it) · [4 open issues](#4-open-issues-by-real-impact) ·
+[5 the queue](#5-the-queue-what-to-build-in-order) · [6 testing](#6-testing-and-verification) ·
+[7 release](#7-what-stands-between-this-and-a-public-testing-release) · [8 simplification](#8-making-the-repository-smaller) ·
+[9 onboarding](#9-onboarding-your-first-hour) · [10 next actions](#10-exactly-what-to-do-next). Part II: [the 13 November research](#part-ii--the-13-november-2026-research-codex).
+
+---
+
+# Part I — where things stand and what to do
+
+## 1. Where the project actually stands
+
+DeluluLang is a statically typed language in which **a program can do nothing except what it was explicitly handed**:
+effects are in a function's type, capabilities are values, and the authority a program needs is computed from its
+code before it runs. It is one command, `delulu` (a Rust workspace of 13 workspace members, about 114,000 lines of production
+Rust and 57,000 of integration tests). Its intended users are AI models and agents — many at once — with people
+fully supported. Version `1.0.0` is tagged in the test repository; **nothing has been published as a release**.
+
+| Area | Works, and was tested | Incomplete | Only written down |
+|---|---|---|---|
+| **Language and checker** | records, generics, recursion, `Result`/`Option` by `match`, lists and maps, ranges, compound assignment, math, f-strings, bitwise operators, effect rows, reference capabilities; a 352-line JSON program written from scratch passed 17 of 18 oracle cases identically on three execution modes and five machines (audit §5) | `Option`/`Result` have no methods (RW 2.50 — half built on a branch, §5 Q8); no methods on your own types (2.33); no tuples or sets (2.39); a scope refusal cannot be handled by the program (2.42) | resumable effect handlers, `async` (reserved words, rejected or deferred) |
+| **Input and data** | reading and writing granted files; scoped HTTPS with method and path grants; standard input on the interpreter | **no command-line arguments, no environment, no exit code, no sleep (2.40); no JSON library (2.41); no character-from-number (2.52)** | — |
+| **Two engines** | the interpreter and a WebAssembly engine give the same answers on the shared subset (differential tests in CI); a `.dwx` artifact runs | WASM refuses some constructs the documents teach, at compile time, in words (3.25, 3.4); no early "this target cannot run this" verdict (6.61) | a native backend, tiered execution, an optimizer |
+| **Authority (static)** | `delulu authority` reports what a program can do; `--within` answers within / exceeds / inconclusive; `--preflight` refuses before any effect | a computed scope is *inconclusive*, by design (6.64) | — |
+| **Guard, leases, broker (run time)** | every use is decided by a broker daemon: grants, delegation that only narrows, single-use leases, revocation, an owner code for guarded classes, a hash-chained audit log, a dead-man per run. Two real OS accounts: 28 of 31 pre-registered custody steps as expected (audit §4 T5). 256 runs at once against one broker: all served, chain verified (§3) | **a broker adopts a certificate issued to a different key (FABLE-022)**; a lease token is passed on the command line (4.90); at 384 runs at once 20 were refused by their own dead-man — fail-closed (4.101); on one OS account the proposer can approve (4.91, documented) | multi-tenancy; federation is not model-checked (5.5) |
+| **Plugins and Verified artifacts** | build, inspect, verify, load under `--grant plugin=.`; signatures; a wrong ceiling, tampering and a contained plugin are refused | **the artifact path accepts trees the text path would refuse — colliding node ids, identifiers the lexer refuses — and `why` reports on an artifact without verifying it (4.93, 4.94, 6.67, 5.7, 6.71). No escape from a grant or a jail has been shown. Do not offer untrusted Verified artifacts until §5 Q1 lands** | a plugin marketplace |
+| **Sandbox** | `run --sandbox` starts a jailed guest that holds no authority — AppContainer and a Job on Windows, Landlock and seccomp on Linux, Seatbelt on macOS (CI on all three); a KVM microVM builds reproducibly in CI | the guest channel cannot carry actors, foreign code, Python, plugins or secrets — those runs are refused; the sandbox is opt-in | L3/L4 external launchers are measured by nobody (4.89, 6.50) |
+| **Truthful outcomes** | a report is proved writable before the run and never lost quietly (D-V2-227); `test`, `fix`, `schema validate`, `authority` no longer report success for work not done (D-V2-232) | **a panic inside the tool exits 2, which is documented as "nothing was examined" (FABLE-013); a closed output pipe panics (6.58); `main` returning `Err` exits 0; a killed guest or daemon leaves no terminal outcome (6.59, 6.84, 6.68)** | a single typed outcome for every way a run can end |
+| **Packages** | a four-package diamond runs from source and as `.dwx`; a lock detects a changed dependency | running a package by its entry FILE misses its imports (6.52); a package does not see `.solulu` files, and checks clean with the entry unread (FABLE-016); no registry round trip was run | a public registry |
+| **Tools for agents** | `--json` envelopes with closed schemas; typed repairs and `delulu fix`; hash-guarded `delulu edit`; an LSP; an MCP server (read-only tools, cancellation); the Atlas (a program's own structure) | MCP speaks 2025-era protocol versions only and sends 229 kB of schemas up front (6.88, FABLE-026); several option-parsing gaps (6.78 parts 2 and 4) | — |
+| **The repository's map** | the Survey (`delulu-survey`): every file a node, every edge cited to a `file:line`, impact and path queries, commands as nodes; `delulu doctor` checks the environment, the security posture and the map's freshness; CI fails on a stale map | no function-level edges; no generated layered views yet (§5 Q9); `doctor` does not compare the binary on `PATH` with the checkout (6.53) | — |
+| **Devices** | a named simulator profile: command, envelope refusal, read-back, e-stop | with no profile an actuator's command answers `Ok` though no device exists (4.88) | **any physical system. Nothing here is certified or tested for one, and an effect checker does not make a robot safe** |
+| **Assurance** | 18 CI jobs on every push to `master` (§6): three operating systems and ARM64, Miri, fuzzing, TLA+/Lean checks, supply chain, reproducible microVM | the core's mechanised results cover a monomorphic closed-row fragment under stated assumptions | whole-system or "guaranteed safe" readings — withdrawn |
+
+**Honest one-paragraph verdict.** The core idea works end to end and is uniform across platforms: a program without
+a grant is refused, a narrowed lease cannot be widened, and the record of what happened verifies. What is missing is
+ordinary — arguments, JSON, a few methods — plus three things that matter more than they sound: an artifact
+verifier that does not yet re-establish what the parser guarantees, outcome codes that still lie in a few failure
+paths, and a certificate that is not bound to its holder. None of this is ready to be called production-ready, and
+it is not safe to describe as a security boundary between mutually distrustful processes sharing one OS account.
+
+## 2. Architecture, and the tools that know it
+
+**Do not learn the architecture from this section — ask the tools.** This is orientation only; it is hand-written
+and will drift. The generated truth is [`docs/survey/SURVEY.md`](survey/SURVEY.md) (regenerated by `delulu-survey
+build`, checked fresh in CI), and the queries below read the same data.
+
+```
+            text source (.delulu, .solulu)                         a Verified artifact (.dpx: DIR)
+                       │                                                      │
+   delulu-syntax   lexer → parser → AST ──────────────────────────────────────┤  (DIR decodes straight to an AST:
+                       │                                                      │   the parser's guarantees are NOT
+   delulu-check    resolve → type and effect check → reference capabilities ◄─┘   re-established — §5 Q1)
+                       │            └→ authority report (what this program can do)
+        ┌──────────────┼───────────────────────────┐
+   delulu-runtime      │                      delulu-wasm
+   the interpreter     │                      codegen → Wasmtime → host imports
+        └──────┬───────┘                            │
+               ▼                                    ▼
+     primitives (prim.rs): every effect is a call that needs a capability value
+               │
+   delulu-broker (in-process, or the daemon `delulu broker`): grant tree, leases, Guard, audit chain, dead-man
+               │
+     the host performs the effect:  files (beneath.rs, no link followed) · network (egress.rs) · devices · plugins
+               │
+   `run --sandbox`: the program runs as a GUEST in an OS jail and holds nothing; the host above does every effect
+```
+
+| Crate | What it is | Depends on (workspace only) |
+|---|---|---|
+| `delulu-diag` | diagnostics, the code registry, the JSON envelope | — |
+| `delulu-syntax` | lexer, parser, AST, formatter | diag |
+| `delulu-check` | resolver, type/effect checker, reference capabilities, authority, DIR, packages and locks | diag, syntax |
+| `delulu-broker` | grant tree, leases, Guard policy, certificates, audit chain | check, diag |
+| `delulu-runtime` | interpreter, primitives, file/network/device hosts, plugin loader, budgets | broker, check, diag, syntax |
+| `delulu-wasm` | WebAssembly code generator and host, `.dwx`/`.dpx` containers | check, diag, runtime, syntax |
+| `delulu-atlas` | a PROGRAM's structure as data (callers, paths, authority chains) | check, diag, syntax |
+| `delulu` | the CLI: every command, the broker daemon, the sandbox host and guest, LSP, MCP, `doctor` | all of the above, survey |
+| `delulu-survey` | the REPOSITORY's map of itself | — |
+| `delulu-conform`, `delulu-fuzz`, `delulu-measure`, `delulu-registry` | conformance and generated reference; fuzz entry points; measurements; registry client | — |
+
+**Three tools, three different questions. They are not interchangeable.**
+
+| Tool | Answers | First commands |
+|---|---|---|
+| **Survey** — the repository | what is this file, what reaches it, what breaks if I change it, which tests drive this command | `cargo run -p delulu-survey -- query mod:crates/delulu/src/brokerd.rs` · `impact <id> --depth 2` · `affected-by <id>` · `path <a> <b>` · `diff origin/master` · `query verb:run` · add `--json` for a machine |
+| **Doctor** — this machine and checkout | is this healthy: toolchain, security posture, sandbox level, map freshness | `cargo run -p delulu -- doctor --check` (exit 0 healthy, 1 a problem, 2 bad invocation) · `--json` |
+| **Atlas** — one DeluluLang program | what does this program contain, who calls what, why does it need this authority | `delulu atlas tree f.delulu` · `digest` · `callers` · `why` · `path` · `chain` · `mermaid` · `--json` |
+
+Node ids: `crate:delulu-check`, `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`,
+`doc:README.md`, `code:DL0501`, `ruling:S10-D64`, `verb:run`. An edge marked **inferred** was read from a string, not
+from structure, and says so in the output. What the map does not know, named in its own output: five internal
+subcommands dispatched through constants, tests that build a command one argument at a time (RW 7.32), and anything
+below the module — there is no call graph.
+
+Where each large thing lives: commands and dispatch, `crates/delulu/src/cli.rs` (about 12,000 lines) and
+`run_cmd.rs`; the broker daemon, `brokerd.rs`; its wire, `broker_ipc.rs` and `broker_transport.rs`; the sandbox,
+`guest.rs`, `jail.rs`, `launcher.rs`, `microvm.rs`; the checker, `crates/delulu-check/src/check.rs`; the artifact
+format, `crates/delulu-check/src/dir.rs`; primitives, `crates/delulu-runtime/src/prim.rs`, and their table of signatures, `crates/delulu-check/src/prim_table.rs`;
+contained file access, `beneath.rs`; network, `egress.rs`. Trust boundaries are in Part II, *Components and
+boundaries*.
+
+## 3. What the Fable 5.2 sessions built, and what became of it
+
+Three branches were compared at `origin` on 2026-11-17 (`git merge-base`: all three fork from `master` `ac2a162`;
+`master` had not moved).
+
+| Branch | What it holds | Outcome |
+|---|---|---|
+| `laptop/fable-deep-verification` | the audit, and every code change below — a straight line of commits on `ac2a162` | **Integration candidate — not merged.** Pull request [#145](https://github.com/jessesuniljs1-collab/delululang-test/pull/145) into `master`, held for an independent reviewer (D-V2-233; the paragraph under the next table says exactly why and how it lands). Work continues on this branch meanwhile |
+| `laptop/fable-research-runner` | three commits: one workflow (`.github/workflows/fable-research.yml`) and four scripts under `research/fable-s1/` that built the binary on four runners and ran the audit's fixtures; runs `43506513620`, `43508697812`, `43509259836`, green | **Deliberately not merged.** Its first commit is titled "throwaway, never merge": the workflow runs on every push to that branch and the scripts assert nothing by themselves. Its results are in the audit (§4 to §6). Kept on `origin` as the ready multi-platform harness for §5 Q3 and Q4 — copy its files onto a working branch when needed |
+| `claude/relaxed-brown-2l78i1` (not a Fable-audit branch; the routine's) | RW 2.50, `Option`/`Result` methods, half built at `d5e647d` | **Not merged.** Run `43389262361`: 14 jobs green, 4 red — two generated-file tests (`release_requires_full_coverage`, `the_generated_reference_is_not_stale`) on four systems. §5 Q8 |
+
+**The commits of `laptop/fable-deep-verification`, oldest first.** "CI" is the full `jobs=everything` run at that
+commit, read job by job.
+
+| Commit | What | Decision · rows | CI |
+|---|---|---|---|
+| `b3142a1`, `919114e` | the audit itself: [`docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md`](review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md), its state file, three of the owner's prompts and this plan as Codex wrote it | — | `43506016428` green; release dry run `43508844764` green |
+| `4f2af3f` | **a run's report is proved writable before the run starts, and is never lost quietly**; a sandboxed pre-start refusal writes its report | D-V2-227 · RW 6.77, 6.83 closed | `43625167177`, 18 of 18 |
+| `b1eaeae` | **the broker never stops serving to write its own log** — a foreground daemon whose standard error nobody read stopped for good when the pipe filled | D-V2-228 · RW 4.99 closed (FABLE-038) | `43654591666`, 18 of 18 |
+| `3e834cc` | **architecture slice 1**: every command is a node in the Survey with its handler and the suites that drive it; an edge says whether it was read or inferred | D-V2-229 | `43656019101`, 18 of 18 |
+| `bb2cfb1` | the map's own exercise as a test: from `verb:run` to the checker, both engines and the broker, every cited line opened | — | `43678784062`, 18 of 18 |
+| `8bb85e0` | two timing tests that failed a scheduled run on a runner's stall now measure where the beat is stamped | D-V2-230 · RW 7.30 (part) | `43713270218`, 18 of 18 |
+| `11c0cce` | **a connection the broker turns away at its bound of 64 is told so, unread, and its client asks again** (128 of 128 and 256 of 256 runs at once, was 101 and 129) | D-V2-231 · RW 4.100 closed (FABLE-039) | `43788300598`, **15 of 18 — red** on Ubuntu, ARM64, macOS. **Never use this commit alone** |
+| `df9feb5` | the repair of `11c0cce` (the client asked for its read deadline after sending; macOS refuses that) and **`test`, `fix`, `schema validate` and `authority` stop reporting success for work not done** | D-V2-231 amended, D-V2-232 · RW 6.51, 6.55, 6.79 closed; 6.78 parts 1 and 3 | `43938925325`, 18 of 18 |
+| *the commit after `df9feb5`* | this guide rewritten as the canonical one; the integration decision | D-V2-233 | dispatched after its push — **not read when this row was written**; the next commit's records name it |
+
+**What "verified" means for these, exactly.** Each change has a test that was seen failing before the fix and
+mutants that turn it red again; each commit's full CI run was read to its end. **None of it was reviewed by a
+second party — which is why none of it is on `master`.** `CONTRIBUTING.md` §4 asks for a sponsor who is not the
+author for a change in a risk class, and counts a model reviewing its own output as one party; the owner's
+commission of 2026-11-17 authorises a merge only when that review exists, and says that otherwise the candidate
+waits on a review branch with the blocker written down. The author of every commit above is Claude Fable 5.2. In
+a risk class: D-V2-232 (it changes two exit codes, which `STABILITY.md` §1 covers) and D-V2-231 (a `Busy` answer
+on the broker's wire; its client now repeats a request the daemon said it did not read — `Issue` and `Revoke`
+included). D-V2-227 and D-V2-228 touch a run's outcome and the broker daemon and are best read with them.
+
+**To land it.** A second party — the owner himself, a person he names, or a different AI system he starts for the
+purpose; never a sub-agent of the author — reads D-V2-227 to D-V2-233 in
+[`V2_DECISION_LOG.md`](DELULULANG_V2/V2_DECISION_LOG.md) and the diffs they name, and says so in pull request #145
+and in a line under each decision. Then **fast-forward**: `git push origin laptop/fable-deep-verification:master`,
+or the pull request's *Create a merge commit*. **Never *Squash* or *Rebase*** — the records cite these commit
+hashes. The owner may instead change the rule (§8, *Policy and licence*); that is his alone.
+
+## 4. Open issues, by real impact
+
+The catalogue is [`docs/REMAINING_WORK.md`](REMAINING_WORK.md): 330 rows, about 140 open, each checked against the
+binary when written. These are the ones that decide what happens next. `RW n.m` is a row there; `FABLE-nnn` is a
+row of the audit's registry (its Appendix A).
+
+| # | Issue | Why it matters | Rows | State |
+|---|---|---|---|---|
+| 1 | **A Verified artifact is checked less strictly than the same program as text.** The artifact decodes straight to a syntax tree; the verifier re-runs the checker but trusts node ids and names the parser would have guaranteed. `why` reports on an artifact it never verified. | It is the feature named "Verified". A reference-capability rule was skipped this way (DL1604); no authority escape is shown. RW 4.95's guarantee inside a plugin rests on the same ids (by source, FABLE-008, unrun). | RW 4.93, 4.94, 6.67, 5.7, 6.71 | **Open — §5 Q1.** Not started |
+| 2 | **A certificate is not bound to its holder.** A broker adopts, and can then use, a certificate its anchor issued to a different key. | "Per-agent identity" is what many agents at once need most. | FABLE-022 | **Open — a decision first, §5 Q2** |
+| 3 | **Some failures still report the wrong thing.** A panic in the tool exits 2 ("nothing was examined"); a closed output pipe panics; `main` returning `Err` exits 0; a killed guest or daemon leaves no terminal outcome. | An agent that retries on these can repeat an effect. | FABLE-013, RW 6.58, 6.59, 6.84, 6.68, 2.40 | **Open — §5 Q3.** The report half is done (D-V2-227) |
+| 4 | **No arguments, no JSON.** | Every real agent task starts with input and ends with structured output. The language can do it by hand (§1); nobody should have to. | RW 2.40, 2.41, 2.52 | **Open — §5 Q4** |
+| 5 | **The whole Fable branch is unmerged for want of an independent reviewer** (§3). | Until it lands `master` lacks every fix in §3 and this guide. The rule is the project's own, and `11c0cce` shows why it exists — it passed its author's tests and broke macOS. | D-V2-233; D-V2-227, 228, 231, 232 | **Blocked on a reviewer — the owner's to arrange**, or his rule to change. Pull request #145 |
+| 6 | **A saturated broker lets a run's own dead-man fire.** At 384 runs started together, 20 were revoked (DL1403) while their beats waited in line. Fail-closed, recorded — and a ceiling. | Many agents at once is the target workload. Measured once, on one Windows laptop, debug build. | RW 4.101 (FABLE-043), RW 7.30 (FABLE-042) | **Open** — measure on Linux with a release build before choosing a remedy; who is heard first when the broker is full is the owner's to weigh |
+| 7 | **Packages and `.solulu`.** A package's entry file run directly misses its imports; a package ignores `.solulu` and checks clean with the entry unread; `fmt` refuses the extension. | The owner chose `.solulu` as the future default. | RW 6.52, FABLE-016 | **Open — §5 Q5** |
+| 8 | **The default build needs the build machine's `libpython` to start at all.** Under another OS account every command died at load. | A release built this way does not run elsewhere. The Python-free (`net`) build passed everything on four platforms. | FABLE-025, RW 3.26 | **Open** — ship the Python-free build; §7 |
+| 9 | **The binary cannot say which commit it is,** and `doctor` does not compare the binary on `PATH` with the checkout. The laptop's `PATH` binary is from 2026-08-07. | An agent can test one build and run another. | RW 6.53, FABLE-004 | **Open — §5 Q7** |
+| 10 | **A lease token travels on the command line.** | Readable from the process table by the same user. | RW 4.90, FABLE-031 | **Open** |
+| 11 | **The MCP server is two protocol revisions old and sends 229 kB of schemas for twelve tools.** | The first thing an MCP client pays for. | RW 6.88, FABLE-026, FABLE-044 | **Open — §5 Q6** |
+| 12 | **With no device profile, an actuator's command answers `Ok`.** | A false success in the one domain where it matters most. | RW 4.88, FABLE-027 | **Open** |
+
+**Unverified claims — do not repeat them as facts.** How late a dead-man fires under load (a reading of the serve
+loop, not a measurement); anything about macOS that is not in a named CI run (no local hardware); DNS rebinding
+and cross-host redirects against the network host (not run); L3/L4 launchers; any registry round trip; every
+"hours" or "days" estimate anywhere. **Technical debt that is real but not urgent:** `cli.rs` at about 12,000 lines
+and `brokerd.rs` at about 6,000; one option table per command (RW 6.78); the Survey rebuilds its whole map for
+every query (about 3 s).
+
+## 5. The queue: what to build, in order
+
+One change per item, on a branch, pushed to `origin`, full CI read before it lands (§6). For every item: **see the
+defect fail first; fix it as small as it can be; put the defect back and watch your test go red; run the Survey
+before and after.** Sizes are scope, not time.
+
+| # | Build | Where | Tests to run | Done when |
+|---|---|---|---|---|
+| **Q1** | **Artifact ingress, minimal and fail-closed.** In `Dir::decode`: refuse a repeated node id, a non-empty `recovered`, and any identifier the lexer would refuse (expose the lexer's own predicate from `delulu-syntax`; do not write a second one). In `verify_checked`, after the replay, the type table's size must equal the node count. Make `why` on a `.dpx` verify before it reports. No wire-format change. The audit's §11 is a ten-step handoff for exactly this. | `crates/delulu-check/src/dir.rs`; `crates/delulu/src/cli.rs` (`cmd_why_plugin`); `crates/delulu-check/src/fuzz.rs` | `cargo test --locked -p delulu-check -j 4`; `cargo test --locked -p delulu --test plugin_cli --test plugin_load_cli --test signing_cli -j 4` | every honest artifact in the corpus still verifies byte for byte; each guard removed in turn fails exactly its own test; `fuzz_one_dir` calls `verify` under the property "if it verifies, its text form checks to the same types". **Security-critical: say in the pull request who reviewed it** |
+| **Q2** | **Bind a certificate to its holder** — after a recorded decision. Recommended (audit §10): at adoption the leaf's subject must be the adopting broker's own key, in strict mode; `DEPLOYMENT.md`'s recipe changes to take that key from the host. It touches behaviour RFC 0001 describes, which is entrenched: write the `D-V2-nn` and the entrenched-change record first. | `crates/delulu-broker/src/cert.rs`, `Broker::adopt`; `docs/DEPLOYMENT.md` | `cargo test -p delulu-broker -j 4`; `cargo test -p delulu --test grants_cli --test guard_e2e -j 4`; the two-account steps of audit §4 T5 | the three T5 steps that failed pass; a certificate naming another key is refused in words; every existing adoption test still passes |
+| **Q3** | **One outcome for every way a run ends.** An internal fault gets its own exit code and envelope (not 2); a closed standard output is a stop, not a panic; `main` returning `Err` exits non-zero; a killed guest is reported by its parent. | `crates/delulu/src/main.rs` (the panic hook), `run_cmd.rs`, `guest.rs`, console writes in `crates/delulu-runtime/src/prim.rs`; `docs/for-agents.md` | `cargo test -p delulu --test json_contract --test sandbox_run_cli --test cli_contract -j 4` | refused / failed / completed / stopped / unknown are distinguishable without parsing text; exit 2 means only "nothing was examined"; `STABILITY.md` §1 gains the new code by its own process |
+| **Q4** | **Arguments and JSON.** `root.args()` (an immutable list the invocation supplies — no ambient environment); `parse_json` / `to_json` with decided number, duplicate-key, depth and size rules; a character from its number. On both engines, or refused early in words. | `crates/delulu-check/src/prim_table.rs`; `crates/delulu-runtime/src/prim.rs`; `crates/delulu-check/src/check.rs`; `crates/delulu-wasm/src/codegen.rs`, `host.rs`; conformance witnesses | the audit's oracle: 18 fixtures × three modes (the runner branch has the harness); `cargo run -p delulu-conform -- --coverage` | the JSON task of audit §5 needs no hand-written parser; invalid, deep, oversize and non-UTF-8 input are typed errors, never a panic |
+| **Q5** | **`.solulu` in packages**, and running a package by its entry file. One source-path classifier used by `package.rs`, `deps.rs`, `cli.rs`, `run_cmd.rs`, `lsp.rs`, `fmt`; a duplicate module across the two extensions is refused, never resolved by preference. Part II, *`.solulu` migration*, has the three steps. | as named | `cargo test -p delulu --test package_run --test lsp_cli --test edit_cli --test test_runner_cli --test editor_contract -j 4`; `cargo test -p delulu-check -j 4` | a mixed-extension package checks, runs, tests, formats and builds the same from its directory and from its entry file |
+| **Q6** | **MCP: send a tool's schema when asked, not all twelve up front**; answer an undecodable line with an error and keep serving (RW 6.76). | `crates/delulu/src/mcp.rs` | `cargo test -p delulu --test mcp_cli -j 4` | `tools/list` is a small multiple of the tool count; every schema still validates its tool's output |
+| **Q7** | **The binary names its commit; `doctor` compares.** Plain `--version` prints commit and target; `doctor` reports when the `delulu` on `PATH` is not the one built here. | `crates/delulu/build.rs`, `doctor.rs`, `cli.rs` | `cargo test -p delulu --test doctor_cli -j 4` | an old binary first on `PATH` is named as such |
+| **Q8** | **Finish RW 2.50** from `origin/claude/relaxed-brown-2l78i1` (code at `d5e647d`): add its 14 coverage witnesses, regenerate the reference, a `D-V2-nn`. Do it after Q1 — the draft changes the DIR version. | that branch; `tests/conformance/` | `cargo test -p delulu-wasm --test option_result_parity -j 4`; `cargo run -p delulu-conform -- --coverage` | its four red CI jobs are green and three real programs use the methods |
+| **Q9** | **Architecture slice 2: layered views generated by the Survey** — language, checker, engines, runtime, broker/Guard, sandbox, tools — each element marked implemented / tested / inferred / planned from data the map already holds, in `SURVEY.md` and behind `query`. No second documentation system. Then: classify the 276 nodes the map calls `other`; CI workflows and Cargo features as nodes; RW 7.32. | `crates/delulu-survey/src/` | `cargo test -p delulu-survey -j 4` | §2's diagram above is deleted from this file because the generated one replaced it |
+| **Q10** | **The saturated broker** (RW 4.101): measure 384 and 512 runs at once on Linux with a release build; then choose — a line of their own for a holder's beats is the smallest remedy. | `crates/delulu/src/brokerd.rs` (`serve_inner`) | the storm harness in the audit's Appendix B (M1); `cargo test -p delulu --bin delulu brokerd -j 4` | no run is revoked by its own dead-man while its beats were sent on time |
+
+**Then**, from Part II's queue, unchanged: P1.5's remaining parts (target verdicts, the null device), P2.2 (bounded
+agent interfaces), P2.3, P2.4 (lease by file or standard input), P3.1 (one agent-to-agent demo). **Not now** — Part
+II's list stands: no universal agent protocol, no native backend, no marketplace, no real-time physical control, no
+certification claims.
+
+## 6. Testing and verification
+
+```
+# every session, first
+git fetch origin && git status && git log --oneline HEAD..origin/master
+cargo run -p delulu-survey -- check          # must say: ok: the Survey matches the tree
+cargo run -p delulu -- doctor --check        # must say: ok: N check(s) passed
+
+# before a change
+cargo run -p delulu-survey -- impact mod:<path> --depth 2      # what to run, and what you might break
+
+# after the last .rs edit, in this order
+scripts/clippy.sh -j 4                                         # fmt check + clippy -D warnings + the stamp the commit hook wants
+cargo test -p <crate> -j 4 --no-fail-fast [--test <suite> …]   # read cargo's OWN exit code, never a pipeline's
+cargo run -p delulu-survey -- build && cargo run -p delulu-survey -- check && cargo run -p delulu-survey -- findings
+cargo run -p delulu -- doctor --check
+
+# then GitHub does the rest
+git push origin <branch>
+gh workflow run ci.yml -R jessesuniljs1-collab/delululang-test --ref <branch> -f jobs=everything
+gh run view <id> -R jessesuniljs1-collab/delululang-test --json conclusion,jobs
+gh api --allow-escape-sequences repos/jessesuniljs1-collab/delululang-test/actions/jobs/<job-id>/logs   # one job's log
+gh workflow run witness.yml --ref <branch> -f os=macos-latest -f target=<test file> -f filter=<name>     # one test, one runner
+```
+
+| | |
+|---|---|
+| **The 18 CI jobs** | `test` on `ubuntu-24.04`, `windows-latest`, `macos-latest`; `arm64`; `lints`; `heavy-gates`; `fuzz`; `formal`; `supply-chain`; `editor`; `microvm`; `microvm-reproducible`; `miri` (`delulu-diag`, `delulu-atlas`); `miri-ffi`; `miri-slow` (`delulu-check`, `delulu-syntax`, `delulu-broker`). A push to `master` runs them; a branch needs the dispatch above |
+| **Current evidence** | the candidate: run `43938925325` at `df9feb5`, 18 of 18, read job by job on 2026-11-17 — the eleven tests its last two code commits added or repaired are `ok` by name on all four test jobs. `master` `ac2a162`: push run `43302145758` and scheduled run `43409171490`, 18 of 18 each. A later commit's run is in §3's table |
+| **Platforms** | Windows: the laptop. Linux: WSL2 on the laptop (`wsl`, a copy of the tree under `~`), and CI. **macOS and ARM64: CI only — there is no local stand-in, so a macOS failure is found one push late. Read the run before you build on the commit** (this cost a red commit, §3) |
+| **The laptop cannot finish the whole workspace suite comfortably** | the whole `delulu` package is about 25 minutes at `-j 4`; let CI run the workspace. Freeze the tree while a suite runs; run one heavy job at a time |
+| **Known test gaps** | no test builds a malformed artifact's tree (Q1 adds them); nothing exercises macOS locally; the 256-run storm is a script, not a suite; no end-to-end install-and-upgrade test; DNS rebinding and cross-host redirects are not attacked |
+| **Independent review** | required by `CONTRIBUTING.md` §4 for the language core, the stability contract, and authority or effect behaviour. **A sub-agent you started, or the same model in another window, is not independent.** If there is no second party, say so in the pull request and in §4 above — do not write "reviewed" |
+| **A gate that cannot fail is not a gate** | every new test is falsified: put the defect back, watch it go red, record the mutant. A test that survives its own defect is strengthened or deleted |
+
+## 7. What stands between this and a public testing release
+
+Mandatory — each is a refusal to ship, not a nice-to-have:
+
+1. **§5 Q1.** No untrusted Verified artifact is offered while the verifier accepts what the parser refuses.
+2. **§5 Q3.** Exit codes and envelopes say what happened on every path an agent can reach.
+3. **The Python-free build is the one shipped,** and it names its commit (§5 Q7; §4 items 8 and 9).
+4. **An install and an upgrade from the published archive on a clean machine or account,** with an old binary first on `PATH` as the control.
+5. **Full CI green on the exact commit,** a release dry run, checksums, SBOM, provenance and signature verified by someone who did not make them.
+6. **The owner's word.** He has said: push only to the test repository, never push a tag, never switch `origin`, until he says otherwise in words. `launch/2.0.0` is prepared, not launched. No model publishes a release under any commission written so far.
+
+Can wait: §5 Q4 to Q10 make it *useful*; they do not make it *unsafe to try*. Methods, tuples, a registry, a native
+backend, more localisations, external launchers and every device beyond the simulator can all follow a preview.
+Part II, *Platform and release gates*, has the per-platform table and the alpha and stable bars; both still hold.
+
+## 8. Making the repository smaller
+
+Nothing was deleted in the Fable sessions. Evidence so far says where to cut; each needs its consumers traced
+first — **a thing that looks unused is not shown to be unused** (dynamic dispatch, feature gates, other platforms,
+published contracts).
+
+| Candidate | Evidence | Before touching it |
+|---|---|---|
+| `verified_executable_wasm` (`crates/delulu-wasm/src/lib.rs`) — the Verified plugin's shipped WASM cache | one definition; called only from that file's tests; the runtime instantiates the re-checked interpreter path instead (RW 3.27) | old `.dpx` files must stay readable or be refused by version, deliberately; tests for an invalid cache, a tampered one, and no fallback |
+| Embedded Python in the default build | costs 1–2 ms on every invocation and makes the binary depend on the build machine's `libpython` (RW 3.26, FABLE-025) | make `net` (Python-free) the default feature set; keep `python` as an opt-in build. A `Cargo.toml` change plus the packaging script — and the release notes |
+| `cli.rs` (about 12,000 lines) | every command's parsing, help and dispatch in one file; RW 6.78 asks for one option table per command, from which the parser, `--help` and `toolchain` are generated | do it command by command, each with its `cli_contract` rows unchanged |
+| Documents: about 114,000 lines of Markdown, a third of it logs and archived design | Part II, *Which documents govern what*, classifies every group | **never delete a `.md`** (a hard rule): move a superseded one to `docs/archive/` and fix its inbound links; the Survey's `findings` lists every broken citation |
+| `docs/assistant-memory/` (97 files) and `docs/archive/` | historical; not on any onboarding path | leave; make sure nothing in §9 points a newcomer there |
+| The research runner branch | throwaway by its own title | delete the branch only on the owner's word; its scripts are also in the audit's evidence |
+| The laptop's stale `delulu` on `PATH` and the old VS Code extension (2026-08-07) | RW 6.53 | the owner's machine: update only on his word |
+
+**Policy and licence** — proposals only, nothing changed: Part II, *Contribution, policy and licensing proposals*,
+and the audit's §9 give the wording. The one worth deciding soon: replace "a sponsor who is not the author" with
+"one named independent technical reviewer for a risk-class change; a single maintainer may land low-risk changes
+and records sole review". It matches what a one-maintainer project can actually do, and it would turn §4 item 5
+from an open debt into a defined process. Keep Apache-2.0 with `NOTICE` and `TRADEMARK.md` as they are.
+
+## 9. Onboarding: your first hour
+
+1. **Read, in this order:** this Part I; [`AGENTS.md`](../AGENTS.md) (the hard rules — short); the newest entry of
+   [`docs/CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) (its *Open / next* is your inbox);
+   [`docs/AI_ONBOARDING.md`](AI_ONBOARDING.md) if you are new to the repository. `HANDOFF.md` §1 and §11 are the
+   long form; read them before your first risky change, not before your first command.
+2. **Synchronise:** the first block of §6. If `origin/master` has commits you did not expect, read them and their CI
+   before anything else. **One AI at a time:** if a commit you did not make lands while you work, stop and tell the
+   owner.
+3. **Find your way:** `cargo run -p delulu-survey -- query verb:run`, then `impact` on the module you mean to change.
+   Open the files it names. Do not read the repository top to bottom — it is about 1,280 files.
+4. **Try the product:** `cargo build -p delulu -j 4`, then in a scratch directory outside the checkout: `delulu new
+   hello`, `delulu check`, `delulu authority`, `delulu run` with and without `--grant console`, `delulu test`. Set
+   `DELULU_STATE_DIR` to a scratch path so nothing touches the owner's real state.
+5. **Change something.** **Until pull request #145 lands, work on `laptop/fable-deep-verification` or a branch
+   off it** — `master` lacks §3's fixes and this guide. After it lands, a branch off `origin/master`. Witness, fix,
+   falsify (§5's opening); §6's second block.
+6. **Record it**, in the same commit: `V2_LOG.md` (what, why, evidence); `CHANGELOG.md` if a user would notice; a
+   `D-V2-nn` in `V2_DECISION_LOG.md` for a decision (the next free number is **D-V2-234**); the `REMAINING_WORK.md`
+   row; a `CLOUD_SYNC_LOG.md` entry from its template; and the rows of this guide you made untrue.
+7. **Hand off through git alone.** Everything pushed; the sync-log entry's *Open / next* says exactly what you would
+   do next.
+
+**The rules that are not negotiable** (from `AGENTS.md`; each has cost real time once): push only to `origin`, never
+force-push, never push a tag; never put CI's skip token in a commit message; never delete a `.md`; never weaken a
+test to make it pass; no new `DL` code without a recorded decision; harden Authority and the Guard, never redefine
+them; never claim what did not run — "prepared", "dispatched" and "green" are three different words; commit with
+`git commit -F <file>` and end the message with the model that actually ran and the session link; one word the owner
+banned appears nowhere (`HANDOFF.md` §1 names it — check a diff for it before committing).
+
+**Traps this branch paid for, so you need not:** a broker or transport change is not verified by Windows alone — run
+it in WSL before pushing; macOS refuses to set a socket deadline once the other end has closed; a test whose
+premise is "N actions make N log lines" breaks when the product starts batching its lines; a wall-clock test that
+fails only in CI may be measuring the runner — give it a control measured on the same machine; `survey findings`
+exits 0 whatever it finds, so read its count.
+
+## 10. Exactly what to do next
+
+**State when this was written (17 November 2026):** the candidate branch is at the commit that added this revision;
+`master` is `ac2a162`; pull request #145 is open and unreviewed; nothing is half-edited — the tree is clean and every
+change is pushed. The newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after this was written.
+
+**For the owner — only he can do these:**
+
+1. **Unblock pull request #145** (§3, *To land it*): read it, or have a second party read it, or change the rule.
+   Nothing else in this list waits for it — the work continues on the branch.
+2. **Decide FABLE-022** (a certificate is not bound to its holder — §5 Q2). It changes what RFC 0001 describes, so
+   it needs his recorded word or his delegate's `D-V2-nn` plus an entrenched-change record. Consider filing it as a
+   private security advisory rather than a public issue.
+3. **Say who is heard first when the broker is full** (§4 item 6) once Q10's measurement exists.
+4. Housekeeping he may want: delete `laptop/fable-research-runner` (or keep it as the harness); update or remove the
+   2026-08-07 `delulu` on the laptop's `PATH`; the WSL copy `/home/user/fable-audit-s1` and the audit worktree's
+   `target/release` can be deleted to free disk. The cloud routine stays paused unless he resumes it.
+
+**For the next engineer, in order:**
+
+1. `git fetch origin`; `git switch laptop/fable-deep-verification`; §6's first block. Read the CI run of the tip
+   (`gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3`) **to its
+   end** before building on it, and write its result into §3's table.
+2. **§5 Q1 — artifact ingress.** Nothing of it is written yet. Start in `crates/delulu-check/src/dir.rs`: the test
+   module's `corpus()` and the three `forged_…`/`narrowed_…` tests show how a tree is built in code and tampered.
+   Write four tests first and see three fail: (a) two nodes with one id, (b) a non-empty `recovered`, (c) an
+   identifier the lexer refuses (`crates/delulu-syntax/src/lexer.rs`, `ident()`; keywords in `token.rs`), and
+   (d) the honest control, which must stay green. Then the guards in `Dir::decode`, the table-size equation in
+   `verify_checked`, `cmd_why_plugin` (`crates/delulu/src/cli.rs` — it calls `dir_deserialize` and never verifies),
+   and `fuzz_one_dir`. Build every malformed tree **in the test, as code**; commit no artifact file.
+3. **§5 Q3**, then **Q4** — the outcome contract before the features that will rely on it.
+4. Then Q5 to Q10 in order, unless the owner reorders them.
+
+**If you have one hour only:** do step 1, then the four red-first tests of step 2, and commit them marked
+`#[ignore = "RW 4.93: the guard is not written"]` with a sync-log entry. A named failing witness is worth more to
+the next engineer than a half-written guard.
+
+---
+
+# Part II — the 13 November 2026 research (Codex)
+
+*Everything below is Codex's plan as it was written on 13 November 2026 against `ac2a162`, kept because Part I's
+queue, gates and component analysis rest on it. Where Part I and Part II disagree, Part I is newer. Statuses that
+have changed since: RW 6.77 and 6.83 are closed (D-V2-227); RW 6.51, 6.55 and 6.79 are closed and RW 6.78 is half
+done (D-V2-232); its P1.1 and P1.3 are therefore done except for the parts §5 Q3 lists; its proposed `D-V2-227` was
+taken by another decision — the next free number is in §9. All of that is on the candidate branch (§3), not yet on
+`master`.*
 
 **13 November 2026 · audited `ac2a16202e790657810b819e882b8d721dc0aef4` · proposed execution order.** Codex head chef, GPT‑6.1 Sol at handoff. Earlier session model and effort were not independently recorded. This is the plan requested in the owner's research commission. It takes effect as a work queue when adopted. Repository rules and recorded decisions remain in force until changed through their own process.
 

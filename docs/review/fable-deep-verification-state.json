@@ -15,8 +15,8 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 9,
-  "checkpoint_note": "Seven commits of code on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), architecture slice 1's first part (D-V2-229), its dogfood test, RW 4.98's two timing tests (D-V2-230), the broker's busy answer (D-V2-231), and this one: D-V2-231 amended after its CI run was read red on Ubuntu, ARM64 and macOS, with the false greens of test, fix, schema validate and authority closed (D-V2-232). The CI of the first five is read whole, 18 of 18 each; the sixth's is read whole and RED (15 of 18, run 43788300598); this one's is dispatched after the push. The owner's commission of 2026-11-17 authorises integrating verified work into master.",
+  "checkpoint": 10,
+  "checkpoint_note": "Checkpoint 9's CI run 43938925325 at df9feb5 is read whole: 18 of 18, the eleven named tests ok on all four test jobs. The branch is NOT merged: it is the integration candidate of pull request #145, held because CONTRIBUTING.md section 4 asks for an independent reviewer of a risk-class change and none exists (D-V2-233). docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md is rewritten as the one continuation guide (Part I new, Part II Codex's plan). No code changed at this checkpoint; its own CI run is dispatched after the push.",
   "last_session": {
     "date": "2026-11-17",
     "where": "owner's laptop (Windows 11 x64), WSL2 Ubuntu 20.04 on it, and GitHub-hosted runners of the test repository",
@@ -85,15 +85,15 @@
   "next_three_commands": [
     {
       "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the run dispatched at checkpoint 9's commit, 18 of 18; on test (macos-latest) read by name: a_use_its_capability_refuses_is_recorded_refused_and_never_allowed, an_actors_commands_are_uses_of_the_runs_node_in_the_audit_chain, the three monitor_cli tests of V2_LOG's entry of 2026-11-17, and a_daemon_whose_standard_error_nobody_reads_keeps_serving on all three test jobs and arm64"
+      "expect": "the run dispatched at checkpoint 10's commit, 18 of 18; write it into the recovery plan's section 3 table"
     },
     {
-      "run": "git fetch origin && git log --oneline origin/master..origin/laptop/fable-deep-verification",
-      "expect": "the commits to integrate; master is an ancestor (a fast-forward) unless something landed there"
+      "run": "gh pr view 145 -R jessesuniljs1-collab/delululang-test --json state,reviews,mergeable",
+      "expect": "OPEN until a second party has read D-V2-227 to D-V2-233; if MERGED, master has the branch and work moves to branches off master"
     },
     {
-      "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
-      "expect": "ok; ok"
+      "run": "cargo test --locked -p delulu-check -j 4 dir::",
+      "expect": "green; then the recovery plan's Q1: four red-first tests in crates/delulu-check/src/dir.rs"
     }
   ],
   "engineering": {
@@ -178,7 +178,7 @@
         "base": "11c0cce",
         "verified_on_laptop": "Windows: the whole delulu package, 108 targets, 1,163 passed and 12 ignored (3 doctor_cli failures were the stale map, re-run after regenerating); clippy clean. Linux (WSL): broker_cli 24 of 24 and the suites the commit message names. Eleven mutants, each red.",
         "not_verified_on_laptop": "macOS (the client defect shows only there), a release build",
-        "ci": "dispatched after the push",
+        "ci": "run 43938925325 at df9feb5, read whole: 18 of 18; the eleven named tests ok on test (ubuntu-24.04), test (windows-latest), test (macos-latest) and arm64",
         "for_independent_review": "D-V2-232 changes two exit codes (STABILITY.md section 1); its author is the only party who has read it"
       }
     ],
@@ -201,7 +201,8 @@
         "D-V2-229",
         "D-V2-230",
         "D-V2-231",
-        "D-V2-232"
+        "D-V2-232",
+        "D-V2-233"
       ],
       "remaining_work_rows": [
         "6.87",
@@ -281,5 +282,16 @@
     "2026-11-13": "43409171490 success",
     "2026-11-14": "43582084749 failure (Windows; the two RW 4.98 timing tests, inconclusive)",
     "2026-11-15": "43703463838 success"
+  },
+  "integration": {
+    "decision": "D-V2-233",
+    "pull_request": 145,
+    "state": "candidate held for independent review; master not moved (ac2a162)",
+    "blocker": "CONTRIBUTING.md section 4 items 2 and 3: a risk-class change needs a sponsor who is not its author; D-V2-231 and D-V2-232 are in a risk class and only their author has read them",
+    "land_by": "fast-forward or merge commit only; never squash or rebase (records cite commit hashes)",
+    "not_merged_on_purpose": [
+      "laptop/fable-research-runner",
+      "claude/relaxed-brown-2l78i1"
+    ]
   }
 }

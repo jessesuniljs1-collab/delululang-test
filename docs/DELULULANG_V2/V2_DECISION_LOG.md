@@ -7086,3 +7086,58 @@ mutants, one per rule, are each red in the test that names the rule (`E35`). Tes
 `cli_contract::authority_refuses_a_mode_that_run_refuses`,
 `json_contract::schema_validate_counts_what_it_finds_in_summary_errors`, and three rows added to
 `json_contract::a_report_shaped_failure_never_claims_zero_errors`.
+
+## D-V2-233 — the Fable 5.2 branch is an integration candidate held for independent review (pull request #145), not merged; the research-runner branch is not merged at all — TAKEN (head chef, 2026-11-17, under the owner's commission of that date)
+
+**Context.** The owner's commission of 2026-11-17
+(`docs/prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md`, §1 and §2): *"I now also
+explicitly authorize merging verified work into `master`, provided all applicable CI, independent review, governance
+and branch-protection requirements are satisfied … If a required independent reviewer or approval is unavailable,
+preserve the integration candidate on a review branch and document the exact blocker. Your own review or another
+subagent under your control must not be misrepresented as independent approval."* It supersedes the earlier
+commissions' *"do not automatically merge"* for work that meets its conditions.
+
+**What was compared** (`git fetch origin`, 2026-11-17): `master` at `ac2a162`, unchanged since the branches forked
+from it; `laptop/fable-deep-verification`, nine commits in a straight line on `ac2a162`; `laptop/fable-research-runner`,
+three commits on `ac2a162` (one workflow, four scripts, titled *"throwaway, never merge"* by their own first commit).
+Nothing is duplicated between them and nothing conflicts: the runner branch touches no file the other does except
+the generated map.
+
+**The conditions, one by one.**
+
+| Condition | Finding |
+|---|---|
+| CI | **Met.** Every commit that changes code has a full `jobs=everything` run, read job by job: 18 of 18 at `4f2af3f`, `b1eaeae`, `3e834cc`, `bb2cfb1`, `8bb85e0`; **15 of 18 at `11c0cce`** (red on Ubuntu, ARM64, macOS — D-V2-231's amendment); **18 of 18 at `df9feb5`** (run `43938925325`), which carries the repair. On each of the four test jobs of that run the eleven tests this branch's last two commits added or repaired are `ok` by name, each job has 203 passing test-result lines and none failing, and `Invalid argument` — the macOS failure's text — appears nowhere |
+| Branch protection | **Nothing to meet.** `master` is unprotected and the repository has no rulesets (GitHub API, read 2026-11-17). Nothing here changes that |
+| Governance — independent review of a risk-class change | **Not met, and cannot be met by this session.** `CONTRIBUTING.md` §4 item 2 asks for a named sponsor who is not the author and who has read the change, for the language core, the stability contract, and authority or effect behaviour; item 3: *"No change merges on the say-so of its own author."* It counts one model reviewing its own output as one party. The author of every commit is Claude Fable 5.2. Nobody else has read them. A sub-agent this session starts is not a second party, and the commission says so in its own words |
+
+**Decision.**
+1. **`master` is not moved.** The candidate stays on `laptop/fable-deep-verification` at `origin`, and **pull
+   request #145** into `master` is open with the blocker above stated in it. A first draft of this decision
+   fast-forwarded `master` and marked two changes *"awaiting review"*; it was set aside because the commission names
+   this exact case and gives the other answer, and because *"merged, review to follow"* is how a rule stops being one.
+2. **What needs a second party's reading before the merge:** D-V2-232 (two exit codes change; `STABILITY.md` §1) and
+   D-V2-231 with its amendment (a `Busy` answer on the broker's wire; the client repeats a request the daemon said it
+   did not read) are in a risk class. D-V2-227 (a run's report) and D-V2-228 (the broker's log writer) touch a run's
+   outcome and the broker daemon and are best read with them. The rest — the audit, the Survey's command nodes
+   (D-V2-229), two timing tests (D-V2-230), the records — is in no risk class, but the commits are one line of
+   history and are not split: splitting would rewrite the hashes every record cites.
+3. **Who can lift the blocker.** Any second party in `CONTRIBUTING.md`'s sense — the owner reading it himself, a
+   person he names, or a different AI system he starts for the purpose — by reading the decisions and their diffs
+   and saying so in the pull request and under each decision here. The owner may also change the rule
+   (`CONTRIBUTING.md` is his; the recovery plan's §8 carries Codex's proposed wording for a one-maintainer project).
+   Neither is this session's to do.
+4. **How to land it when it is lifted:** a fast-forward (`git push origin laptop/fable-deep-verification:master`) or
+   a merge commit. Never a squash or a rebase: the records cite these hashes.
+5. **Work continues on the same branch** (the commission: *"BUILD DELULULANG"*), each checkpoint with its own full CI
+   run, listed in the recovery plan's §3. The pull request therefore grows; what a reviewer has and has not read is
+   said per decision, not per pull request.
+6. **`laptop/fable-research-runner` is not merged**, and stays on `origin` as the multi-platform harness the audit's
+   §11 describes. Deleting it is the owner's.
+7. **`claude/relaxed-brown-2l78i1` (RW 2.50) is not merged**: four red jobs, and its draft changes the DIR version,
+   which the artifact repair (the plan's Q1) should precede.
+8. **Nothing is released, tagged or published**, and no repository setting is changed.
+
+**For whoever reads this later.** On this branch "verified" means: green CI on the exact commit, each change
+witnessed failing before its fix and falsified after. It does not mean reviewed by anyone but its author — which is
+why it is a candidate and not `master`.
