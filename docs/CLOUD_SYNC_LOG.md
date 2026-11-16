@@ -9943,3 +9943,40 @@ Survey and doctor: in the commit below.
   choosing a remedy; (4) the rest of RW 7.30; (5) the rest of architecture slice 1, then slice 2; (6) the three
   small items of the audit's section 8.1. **For the owner to weigh:** who is heard first when the broker is full
   (RW 4.101's second option).
+
+### 2026-11-17 — the laptop: Fable 5.2, checkpoint 9 — checkpoint 8's CI read RED on Ubuntu, ARM64 and macOS and repaired (D-V2-231 amended); the false greens of `test`, `fix`, `schema validate` and `authority` closed (D-V2-232)
+- Session: `https://claude.ai/code/session_01Deh6WBsbizoPFQGzvU4SmL` (the same work, continued under the owner's
+  commission of 2026-11-17, `docs/prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md`).
+  Model: Claude Fable 5.2 as the harness names it; effort `high`, as the owner set it. No sub-agent wrote code or ran
+  a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none yet.   Merged: no.
+- Base of this entry: `11c0cce`. Nothing new on `origin/master` (`ac2a162`) at the fetch that began the session.
+- **CI read since the entry above, whole and by name.** Run `43788300598` at `11c0cce` (checkpoint 8): **15 of 18 —
+  RED** on `test (ubuntu-24.04)`, `arm64` and `test (macos-latest)`. One test on the two Linux jobs; six on macOS
+  (`broker_cli` 2, `estop_cli` 1, `monitor_cli` 3). Both causes were in checkpoint 8's own change and both are
+  repaired here; `V2_LOG.md`'s entry of this date names every test and its cause. **`11c0cce` must not be merged or
+  built on by itself: on macOS its client reports an answered request as an unreachable broker.**
+- **What changed for a user:** a mistyped path or filter given to `delulu test` is refused (exit 2) where it was a
+  green run of nothing; `delulu fix` exits 1 while an error is left; `schema validate` counts its failure;
+  `authority` refuses a mode `run` refuses. `docs/for-agents.md` says each.
+- Files and folders: M `crates/delulu/src/brokerd.rs`, `cli.rs`, `fix.rs`, `schema.rs`;
+  M `crates/delulu/tests/broker_cli.rs`, `cli_contract.rs`, `fix_cli.rs`, `json_contract.rs`, `test_runner_cli.rs`;
+  M `docs/for-agents.md`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-231 amended, D-V2-232),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.51, 6.55, 6.79 closed; 6.78 parts 1 and 3 done; 2.54
+  and 7.32 opened), `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (section 13.6),
+  `docs/review/fable-deep-verification-state.json`, `docs/REPOSITORY_STRUCTURE.md` (the `docs/prompt/` row and the
+  recovery plan's), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (regenerated).
+  A `docs/prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md` — the owner's commission
+  of 2026-11-17, committed as he wrote it (it was untracked in the laptop's primary checkout). Nothing deleted or
+  renamed; no workflow, no entrenched file.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227` to `D-V2-232`; RW `6.87`, `6.88`, `4.99`, `4.100`,
+  `4.101`, `2.54`, `7.32`.
+- Tests: on the laptop (Windows, `-j 4`) the whole `delulu` package, 108 targets, 1,163 passed and 12 ignored, the
+  three `doctor_cli` failures being the map not yet regenerated; on Linux (WSL) the suites the commit message names;
+  eleven mutants (eight for D-V2-232, three for the repaired FABLE-038 test), each red. `scripts/clippy.sh -j 4` clean
+  and stamped after the last `.rs` edit. **macOS: CI only.**
+- Survey and doctor after the last edit: as the commit message states them.
+- **Open / next, in order:** (1) read this commit's CI run whole — the five macOS tests above by name; (2) on green,
+  integrate the branch into `master` as the owner's commission of 2026-11-17 authorises, recording exactly what was
+  and was not independently reviewed; (3) rewrite `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` as the one guide for
+  whoever continues; (4) then code, in the order that guide gives.

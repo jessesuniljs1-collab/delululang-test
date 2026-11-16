@@ -870,6 +870,17 @@ at the same commit.
 
 ---
 
+### 13.6 Checkpoint 8's CI was red on three systems; the false greens closed — D-V2-231 amended, D-V2-232, checkpoint 9
+
+| | |
+|---|---|
+| Read | Run `43788300598` at `11c0cce`: 15 of 18. Red on `test (ubuntu-24.04)`, `arm64`, `test (macos-latest)`; green on Windows, which is all the laptop had run before the push. |
+| Defect 1 (macOS only, five tests) | §13.5's client asked for its read deadline after sending its request. macOS refuses that (`EINVAL`) once the daemon has answered and closed, so an answered request read *"broker unreachable: Invalid argument"* — a run's own beats included, and the run was revoked for them. Repaired: the deadline is asked for before anything is sent; a connection that cannot be given one is asked again, never read unbounded. |
+| Defect 2 (Linux and macOS, one test) | FABLE-038's test floods the daemon's log with one line per bare connection. With §13.5 most such connections are answered `Busy` and said once a second, so the pipe never filled. Repaired in the test: each knock is four bytes the daemon refuses in one line, and waits for the daemon to close. Three mutants on Linux, each red; one of them reproduces the CI failure to within three bytes. |
+| What it says about §13.5's evidence | *"Linux and macOS: CI"* was the honest label and the run was the test — but the next slice was started on the commit before the run had been read. From this checkpoint a broker change is run on Linux (WSL) before the push, and a run is read before anything is built on its commit. |
+| Slice S2 of §10 | **Done** for `test` (RW 6.51, and RW 6.78 part 3), `fix` (RW 6.55), `schema validate` (RW 6.79) and `authority`'s modes (RW 6.78 part 1): D-V2-232. Five new tests, each seen red first; eight mutants, each red. Not done from S2's list: a package refusing a source-like file it does not read (RW 6.52's half), the MCP server and an undecodable line (RW 6.76), and the Windows one-second wait for a daemon that is not there. |
+| Marked for independent review | D-V2-232 changes two exit codes, and exit codes are in `STABILITY.md` §1. The reading taken — an outcome that was not a success was never entitled to `0` — is the one D-V2-227 took. Its author is the only party who has read it. |
+
 ## Appendix A. Evidence registry
 
 One line per proposition. All at source `ac2a162`, 2026-11-14. "Five machines" means the Windows laptop and the

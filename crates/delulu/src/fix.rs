@@ -274,16 +274,24 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
         written = true;
     }
 
-    let errors_after = if applied > 0 {
-        let recheck = check_source(id, &out);
-        recheck.diagnostics.iter().filter(|d| d.is_error()).count()
-    } else {
-        errors_before
+    // RW 6.55: the answer is the RESULT's — the text this run wrote, or would write under `--dry-run`. The envelope
+    // used to carry the diagnostics from BEFORE the repairs beside `errors_after`, so a file this command had just
+    // made clean still said `summary.errors: 1`; and the exit code was 0 whatever was left, so a file it could not
+    // repair read as a success. The result is checked in a map of its own: its spans index the new text.
+    let rechecked = (applied > 0).then(|| {
+        let mut result_map = delulu_diag::SourceMap::new();
+        let result_id = result_map.add_file(file.clone(), out.clone());
+        (check_source(result_id, &out), result_map)
+    });
+    let (result, result_map) = match &rechecked {
+        Some((recheck, result_map)) => (&recheck.diagnostics, result_map),
+        None => (&checked.diagnostics, &map),
     };
+    let errors_after = result.iter().filter(|d| d.is_error()).count();
 
     if json {
         crate::cli::note_json_emitted();
-        let mut env = delulu_diag::envelope("fix", &checked.diagnostics, None, &map);
+        let mut env = delulu_diag::envelope("fix", result, None, result_map);
         env["fix"] = serde_json::json!({
             "file": file,
             "written": written,
@@ -304,7 +312,8 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
     } else {
         render(&file, &decisions, applied, written, dry_run, errors_before, errors_after);
     }
-    0
+    // Exit 1 is "the program is wrong" ([agents.exit-codes]), and a program with an error left is.
+    i32::from(errors_after > 0)
 }
 
 /// Whether this repair may be applied, and if not, why not.

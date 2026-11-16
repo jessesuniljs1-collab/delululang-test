@@ -662,3 +662,60 @@ fn let_to_var_migrates_a_program_that_reassigned_a_let() {
     let after = delulu(&["check", path]);
     assert!(!after.status.success() && stderr(&after).contains("cannot assign to `n`: it is a parameter"), "{}", stderr(&after));
 }
+
+/// RW 6.55: **`fix` exits 1 while errors remain, and its envelope describes the program after the fix.**
+///
+/// With its one repair skipped — it would widen authority — `fix --json` said `fix.errors_after: 1` and exited 0;
+/// and after a repair that left the file clean, `summary.errors` still said 1, the count from before. A caller that
+/// reads the exit code was told a broken file was fine, and one that reads `summary.errors` was told a fixed file
+/// was broken. The exit code and the summary are now both the RESULT's: what the file holds after the repairs this
+/// run applied, or would hold under `--dry-run`.
+#[test]
+fn fix_exits_1_while_errors_remain_and_its_summary_is_the_result() {
+    let d = scratch("left");
+    let f = d.join("m.delulu");
+    let path = f.to_str().unwrap();
+    let envelope = |o: &Output| -> serde_json::Value {
+        serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope: {e}\n{}{}", stdout(o), stderr(o)))
+    };
+
+    // The repair is skipped: one error before, one after. Exit 1, and the summary says one.
+    write(&f, WIDENS);
+    let o = delulu(&["fix", path, "--json"]);
+    let v = envelope(&o);
+    assert_eq!((&v["fix"]["errors_before"], &v["fix"]["errors_after"]), (&serde_json::json!(1), &serde_json::json!(1)), "{v}");
+    assert_eq!(o.status.code(), Some(1), "an error is left, so this is not a success:\n{v}");
+    assert_eq!(v["summary"]["errors"], 1, "{v}");
+    let o = delulu(&["fix", path]);
+    assert_eq!(o.status.code(), Some(1), "the same without --json:\n{}", stderr(&o));
+    assert!(stderr(&o).contains("1 error(s) remain"), "{}", stderr(&o));
+    assert_eq!(read(&f), WIDENS, "and nothing was written");
+
+    // A dry run answers for its result too: the repair named, nothing written, and the result would be clean.
+    let o = delulu(&["fix", path, "--dry-run", "--accept-widening", "add_effect_to_row", "--json"]);
+    let v = envelope(&o);
+    assert_eq!(
+        (o.status.code(), &v["fix"]["errors_after"], &v["summary"]["errors"]),
+        (Some(0), &serde_json::json!(0), &serde_json::json!(0)),
+        "{v}"
+    );
+    assert_eq!(read(&f), WIDENS, "a dry run writes nothing");
+
+    // Named for real: one error before, none after. Exit 0, and the summary describes the file as it now is.
+    let o = delulu(&["fix", path, "--accept-widening", "add_effect_to_row", "--json"]);
+    let v = envelope(&o);
+    assert_eq!((&v["fix"]["errors_before"], &v["fix"]["errors_after"]), (&serde_json::json!(1), &serde_json::json!(0)), "{v}");
+    assert_eq!(o.status.code(), Some(0), "{v}");
+    assert_eq!(v["summary"]["errors"], 0, "the summary is the result's, not the count from before:\n{v}");
+    let errors_listed = v["diagnostics"].as_array().unwrap().iter().filter(|d| d["severity"] == "error").count();
+    assert_eq!(errors_listed, 0, "and so are the diagnostics:\n{v}");
+    assert_eq!(delulu(&["check", path]).status.code(), Some(0), "the file on disk agrees");
+
+    // An error no repair addresses is left, and says so the same way.
+    let g = d.join("n.delulu");
+    write(&g, "module n\nfn f() -> Int {\n  nope\n}\n");
+    let o = delulu(&["fix", g.to_str().unwrap(), "--json"]);
+    let v = envelope(&o);
+    assert_eq!((o.status.code(), &v["fix"]["applied"]), (Some(1), &serde_json::json!(0)), "{v}");
+    assert!(v["summary"]["errors"].as_u64().unwrap() >= 1, "{v}");
+}

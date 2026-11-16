@@ -1924,11 +1924,30 @@ impl Drop for KillOnDrop {
     }
 }
 
-/// One connection that says nothing and closes: the daemon answers it with one line on its standard error
-/// (*"… (dropping connection)"*). `false` when the endpoint would not take a client this instant (a Windows pipe with
-/// every instance busy).
-fn knock(state: &Path) -> bool {
-    hold(state).is_ok()
+/// A knock the daemon **answers with one line of its log, and that waits for it**: four bytes that claim a frame larger
+/// than any the daemon reads, and then a read until the daemon closes. `true` only when the daemon closed without a
+/// word — it read the four bytes on a reader thread, said *"what the client sent was not a request this broker reads
+/// (incoming frame exceeds the maximum size)"* (about 130 bytes) and dropped the connection.
+///
+/// A connection opened and dropped stopped being one line each with RW 4.100: a connection past the daemon's bound of 64 readers is
+/// answered `Busy` by one thread that says so once a second, not once a connection, so 1,600 knocks as fast as a loop
+/// makes them wrote about 700 lines on Linux — fewer than the pipe and the daemon's kept lines hold together — and
+/// the flood below was no longer a flood (CI run 43788300598, red on Linux and macOS; Windows knocks slowly enough
+/// to have stayed green). Each of these is over before the next begins — the daemon's reader has counted itself out
+/// before it closes — so the bound is never reached, and one that WAS answered (`Busy` is bytes) is not counted.
+fn knock_for_a_line(state: &Path) -> bool {
+    use std::io::{Read as _, Write as _};
+    let Ok(mut conn) = hold(state) else { return false };
+    if conn.write_all(&u32::MAX.to_le_bytes()).is_err() {
+        return false;
+    }
+    let mut word = [0u8; 8];
+    match conn.read(&mut word) {
+        Ok(0) => true,
+        Ok(_) => false,
+        // A pipe the daemon disconnected reads as an error on Windows; a socket reads as its end.
+        Err(_) => cfg!(windows),
+    }
 }
 
 /// Why a knock fails, for a failure message.
@@ -1969,10 +1988,10 @@ fn hold(state: &Path) -> Result<Held, String> {
 /// its standard error as a pipe and does not read it — an agent's harness, a script — the daemon stopped for good when
 /// the pipe filled: a reader thread blocked holding standard error's lock, the next 64 readers behind it, then the
 /// accept loop itself, and no client was ever answered again (each failed closed with DL1401 after 15 s). Found with
-/// 64 runs at once on Windows, where a pipe holds 4 KiB: 3 of 64 succeeded. Here the lines are the cheapest the daemon
-/// writes — one for a connection that closes without a request — and there are far more of them than a pipe holds
-/// (64 KiB on Linux). Then the daemon must still answer `status`, still run a program, and — once this test starts
-/// reading — name the lines it dropped.
+/// 64 runs at once on Windows, where a pipe holds 4 KiB: 3 of 64 succeeded. Here each line is one the daemon writes
+/// for a connection whose four bytes are no request (`knock_for_a_line`), and there are far more of them than a pipe
+/// holds (64 KiB on Linux). Then the daemon must still answer `status`, still run a program, and — once this test
+/// starts reading — name the lines it dropped.
 #[test]
 fn a_daemon_whose_standard_error_nobody_reads_keeps_serving() {
     use std::io::Read as _;
@@ -2007,18 +2026,18 @@ fn a_daemon_whose_standard_error_nobody_reads_keeps_serving() {
     });
     assert!(up, "the foreground daemon did not come up");
 
-    // The flood: each knock is one line of about 100 bytes, and nobody reads them. 1,600 of them is past what this
-    // pipe holds on any system here (64 KiB: Linux, and Rust's own pipes on Windows) plus the lines the daemon keeps
-    // for a reader that is behind. On its own thread, with a deadline: against a daemon that HAS stopped, a knock
-    // waits in the socket's backlog for ever (Unix) or is refused (Windows), and the assertion below must still be
-    // reached to say so.
+    // The flood: each knock is one line of about 130 bytes (`knock_for_a_line`), and nobody reads them. 1,600 of them
+    // is past what this pipe holds on any system here (64 KiB: Linux, and Rust's own pipes on Windows) plus the lines
+    // the daemon keeps for a reader that is behind. On its own thread, with a deadline: against a daemon that HAS
+    // stopped, a knock waits in the socket's backlog for ever (Unix) or is refused (Windows), and the assertion
+    // below must still be reached to say so.
     let wanted = 1600;
     let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     {
         let (state, count) = (state.clone(), count.clone());
         std::thread::spawn(move || {
             for _ in 0..wanted * 20 {
-                if knock(&state) {
+                if knock_for_a_line(&state) {
                     if count.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 >= wanted {
                         break;
                     }
@@ -2057,7 +2076,7 @@ fn a_daemon_whose_standard_error_nobody_reads_keeps_serving() {
     });
     std::thread::sleep(std::time::Duration::from_millis(300));
     for _ in 0..50 {
-        if knock(&state) {
+        if knock_for_a_line(&state) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));

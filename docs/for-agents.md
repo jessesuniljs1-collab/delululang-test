@@ -189,6 +189,12 @@ Every `--json` command emits one object:
   said `usage` and `2`, collapsing the two codes the table above keeps apart). No DL
   code is invented for these, because the code registry is a stable contract and a usage error is not
   a language diagnostic, so `diagnostics` is `[]`.
+- **A report that says "no" counts what it found.** `schema validate <name> <file> --json` on a document
+  that does not conform exits 1 with `summary.errors` equal to the number of problems, an `error` object
+  (`kind: "failed"`, `exit: 1`) and the problems in `validate.errors` beside `validate.valid: false`
+  (since 2026-11-17, RW 6.79; it said `summary.errors: 0`). `authority` refuses a `--broker`,
+  `--isolation` or `--foreign-isolation` value that `run` refuses, in the same words, exit 2 — a report
+  is never labelled with a mode no run can have (RW 6.78).
 
   This is gated, not merely promised: `crates/delulu/tests/json_contract.rs` sweeps every subcommand
   against malformed-argument shapes and asserts stdout parses as **exactly one** JSON value. It was
@@ -271,6 +277,12 @@ the policy below — only `exact` repairs, never an `authority_widening` one unl
 `--accept-widening <id>`, and never at all if the file is stored in a surface morph (its repairs
 describe the canonical text, not the bytes on disk). Every repair comes back with a `verdict`
 saying what happened to it, so a skipped one is visible rather than looking like nothing to do.
+
+**`fix` exits 1 while the result still has an error, and 0 only when it has none** (since 2026-11-17, RW 6.55;
+it exited 0 whatever was left). The envelope's `diagnostics` and `summary` describe **the program after the
+repairs** — with `--dry-run`, the program the repairs would leave — so `summary.errors` is what is still wrong, and
+`fix.errors_before` / `fix.errors_after` say what changed. A loop that reads the exit code or `summary.errors` now
+stops when the program is clean, never when `fix` merely ran.
 
 > ### `authority_widening: true` means DO NOT APPLY AUTOMATICALLY.
 >
@@ -545,8 +557,23 @@ fs_read = ["./fixtures"]
 Inside a package, bare `delulu test` targets the package; outside one it refuses rather than guess a
 directory.
 
-**Zero tests is exit 0.** A file or package with no `test` block passes with `summary.passed: 0` and
-`failed: 0`; read `passed` if "no test ran" must not count as success.
+**Zero tests is exit 0 — when you asked for no test in particular.** A file or package with no `test` block passes
+with `summary.passed: 0` and `failed: 0`; read `passed` if "no test ran" must not count as success.
+
+**What you NAMED must exist, or nothing runs and the exit is 2** (since 2026-11-17, RW 6.51; each of these was a
+green run of nothing):
+
+- **a path that is not there** — an argument that contains `/` or `\`, ends in `.delulu` or `.solulu`, or is `.` or
+  `..`, and names nothing on disk — is refused: *"`test` was given a path that does not exist"*. It is never read as
+  a filter;
+- **a filter that matches no test** is refused before the first test runs: *"`test` was given a filter that matches
+  no test"*, with how many tests were found. Every filter you give must match at least one test name (a filter
+  selects the tests whose name contains it). A program that does not check is reported as before, exit 1 — its
+  names cannot be searched;
+- **an option the command does not know**, with one dash or two (`-v`, `--filter`), is refused.
+
+Under `--json` each of these is the usage envelope (`error.kind: "usage"`, `error.exit: 2`), with the reason on
+standard error.
 
 ## [agents.sandbox] Running code you did not write
 

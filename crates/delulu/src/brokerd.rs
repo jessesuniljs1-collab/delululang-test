@@ -2635,10 +2635,12 @@ const BUSY_HEARD_WITHIN: std::time::Duration = std::time::Duration::from_millis(
 /// **RW 4.100 (D-V2-231): a request the daemon did not read is asked again.** The daemon reads at most 64 connections
 /// at once and, past that, answers `Busy` without reading a byte (`serve_inner`). `Busy` therefore promises that
 /// nothing was decided and nothing recorded, and the request is sent again — any request, an `Issue` or a `Revoke`
-/// as well as a `Status` — after a wait that grows and is partly random. Two things count as turned away:
+/// as well as a `Status` — after a wait that grows and is partly random. Three things count as turned away:
 /// - the daemon answered `Busy`;
 /// - the daemon closed the connection **before the request could be sent**, and left no word. No whole request
-///   reached it, and it acts on nothing less than a whole one.
+///   reached it, and it acts on nothing less than a whole one;
+/// - the connection could not be given its read deadline, which is asked for **before anything is sent** (on macOS:
+///   the daemon had already closed it). Nothing was sent, and nothing is read without a bound.
 ///
 /// A connection that closes with no answer **after** the request was sent is NOT asked again: the daemon may have
 /// read it and acted on it, and the error says the outcome is not known. A daemon that turns the request away for
@@ -2650,12 +2652,18 @@ fn request_counting(state_dir: &Path, body: ReqBody, read_timeout: std::time::Du
     let mut turned_away = 0u32;
     // The bound the daemon named when it last said `Busy`, for the error's words.
     let mut named: Option<u32> = None;
-    let busy = |turned_away: u32, named: Option<u32>, began: std::time::Instant| {
+    // The last connection that could not be given a read deadline before anything was sent on it, and why.
+    let mut no_deadline: Option<io::Error> = None;
+    let busy = |turned_away: u32, named: Option<u32>, began: std::time::Instant, no_deadline: Option<&io::Error>| {
         let reading = named.map(|r| format!(" ({r} connections already being read)")).unwrap_or_default();
+        let unbounded = no_deadline
+            .map(|e| format!("; the last connection could not be given a deadline before anything was sent on it ({e})"))
+            .unwrap_or_default();
         io::Error::new(
             io::ErrorKind::ResourceBusy,
             format!(
-                "the broker is running but busy: it turned this request away unread {turned_away} time(s) in {} ms{reading}",
+                "the broker is running but busy: it turned this request away unread {turned_away} time(s) in {} \
+                 ms{reading}{unbounded}",
                 began.elapsed().as_millis()
             ),
         )
@@ -2663,66 +2671,81 @@ fn request_counting(state_dir: &Path, body: ReqBody, read_timeout: std::time::Du
     loop {
         // A wait that overran (a machine that did not run this thread) may have used up the bound: nothing is sent late.
         if turned_away > 0 && began.elapsed() >= read_timeout {
-            return Err(busy(turned_away, named, began));
+            return Err(busy(turned_away, named, began, no_deadline.as_ref()));
         }
         let mut conn = broker_transport::connect(state_dir)?;
         let left = read_timeout.saturating_sub(began.elapsed()).max(BUSY_HEARD_WITHIN);
-        // Sent without a flush: this client stays to read, and a flush would wait for a daemon that turns the
-        // connection away to read what it never reads (`send_frame`).
-        let sent = send_frame(&mut conn, &request);
-        // A request that could not be sent because the daemon had already closed may have been turned away: what
-        // the daemon wrote before closing is read at once or not at all. Any other failure to send is the answer.
-        let within = match &sent {
-            Ok(()) => left,
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::BrokenPipe
+        // **The read's deadline is set before a byte is sent.** macOS refuses to set one on a socket whose other end
+        // has closed (`EINVAL`), and a daemon that has answered has closed it. This function first set it AFTER the
+        // send, so on macOS a request the daemon had read, decided and answered came back as *"broker unreachable:
+        // Invalid argument"* — a run's own beats among them, and the run revoked for it (CI run 43788300598: five
+        // tests red on macOS, none on Linux or Windows, where the call cannot fail that way).
+        //
+        // A connection that cannot be given a deadline HERE has had nothing sent on it, so nothing was decided: on
+        // macOS it is one the daemon closed at its bound before this client reached this line. It is never read
+        // without a bound; it is asked again, and the reason is kept for the error if the bound runs out.
+        if let Err(e) = conn.set_read_timeout(Some(left)) {
+            no_deadline = Some(e);
+        } else {
+            // Sent without a flush: this client stays to read, and a flush would wait for a daemon that turns the
+            // connection away to read what it never reads (`send_frame`).
+            let sent = send_frame(&mut conn, &request);
+            // A request that could not be sent because the daemon had already closed may have been turned away: what
+            // the daemon wrote before closing is read at once or not at all. Any other failure to send is the answer.
+            let within = match &sent {
+                Ok(()) => left,
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::BrokenPipe
+                            | io::ErrorKind::ConnectionReset
+                            | io::ErrorKind::ConnectionAborted
+                            | io::ErrorKind::NotConnected
+                            | io::ErrorKind::UnexpectedEof
+                            | io::ErrorKind::WriteZero
+                    ) =>
+                {
+                    // The shorter wait is asked of the socket too, and not insisted on: the other end has closed, so
+                    // a read returns at once whatever the socket's own deadline is, and `Within` holds the bound.
+                    let _ = conn.set_read_timeout(Some(BUSY_HEARD_WITHIN));
+                    BUSY_HEARD_WITHIN
+                }
+                Err(_) => return Err(sent.unwrap_err()),
+            };
+            // The WHOLE answer within the bound, not each read of it (the red-team pass on FRAME-DRIP-1, F1):
+            // whatever answers on the socket, one byte at a time inside the bound, kept the dead-man's probe
+            // waiting — and the arm moving after an e-stop that said "revoked".
+            let answer: io::Result<Response> = read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, within));
+            drop(conn);
+            match (sent, answer) {
+                (_, Ok(Response::Busy { reading })) => named = Some(reading),
+                (Ok(()), Ok(resp)) => return Ok((resp, turned_away)),
+                (Ok(()), Err(e)) => {
+                    return Err(match e.kind() {
+                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            format!("the broker accepted the request but did not answer within {read_timeout:?}"),
+                        ),
+                        // The request was sent, and the connection then closed with no answer on it. Not asked again:
+                        // the daemon may have read the request and acted on it before it went.
+                        io::ErrorKind::UnexpectedEof
+                        | io::ErrorKind::BrokenPipe
                         | io::ErrorKind::ConnectionReset
-                        | io::ErrorKind::ConnectionAborted
-                        | io::ErrorKind::NotConnected
-                        | io::ErrorKind::UnexpectedEof
-                        | io::ErrorKind::WriteZero
-                ) =>
-            {
-                BUSY_HEARD_WITHIN
+                        | io::ErrorKind::ConnectionAborted => {
+                            io::Error::new(e.kind(), "the broker accepted the connection and closed it without an answer")
+                        }
+                        _ => e,
+                    });
+                }
+                // Closed before the request could be sent, and no word left behind: turned away, unread.
+                (Err(_), _) => {}
             }
-            Err(_) => return Err(sent.unwrap_err()),
-        };
-        conn.set_read_timeout(Some(within))?;
-        // The WHOLE answer within the bound, not each read of it (the red-team pass on FRAME-DRIP-1, F1):
-        // whatever answers on the socket, one byte at a time inside the bound, kept the dead-man's probe
-        // waiting — and the arm moving after an e-stop that said "revoked".
-        let answer: io::Result<Response> = read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, within));
-        drop(conn);
-        match (sent, answer) {
-            (_, Ok(Response::Busy { reading })) => named = Some(reading),
-            (Ok(()), Ok(resp)) => return Ok((resp, turned_away)),
-            (Ok(()), Err(e)) => {
-                return Err(match e.kind() {
-                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        format!("the broker accepted the request but did not answer within {read_timeout:?}"),
-                    ),
-                    // The request was sent, and the connection then closed with no answer on it. Not asked again:
-                    // the daemon may have read the request and acted on it before it went.
-                    io::ErrorKind::UnexpectedEof
-                    | io::ErrorKind::BrokenPipe
-                    | io::ErrorKind::ConnectionReset
-                    | io::ErrorKind::ConnectionAborted => {
-                        io::Error::new(e.kind(), "the broker accepted the connection and closed it without an answer")
-                    }
-                    _ => e,
-                });
-            }
-            // Closed before the request could be sent, and no word left behind: turned away, unread.
-            (Err(_), _) => {}
         }
         turned_away += 1;
         let random = std::collections::hash_map::RandomState::new().build_hasher().finish();
         match ask_again_after(turned_away, began.elapsed(), read_timeout, random) {
             Some(wait) => std::thread::sleep(wait),
-            None => return Err(busy(turned_away, named, began)),
+            None => return Err(busy(turned_away, named, began, no_deadline.as_ref())),
         }
     }
 }

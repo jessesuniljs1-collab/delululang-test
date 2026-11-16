@@ -862,3 +862,39 @@ fn preflight_refuses_before_any_effect_naming_every_missing_grant() {
     assert_eq!(json_of(&o)["missing_grants"], serde_json::json!(["fs.write=PATH"]), "its placeholder: {}", text(&o));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 6.78 (1): **`authority` refuses a value `run` refuses.**
+///
+/// `--isolation`, `--broker` and `--foreign-isolation` label an authority report with the mode a run would have.
+/// `authority` took any word for them: `--isolation bogus` was exit 0 with `isolation: "bogus"` written into the
+/// report, where `run --isolation bogus` is exit 2. A report that repeats a mistyped mode back as fact is worse
+/// than no report. Each is now refused in `run`'s own words, before the program is read.
+#[test]
+fn authority_refuses_a_mode_that_run_refuses() {
+    let home = scratch("authority-modes");
+    for (flag, good) in [("--isolation", "process"), ("--broker", "daemon"), ("--foreign-isolation", "process")] {
+        // The control: a mode that exists labels the report.
+        let o = delulu(&home, &["authority", DEMO, flag, good]);
+        assert_eq!(o.status.code(), Some(0), "`authority {flag} {good}`: {}", text(&o));
+        for spelling in [vec![flag, "bogus"], vec![&format!("{flag}=bogus")[..]]] {
+            let mut args = vec!["authority", DEMO];
+            args.extend(spelling.iter().copied());
+            let o = delulu(&home, &args);
+            let said = text(&o);
+            assert_eq!(o.status.code(), Some(2), "`{}` must be refused:\n{said}", args.join(" "));
+            assert!(said.contains("`bogus`") && said.contains(flag), "it names the flag and the value:\n{said}");
+            assert!(said.contains(good), "and the values it takes:\n{said}");
+            assert!(!said.contains("Authority of"), "no report is printed:\n{said}");
+            args.push("--json");
+            let o = delulu(&home, &args);
+            let v: serde_json::Value =
+                serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope: {e}\n{}", text(&o)));
+            assert_eq!((o.status.code(), &v["error"]["kind"]), (Some(2), &serde_json::json!("usage")), "{v}");
+            assert!(v.get("authority").is_none(), "no report under --json either:\n{v}");
+        }
+    }
+    // A package directory and a lock comparison read the same options.
+    let o = delulu(&home, &["authority", "examples/greeter", "--isolation", "bogus"]);
+    assert_eq!(o.status.code(), Some(2), "a package directory: {}", text(&o));
+    let _ = std::fs::remove_dir_all(&home);
+}

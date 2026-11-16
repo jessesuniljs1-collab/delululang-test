@@ -6979,3 +6979,110 @@ dead-man: a run whose own dead-man fires while the broker is saturated is still 
 person types, each seen red under its own defect (five mutants); the same storm after the change — 128 of 128,
 256 of 256 with a chain of 2,049 records verified, 10,518 connections told to ask again and none dropped unanswered;
 and 364 of 384, the 20 refusals each a run's own 10 s dead-man (DL1403), fail-closed.
+
+## D-V2-231 — amended 2026-11-17, after its own CI run was read red on Linux, ARM64 and macOS (head chef, under the owner's delegation)
+
+**What the run showed.** Run `43788300598` at `11c0cce` (`jobs=everything`): 15 of 18 green, and three red — `test
+(ubuntu-24.04)`, `arm64` and `test (macos-latest)`. Windows was green, and Windows was all the laptop had run. Two
+defects, both in D-V2-231's own change, neither in what it decided:
+
+1. **The client set its read deadline after it sent its request, and macOS refuses that on a connection whose other end
+   has closed.** `setsockopt(SO_RCVTIMEO)` answers `EINVAL` there once the peer is gone, and a daemon that has answered
+   has closed. So a request the daemon had read, decided and answered came back *"broker unreachable: Invalid argument
+   — start it with `delulu broker start`"*. Five tests on macOS, none anywhere else: three in `monitor_cli` (a
+   run's own beat answered that way, and the run revoked by its dead-man; the other two are the same runs seen
+   revoked), an actor's commands (`estop_cli`: *"REVOKED: broker unreachable: Invalid argument"*), and a use the
+   broker had refused (`broker_cli`). The words are in the log fourteen times. Before D-V2-231 the deadline was set straight after the connect, so the window was a connect wide
+   and no test had met it.
+2. **FABLE-038's test stopped being a flood.** It opens 1,600 connections and drops them, one line of the daemon's log
+   each, to fill a pipe nobody reads. With D-V2-231 a connection past the bound is answered `Busy` by a thread that
+   says so once a second — which is the decision working — so 1,600 knocks as fast as a loop makes them wrote about
+   700 lines on Linux: 71,371 bytes, less than the pipe (64 KiB) and the lines the daemon keeps (256) hold together.
+   The daemon dropped nothing, so it had nothing to say, and the assertion that it names what it dropped went red.
+   Windows knocks slowly enough that it stayed green there.
+
+**Amendment.**
+- **The read deadline is asked for before anything is sent.** A connection that cannot be given one at that point has
+  had nothing sent on it, so nothing was decided: it counts as turned away and is asked again, inside the caller's
+  bound, and it is never read without a bound. If the bound runs out, the error still says the broker is running and
+  busy, and adds why the last connection had no deadline. After a send that failed because the other end had closed,
+  the shorter wait is asked of the socket and not insisted on — a read on a closed connection returns at once, and
+  `Within` holds the bound either way. The decision's rule 5 gains this third case; nothing else in it changes.
+- **The test's knock is one line by construction.** Four bytes that claim a frame larger than any the daemon reads,
+  then a read until the daemon closes: the daemon's reader says *"what the client sent was not a request this broker
+  reads (incoming frame exceeds the maximum size)"* and drops the connection, and only then does the next knock
+  begin, so the bound is never reached. A knock that was answered (`Busy` is bytes) is not counted. The test asserts
+  what it asserted before — still serving, every knock taken, the drop count said — and is not weakened: three
+  mutants on Linux are each red (FABLE-038 itself put back; the drop count never said; the knock made a bare
+  connect-and-drop again, which reproduces the CI failure to within three bytes: 71,368).
+
+**What this says about the branch's method, recorded so it is not relearned.** A change to the broker's client or
+transport is not verified by a Windows run. The laptop has WSL; the same suites run there in minutes, and from this
+checkpoint a broker change is run on Linux before it is pushed. macOS has no local stand-in: its evidence is CI, and a
+macOS-only failure is read before the next slice is built on the commit.
+
+**Evidence.** Red: run `43788300598`, the three jobs' logs read whole by test name. Green after: `broker_cli` 22 of 22
+on Windows and 24 of 24 on Linux (WSL, Ubuntu 20.04). **macOS was not run when this was written**: the first
+defect shows only there, so the CI run on the commit that carries this amendment decides it, and its result is
+recorded when it has been read.
+
+## D-V2-232 — RW 6.51, 6.55, 6.79 and RW 6.78 (parts 1 and 3): four commands stop reporting success for work that was not done — TAKEN (head chef, 2026-11-17, under the owner's delegation)
+
+**Context.** An agent decides what to do next from an exit code and `summary.errors`. Four commands answered *"this
+passed"* when nothing had been done, or when what was asked for was wrong:
+
+| Command | What it said | What had happened |
+|---|---|---|
+| `delulu test no/such/file.delulu` | exit 0, `0 passed, 0 failed` | the path does not exist; it was read as a filter on test names, and matched none |
+| `delulu test typo_in_a_test_name` | exit 0, `0 passed, 0 failed` | no test has that in its name; the same answer as a package with no tests |
+| `delulu test -v` | exit 0, nothing run | a single-dash option was read as a filter |
+| `delulu fix f.delulu --json` | exit 0; `summary.errors` from before the repairs | an error was left (a widening repair is never applied unasked) |
+| `delulu schema validate envelope bad.json --json` | `summary.errors: 0`, beside `validate.valid: false` | the document does not conform |
+| `delulu authority p.delulu --isolation bogus` | exit 0, a report labelled `isolation: "bogus"` | `run --isolation bogus` exits 2 |
+
+**Decision.**
+1. **What a caller NAMED must exist, or nothing runs and the exit is 2.** In `delulu test`: an argument that names a
+   path (it contains `/` or `\`, ends in `.delulu` or `.solulu`, or is `.` or `..`) and names nothing on disk is
+   refused, never read as a filter; every filter must match at least one test, held against every program's tests
+   before the first test runs and before the broker is asked for a session; an option the command does not know is
+   refused with one dash as with two. **Zero tests with no filter stays exit 0** — a package with no tests asked for
+   nothing in particular, and `docs/for-agents.md` has said so since the test runner shipped.
+2. **A program that does not check keeps its own verdict.** Its test names cannot be searched, so the filter rule is
+   not applied to that run: it is `check-failed`, exit 1, as before. A refusal for the filter would hide the
+   diagnostics behind a usage error.
+3. **`fix` answers for the program it leaves.** Exit 1 while the result still has an error, 0 only when it has none.
+   The envelope's `diagnostics` and `summary` are the result's — checked again in a source map of its own, so a
+   span points into the text that is on disk afterwards (or, with `--dry-run`, the text that would be).
+   `fix.errors_before` and `fix.errors_after` are unchanged.
+4. **A report that says "no" counts what it found.** `schema validate` on a document that does not conform puts
+   the number of problems in `summary.errors` and adds the `error` object (`kind: "failed"`, `exit: 1`); the exit was
+   already 1.
+5. **`authority` refuses a mode `run` refuses**, in `run`'s words, exit 2: `--broker`, `--isolation`,
+   `--foreign-isolation`. One function (`refuse_unknown_modes`) is called by both.
+
+**Compatibility.** These change exit codes a script may read: a mistyped path or filter in `test` is now 2 (was 0),
+and `fix` with an error left is now 1 (was 0). That is the point of the change, and each was a documented promise
+already — `summary.errors == 0` *"is the machine-readable definition of this passed"* — that the command did not
+keep. No field was removed or changed in type; `error` on `schema validate` is the additive object every failing
+envelope carries. No new `DL` code: these are usage refusals and the tool's own exit, as for every other command.
+
+**Against the stability contract, said plainly.** `docs/design/STABILITY.md` §1 promises: *"`0` success, `1`
+diagnostics/failure, `2` usage error … A command's exit code for a given outcome does not change."* Two of these
+outcomes change their code (a `test` argument that names nothing: 0 to 2; `fix` with an error left: 0 to 1). The
+reading taken here is the one D-V2-227 took for `run` and JSON-EXIT-1 took before it: the table's first half defines
+what the codes mean, an outcome that was not a success was never entitled to `0`, and a command that printed `0` for
+it broke the contract rather than expressed it. `STABILITY.md` itself is not edited. Because the contract is in a
+risk class of `CONTRIBUTING.md` §4, this decision is marked **for independent review**: its author is the only
+party who has read the change.
+
+**Not done here, and still open under RW 6.78:** part 2 (`toolchain --json` lists flags scanned from usage prose) and
+part 4 (a repeated single-value flag is last-wins; `test pkg pkg` counts a test twice). Both want the one option
+table per command that the row asks for.
+
+**Evidence.** Each of the five new tests was seen red on the code before the change (`E33`), then green (`E34`); eight
+mutants, one per rule, are each red in the test that names the rule (`E35`). Tests:
+`test_runner_cli::a_path_that_is_not_there_and_a_filter_that_matches_nothing_are_refused`,
+`fix_cli::fix_exits_1_while_errors_remain_and_its_summary_is_the_result`,
+`cli_contract::authority_refuses_a_mode_that_run_refuses`,
+`json_contract::schema_validate_counts_what_it_finds_in_summary_errors`, and three rows added to
+`json_contract::a_report_shaped_failure_never_claims_zero_errors`.

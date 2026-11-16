@@ -680,6 +680,8 @@ fn a_report_shaped_failure_never_claims_zero_errors() {
     std::fs::write(pkg.join("failing.delulu"), "module failing\n\ntest \"two is three\" {\n    assert_eq(str(2), str(3))\n}\n")
         .unwrap();
     std::fs::write(pkg.join("pure-env.toml"), "[authority]\neffects = []\n").unwrap();
+    std::fs::write(pkg.join("widens.delulu"), "module m\nfn greet(out: Cap[Console], n: Str) { out.println(n) }\n").unwrap();
+    std::fs::write(pkg.join("wrong.json"), "{\"command\":\"x\"}").unwrap();
 
     let run_in = |args: &[&str]| -> Output {
         Command::new(env!("CARGO_BIN_EXE_delulu"))
@@ -699,6 +701,10 @@ fn a_report_shaped_failure_never_claims_zero_errors() {
         ("verify-sig-unsigned", vec!["verify-sig", "src/main.delulu", "--json"]),
         ("deploy-exceeds-ceiling", vec!["deploy", "plan", "--service", "s=.", "--env", "pure-env.toml", "--json"]),
         ("test-failing", vec!["test", "failing.delulu", "--json"]),
+        // RW 6.51, RW 6.55, RW 6.79: three that exited non-zero, or should have, beside `summary.errors: 0`.
+        ("test-filter-matches-nothing", vec!["test", "failing.delulu", "no_such_test", "--json"]),
+        ("fix-errors-left", vec!["fix", "widens.delulu", "--json"]),
+        ("schema-validate-invalid", vec!["schema", "validate", "envelope", "wrong.json", "--json"]),
     ];
 
     let mut bad: Vec<String> = Vec::new();
@@ -1374,5 +1380,43 @@ fn a_run_the_checker_refuses_reports_its_diagnostics() {
     assert!(errors >= 1, "the report names the checker's refusal: {v}");
     assert!(v["diagnostics"][0]["code"].as_str().is_some_and(|c| c.starts_with("DL")), "{v}");
     assert_eq!(v["summary"]["errors"].as_u64(), Some(errors as u64), "the count is the diagnostics' own: {v}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// RW 6.79: **`schema validate --json` counts what it finds in `summary.errors`.**
+///
+/// It exited 1 for a document that is not valid and printed a success envelope around it: `validate.valid: false`
+/// beside `summary.errors: 0`, the field `docs/for-agents.md` defines as *"this passed"*. The problems are now
+/// counted there, with the additive `error` object every failed command carries. The control is a document that
+/// IS valid — this command's own answer.
+#[test]
+fn schema_validate_counts_what_it_finds_in_summary_errors() {
+    let d = std::env::temp_dir().join(format!("delulu-schema-validate-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let wrong = d.join("wrong.json");
+    std::fs::write(&wrong, "{\"command\":\"x\"}").unwrap();
+    let o = run(&["schema", "validate", "envelope", wrong.to_str().unwrap(), "--json"]);
+    let so = String::from_utf8_lossy(&o.stdout).to_string();
+    assert_eq!(count_json_values(&so), 1, "exactly one object:\n{so}");
+    let v: serde_json::Value = serde_json::from_str(so.trim()).unwrap();
+    let found = v["validate"]["errors"].as_array().expect("the problems are listed").len();
+    assert!(found > 0 && v["validate"]["valid"] == false, "{v}");
+    assert_eq!(o.status.code(), Some(1), "{v}");
+    assert_eq!(v["summary"]["errors"].as_u64(), Some(found as u64), "every problem is counted where a caller looks:\n{v}");
+    assert_eq!((&v["error"]["kind"], &v["error"]["exit"]), (&serde_json::json!("failed"), &serde_json::json!(1)), "{v}");
+    assert_eq!(v["diagnostics"], serde_json::json!([]), "a document's problems are not language diagnostics:\n{v}");
+
+    // The control: a valid document is exit 0 with nothing counted and no `error`.
+    let right = d.join("right.json");
+    std::fs::write(&right, &o.stdout).unwrap();
+    let o = run(&["schema", "validate", "envelope", right.to_str().unwrap(), "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).expect("one object");
+    assert_eq!(
+        (o.status.code(), &v["summary"]["errors"], &v["validate"]["valid"]),
+        (Some(0), &serde_json::json!(0), &serde_json::json!(true)),
+        "{v}"
+    );
+    assert!(v.get("error").is_none(), "{v}");
     let _ = std::fs::remove_dir_all(&d);
 }

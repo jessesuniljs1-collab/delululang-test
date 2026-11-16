@@ -11,6 +11,30 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a command that did nothing no longer says it passed, 2026-11-17
+
+- **Changed (RW 6.51, D-V2-232): `delulu test` refuses what it was given and cannot find — exit 2, nothing run.** A
+  path that does not exist (an argument with a `/` or `\` in it, or ending `.delulu` or `.solulu`) used to be read as
+  a filter on test names, match nothing and exit 0 with `0 passed, 0 failed`. So did a filter that matched no test,
+  and an option with one dash (`test -v`). Each is now refused in words that name it, before any test runs. A
+  package or file with no tests, asked for nothing in particular, is still exit 0. **If a script of yours passes
+  `delulu test` a name that matches no test, it now fails where it used to pass.**
+- **Changed (RW 6.55, D-V2-232): `delulu fix` exits 1 while the program still has an error.** It exited 0 whatever
+  was left. Its `--json` envelope's `diagnostics` and `summary` now describe the program after the repairs (with
+  `--dry-run`, the program they would leave), not the one before; `fix.errors_before` and `fix.errors_after` are as
+  they were.
+- **Fixed (RW 6.79, D-V2-232): `delulu schema validate` counts what it finds.** A document that does not conform
+  gets `summary.errors` equal to the number of problems and an `error` object (`kind: "failed"`); it said
+  `summary.errors: 0` beside `validate.valid: false`. The exit code was already 1.
+- **Fixed (RW 6.78, part): `delulu authority` refuses a `--broker`, `--isolation` or `--foreign-isolation` value that
+  `delulu run` refuses**, in the same words, exit 2. It used to print a report labelled with a mode that does not
+  exist.
+- **Fixed (D-V2-231, amended): on macOS, a command under `--broker daemon` could fail with *"broker unreachable:
+  Invalid argument"* after the broker had answered it.** This was in the change of 2026-11-16 only, on the
+  development branch, and was found by that change's own CI run before it reached `master`: the client asked for
+  its read deadline after sending its request, and macOS refuses that once the broker has closed the connection.
+  The deadline is now asked for first.
+
 ## Unreleased — a busy broker says so, 2026-11-16
 
 - **Fixed (FABLE-039, RW 4.100, D-V2-231): past 64 requests at once, a command is served instead of being told to

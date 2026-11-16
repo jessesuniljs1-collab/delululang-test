@@ -961,10 +961,24 @@ pub fn cmd_schema(rest: &[String]) -> i32 {
             };
             let errors = validate(&doc, &value);
             if json_out {
-                crate::cli::print_success_envelope(
-                    "schema",
-                    json!({ "validate": { "schema": name, "file": file, "valid": errors.is_empty(), "errors": errors } }),
-                );
+                let mut report =
+                    json!({ "validate": { "schema": name, "file": file, "valid": errors.is_empty(), "errors": errors } });
+                // RW 6.79: a document that is not valid is counted where a caller looks. It was exit 1 around
+                // `summary.errors: 0`, the field that defines "this passed". No DL code is invented for it — a
+                // document's problems are not language diagnostics — so it carries the additive `error` object every
+                // failed command does, and `validate.errors` lists the problems.
+                if !errors.is_empty() {
+                    report["summary"] = json!({ "errors": errors.len() });
+                    report["error"] = json!({
+                        "kind": "failed",
+                        "exit": 1,
+                        "message": format!(
+                            "`{file}` is not a valid `{name}`: {} problem(s), listed in `validate.errors`",
+                            errors.len()
+                        ),
+                    });
+                }
+                crate::cli::print_success_envelope("schema", report);
             } else if errors.is_empty() {
                 println!("ok: `{file}` is a valid `{name}`");
             } else {

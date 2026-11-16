@@ -2100,6 +2100,62 @@ fn enclosing_test_ceiling(path: &std::path::Path, ceilings: &mut Vec<(std::path:
 /// Where a test is written: its file label, its `FileId` in the run's source map, its name span.
 type TestLocation = (String, delulu_diag::FileId, delulu_diag::Span);
 
+/// Whether an argument of `delulu test` that is not on disk was meant as a path (RW 6.51): it has a path separator,
+/// or a source file's extension, or is a directory's own name. Anything else is a filter on test names.
+fn names_a_path(arg: &str) -> bool {
+    let lower = arg.to_ascii_lowercase();
+    arg.contains('/')
+        || arg.contains('\\')
+        || lower.ends_with(".delulu")
+        || lower.ends_with(".solulu")
+        || arg == "."
+        || arg == ".."
+}
+
+/// One program `delulu test` was asked to run, after it was read and checked and before any test runs (RW 6.51):
+/// the filters are held against every program's tests first, so a filter that matches none stops the run whole.
+enum TestUnit {
+    /// It did not check. Its report and its diagnostics, kept in the order the programs were named.
+    Failed {
+        report: Json,
+        diags_json: Vec<Json>,
+    },
+    Ready(Box<ReadyTests>),
+}
+
+/// A checked program whose tests can run.
+struct ReadyTests {
+    map: SourceMap,
+    module: delulu_syntax::ast::Module,
+    ceiling: TestCeiling,
+    /// What its broker node is called under a test session.
+    holder: String,
+    /// A package runs flattened: where each of its ROOT package's tests is written — its name, file, id and span. A
+    /// dependency's tests are not this run's, are not in the list, and are skipped. `None` for a loose file, whose
+    /// every test is its own.
+    written: Option<Vec<(String, String, delulu_diag::FileId, delulu_diag::Span)>>,
+    label: String,
+    id: delulu_diag::FileId,
+}
+
+impl ReadyTests {
+    /// Where `t` is written, or `None` for a test that is not this run's to run.
+    fn locate(&self, t: &delulu_syntax::ast::TestDecl) -> Option<TestLocation> {
+        match &self.written {
+            Some(written) => written.iter().find(|(n, ..)| *n == t.name).map(|(_, file, id, span)| (file.clone(), *id, *span)),
+            None => Some((self.label.clone(), self.id, t.name_span)),
+        }
+    }
+
+    /// The names of the tests this run would run from this program, before any filter.
+    fn test_names(&self) -> impl Iterator<Item = &str> {
+        self.module.items.iter().filter_map(|item| match item {
+            delulu_syntax::ast::Item::Test(t) if self.locate(t).is_some() => Some(t.name.as_str()),
+            _ => None,
+        })
+    }
+}
+
 /// What one `delulu test` invocation accumulates across the programs it runs.
 struct TestRunState {
     json: bool,
@@ -2302,23 +2358,29 @@ fn cmd_test(rest: &[String]) -> i32 {
                 };
                 seed_flag = Some(n);
             }
-            other if !other.starts_with("--") => {
-                let p = std::path::PathBuf::from(other);
-                if p.exists() {
-                    paths.push(p);
-                } else {
-                    patterns.push(other.to_string());
-                }
-            }
             // An unknown option is refused rather than dropped: a mistyped `--seed` or `--filter`
-            // used to run the whole suite unfiltered and report success.
+            // used to run the whole suite unfiltered and report success. One dash or two (RW 6.78, 3):
+            // `test -v` was read as a filter on test names, matched none, and exited 0.
             other if other.starts_with('-') => {
                 eprintln!("error: `test` does not know the option `{other}`");
                 eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
                 eprintln!("note: `delulu test --help` lists what this command accepts");
                 return 2;
             }
-            _ => {}
+            other => {
+                let p = std::path::PathBuf::from(other);
+                if p.exists() {
+                    paths.push(p);
+                } else if names_a_path(other) {
+                    // RW 6.51: a path that is not there was read as a filter on test names, matched none, and the
+                    // run was green — `0 passed, 0 failed`, exit 0, for a mistyped file.
+                    eprintln!("error: `test` was given a path that does not exist: `{other}`");
+                    eprintln!("  nothing was run — a path that names nothing is refused, never read as a filter on test names");
+                    return 2;
+                } else {
+                    patterns.push(other.to_string());
+                }
+            }
         }
         i += 1;
     }
@@ -2431,6 +2493,157 @@ fn cmd_test(rest: &[String]) -> i32 {
         }
     };
 
+    // NE-08: the envelope said `{"file": …, "status": "check-failed"}` and the DL render went to
+    // **stderr**, so the machine channel named a failure and withheld its cause; a ceiling failure
+    // carried a message string with the code spliced into prose and no span, code field or repair.
+    // The diagnostics belong where the contract says diagnostics live, and under `--json` nothing
+    // human-rendered goes to stderr at all.
+    let mut st = TestRunState {
+        json,
+        patterns,
+        seed_base: seed_flag.unwrap_or(0xDE1),
+        reports: Vec::new(),
+        diags_json: Vec::new(),
+        failed: 0,
+        passed: 0,
+    };
+    let t_all = std::time::Instant::now();
+
+    // First every program is read and checked, and no test runs (RW 6.51): the filters are held against all of
+    // them below, before the first test and before the broker is asked for a session.
+    let mut units: Vec<TestUnit> = Vec::new();
+    for (dir, ws, governs) in packages {
+        let unit_ceiling = governing(governs);
+        let label = dir.display().to_string();
+        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+        if !ws.modules.is_empty() {
+            // A package's tests run its dependencies' code, so the supply-chain gate holds here as it does for `run`
+            // (RUN-PIN-1).
+            let program = delulu_check::deps::check_workspace(&ws);
+            diags.extend(program.diagnostics.iter().cloned());
+            diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
+        }
+        if errors(&diags) > 0 {
+            let mut diags_json = Vec::new();
+            if st.json {
+                diags_json.extend(diagnostics_json(&diags, &ws.source_map));
+            } else {
+                print_diagnostics("test", &diags, &ws.source_map, None, false);
+            }
+            let report = json!({ "file": label, "status": "check-failed", "errors": errors(&diags) });
+            units.push(TestUnit::Failed { report, diags_json });
+            continue;
+        }
+        let Some(first) = ws.modules.iter().find(|m| m.pkg == ws.root) else { continue };
+        let entry = first.unit.name.clone();
+        // Where each of the ROOT package's tests is written. A dependency's tests are not this
+        // run's: they locate to nothing and are skipped.
+        let written: Vec<(String, String, delulu_diag::FileId, delulu_diag::Span)> = ws
+            .modules
+            .iter()
+            .filter(|m| m.pkg == ws.root)
+            .flat_map(|m| {
+                m.unit.module.items.iter().filter_map(move |it| match it {
+                    delulu_syntax::ast::Item::Test(t) => {
+                        Some((t.name.clone(), m.unit.path.display().to_string(), m.unit.file, t.name_span))
+                    }
+                    _ => None,
+                })
+            })
+            .collect();
+        let texts: Vec<&str> = ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
+        let flat_src = delulu_check::flatten_sources(&entry, &texts);
+        let module_count = ws.modules.len();
+        let mut map = ws.source_map;
+        let fid = map.add_file(format!("{label} (flattened for testing)"), flat_src.clone());
+        let flat = check_source(fid, &flat_src);
+        if errors(&flat.diagnostics) > 0 {
+            // The workspace accepted the program; flattening collided (the D61 limit `run` states).
+            let mut diags_json = Vec::new();
+            if st.json {
+                diags_json.extend(diagnostics_json(&flat.diagnostics, &map));
+            } else {
+                print_diagnostics("test", &flat.diagnostics, &map, None, false);
+                eprintln!(
+                    "note: `{label}` checks clean as a {module_count}-module program, but two of its \
+                     modules declare the same top-level name, and testing it flattens them into one \
+                     scope (ruling D61) — rename one"
+                );
+            }
+            let report = json!({ "file": label, "status": "check-failed", "errors": errors(&flat.diagnostics) });
+            units.push(TestUnit::Failed { report, diags_json });
+            continue;
+        }
+        units.push(TestUnit::Ready(Box::new(ReadyTests {
+            map,
+            module: flat.module,
+            ceiling: unit_ceiling,
+            holder: format!("test-package {label}"),
+            written: Some(written),
+            label,
+            id: fid,
+        })));
+    }
+
+    for (f, pkg) in &files {
+        let (map, id, src) = match load(&f.display().to_string()) {
+            Ok(x) => x,
+            Err(c) => return c,
+        };
+        let checked = check_source(id, &src);
+        if errors(&checked.diagnostics) > 0 {
+            let mut diags_json = Vec::new();
+            if st.json {
+                diags_json.extend(diagnostics_json(&checked.diagnostics, &map));
+            } else {
+                print_diagnostics("test", &checked.diagnostics, &map, None, false);
+            }
+            let report = json!({
+                "file": f.display().to_string(), "status": "check-failed",
+                "errors": errors(&checked.diagnostics),
+            });
+            units.push(TestUnit::Failed { report, diags_json });
+            continue;
+        }
+        units.push(TestUnit::Ready(Box::new(ReadyTests {
+            map,
+            module: checked.module,
+            ceiling: governing(*pkg),
+            holder: format!("test-file {}", f.display()),
+            written: None,
+            label: f.display().to_string(),
+            id,
+        })));
+    }
+
+    // RW 6.51: **every filter names a test, or nothing is run.** A filter that matched no test was a green run —
+    // `0 passed, 0 failed`, exit 0, the same answer as a package with no tests — so a mistyped name read as success.
+    // Held here, before the first test: a run of the half that matched would be a run nobody asked for. A program
+    // that did not check cannot be searched for names; its own failure is that run's verdict, as before.
+    if !st.patterns.is_empty() && !units.iter().any(|u| matches!(u, TestUnit::Failed { .. })) {
+        let names: Vec<&str> = units
+            .iter()
+            .flat_map(|u| match u {
+                TestUnit::Ready(ready) => Some(ready.test_names()),
+                TestUnit::Failed { .. } => None,
+            })
+            .flatten()
+            .collect();
+        let unmatched: Vec<String> =
+            st.patterns.iter().filter(|p| !names.iter().any(|n| n.contains(p.as_str()))).map(|p| format!("`{p}`")).collect();
+        if !unmatched.is_empty() {
+            let (what, verb) = if unmatched.len() == 1 { ("a filter", "matches") } else { ("filters", "match") };
+            eprintln!("error: `test` was given {what} that {verb} no test: {}", unmatched.join(", "));
+            eprintln!(
+                "  nothing was run — {} test(s) were found, and none has {} in its name",
+                names.len(),
+                if unmatched.len() == 1 { "that" } else { "any of those" }
+            );
+            eprintln!("note: a filter selects the tests whose name contains it; with no filter every test under the paths runs");
+            return 2;
+        }
+    }
+
     // The broker session lane: reachable daemon ⇒ the whole run lives under a freshly
     // ISSUED `test-session` principal node (the broker tree starts empty; a test run is
     // its own principal); unreachable ⇒ embedded grants (the Stage-5 default posture).
@@ -2468,111 +2681,19 @@ fn cmd_test(rest: &[String]) -> i32 {
         })
     };
 
-    // NE-08: the envelope said `{"file": …, "status": "check-failed"}` and the DL render went to
-    // **stderr**, so the machine channel named a failure and withheld its cause; a ceiling failure
-    // carried a message string with the code spliced into prose and no span, code field or repair.
-    // The diagnostics belong where the contract says diagnostics live, and under `--json` nothing
-    // human-rendered goes to stderr at all.
-    let mut st = TestRunState {
-        json,
-        patterns,
-        seed_base: seed_flag.unwrap_or(0xDE1),
-        reports: Vec::new(),
-        diags_json: Vec::new(),
-        failed: 0,
-        passed: 0,
-    };
-    let t_all = std::time::Instant::now();
-
-    for (dir, ws, governs) in packages {
-        let unit_ceiling = governing(governs);
-        let label = dir.display().to_string();
-        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
-        if !ws.modules.is_empty() {
-            // A package's tests run its dependencies' code, so the supply-chain gate holds here as it does for `run`
-            // (RUN-PIN-1).
-            let program = delulu_check::deps::check_workspace(&ws);
-            diags.extend(program.diagnostics.iter().cloned());
-            diags.extend(delulu_check::deps::supply_chain_gate(&ws, &program));
-        }
-        if errors(&diags) > 0 {
-            if st.json {
-                st.diags_json.extend(diagnostics_json(&diags, &ws.source_map));
-            } else {
-                print_diagnostics("test", &diags, &ws.source_map, None, false);
+    // Then the tests, program by program in the order they were named.
+    for unit in units {
+        match unit {
+            TestUnit::Failed { report, diags_json } => {
+                st.diags_json.extend(diags_json);
+                st.reports.push(report);
+                st.failed += 1;
             }
-            st.reports.push(json!({ "file": label, "status": "check-failed", "errors": errors(&diags) }));
-            st.failed += 1;
-            continue;
-        }
-        let Some(first) = ws.modules.iter().find(|m| m.pkg == ws.root) else { continue };
-        let entry = first.unit.name.clone();
-        // Where each of the ROOT package's tests is written. A dependency's tests are not this
-        // run's: they locate to nothing and are skipped.
-        let written: Vec<(String, String, delulu_diag::FileId, delulu_diag::Span)> = ws
-            .modules
-            .iter()
-            .filter(|m| m.pkg == ws.root)
-            .flat_map(|m| {
-                m.unit.module.items.iter().filter_map(move |it| match it {
-                    delulu_syntax::ast::Item::Test(t) => {
-                        Some((t.name.clone(), m.unit.path.display().to_string(), m.unit.file, t.name_span))
-                    }
-                    _ => None,
-                })
-            })
-            .collect();
-        let texts: Vec<&str> = ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
-        let flat_src = delulu_check::flatten_sources(&entry, &texts);
-        let module_count = ws.modules.len();
-        let mut map = ws.source_map;
-        let fid = map.add_file(format!("{label} (flattened for testing)"), flat_src.clone());
-        let flat = check_source(fid, &flat_src);
-        if errors(&flat.diagnostics) > 0 {
-            // The workspace accepted the program; flattening collided (the D61 limit `run` states).
-            if st.json {
-                st.diags_json.extend(diagnostics_json(&flat.diagnostics, &map));
-            } else {
-                print_diagnostics("test", &flat.diagnostics, &map, None, false);
-                eprintln!(
-                    "note: `{label}` checks clean as a {module_count}-module program, but two of its \
-                     modules declare the same top-level name, and testing it flattens them into one \
-                     scope (ruling D61) — rename one"
-                );
+            TestUnit::Ready(ready) => {
+                let _node = attenuate(&ready.ceiling, ready.holder.clone());
+                run_module_tests(&mut st, &ready.map, &ready.module, &ready.ceiling, &|t| ready.locate(t));
             }
-            st.reports.push(json!({ "file": label, "status": "check-failed", "errors": errors(&flat.diagnostics) }));
-            st.failed += 1;
-            continue;
         }
-        let _package_node = attenuate(&unit_ceiling, format!("test-package {label}"));
-        run_module_tests(&mut st, &map, &flat.module, &unit_ceiling, &|t| {
-            written.iter().find(|(n, ..)| *n == t.name).map(|(_, file, id, span)| (file.clone(), *id, *span))
-        });
-    }
-
-    for (f, pkg) in &files {
-        let (map, id, src) = match load(&f.display().to_string()) {
-            Ok(x) => x,
-            Err(c) => return c,
-        };
-        let checked = check_source(id, &src);
-        if errors(&checked.diagnostics) > 0 {
-            if st.json {
-                st.diags_json.extend(diagnostics_json(&checked.diagnostics, &map));
-            } else {
-                print_diagnostics("test", &checked.diagnostics, &map, None, false);
-            }
-            st.reports.push(json!({
-                "file": f.display().to_string(), "status": "check-failed",
-                "errors": errors(&checked.diagnostics),
-            }));
-            st.failed += 1;
-            continue;
-        }
-        let file_ceiling = governing(*pkg);
-        let _file_node = attenuate(&file_ceiling, format!("test-file {}", f.display()));
-        let label = f.display().to_string();
-        run_module_tests(&mut st, &map, &checked.module, &file_ceiling, &|t| Some((label.clone(), id, t.name_span)));
     }
     let TestRunState { reports, diags_json, failed, passed, .. } = st;
 
@@ -3580,6 +3701,9 @@ fn cmd_authority(rest: &[String]) -> i32 {
         return code;
     }
     if let Some(code) = refuse_unknown_flags("authority", &opts) {
+        return code;
+    }
+    if let Some(code) = refuse_unknown_modes(&opts) {
         return code;
     }
     // P9-01: `--within` is documented for `authority`, so the shared parser hands it to every form of
@@ -4694,6 +4818,24 @@ fn grant_effects_of(e: &delulu_syntax::ast::Expr) -> Vec<String> {
         }
     }
     Vec::new()
+}
+
+/// RW 6.78 (1): the three options that label an authority report with the mode a run would have take the values
+/// `run` takes, and nothing else. `authority --isolation bogus` was exit 0 with `isolation: "bogus"` written into the
+/// report — a mistyped mode repeated back as a fact about the program — where `run --isolation bogus` is exit 2.
+/// Refused in `run`'s own words, before the program is read, for every form of the command.
+fn refuse_unknown_modes(opts: &Opts) -> Option<i32> {
+    let refusal = match (opts.broker.as_deref(), opts.isolation.as_deref(), opts.foreign_isolation.as_deref()) {
+        (Some(b), _, _) if !matches!(b, "embedded" | "daemon") => format!("unknown --broker mode `{b}` (embedded | daemon)"),
+        (_, Some(i), _) if !matches!(i, "none" | "process" | "microvm") => {
+            format!("unknown --isolation `{i}` (none | process | microvm)")
+        }
+        (_, _, Some(f)) if !matches!(f, "inproc" | "process") => format!("unknown --foreign-isolation `{f}` (inproc | process)"),
+        _ => return None,
+    };
+    eprintln!("error: {refusal}");
+    eprintln!("  nothing was done — a report labelled with a mode that does not exist would say what no run can have");
+    Some(2)
 }
 
 /// Stamp the custody label on an authority report (Stage 5, playbook 5j): `embedded` unless the

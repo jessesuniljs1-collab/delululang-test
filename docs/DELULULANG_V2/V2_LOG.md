@@ -13303,3 +13303,65 @@ stamped after the last `.rs` edit. NOT run here: Linux, macOS — CI.
 program, the program can reach only the tools it was handed, and a tool's schema is fetched when asked for instead
 of sent up front. Measured here against that: `delulu mcp`'s `tools/list` is 229,161 bytes for twelve tools, of
 which 222 kB is the tools' output schemas: the same 17 kB of definitions in each of the twelve (RW 6.88).
+
+## 2026-11-17 — the laptop (Fable 5.2, effort high): checkpoint 8's CI read red on three systems and repaired (D-V2-231 amended); four commands stop reporting success for work not done (D-V2-232; RW 6.51, 6.55, 6.79 closed, RW 6.78 parts 1 and 3)
+
+**The owner's new commission** (`docs/prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md`,
+2026-11-17) is in force: build, integrate what is verified into `master`, and leave one canonical guide for whoever
+continues (`docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`). This entry is the first of that work; the integration and
+the guide are the entries that follow it.
+
+**1. Checkpoint 8's CI run, read whole: red.** Run `43788300598` at `11c0cce`, `jobs=everything`: 15 of 18. Red:
+`test (ubuntu-24.04)`, `arm64`, `test (macos-latest)`. Windows — all the laptop had run — was green. Both defects
+were in the change itself; D-V2-231's amendment has the account. In short:
+
+| Where | Test | Cause |
+|---|---|---|
+| Ubuntu, ARM64, macOS | `broker_cli::a_daemon_whose_standard_error_nobody_reads_keeps_serving` | the test's 1,600 bare knocks no longer write 1,600 lines (most are answered `Busy`, said once a second), so the pipe never filled and the daemon had no dropped lines to name |
+| macOS only | `broker_cli::a_use_its_capability_refuses_is_recorded_refused_and_never_allowed`; `estop_cli::an_actors_commands_are_uses_of_the_runs_node_in_the_audit_chain`; `monitor_cli` — `a_killed_monitors_runs_are_revoked_by_its_broker_and_the_chain_says_why`, `a_monitor_that_ends_cleanly_disarms_its_dead_man_and_the_runs_live_on`, `a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor` | the client asked for its read deadline after sending; macOS answers `EINVAL` once the daemon has answered and closed, and the answered request was reported *"broker unreachable: Invalid argument"* |
+
+**The repair.** `brokerd.rs` `request_counting`: the deadline is asked for before anything is sent; a connection that
+cannot be given one has had nothing sent on it and is asked again inside the caller's bound, never read unbounded.
+`broker_cli.rs`: the flood's knock (`knock_for_a_line`) is four bytes the daemon refuses in one line, and waits for
+the daemon to close, so each knock is one line and the bound is never reached.
+
+**Verified.** `broker_cli` on Windows 22 of 22 and on Linux (WSL, Ubuntu 20.04) 24 of 24 — the test that was red on
+Ubuntu in CI is green there. Three mutants of the repaired test on Linux, each red: FABLE-038 itself put back
+(the daemon stops answering); the drop count never said; the knock made a bare connect-and-drop again — which
+reproduces the CI failure (71,368 bytes said, against CI's 71,371). **Not verified here: macOS.** The client defect
+shows only there; CI decides it.
+
+**2. The false greens (the audit's slice S2; D-V2-232).** `delulu test` refuses a path that does not exist, a filter
+that matches no test and a single-dash option, exit 2, nothing run; `delulu fix` exits 1 while an error is left and
+its envelope describes the result; `delulu schema validate` counts what it finds in `summary.errors`; `delulu
+authority` refuses a `--broker`, `--isolation` or `--foreign-isolation` value that `run` refuses. `cmd_test` now
+reads and checks every program before the first test runs, so a filter is held against all of them and the broker
+is not asked for a session by a run that will be refused.
+
+| Mutant | Defect put back | Red in |
+|---|---|---|
+| M1 | a missing path is read as a filter again | `test_runner_cli::a_path_that_is_not_there_and_a_filter_that_matches_nothing_are_refused` |
+| M2 | a filter that matches nothing runs nothing and is green | the same |
+| M3 | one filter that matches is enough | the same |
+| M4 | an option with one dash is a filter again | the same |
+| M5 | `fix` exits 0 whatever is left | `fix_cli::fix_exits_1_while_errors_remain_and_its_summary_is_the_result` |
+| M6 | `fix`'s envelope is the program before the repairs | the same |
+| M7 | `schema validate` counts nothing | `json_contract::schema_validate_counts_what_it_finds_in_summary_errors` |
+| M8 | `authority` takes any mode | `cli_contract::authority_refuses_a_mode_that_run_refuses` |
+
+Each of the five new tests was red on the code before the change and is green after it.
+
+**Verified on the laptop** (Windows, `-j 4`): the whole `delulu` package, 108 test targets — 1,163 passed, 12 ignored,
+and 3 failed, all three in `doctor_cli` and all three the stale map (the run was before the map was regenerated;
+`doctor_cli` re-run after regenerating is in the commit message). `scripts/clippy.sh -j 4` clean and stamped after
+the last `.rs` edit (it refused the first time: `TestUnit::Ready` was a large variant, now boxed; the four suites of
+this change re-run after that, 63 of 63). On Linux (WSL): the suites named in the commit message.
+
+**Found while checking the Guard, Authority, plugins, the Survey, `doctor` and the Atlas end to end** (the owner's
+request of 2026-11-16; every command driven against the debug build of `11c0cce`, scratch state, no secret
+printed): each surface did what its documents say — a missing grant is DL0703; a guarded class is DL1414 without the
+owner code, DL1410 naming the narrowest request, DL1411 while pending, a write after approval, DL1412 with the
+comment after denial, DL1413 for a sealed rule, DL1403 after a revoke; `audit verify` ok; a plugin loads only with
+`--grant plugin=.`, and the WASM engine and the sandbox refuse a plugin host in words. Two small findings opened:
+RW 2.54 (DL0405 for a method under another language's name says nothing of the name this language uses) and RW 7.32
+(the Survey's `exercises` edge misses a test that builds its command with `.arg("verb")`).

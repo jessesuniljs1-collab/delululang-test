@@ -374,3 +374,82 @@ fn every_route_to_a_test_file_meets_its_packages_ceiling() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 6.51 (and RW 6.78, 3): **a path that is not there is refused, and so is a filter that matches no test.**
+///
+/// An argument that was not a path on disk was read as a filter on test names, and a filter that matched nothing was
+/// a green run: `delulu test` on a file that is not there printed `0 passed, 0 failed` and exited 0, with the same envelope
+/// as a package that has no tests. An agent that mistyped a path was told its tests pass. So was `delulu test -v`:
+/// an option with one dash was a filter too.
+///
+/// Now an argument shaped like a path that names nothing is refused, an option nobody knows is refused whatever its
+/// dashes, and every filter must match a test — or nothing is run at all. The controls: the same package with the
+/// right spellings runs, and a file with no test in it is still exit 0 when no filter was given.
+#[test]
+fn a_path_that_is_not_there_and_a_filter_that_matches_nothing_are_refused() {
+    let dir = tmp("nothing");
+    scaffold(&dir);
+    let said = |o: &Output| format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    let summary = |o: &Output| -> Value {
+        serde_json::from_slice::<Value>(&o.stdout).unwrap_or_else(|e| panic!("one envelope: {e}\n{}", said(o)))["summary"].clone()
+    };
+
+    // The controls. Both tests run; a filter that names one runs that one.
+    let o = delulu(&dir, &["test", "tests", "--json"], None);
+    assert_eq!((o.status.code(), summary(&o)["passed"].as_u64()), (Some(0), Some(2)), "{}", said(&o));
+    let o = delulu(&dir, &["test", "tests", "pure", "--json"], None);
+    assert_eq!((o.status.code(), summary(&o)["passed"].as_u64()), (Some(0), Some(1)), "{}", said(&o));
+
+    // A path that is not there: refused, nothing run, and never read as a filter.
+    for missing in ["tests/missing.delulu", "no/such/dir", "missing.delulu", "./nope"] {
+        let o = delulu(&dir, &["test", missing], None);
+        let text = said(&o);
+        assert_eq!(o.status.code(), Some(2), "`test {missing}` must be refused:\n{text}");
+        assert!(text.contains("does not exist") && text.contains(missing), "it names the path:\n{text}");
+        assert!(text.contains("nothing was run") && !text.contains("test result"), "and says nothing ran:\n{text}");
+        let o = delulu(&dir, &["test", missing, "--json"], None);
+        let v: Value = serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope: {e}\n{}", said(&o)));
+        assert_eq!(
+            (o.status.code(), &v["summary"]["errors"], &v["error"]["kind"]),
+            (Some(2), &serde_json::json!(1), &serde_json::json!("usage")),
+            "{v}"
+        );
+    }
+
+    // A filter that matches no test: refused, and it says how many tests there were.
+    let o = delulu(&dir, &["test", "tests", "no_such_test"], None);
+    let text = said(&o);
+    assert_eq!(o.status.code(), Some(2), "a filter that matches nothing must be refused:\n{text}");
+    assert!(text.contains("matches no test") && text.contains("`no_such_test`"), "it names the filter:\n{text}");
+    assert!(text.contains("2 test(s)") && text.contains("nothing was run"), "and what it looked through:\n{text}");
+    assert!(!text.contains("test result") && !text.contains("hi from a test"), "no test ran:\n{text}");
+    let o = delulu(&dir, &["test", "tests", "no_such_test", "--json"], None);
+    assert_eq!((o.status.code(), summary(&o)["errors"].as_u64()), (Some(2), Some(1)), "{}", said(&o));
+
+    // Two filters, one of which matches nothing: nothing is run, not the half that matched.
+    let o = delulu(&dir, &["test", "tests", "pure", "no_such_test"], None);
+    let text = said(&o);
+    assert_eq!(o.status.code(), Some(2), "{text}");
+    assert!(text.contains("`no_such_test`") && !text.contains("`pure`"), "only the one that matched nothing is named:\n{text}");
+    assert!(!text.contains("ok: test"), "the filter that did match ran nothing either:\n{text}");
+
+    // An option with one dash is an option nobody knows, not a filter (RW 6.78, 3).
+    for option in ["-v", "-q", "-x", "-j"] {
+        let o = delulu(&dir, &["test", "tests", option], None);
+        let text = said(&o);
+        assert_eq!(o.status.code(), Some(2), "`test {option}`:\n{text}");
+        assert!(text.contains("does not know the option") && !text.contains("test result"), "{text}");
+    }
+
+    // A file that does not check is still the verdict of its own run: exit 1, whatever the filter.
+    std::fs::write(dir.join("tests").join("broken.delulu"), "module broken\ntest \"t\" {\n  assert_eq(nope, 1)\n}\n").unwrap();
+    let o = delulu(&dir, &["test", "tests/broken.delulu", "no_such_test"], None);
+    assert_eq!(o.status.code(), Some(1), "a file that does not check is exit 1:\n{}", said(&o));
+    std::fs::remove_file(dir.join("tests").join("broken.delulu")).unwrap();
+
+    // And zero tests with no filter is still exit 0 ([agents.test]).
+    std::fs::write(dir.join("none.delulu"), "module none\nfn one() -> Int { 1 }\n").unwrap();
+    let o = delulu(&dir, &["test", "none.delulu", "--json"], None);
+    assert_eq!((o.status.code(), summary(&o)["passed"].as_u64()), (Some(0), Some(0)), "{}", said(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
