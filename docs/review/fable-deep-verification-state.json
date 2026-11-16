@@ -15,13 +15,13 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 7,
-  "checkpoint_note": "Five commits of code on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), architecture slice 1's first part (D-V2-229), its dogfood test, and RW 4.98's two timing tests (D-V2-230). The CI of the first four is read whole: 18 of 18 each.",
+  "checkpoint": 8,
+  "checkpoint_note": "Six commits of code on this branch: the report sinks (D-V2-227), the broker's log writer (D-V2-228), architecture slice 1's first part (D-V2-229), its dogfood test, RW 4.98's two timing tests (D-V2-230), and the broker's busy answer (D-V2-231). The CI of the first five is read whole: 18 of 18 each.",
   "last_session": {
-    "date": "2026-11-15",
-    "where": "owner's laptop (Windows 11 x64, WSL2 Ubuntu 20.04) and GitHub-hosted runners of the test repository",
+    "date": "2026-11-16",
+    "where": "owner's laptop (Windows 11 x64) and GitHub-hosted runners of the test repository",
     "model_as_stated_by_harness": "claude-fable-5-2",
-    "effort_as_set_by_owner": "max until checkpoint 7's records, then xhigh"
+    "effort_as_set_by_owner": "max for checkpoint 8's code and tests, xhigh for its records"
   },
   "source_under_audit": "ac2a16202e790657810b819e882b8d721dc0aef4",
   "branch": "laptop/fable-deep-verification",
@@ -85,11 +85,11 @@
   "next_three_commands": [
     {
       "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the run dispatched at checkpoint 7's commit; read RW 4.98's witness, its twin and an_attempt_counts_only_when_its_own_measurements_show_the_shape by name on the three test jobs"
+      "expect": "the run dispatched at checkpoint 8's commit; read the six new unit tests and a_command_turned_away_at_the_brokers_bound_asks_again_and_is_never_told_to_start_a_broker by name on the three test jobs"
     },
     {
-      "run": "cargo test -p delulu --bin delulu -j 4 -- brokerd::tests",
-      "expect": "green; then RW 4.100: Response::Busy for a connection turned away at the bound, and request_timed asking again"
+      "run": "cargo test -p delulu --test mcp_cli -j 4",
+      "expect": "green; then RW 6.88: tools/list without the definitions no tool's answer refers to"
     },
     {
       "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
@@ -152,26 +152,41 @@
         "base": "bb2cfb1",
         "verified_on_laptop": "the CLI crate's unit-test target, 212 of 212; red at once with the defect back; red after three attempts when the shape never holds; under processors stalled together the old tests failed 14 of 96 and the new 0 of 96; clippy clean",
         "not_verified_on_laptop": "Linux, macOS",
+        "ci": "run 43713270218 at 8bb85e0: completed, 18 of 18 jobs; RW 4.98's witness, its twin and the judge's test ok by name on Windows, Ubuntu and macOS"
+      },
+      {
+        "id": "broker-busy-answer",
+        "rows": [
+          "RW 4.100 (FABLE-039)"
+        ],
+        "decision": "D-V2-231",
+        "base": "8bb85e0",
+        "verified_on_laptop": "the CLI crate's unit-test target, 218 of 218; the nineteen suites the Survey names for brokerd.rs, 230 passed and 1 ignored; five mutants each red; the storm: 128 of 128, 256 of 256 (chain verified, 2,049 records), 364 of 384; clippy clean",
+        "not_verified_on_laptop": "Linux, macOS, a release build",
         "ci": "dispatched after the push"
       }
     ],
     "found_not_fixed": [
       "RW 6.87: --signoff has none of the report's rules",
-      "RW 4.100 (FABLE-039): past 64 simultaneous requests the broker sheds them and the client is told to start a broker that is running",
+      "RW 4.101 (FABLE-043): with the broker saturated (384 runs at once) 20 runs were refused by their own dead-man, DL1403; fail-closed, a ceiling",
+      "RW 6.88 (FABLE-044): delulu mcp's tools/list is 229 kB for twelve tools, 222 kB of it output schemas that each carry all 34 definitions",
       "RW 7.30 (FABLE-042): a_busy_daemon_still_fires_an_unbeaten_dead_man is red 16 of 16 with four copies of the target on one pinned processor; its window is fixed at 1.5 s and the firing waits for the line",
-      "for the owner to weigh: under load a dead-man's firing is late by the wait of the broker's line (a reading of the serve loop, not tested by a change)"
+      "for the owner to weigh: under load a dead-man's firing is late by the wait of the broker's line (a reading of the serve loop, not tested by a change); and who is heard first when the broker is full (RW 4.101)"
     ],
     "numbers_taken": {
       "decisions": [
         "D-V2-227",
         "D-V2-228",
         "D-V2-229",
-        "D-V2-230"
+        "D-V2-230",
+        "D-V2-231"
       ],
       "remaining_work_rows": [
         "6.87",
+        "6.88",
         "4.99",
-        "4.100"
+        "4.100",
+        "4.101"
       ]
     }
   },
@@ -179,7 +194,10 @@
     "pins": {
       "cloudflare/security-audit-skill": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
       "anthropics/oss-scanner": "2084acae60ff5834a56da86b82b585491d0890db",
-      "google/cybernetic-agent-governance-engine": "f0ca9f4d216b62847bea0a20963bfb7ad2b7f184"
+      "google/cybernetic-agent-governance-engine": "f0ca9f4d216b62847bea0a20963bfb7ad2b7f184",
+      "cloudflare/agents": "9b73399c7cee9550c19146b7f76a735a10700ada",
+      "anthropics/claude-cookbooks": "ce8b2629efe8b24048b127b4c79af1e9cbab93d4",
+      "aaif-goose/goose": "0bf8b62407201ce11cac7da2582d25eb0fe620f5"
     },
     "status": "read at these commits; the decision table is the audit's section 8.1",
     "read_as_abstract_pages_only": [
@@ -195,7 +213,7 @@
     "M1_many_runs_one_broker": {
       "where": "the Windows laptop; debug build of 4f2af3f and release build of ac2a162",
       "holds_at": 64,
-      "sheds_past": 64,
+      "sheds_past": "64 are read at once; a connection past that is answered Busy and asked again by its client",
       "wall_ms_at_1_16_64": [
         93,
         1021,
@@ -207,7 +225,8 @@
         "macOS",
         "any device",
         "any network effect"
-      ]
+      ],
+      "after_D-V2-231_debug": "128 of 128; 256 of 256 (chain verified, 2,049 records; 10,518 connections told to ask again; none dropped unanswered); 364 of 384 (20 refused DL1403 by their own dead-man)"
     }
   },
   "architecture": {

@@ -3033,10 +3033,20 @@ pub(crate) fn guard_pattern_for_broker(class: &str, pattern: &str) -> String {
 /// (ESTOP-QUEUE-1): one that ACCEPTED the request and did not answer in time is running — told to start a broker, the
 /// operator of a busy daemon was sent after one that was never missing. Its `broker.log` names each answer that left
 /// late and what it waited for (RW 7.17).
+///
+/// RW 4.100 (D-V2-231): and two more that are not a missing broker. One that **turned the request away unread** every
+/// time it was asked is running and busy, and nothing was done. One that **accepted the connection and closed it
+/// without an answer** was running a moment ago, and what it did with the request is not known — it is not said to
+/// have done nothing. Neither is told to start a broker: 128 runs at once against one broker were (FABLE-039).
 pub(crate) fn broker_unreachable_advice(detail: &str) -> &'static str {
     if broker_accepted_and_was_silent(detail) {
         "it is running but did not answer in time: `broker.log` in its state directory names each late answer and what \
          it waited for"
+    } else if broker_turned_it_away(detail) {
+        "nothing was done, so ask again; `broker.log` in its state directory names each connection it turned away"
+    } else if broker_closed_without_answer(detail) {
+        "whether it acted on the request is not known: `delulu broker status` says whether it is still running, and \
+         `broker.log` in its state directory says why it dropped a connection"
     } else {
         "start it with `delulu broker start`"
     }
@@ -3046,6 +3056,24 @@ pub(crate) fn broker_unreachable_advice(detail: &str) -> &'static str {
 /// ([`crate::brokerd::request_timed`]'s words) — one that is running, not one that is missing.
 pub(crate) fn broker_accepted_and_was_silent(detail: &str) -> bool {
     detail.contains("accepted the request but did not answer within")
+}
+
+/// Whether [`broker_unreachable_detail`] found a broker that turned the request away unread at its bound for the
+/// caller's whole deadline ([`crate::brokerd::request_timed`]'s words; RW 4.100) — running, and busy.
+pub(crate) fn broker_turned_it_away(detail: &str) -> bool {
+    detail.contains("turned this request away unread")
+}
+
+/// Whether [`broker_unreachable_detail`] found a broker that took the connection and closed it with no answer on it
+/// ([`crate::brokerd::request_timed`]'s words; RW 4.100) — there was a broker; the request's outcome is unknown.
+pub(crate) fn broker_closed_without_answer(detail: &str) -> bool {
+    detail.contains("accepted the connection and closed it without an answer")
+}
+
+/// Whether what [`broker_unreachable_detail`] found is a broker that was THERE — late, busy, or gone without an
+/// answer — and so is never described as one that is not running.
+pub(crate) fn broker_was_there(detail: &str) -> bool {
+    broker_accepted_and_was_silent(detail) || broker_turned_it_away(detail) || broker_closed_without_answer(detail)
 }
 
 /// Why the broker could not be reached, in words — never the OS's raw error text. `grants inspect`

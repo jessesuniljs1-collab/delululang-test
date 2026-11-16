@@ -9913,3 +9913,33 @@ Survey and doctor: in the commit below.
   architecture slice 1, then slice 2; (4) RW 6.87 and the plan's next truthful-outcome rows; (5) the three small items
   of the audit's section 8.1. **For the owner to weigh, not for an agent to patch:** under load a dead-man's firing is
   late by the wait of the broker's line (`V2_LOG.md`, this date).
+
+### 2026-11-16 — the laptop: Fable 5.2, checkpoint 8 — RW 4.100 closed: a connection turned away at the broker's bound is told so and its client asks again (D-V2-231); 256 runs at once all served; checkpoint 7's CI read whole, 18 of 18
+- Session: `https://claude.ai/code/session_01Deh6WAghMMJCHyVXNeR7Aj` (the same work, continued; the harness gave it a
+  new link). Model: Claude Fable 5.2 as the harness names it; effort `max` for the code and its tests, `xhigh` for
+  the records, each as the owner set it. No sub-agent wrote code or ran a test.
+- Branch: `laptop/fable-deep-verification` (worktree `D:\nelan\dl-fable-audit`).   Pull request: none.   Merged: no.
+- Base of this entry: `8bb85e0`. Nothing new on `origin/master` (`ac2a162`) at the last fetch.
+- **CI read since the entry above, whole and by name.** Run `43713270218` at `8bb85e0` (checkpoint 7): **18 of 18**;
+  RW 4.98's witness, its twin and `an_attempt_counts_only_when_its_own_measurements_show_the_shape`, each `ok` on
+  Windows, Ubuntu and macOS.
+- **What changed for a user:** past 64 requests at once a command is served instead of failing with *"start it with
+  `delulu broker start`"* while the broker runs. Three failures that are not a missing broker now say what they are.
+- Files and folders: M `crates/delulu/src/broker_ipc.rs`, `broker_transport.rs`, `brokerd.rs`, `cli.rs`;
+  M `crates/delulu/tests/broker_cli.rs`; M `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-231),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.100 closed; 4.101 and 6.88 opened),
+  `docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md` (sections 8.1, 13.2, 13.5, both appendices),
+  `docs/review/fable-deep-verification-state.json`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` (regenerated). Nothing
+  added, deleted or renamed; no workflow, no entrenched file.
+- **Numbers taken on this branch, for whoever merges:** `D-V2-227` to `D-V2-231`; RW `6.87`, `6.88`, `4.99`, `4.100`,
+  `4.101`.
+- Tests on the laptop (Windows, `-j 4`): the CLI crate's unit-test target, 218 of 218; the nineteen suites the Survey
+  names for `brokerd.rs`, 230 passed and 1 ignored; `scripts/clippy.sh -j 4` clean and stamped after the last `.rs`
+  edit. Five mutants, each red in its own tests — `V2_LOG.md`'s entry of this date has the table.
+- Survey and doctor after the last edit: as the commit message states them.
+- **Open / next, in order:** (1) RW 6.88 — `delulu mcp`'s `tools/list` is 229 kB, nearly all of it definitions no
+  tool's answer refers to; (2) the false greens of the audit's slice S2 (`test` on a path that matches nothing,
+  `fix`, `schema validate`); (3) RW 4.101 — measure the saturated broker with a release build and on Linux before
+  choosing a remedy; (4) the rest of RW 7.30; (5) the rest of architecture slice 1, then slice 2; (6) the three
+  small items of the audit's section 8.1. **For the owner to weigh:** who is heard first when the broker is full
+  (RW 4.101's second option).

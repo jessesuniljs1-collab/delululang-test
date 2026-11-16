@@ -583,6 +583,16 @@ pub enum Response {
     ProposalList {
         proposals: Vec<ProposalWire>,
     },
+    /// RW 4.100 (D-V2-231): the daemon was already reading as many connections as it reads at once (`reading`) and
+    /// **did not read this request**. Nothing was decided and nothing was recorded, so the same request may be sent
+    /// again — any request, whatever it would have done. Sent only to a connection turned away before a byte of it
+    /// was read; a request that was read is never answered this way. HTTP/2 gives `REFUSED_STREAM` the same meaning
+    /// (RFC 9113 §8.7): *"Requests that have not been processed have not failed"*, and a server must not say so
+    /// unless it can guarantee it. Additive on `broker/1`: a client older than this variant reads it as a frame it
+    /// does not know and fails closed, as it did when the connection was dropped unanswered.
+    Busy {
+        reading: u32,
+    },
 }
 
 /// A message whose encoding is larger than [`MAX_FRAME`]: [`write_frame`] wrote none of it. Carried inside its
@@ -602,6 +612,17 @@ impl std::error::Error for FrameTooLarge {}
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.
 pub fn write_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
+    send_frame(w, msg)?;
+    w.flush()
+}
+
+/// [`write_frame`] without the flush that ends it: for a sender that goes on to READ its answer on the same
+/// connection — the client's request (RW 4.100). On a Windows pipe a flush returns only once the other end has
+/// read what was written, and a daemon that turns a connection away at its bound reads nothing: the client waited
+/// in its flush, the daemon waited for the client to take its `Busy`, and the answer was lost when the daemon gave
+/// up. A request needs no flush — it is in the pipe once written, and the sender stays to read. A REPLY does: its
+/// writer disconnects next, and a disconnect discards what is unread.
+pub fn send_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
     // One write, the length filled in at the front after encoding — as the sandbox channel's
     // `write_frame` does, and for the same reason: two writes can wake the reader twice per frame.
     let mut buf = vec![0u8; 4];
@@ -611,8 +632,7 @@ pub fn write_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()>
         return Err(io::Error::new(io::ErrorKind::InvalidData, FrameTooLarge { len }));
     }
     buf[..4].copy_from_slice(&(len as u32).to_le_bytes());
-    w.write_all(&buf)?;
-    w.flush()
+    w.write_all(&buf)
 }
 
 /// Read one length-prefixed CBOR frame. An oversize length or a short read is a hard error
@@ -693,6 +713,18 @@ mod tests {
         };
         let mut buf = Vec::new();
         write_frame(&mut buf, &resp).unwrap();
+        let got: Response = read_frame(&mut &buf[..]).unwrap();
+        assert_eq!(got, resp);
+    }
+
+    /// RW 4.100: `Busy` is an additive `broker/1` variant, as the chunk-5 ones were — it round-trips, and it is small
+    /// enough that writing it never waits on the reader (it is written by the one thread that turns connections away).
+    #[test]
+    fn the_busy_answer_roundtrips_and_is_small() {
+        let resp = Response::Busy { reading: 64 };
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &resp).unwrap();
+        assert!(buf.len() < 64, "the busy answer is {} bytes", buf.len());
         let got: Response = read_frame(&mut &buf[..]).unwrap();
         assert_eq!(got, resp);
     }

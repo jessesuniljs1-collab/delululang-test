@@ -24,7 +24,7 @@ use delulu_broker::{
 };
 use delulu_check::Effect;
 
-use crate::broker_ipc::{read_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION};
+use crate::broker_ipc::{read_frame, send_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION};
 use crate::broker_transport::{self, Connection, Listener};
 
 /// `eprintln!` for the daemon: the same line, through [`log_line`], so a standard error nobody reads never stops a
@@ -2167,8 +2167,23 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // delayed every client behind them — the e-stop's revoke among them — by about 5·N s (red: six held a
     // `Status` 30.6 s). Each reader still owes its request within `SERVE_READ_TIMEOUT`; at most
     // `MAX_READERS` are reading or waiting to hand a request over at once, and a connection past that is
-    // dropped at once, so a flood costs threads it cannot grow without bound.
+    // turned away at once, so a flood costs threads it cannot grow without bound.
     const MAX_READERS: usize = 64;
+    // RW 4.100 (D-V2-231): a connection turned away at that bound is told so. Its request was never read, so nothing
+    // was decided or recorded, and `Response::Busy` says exactly that: its sender asks again (`request_timed`). Until
+    // this, such a connection was dropped unanswered, and the run that sent it failed with *"start it with `delulu
+    // broker start`"* while the broker was running (FABLE-039: 101 of 128 runs at once succeeded). One thread tells
+    // them. It writes the answer at once and waits on nobody: each connection told is kept until its sender has taken
+    // the answer — a disconnect discards what is unread on a Windows pipe — or for `SHED_WITHIN`, all of them at once,
+    // looked at every `SHED_TICK`. At most `SHED_LINE` are kept and `SHED_LINE` more wait to be told; past that a
+    // connection is dropped unanswered, as every one was before. So the flood's bound holds — one more thread and
+    // twice `SHED_LINE` connections, whatever arrives — and the thread that accepts neither writes nor logs.
+    const SHED_LINE: usize = 64;
+    const SHED_WITHIN: std::time::Duration = std::time::Duration::from_millis(250);
+    const SHED_TICK: std::time::Duration = std::time::Duration::from_millis(2);
+    // What was turned away is said in `broker.log` once a second at most, with its count: one line each was 3,835
+    // lines in twelve seconds under 256 runs at once.
+    const SHED_SAID_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
     // DEADMAN-BUSY-1 (D-V2-127): each whole request carries the instant it arrived — read on its own thread, which the
     // handler being held on one request does not delay — by the wall clock, for `broker.log`, and by the hearing clock,
     // which every dead-man is judged by: it stands still while the whole daemon was not running (DEADMAN-DEAF-1).
@@ -2189,6 +2204,61 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     let heard_beats = HeardBeats::default();
     #[cfg(test)]
     let seam_dir = state_dir.to_path_buf();
+    // RW 4.100: the one thread that answers the connections turned away at the bound. It ends when the accepting
+    // thread does (the line's only sender is there).
+    let (shed, shed_line) = std::sync::mpsc::sync_channel::<broker_transport::Connection>(SHED_LINE);
+    // The connections dropped unanswered because that line was full, for the same thread to say.
+    let unanswered = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    {
+        let unanswered = unanswered.clone();
+        std::thread::spawn(move || {
+            use std::sync::mpsc::RecvTimeoutError;
+            let busy = Response::Busy { reading: MAX_READERS as u32 };
+            // Told, and not yet seen to have taken it: each with the moment it is left whatever it has taken.
+            let mut told: Vec<(broker_transport::Connection, std::time::Instant)> = Vec::new();
+            // Turned away since the last line about it.
+            let (mut counted, mut said) = (0usize, std::time::Instant::now());
+            loop {
+                let next = if told.is_empty() && counted == 0 {
+                    match shed_line.recv() {
+                        Ok(conn) => Some(conn),
+                        Err(_) => break,
+                    }
+                } else if told.len() >= SHED_LINE {
+                    std::thread::sleep(SHED_TICK);
+                    None
+                } else {
+                    match shed_line.recv_timeout(SHED_TICK) {
+                        Ok(conn) => Some(conn),
+                        Err(RecvTimeoutError::Timeout) => None,
+                        Err(RecvTimeoutError::Disconnected) => break,
+                    }
+                };
+                if let Some(mut conn) = next {
+                    counted += 1;
+                    // Written at once — the answer is smaller than any pipe's or socket's buffer — and not flushed:
+                    // a flush would wait for this one sender, and the others with it.
+                    if conn.set_write_timeout(Some(SHED_TICK)).is_ok() && send_frame(&mut conn, &busy).is_ok() {
+                        told.push((conn, std::time::Instant::now() + SHED_WITHIN));
+                    }
+                }
+                let now = std::time::Instant::now();
+                told.retain(|(conn, until)| !conn.reply_taken() && now < *until);
+                if counted > 0 && said.elapsed() >= SHED_SAID_EVERY {
+                    let dropped = unanswered.swap(0, std::sync::atomic::Ordering::SeqCst);
+                    let and_dropped = match dropped {
+                        0 => String::new(),
+                        n => format!("; {n} more dropped unanswered, with {SHED_LINE} already waiting to be told"),
+                    };
+                    blog!(
+                        "delulu broker: {MAX_READERS} connections already reading: {counted} more turned away unread and \
+                         told to ask again{and_dropped}"
+                    );
+                    (counted, said) = (0, std::time::Instant::now());
+                }
+            }
+        });
+    }
     {
         let stopping = stopping.clone();
         let reading = reading.clone();
@@ -2212,7 +2282,11 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             }
             if reading.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= MAX_READERS {
                 reading.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-                blog!("delulu broker: {MAX_READERS} connections already reading (dropping this one)");
+                // RW 4.100: not a byte of it is read here or anywhere, so `Busy` can promise that. Said by the thread
+                // that tells it, not here.
+                if shed.try_send(conn).is_err() {
+                    unanswered.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                }
                 continue;
             }
             let (whole, revocation, reading, clock) = (whole.clone(), revocation.clone(), reading.clone(), clock.clone());
@@ -2436,10 +2510,11 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
 
 /// ESTOP-QUEUE-1: a broker that accepted a request and did not answer it in time is RUNNING — busy, or stuck — and is said
 /// so, never "not running": an operator told that starts a second broker, or believes there is nothing left to stop.
-/// `absent` is what the command says when no broker answered at all.
+/// `absent` is what the command says when no broker answered at all. RW 4.100: one that turned the request away at
+/// its bound, or took the connection and closed it without an answer, was there too.
 fn not_answered(state_dir: &Path, e: &io::Error, absent: String) -> String {
     let detail = crate::cli::broker_unreachable_detail(e);
-    if !crate::cli::broker_accepted_and_was_silent(&detail) {
+    if !crate::cli::broker_was_there(&detail) {
         return absent;
     }
     format!(
@@ -2527,19 +2602,129 @@ pub fn list_all(state_dir: &Path) -> io::Result<Response> {
 /// disabling the heartbeat dead-man for every device — a safety fail-open. On Windows the connect
 /// already bounded this; the timeout makes both platforms fail closed at the same bound.
 pub fn request_timed(state_dir: &Path, body: ReqBody, read_timeout: std::time::Duration) -> io::Result<Response> {
-    let mut conn = broker_transport::connect(state_dir)?;
-    conn.set_read_timeout(Some(read_timeout))?;
-    write_frame(&mut conn, &Request::new(body))?;
-    // The WHOLE answer within the bound, not each read of it (the red-team pass on FRAME-DRIP-1, F1):
-    // whatever answers on the socket, one byte at a time inside the bound, kept the dead-man's probe
-    // waiting — and the arm moving after an e-stop that said "revoked".
-    read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, read_timeout)).map_err(|e| match e.kind() {
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => io::Error::new(
-            io::ErrorKind::TimedOut,
-            format!("the broker accepted the request but did not answer within {read_timeout:?}"),
-        ),
-        _ => e,
-    })
+    request_counting(state_dir, body, read_timeout).map(|(resp, _)| resp)
+}
+
+/// RW 4.100: how long a client waits before it asks again. The `n`th wait doubles from `BUSY_FIRST` up to
+/// `BUSY_MOST`; half of it is fixed and half drawn at random (`random`), so the requests a full daemon turned away
+/// together do not all come back together and be turned away together again.
+const BUSY_FIRST: std::time::Duration = std::time::Duration::from_millis(16);
+const BUSY_MOST: std::time::Duration = std::time::Duration::from_millis(400);
+
+fn busy_wait(n: u32, random: u64) -> std::time::Duration {
+    let whole = BUSY_FIRST.saturating_mul(1 << n.saturating_sub(1).min(16)).min(BUSY_MOST);
+    let half = whole / 2;
+    half + std::time::Duration::from_nanos(random % (half.as_nanos() as u64 + 1))
+}
+
+/// Whether a request turned away for the `n`th time, `elapsed` into an exchange the caller bounded at `bound`, is
+/// asked again — and after how long. `None` once the wait would end at or past the bound: the caller's bound is on the
+/// whole exchange, every asking-again included, so a device's authority probe still fails closed inside its second.
+fn ask_again_after(n: u32, elapsed: std::time::Duration, bound: std::time::Duration, random: u64) -> Option<std::time::Duration> {
+    let wait = busy_wait(n, random);
+    (elapsed + wait < bound).then_some(wait)
+}
+
+/// How long a client whose request could not be written still listens for what the daemon said before it closed
+/// (RW 4.100): a daemon that turned the connection away wrote its `Busy` before closing, so it is there or it is not.
+/// Also the least an attempt is given for its answer, however little of the caller's bound a slow connect left.
+const BUSY_HEARD_WITHIN: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// [`request_timed`], and how many times the daemon turned the request away unread before answering it.
+///
+/// **RW 4.100 (D-V2-231): a request the daemon did not read is asked again.** The daemon reads at most 64 connections
+/// at once and, past that, answers `Busy` without reading a byte (`serve_inner`). `Busy` therefore promises that
+/// nothing was decided and nothing recorded, and the request is sent again — any request, an `Issue` or a `Revoke`
+/// as well as a `Status` — after a wait that grows and is partly random. Two things count as turned away:
+/// - the daemon answered `Busy`;
+/// - the daemon closed the connection **before the request could be sent**, and left no word. No whole request
+///   reached it, and it acts on nothing less than a whole one.
+///
+/// A connection that closes with no answer **after** the request was sent is NOT asked again: the daemon may have
+/// read it and acted on it, and the error says the outcome is not known. A daemon that turns the request away for
+/// the caller's whole bound is an error that says it is running and that nothing was done.
+fn request_counting(state_dir: &Path, body: ReqBody, read_timeout: std::time::Duration) -> io::Result<(Response, u32)> {
+    use std::hash::{BuildHasher, Hasher};
+    let request = Request::new(body);
+    let began = std::time::Instant::now();
+    let mut turned_away = 0u32;
+    // The bound the daemon named when it last said `Busy`, for the error's words.
+    let mut named: Option<u32> = None;
+    let busy = |turned_away: u32, named: Option<u32>, began: std::time::Instant| {
+        let reading = named.map(|r| format!(" ({r} connections already being read)")).unwrap_or_default();
+        io::Error::new(
+            io::ErrorKind::ResourceBusy,
+            format!(
+                "the broker is running but busy: it turned this request away unread {turned_away} time(s) in {} ms{reading}",
+                began.elapsed().as_millis()
+            ),
+        )
+    };
+    loop {
+        // A wait that overran (a machine that did not run this thread) may have used up the bound: nothing is sent late.
+        if turned_away > 0 && began.elapsed() >= read_timeout {
+            return Err(busy(turned_away, named, began));
+        }
+        let mut conn = broker_transport::connect(state_dir)?;
+        let left = read_timeout.saturating_sub(began.elapsed()).max(BUSY_HEARD_WITHIN);
+        // Sent without a flush: this client stays to read, and a flush would wait for a daemon that turns the
+        // connection away to read what it never reads (`send_frame`).
+        let sent = send_frame(&mut conn, &request);
+        // A request that could not be sent because the daemon had already closed may have been turned away: what
+        // the daemon wrote before closing is read at once or not at all. Any other failure to send is the answer.
+        let within = match &sent {
+            Ok(()) => left,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::BrokenPipe
+                        | io::ErrorKind::ConnectionReset
+                        | io::ErrorKind::ConnectionAborted
+                        | io::ErrorKind::NotConnected
+                        | io::ErrorKind::UnexpectedEof
+                        | io::ErrorKind::WriteZero
+                ) =>
+            {
+                BUSY_HEARD_WITHIN
+            }
+            Err(_) => return Err(sent.unwrap_err()),
+        };
+        conn.set_read_timeout(Some(within))?;
+        // The WHOLE answer within the bound, not each read of it (the red-team pass on FRAME-DRIP-1, F1):
+        // whatever answers on the socket, one byte at a time inside the bound, kept the dead-man's probe
+        // waiting — and the arm moving after an e-stop that said "revoked".
+        let answer: io::Result<Response> = read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, within));
+        drop(conn);
+        match (sent, answer) {
+            (_, Ok(Response::Busy { reading })) => named = Some(reading),
+            (Ok(()), Ok(resp)) => return Ok((resp, turned_away)),
+            (Ok(()), Err(e)) => {
+                return Err(match e.kind() {
+                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        format!("the broker accepted the request but did not answer within {read_timeout:?}"),
+                    ),
+                    // The request was sent, and the connection then closed with no answer on it. Not asked again:
+                    // the daemon may have read the request and acted on it before it went.
+                    io::ErrorKind::UnexpectedEof
+                    | io::ErrorKind::BrokenPipe
+                    | io::ErrorKind::ConnectionReset
+                    | io::ErrorKind::ConnectionAborted => {
+                        io::Error::new(e.kind(), "the broker accepted the connection and closed it without an answer")
+                    }
+                    _ => e,
+                });
+            }
+            // Closed before the request could be sent, and no word left behind: turned away, unread.
+            (Err(_), _) => {}
+        }
+        turned_away += 1;
+        let random = std::collections::hash_map::RandomState::new().build_hasher().finish();
+        match ask_again_after(turned_away, began.elapsed(), read_timeout, random) {
+            Some(wait) => std::thread::sleep(wait),
+            None => return Err(busy(turned_away, named, began)),
+        }
+    }
 }
 
 fn parse_state_dir(rest: &[String]) -> Option<String> {
@@ -6188,5 +6373,218 @@ mod tests {
 
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
+    }
+
+    // ----- RW 4.100 (D-V2-231): a connection turned away at the bound is told so, and its sender asks again -----
+
+    /// One request on one connection, answered or not, never asked again: what every client did before RW 4.100.
+    fn ask_once(state: &Path, body: ReqBody) -> io::Result<Response> {
+        let within = std::time::Duration::from_secs(5);
+        let mut conn = broker_transport::connect(state)?;
+        conn.set_read_timeout(Some(within))?;
+        send_frame(&mut conn, &Request::new(body))?;
+        read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, within))
+    }
+
+    /// Connections that say nothing, opened until the daemon is reading as many as it reads at once — which it says
+    /// itself, by answering one more with `Busy`. Each holds a reader until it is dropped, or for five seconds.
+    /// Returns them and the bound the daemon named.
+    fn hold_the_bound(state: &Path) -> (Vec<broker_transport::Connection>, u32) {
+        let mut held = Vec::new();
+        let began = std::time::Instant::now();
+        while began.elapsed() < std::time::Duration::from_secs(4) {
+            if held.len() >= 64 {
+                // Not yet `Busy`: a reader the daemon has not counted yet, or this asking took the last place itself.
+                if let Ok(Response::Busy { reading }) = ask_once(state, ReqBody::Status) {
+                    return (held, reading);
+                }
+            }
+            match broker_transport::connect(state) {
+                Ok(c) => held.push(c),
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(2)),
+            }
+        }
+        panic!("{} silent connections and the daemon still reads another: the bound was not reached", held.len());
+    }
+
+    /// The tree's nodes and the chain's `issue` records: what an `Issue` that was read leaves behind.
+    fn nodes_and_issues(state: &Path) -> (usize, usize) {
+        let nodes = match request(state, ReqBody::Status) {
+            Ok(Response::Status { nodes, .. }) => nodes,
+            other => panic!("status: {other:?}"),
+        };
+        let issues = delulu_broker::audit::query(audit_dir(state), &delulu_broker::audit::QueryFilter::default())
+            .unwrap()
+            .iter()
+            .filter(|r| r.action == "issue")
+            .count();
+        (nodes, issues)
+    }
+
+    /// **RW 4.100: a connection past the bound is told so, and its request is not read.** Sixty-four connections that
+    /// say nothing hold every reader. One more, carrying an `Issue`, was dropped unanswered until D-V2-231: its sender
+    /// saw a closed connection and was told to start a broker that was running (FABLE-039). Now it is answered `Busy`,
+    /// and `Busy` keeps its promise — no node was issued and the chain holds no record of one.
+    #[test]
+    fn a_connection_past_the_bound_is_told_so_and_its_request_is_not_read() {
+        let state = temp_state("busytold");
+        let handle = start_daemon(&state);
+        let before = nodes_and_issues(&state);
+        let (held, reading) = hold_the_bound(&state);
+        assert_eq!(reading, 64, "the bound the daemon names");
+        let turned_away = ask_once(&state, ReqBody::Issue(spec(&["Write"])));
+        assert!(
+            matches!(turned_away, Ok(Response::Busy { reading: 64 })),
+            "a connection past the bound is answered, and the answer is `Busy`: {turned_away:?}"
+        );
+        drop(held);
+        assert_eq!(nodes_and_issues(&state), before, "a request answered `Busy` was not read: nothing issued or recorded");
+        // The same request from the client that asks again is done, once.
+        let issued = request(&state, ReqBody::Issue(spec(&["Write"])));
+        assert!(matches!(issued, Ok(Response::Issued { .. })), "{issued:?}");
+        assert_eq!(nodes_and_issues(&state), (before.0 + 1, before.1 + 1));
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **A request turned away is asked again, and done once.** Twenty-four clients each ask for a node while every
+    /// reader is held. Each is turned away, waits, and asks again; when the readers are free every one is answered.
+    /// The tree and the chain then hold exactly twenty-four more, each client's node its own, and the chain
+    /// verifies: a request that was turned away and sent again was not done twice, and none was lost. The number of
+    /// turnings-away is the test's own baseline — with none it would pass while checking nothing.
+    #[test]
+    fn a_request_turned_away_is_asked_again_and_done_once() {
+        let state = temp_state("busyonce");
+        let handle = start_daemon(&state);
+        let before = nodes_and_issues(&state);
+        let (held, _) = hold_the_bound(&state);
+        let clients: Vec<_> = (0..24)
+            .map(|_| {
+                let state = state.clone();
+                std::thread::spawn(move || request_counting(&state, ReqBody::Issue(spec(&["Write"])), REQUEST_DEADLINE))
+            })
+            .collect();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        drop(held);
+        let (mut nodes, mut turned_away) = (std::collections::BTreeSet::new(), 0u32);
+        for client in clients {
+            match client.join().unwrap() {
+                Ok((Response::Issued { node }, times)) => {
+                    nodes.insert(node);
+                    turned_away += times;
+                }
+                other => panic!("a client turned away at the bound was not answered in the end: {other:?}"),
+            }
+        }
+        assert!(turned_away >= 1, "no client was turned away: the bound was not held when they asked");
+        assert_eq!(nodes.len(), 24, "each client's node is its own");
+        assert_eq!(
+            nodes_and_issues(&state),
+            (before.0 + 24, before.1 + 24),
+            "24 requests, turned away {turned_away} times between them, issued exactly 24 nodes"
+        );
+        stop_daemon(&state, handle);
+        let verified = delulu_broker::audit::verify(audit_dir(&state));
+        assert!(verified.is_ok(), "the chain after the storm: {verified:?}");
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **A broker that turns a request away for the caller's whole bound is said to be running and busy — and the
+    /// bound holds.** The readers are held for five seconds; the caller allows 700 ms. A client that ignored its bound
+    /// would ask until the readers were free and be answered, so an error here is the bound holding; and it asked
+    /// again first (a wait is at most 400 ms, so giving up means 300 ms had passed). The words never send the
+    /// operator to start a broker that is running, and say that nothing was done.
+    #[test]
+    fn a_broker_busy_for_the_whole_bound_is_said_to_be_running_and_the_bound_holds() {
+        let state = temp_state("busywords");
+        let handle = start_daemon(&state);
+        let (held, _) = hold_the_bound(&state);
+        let began = std::time::Instant::now();
+        let e = request_timed(&state, ReqBody::Status, std::time::Duration::from_millis(700))
+            .expect_err("turned away for its whole bound, the request is an error — not an answer after the bound");
+        let took = began.elapsed();
+        assert!(took >= std::time::Duration::from_millis(300), "it asked again before giving up: {took:?}");
+        assert_eq!(e.kind(), io::ErrorKind::ResourceBusy, "{e}");
+        let detail = crate::cli::broker_unreachable_detail(&e);
+        assert!(
+            detail.contains("running but busy")
+                && detail.contains("turned this request away unread")
+                && detail.contains("64 connections already being read"),
+            "{detail}"
+        );
+        let advice = crate::cli::broker_unreachable_advice(&detail);
+        assert!(advice.contains("nothing was done") && advice.contains("ask again") && !advice.contains("start"), "{advice}");
+        let verb = not_answered(&state, &e, "broker not running (nothing to stop)".to_string());
+        assert!(verb.starts_with("broker did not answer") && !verb.contains("not running"), "{verb}");
+        drop(held);
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **A connection that closes with no answer after the request was sent is not asked again, and is not called a
+    /// missing broker.** Something here takes a connection, reads the request whole, and closes it without a word —
+    /// a daemon that died after reading, for all the client can tell. Asking again could do the request twice, so the
+    /// request is sent once; and the words say the outcome is not known, never *"nothing was done"* and never
+    /// *"start it"*.
+    #[test]
+    fn a_connection_closed_without_an_answer_is_not_asked_again_and_is_not_a_missing_broker() {
+        let state = temp_state("closedwords");
+        let listener = broker_transport::Listener::bind(&state).expect("the stand-in binds");
+        let (heard, hearing) = std::sync::mpsc::channel();
+        let stand_in = std::thread::spawn(move || {
+            // Two connections at most: the client's, and the one this test makes to let the thread end.
+            for _ in 0..2 {
+                let Ok(mut conn) = listener.accept() else { return };
+                let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                let whole: io::Result<Request> = read_frame(&mut conn);
+                let _ = heard.send(whole.is_ok());
+            }
+        });
+        let e = request_timed(&state, ReqBody::Issue(spec(&["Write"])), std::time::Duration::from_secs(3))
+            .expect_err("no answer came");
+        // Let the stand-in's second `accept` return (a connection that says nothing), and count the whole requests it
+        // read. If that connection cannot be made the thread is left waiting rather than joined.
+        if broker_transport::connect(&state).is_ok() {
+            let _ = stand_in.join();
+        }
+        let whole_requests = hearing.try_iter().filter(|whole| *whole).count();
+        assert_eq!(whole_requests, 1, "a request that may have been read is sent once");
+        let detail = crate::cli::broker_unreachable_detail(&e);
+        assert!(crate::cli::broker_closed_without_answer(&detail), "{detail}");
+        assert!(!detail.contains("os error") && !detail.contains("win32") && !detail.contains("failed to fill"), "{detail}");
+        let advice = crate::cli::broker_unreachable_advice(&detail);
+        assert!(
+            advice.contains("not known") && !advice.contains("nothing was done") && !advice.contains("broker start"),
+            "{advice}"
+        );
+        let verb = not_answered(&state, &e, "broker not running (nothing to stop)".to_string());
+        assert!(verb.starts_with("broker did not answer") && !verb.contains("not running"), "{verb}");
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// The waits between askings: they grow, they stay under their most, at least half of each is fixed (so a wait is
+    /// never nothing), and the caller's bound ends the asking — whatever the random half drew.
+    #[test]
+    fn the_wait_before_asking_again_grows_is_bounded_and_ends_at_the_callers_bound() {
+        let ms = std::time::Duration::from_millis;
+        for random in [0, 1, 12_345_678_901, u64::MAX] {
+            let mut last_least = ms(0);
+            for n in 1..=40 {
+                let wait = busy_wait(n, random);
+                let whole = BUSY_FIRST.saturating_mul(1 << (n - 1).min(16)).min(BUSY_MOST);
+                assert!(wait >= whole / 2 && wait <= whole, "the {n}th wait is {wait:?}, outside {:?} to {whole:?}", whole / 2);
+                assert!(whole / 2 >= last_least, "the least a wait can be never shrinks");
+                last_least = whole / 2;
+            }
+            assert_eq!(busy_wait(1, random).max(ms(8)).min(ms(16)), busy_wait(1, random), "the first: 8 to 16 ms");
+            assert!(busy_wait(40, random) >= ms(200) && busy_wait(40, random) <= BUSY_MOST, "the most: 200 to 400 ms");
+            // Inside the bound it is asked again; a wait that would end at or past the bound is not begun.
+            assert!(ask_again_after(1, ms(0), ms(700), random).is_some());
+            assert!(ask_again_after(9, ms(299), ms(700), random).is_some(), "299 ms + at most 400 ms is inside 700 ms");
+            assert!(ask_again_after(9, ms(500), ms(700), random).is_none(), "500 ms + at least 200 ms is not");
+            assert!(ask_again_after(1, ms(700), ms(700), random).is_none());
+        }
+        // The random half is used: two draws differ somewhere.
+        assert_ne!(busy_wait(9, 3), busy_wait(9, 100_000_007));
     }
 }

@@ -1927,28 +1927,27 @@ impl Drop for KillOnDrop {
 /// One connection that says nothing and closes: the daemon answers it with one line on its standard error
 /// (*"… (dropping connection)"*). `false` when the endpoint would not take a client this instant (a Windows pipe with
 /// every instance busy).
-#[cfg(unix)]
 fn knock(state: &Path) -> bool {
-    std::os::unix::net::UnixStream::connect(state.join("broker.sock")).is_ok()
-}
-#[cfg(windows)]
-fn knock(state: &Path) -> bool {
-    let canon = std::fs::canonicalize(state).unwrap_or_else(|_| state.to_path_buf());
-    let mut h: u64 = 0xcbf29ce484222325;
-    for b in canon.to_string_lossy().to_lowercase().bytes() {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    std::fs::OpenOptions::new().read(true).write(true).open(format!(r"\\.\pipe\delulu-broker-{h:016x}")).is_ok()
+    hold(state).is_ok()
 }
 
 /// Why a knock fails, for a failure message.
-#[cfg(unix)]
 fn knock_error(state: &Path) -> Option<String> {
-    std::os::unix::net::UnixStream::connect(state.join("broker.sock")).err().map(|e| e.to_string())
+    hold(state).err()
+}
+
+/// The daemon's endpoint, opened and kept: a connection that says nothing until it is dropped. Or why it could not
+/// be opened.
+#[cfg(unix)]
+type Held = std::os::unix::net::UnixStream;
+#[cfg(unix)]
+fn hold(state: &Path) -> Result<Held, String> {
+    std::os::unix::net::UnixStream::connect(state.join("broker.sock")).map_err(|e| e.to_string())
 }
 #[cfg(windows)]
-fn knock_error(state: &Path) -> Option<String> {
+type Held = std::fs::File;
+#[cfg(windows)]
+fn hold(state: &Path) -> Result<Held, String> {
     let canon = std::fs::canonicalize(state).unwrap_or_else(|_| state.to_path_buf());
     let mut h: u64 = 0xcbf29ce484222325;
     for b in canon.to_string_lossy().to_lowercase().bytes() {
@@ -1960,8 +1959,7 @@ fn knock_error(state: &Path) -> Option<String> {
         .read(true)
         .write(true)
         .open(&pipe)
-        .err()
-        .map(|e| format!("{pipe}: {e} (state `{}`)", canon.display()))
+        .map_err(|e| format!("{pipe}: {e} (state `{}`)", canon.display()))
 }
 
 /// FABLE-038: a foreground daemon whose standard error nobody reads keeps serving, and says what it could not say
@@ -2078,4 +2076,141 @@ fn a_daemon_whose_standard_error_nobody_reads_keeps_serving() {
         &said[said.len().saturating_sub(400)..]
     );
     let _ = std::fs::remove_dir_all(&base);
+}
+
+/// RW 4.100 (FABLE-039, D-V2-231), through the commands a person types: **a command turned away at the broker's bound
+/// asks again, and is never told to start a broker that is running.**
+///
+/// The daemon reads 64 connections at once. Past that it dropped a connection unanswered, and the command that sent
+/// it failed at once — `broker status`: *"broker not running … start it with `delulu broker start`"*; a run: DL1401,
+/// the same advice, after whatever the run had already done. Found with 128 runs at once: 101 succeeded. Here every
+/// reader is held by a connection that says nothing, six `broker status` and two whole runs are started, and the
+/// readers are let go only once the daemon's own log says it turned a command away. Every command must succeed.
+///
+/// The hold lasts at most five seconds (a reader's own bound), so a machine that starts the commands too late has not
+/// held the shape. Such an attempt is not counted and is made again, three in all; an attempt in which a command
+/// FAILED is the verdict at once (D-V2-230's rule).
+#[test]
+fn a_command_turned_away_at_the_brokers_bound_asks_again_and_is_never_told_to_start_a_broker() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("dlb-{}-{}", std::process::id(), t % 1_000_000_000));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        cwd.join("p.delulu"),
+        "module p\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"served\")\n}\n",
+    )
+    .unwrap();
+    // The daemon's own lines go to a file this test reads: its count of what it turned away is the test's clock.
+    let log = base.join("broker.err");
+    let child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&cwd)
+        .env("DELULU_STATE_DIR", &state)
+        .args(["broker", "start", "--foreground"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::fs::File::create(&log).expect("the daemon's log file"))
+        .spawn()
+        .expect("start the daemon in the foreground");
+    let _daemon = KillOnDrop(child);
+    let guard = DaemonGuard { state: state.clone() };
+    let up = (0..150).any(|_| {
+        let ok = delulu_in(&cwd, &state, &["broker", "status"]).status.success();
+        if !ok {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        ok
+    });
+    assert!(up, "the foreground daemon did not come up");
+
+    // How many connections the daemon says it has turned away and told to ask again, so far.
+    let turned_away = || -> usize {
+        let said = std::fs::read_to_string(&log).unwrap_or_default();
+        said.lines()
+            .filter_map(|l| l.split(" more turned away unread").next().filter(|_| l.contains(" more turned away unread")))
+            .filter_map(|before| before.rsplit(' ').next().and_then(|n| n.parse::<usize>().ok()))
+            .sum()
+    };
+    let until = |what: &dyn Fn() -> bool, within: std::time::Duration| {
+        let deadline = std::time::Instant::now() + within;
+        while !what() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        what()
+    };
+
+    let mut not_counted = Vec::new();
+    for attempt in 1..=3 {
+        let before = turned_away();
+        // Every reader held, and four connections more: 68 that say nothing. The daemon turns four of them away.
+        let mut held: Vec<Held> = Vec::new();
+        let filling = std::time::Instant::now();
+        while held.len() < 68 && filling.elapsed() < std::time::Duration::from_secs(3) {
+            match hold(&state) {
+                Ok(h) => held.push(h),
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(2)),
+            }
+        }
+        // The commands, started at once: with every reader held each is turned away, and asks again.
+        let commands: Vec<_> = (0..8)
+            .map(|i| {
+                let (cwd, state) = (cwd.clone(), state.clone());
+                std::thread::spawn(move || {
+                    if i < 6 {
+                        delulu_in(&cwd, &state, &["broker", "status"])
+                    } else {
+                        delulu_in(&cwd, &state, &["run", "p.delulu", "--broker", "daemon", "--grant", "console"])
+                    }
+                })
+            })
+            .collect();
+        // Let go only once the daemon has counted a FIFTH connection turned away — four are the silent ones, so the
+        // fifth is a command — and then a little. A daemon that drops a connection unanswered never counts one; its
+        // commands have failed by then, and the assertions below say so at once.
+        let a_command_was_turned_away =
+            held.len() == 68 && until(&|| turned_away() >= before + 5, std::time::Duration::from_millis(3500));
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        drop(held);
+        for (i, command) in commands.into_iter().enumerate() {
+            let o = command.join().expect("a command's thread");
+            // `broker status` says a failure on standard output, a run on standard error: both are read.
+            let said = format!("{}{}", stdout(&o), stderr(&o));
+            assert!(
+                o.status.success(),
+                "command {i} was turned away at the bound and failed instead of asking again (attempt {attempt}):\n{said}\n\
+                 the daemon's last lines, newest first:\n{}",
+                // Not its owner code: a log of this test is public.
+                std::fs::read_to_string(&log)
+                    .unwrap_or_default()
+                    .lines()
+                    .rev()
+                    .filter(|l| !l.contains("owner code"))
+                    .take(12)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+            assert!(!said.contains("broker start"), "command {i} was told to start a broker: {said}");
+            if i >= 6 {
+                assert_eq!(stdout(&o), "served\n", "run {i}: {}", stderr(&o));
+            }
+        }
+        if a_command_was_turned_away {
+            // The shape held and every command succeeded. The chain the commands wrote together is whole.
+            let o = delulu_in(&cwd, &state, &["audit", "verify"]);
+            assert!(o.status.success(), "audit verify after the commands: {}{}", stdout(&o), stderr(&o));
+            let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "stop"]);
+            assert!(o.status.success(), "broker stop: {}", stderr(&o));
+            std::mem::forget(guard);
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        }
+        not_counted.push(format!(
+            "attempt {attempt}: no command was turned away while the readers were held (the daemon counted {} then, {} now)",
+            before,
+            turned_away()
+        ));
+    }
+    panic!("inconclusive, not red: in 3 attempts this machine never held the shape — {}", not_counted.join("; "));
 }

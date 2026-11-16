@@ -6934,3 +6934,48 @@ before. It does not repair the other tests of RW 7.30, and it does not explain R
 witness red on its first attempt with the defect back; three uncounted attempts failing the test; and the stall
 reproduced on the laptop — the old tests inconclusive 14 times in 96, the new ones 0 in 96 with 19 attempts measured
 again, no false red in either.
+
+## D-V2-231 — RW 4.100 (FABLE-039): a connection the broker turns away at its bound is told so, unread, and its client asks again; a broker that answered at all is never called missing — TAKEN (head chef, 2026-11-16, under the owner's delegation)
+
+**Context.** The daemon reads at most 64 connections at once (`MAX_READERS`), so a flood cannot grow threads without
+bound. Past that it dropped a connection unanswered. The client read the dropped connection as a broker that is not
+there: `broker status` printed *"broker not running … start it with `delulu broker start`"*, and a run failed with
+DL1401 and the same advice, after whatever it had already done. Measured on the Windows laptop (debug build, runs
+started together, five file writes each): 64 of 64, then **101 of 128** and **129 of 256**. The owner's users are many
+agents and machines at the same time; a broker that tells the 65th it is not running is wrong in the words and wrong
+in the outcome.
+
+**Decision.**
+1. **The bound stays.** Nothing here reads more than 64 connections at once or grows a thread per connection.
+2. **A connection past the bound gets one frame, `Response::Busy { reading }`, and is closed.** Additive on
+   `broker/1`. The daemon writes it **without reading a byte of the request** — one thread (the shedder) does it for
+   every such connection, each write bounded at 2 ms, a connection kept at most 250 ms so that its client can take the
+   frame (on a Windows pipe a disconnect discards what is unread). At most 64 connections wait to be told; past that
+   one is dropped unanswered and **counted**, and the daemon's log says both numbers at most once a second.
+3. **`Busy` is a promise: nothing was decided and nothing recorded.** So a client asks again whatever the request —
+   an `Issue` or a `Revoke` as well as a `Status`. The precedent is RFC 9113 §8.7: *"Requests that have not been
+   processed have not failed; clients MAY automatically retry them, even those with non-idempotent methods … A server
+   MUST NOT indicate that a stream has not been processed unless it can guarantee that fact."* The daemon can
+   guarantee it because the shedder holds no reader.
+4. **The client asks again inside the caller's own bound, never past it.** The wait doubles from 16 ms to 400 ms,
+   half fixed and half random, so requests turned away together do not return together. A device's authority probe
+   bounded at one second still fails closed inside its second.
+5. **Two things count as turned away:** a `Busy` answer; and a connection the daemon closed **before the request
+   could be sent**, with no word left. A connection that closes with no answer **after** the request was sent is NOT
+   asked again — the daemon may have read it and acted — and the error says the outcome is not known.
+6. **The words.** Turned away for the whole bound: *"the broker is running but busy: it turned this request away
+   unread N time(s) in M ms (64 connections already being read) … nothing was done, so ask again"*. Closed after the
+   request was sent: *"the broker accepted the connection and closed it without an answer … whether it acted on the
+   request is not known"*. Neither says *"start it"*; only a broker that could not be connected to at all is called
+   not running.
+7. **The client sends without a flush.** On a Windows pipe a flush waits for the other end to read; a daemon that
+   turns the connection away never reads, and the flush held the client for the daemon's whole 250 ms.
+
+**What this is not.** Not a queue: nothing waits inside the daemon beyond the 64 it reads and the 64 it is telling.
+Not a retry of anything the daemon may have read. Not a change to what any request means, to the Guard, or to a
+dead-man: a run whose own dead-man fires while the broker is saturated is still refused with DL1403 (RW 4.101).
+
+**Evidence.** `V2_LOG.md`'s entry of 2026-11-16 (checkpoint 8): five unit tests and one test through the commands a
+person types, each seen red under its own defect (five mutants); the same storm after the change — 128 of 128,
+256 of 256 with a chain of 2,049 records verified, 10,518 connections told to ask again and none dropped unanswered;
+and 364 of 384, the 20 refusals each a run's own 10 s dead-man (DL1403), fail-closed.

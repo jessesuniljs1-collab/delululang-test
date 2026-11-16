@@ -11,6 +11,25 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a busy broker says so, 2026-11-16
+
+- **Fixed (FABLE-039, RW 4.100, D-V2-231): past 64 requests at once, a command is served instead of being told to
+  start a broker that is running.** The daemon reads 64 connections at once. It used to drop the next one unanswered;
+  `delulu broker status` then said *"broker not running … start it with `delulu broker start`"* and a run under
+  `--broker daemon` failed with DL1401 and the same advice, after whatever it had already done — 101 of 128 runs
+  started together succeeded. The daemon now answers such a connection *busy* without reading its request, so
+  nothing was decided and nothing recorded, and the command asks again by itself, after a short and partly random
+  wait, inside the time it would have waited anyway. 128 of 128 and 256 of 256 now succeed.
+- **Changed: three failures that are not a missing broker say what they are.** A broker busy for a command's whole
+  wait: *"the broker is running but busy … nothing was done, so ask again"*. A broker that took the connection and
+  closed it with no answer: *"whether it acted on the request is not known"*. Only a broker that could not be
+  connected to at all is called not running.
+- **Wire: `Response::Busy`, additive on `broker/1`.** An older client that meets it reads an answer it does not know
+  and fails closed, as it did when the connection was dropped. The daemon's log counts what it turned away, at most
+  one line a second.
+- **Known limit (RW 4.101):** with the broker saturated — 384 runs started together on one laptop — 20 runs were
+  refused by their own dead-man (DL1403). Fail-closed and recorded, but a ceiling.
+
 ## Unreleased — the repository map knows the commands, 2026-11-15
 
 - **Added (D-V2-229): `delulu-survey` maps every `delulu` command.** `query verb:run` names the module that handles

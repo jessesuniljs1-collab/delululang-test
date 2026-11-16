@@ -13238,3 +13238,68 @@ attenuate, checked at the tool, evaluated on two public prompt-injection benchma
 them, even those with non-idempotent methods … A server MUST NOT indicate that a stream has not been processed unless
 it can guarantee that fact"*; and gRPC's retry guide on transparent retry, *"only if gRPC is certain the RPCs have
 not been processed by a server"*.
+
+## 2026-11-16 — the laptop (Fable 5.2): RW 4.100 closed — a connection turned away at the broker's bound is told so and its client asks again (D-V2-231); 256 runs at once all served; checkpoint 7's CI read whole, 18 of 18 (checkpoint 8)
+
+**Model and effort.** Claude Fable 5.2 as the harness names it; the code and its tests at `max`, the records at
+`xhigh`, each as the owner set it. No sub-agent wrote code or ran a test.
+
+**CI read first.** Run `43713270218` at `8bb85e0` (checkpoint 7, `jobs=everything`): **18 of 18 success**. By name on
+Windows, Ubuntu and macOS: `a_beat_late_in_its_period_handed_over_at_once_keeps_its_dead_man_past_the_first_deadline`,
+`a_beat_sent_in_time_keeps_its_dead_man_though_a_held_request_delays_its_answer` and
+`an_attempt_counts_only_when_its_own_measurements_show_the_shape`, each `ok`.
+
+**What was wrong (FABLE-039).** Past 64 connections being read, the daemon dropped the next one unanswered. Its
+client took that for a missing broker: `broker status` said *"broker not running … start it with `delulu broker
+start`"*, a run failed with DL1401 and the same advice. Witness before the change, Windows debug build, runs started
+together, five file writes each: 64 of 64, **101 of 128**, **129 of 256**.
+
+**What changed** (decision D-V2-231; five files).
+- `broker_ipc.rs`: `Response::Busy { reading }`, additive on `broker/1`; `send_frame` writes a frame without a flush.
+- `brokerd.rs`, the daemon: the accept thread hands a connection past the bound to one shedder thread, which writes
+  `Busy` without reading a byte and keeps the connection until its client has taken the frame or 250 ms have passed.
+  At most 64 wait to be told; one past that is dropped and counted. One log line a second at most, with both counts.
+- `brokerd.rs`, the client (`request_counting`): a `Busy` answer, or a connection closed before the request could be
+  sent, is asked again after a wait that doubles from 16 ms to 400 ms and is half random — inside the caller's own
+  bound, never past it. A connection closed after the request was sent is not asked again.
+- `broker_transport.rs`: `Connection::reply_taken()` (Windows: the pipe's outbound buffer is empty; Unix: true —
+  a socket keeps what was written for its peer after a close).
+- `cli.rs`: two more outcomes that are not a missing broker, each with its own advice (`broker_was_there`).
+
+**Tests, each seen red under its own defect.** Six new in `brokerd::tests` and `broker_ipc`, one in
+`tests/broker_cli.rs` that holds every reader with silent connections, starts six `broker status` and two whole runs,
+and lets go only once the daemon's own log counts a command turned away.
+
+| Defect put back | Red |
+|---|---|
+| the daemon drops a connection at the bound unanswered | three unit tests; the CLI test: *"command 0 was turned away at the bound and failed instead of asking again"* |
+| the client never asks again | three unit tests |
+| the client asks again after a connection that closed with the request already sent | one |
+| a busy broker worded as a missing one | one |
+| the client flushes what it sends (Windows) | three — the flush waited for a daemon that never reads |
+
+**The storm again, after the change** (`tools/multiagent.py`, Windows debug build, runs started together):
+
+| Runs at once | Before | After |
+|---:|---|---|
+| 64 | 64 of 64 | 64 of 64 |
+| 128 | 101 of 128 | **128 of 128** |
+| 256 | 129 of 256 | **256 of 256**; the chain verifies (2,049 records); 10,518 connections told to ask again; none dropped unanswered |
+| 384 | not run | 364 of 384; the chain verifies (3,073 records) |
+
+The 20 at 384 are not this defect: each is DL1403, the run's own lease *"revoked by audit seq N"* — its 10 s dead-man
+fired while the broker was saturated (*"64 request(s) were handed over and waiting, and 64 connection(s) were being
+read"*). Fail-closed and recorded, and a ceiling: RW 4.101. 512 at once could not be started on this laptop
+(the operating system refused the processes).
+
+**Verified on the laptop** (Windows, `-j 4`): the CLI crate's unit-test target, 218 of 218; the nineteen suites the
+Survey names for `brokerd.rs`, 230 of 230 with one ignored (`broker_cli` 22 of 22); `scripts/clippy.sh -j 4` clean and
+stamped after the last `.rs` edit. NOT run here: Linux, macOS — CI.
+
+**Research read this checkpoint** (each at a pinned commit; rows in the audit's §8.1): Cloudflare's Code Mode
+(`cloudflare/agents` `9b73399c`, the index and runtime pages of `docs/codemode`), Anthropic's programmatic tool calling
+(`anthropics/claude-cookbooks` `ce8b2629`, the notebook), and goose's code-execution and permission modules
+(`aaif-goose/goose` `0bf8b624`, source). Three independent implementations agree on one shape: the model writes a
+program, the program can reach only the tools it was handed, and a tool's schema is fetched when asked for instead
+of sent up front. Measured here against that: `delulu mcp`'s `tools/list` is 229,161 bytes for twelve tools, of
+which 222 kB is the tools' output schemas: the same 17 kB of definitions in each of the twelve (RW 6.88).

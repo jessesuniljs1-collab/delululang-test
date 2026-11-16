@@ -326,6 +326,13 @@ mod imp {
             Ok(())
         }
 
+        /// Whether the other end has taken everything this end wrote, so that closing loses nothing (RW 4.100):
+        /// a disconnect discards what is unread, and the daemon's thread that turns connections away asks this of
+        /// each one it has told, instead of waiting on them one at a time. A pipe that cannot be asked is done with.
+        pub fn reply_taken(&self) -> bool {
+            self.outbound().map(|(_, drained)| drained).unwrap_or(true)
+        }
+
         /// How much the outbound buffer can take now, and whether it is empty — the reader has taken
         /// everything written (the pipe's own accounting, `FilePipeLocalInformation`).
         fn outbound(&self) -> io::Result<(u32, bool)> {
@@ -594,6 +601,12 @@ mod imp {
         /// (`channel::Within`), because a peer that reads a little at a time lets each write progress.
         pub fn set_write_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
             self.inner.set_write_timeout(dur)
+        }
+
+        /// Whether closing now loses nothing of what this end wrote (RW 4.100; see the Windows transport). On a
+        /// Unix socket it never does: what was written is the reader's to read after the writer has closed.
+        pub fn reply_taken(&self) -> bool {
+            true
         }
     }
 
