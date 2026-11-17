@@ -13592,3 +13592,20 @@ in the owner's evidence folder, `S5-harness/update/`):
 - **Cost:** 10,000 checked `read_text` calls, 4.5 s on either engine, Python 3.13 0.64 s — RW 3.34.
 
 D-V2-238's first amendment puts `run`'s default preflight and RW 2.42 into M3, and RW 3.34 into M2.
+
+## 2026-11-18 — the laptop (Opus 5.5): a reviewer's points on the update scenario, run
+
+The owner passed on a second reviewer's reading of the update scenario and asked for an opinion: *"Think, Check, Test
+and Say"*. Run with the portable release build at `b6814b7`:
+- `authority --within` the old grants: v1 *within* (exit 0), v2 *exceeds* at line 9 (exit 1); the same from a grants
+  file (`--within-file`).
+- v2's fault is at `root.fs_write("./out")` (column 11), which returns a capability (`prim.rs`, `check.rs`): a
+  missing grant is DL0703 there, before the `Result` the program matches.
+- `dirpick` (the folder chosen at run time) — *inconclusive*; `--preflight` starts it; refused after step 1, DL0703.
+  `namepick` (a file name computed to escape `./out`) — *within*; `--preflight` starts it; refused after step 1, DL0904;
+  its fallback and last step never ran.
+- 10,000 operations: a plain loop 12 ms, clock reads 13 ms, shallow file reads 4.3 s, reads six folders deep 5.5 s;
+  Python 0.65 s either way.
+
+All four of the reviewer's points stand. D-V2-238's second amendment corrects the first and puts the deployment gate
+first in M3; RW 2.42 and 3.34 are extended.

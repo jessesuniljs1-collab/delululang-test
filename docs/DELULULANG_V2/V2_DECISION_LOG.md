@@ -7435,3 +7435,21 @@ never happen. `--preflight` refuses before anything runs, and `authority --withi
 with the line, so both catch it before a job starts. Two items join the roadmap: in **M3**, `run` preflights by default
 and RW 2.42 is decided; in **M2**, a checked file operation made cheap — 10,000 checked reads took 4.5 s against
 Python's 0.64 s (RW 3.34).
+
+**D-V2-238, second amendment (head chef — Claude Opus 5.5 — 2026-11-18): a reviewer's corrections, checked and
+adopted.** The owner passed on a second reviewer's reading of the first amendment. Each point was run before it was
+accepted (scenarios in the owner's evidence folder, `S5-harness/update/`):
+- **Preflight by default does not end mid-job refusals.** A folder chosen at run time: `--within` answers
+  *inconclusive*, `--preflight` lets the job start, and the write is refused after step 1 (DL0703). A granted folder
+  with a file name computed to escape it: `--within` answers *within* — rightly, as authority: the program can never
+  write outside `./out` — `--preflight` lets it start, and the write is refused (DL0904) after step 1. The head chef's
+  answer to the owner said a missing grant would mean "never stopped halfway"; that was wrong.
+- **A fallback needs acquisition as well as use.** `root.fs_write(p)` returns a capability; a missing grant is a DL0703
+  fault at that call, before the `Result` a program matches on. RW 2.42 named only a refusal in use (DL0904). The first
+  amendment said the program's `Err` arm never ran *because of RW 2.42*; it never ran because acquisition faulted.
+- **The deployment gate is the first line of defence** (adopted into M3): check a candidate `--within-file` the
+  production grants, run it against staging under those grants, keep the last passing version live. The check exists
+  today (v1 *within*, v2 *exceeds*, from a grants file); `delulu test` takes only an effect ceiling, not folders and
+  hosts; keeping a version live is the deployment system's.
+- **The 7 times is file-specific**: 10,000 clock reads cost 13 ms; a read about 430 µs against Python's 65 µs (RW 3.34,
+  narrowed; to profile before a fix is chosen).
