@@ -7398,3 +7398,30 @@ unread. A ratio that close to its bound is a red waiting for a busy runner.
 `jobs=everything`: **18 of 18**; `verify_is_comfortably_fast_for_per_load_use`, `a_tree_compared_by_bytes_agrees_with_its_fingerprint`
 and the repository sweeps `ok` by name on macOS, Ubuntu, Windows and ARM64. A passing test's figure is not printed, so
 the macOS margin was read on its own (`witness.yml`, `macos-latest`, no busy loops): ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`). `master` fast-forwarded to `b7f5706`.
+
+## D-V2-238 — One roadmap to a public preview: M1 the everyday language, M2 fast by default, M3 truthful outcomes, M4 one file to download, M5 agents first, M6 the preview; nothing else before it — TAKEN (head chef, 2026-11-18, under the owner's delegation)
+
+**Why.** The owner, 2026-11-17: *"Who will even use delululang if it is not better than other programming languages
+… Why everything is like half done. Even the basics was not being built until I told to finish the basics first. Even
+now a real software engineering level programs cannot be programmed using delululang"*; 2026-11-18: *"When will
+delululang be ready to be released and able to be downloaded and used by AI and developers and companies … Why
+Currently there are no concrete plans for what all to be done in order"*. Measured 2026-11-17 (V2_LOG of that date):
+32 of 34 day-one constructs and none of 18 next-step constructs run; 37% of 1,114 commits changed no Rust; 136 commits
+on security rows against 39 on language rows; the basics began at his word on 2026-11-06 and stopped on 2026-11-13,
+when the next commission arrived. There was not one plan but six orders — the guide's §5, Part II's queue,
+`AI_ONBOARDING.md`'s work order, the four reviews' fix order, the release checklist and the gap list — and each new
+commission reordered them.
+
+**Decision.** The roadmap at the top of the guide's §5 is the only order of work until a public preview: M1 to M6,
+each finished before the next begins, each with a check a machine can run, with sizes from the measured pace of the
+November basics. Nothing outside it is started before the preview. A later commission that means to change the order
+says so and records a decision; otherwise it continues the roadmap.
+
+**Rejected.** Keeping Q1 to Q10 in their order (Q3 before Q4): it serves an agent's loop but leaves the language unable
+to write an ordinary program — the owner's measure, and his word of 2026-11-06. Interfaces first: the largest design
+item (a typeclass RFC); methods, tuples and the rest are smaller and unblock more programs sooner. A native backend
+now: the WASM engine already compiles to machine code (Wasmtime's Cranelift) and measured faster than Python on three
+of four programs; its gap to native Rust, 1.5 to 5 times on compute, earns a tier only once M2 shows WASM is the
+bottleneck, and a native tier is the attack surface the Constitution (§5.11) puts behind a human's grant.
+
+**Not decided here.** The preview's tag and the final public repository stay the owner's word (`AGENTS.md`).

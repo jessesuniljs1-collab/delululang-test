@@ -30,7 +30,7 @@ fully supported. Version `1.0.0` is tagged in the test repository; **nothing has
 
 | Area | Works, and was tested | Incomplete | Only written down |
 |---|---|---|---|
-| **Language and checker** | records, generics, recursion, `Result`/`Option` by `match`, lists and maps, ranges, compound assignment, math, f-strings, bitwise operators, effect rows, reference capabilities; a 352-line JSON program written from scratch passed 17 of 18 oracle cases identically on three execution modes and five machines (audit §5). **The everyday-program probe, rebuilt and re-run 2026-11-17** (55 small programs, one construct each, both engines): 32 of 34 day-one constructs run, and **none of the 21 a Java or Python programmer reaches for next** — methods on one's own types, `impl`, interfaces, tuples, sets, `sort_by`, comprehensions, `Option`/`Result` methods, arguments, environment, exit code, sleep, JSON, character codes, try/catch (deliberate), a record written through a list, a line continued by an operator. A 77-line order report (CSV in, totals, sorted, report out, two tests) runs on both engines, byte-identical to a 40-line Python version, after three repair rounds (RW 2.55) | `Option`/`Result` have no methods (RW 2.50 — half built on a branch, §5 Q8); no methods on your own types (2.33); no tuples or sets (2.39); a scope refusal cannot be handled by the program (2.42) | resumable effect handlers, `async` (reserved words, rejected or deferred) |
+| **Language and checker** | records, generics, recursion, `Result`/`Option` by `match`, lists and maps, ranges, compound assignment, math, f-strings, bitwise operators, effect rows, reference capabilities; a 352-line JSON program written from scratch passed 17 of 18 oracle cases identically on three execution modes and five machines (audit §5). **The everyday-program probe, rebuilt and re-run 2026-11-17** (53 small programs, one construct each, both engines; first reported as 55 and 21, an addition error corrected 2026-11-18): 32 of 34 day-one constructs run, and **none of the 18 a Java or Python programmer reaches for next** — methods on one's own types, `impl`, interfaces, tuples, sets, `sort_by`, comprehensions, `Option`/`Result` methods, arguments, environment, exit code, sleep, JSON, character codes, try/catch (deliberate), a record written through a list, a line continued by an operator. A 77-line order report (CSV in, totals, sorted, report out, two tests) runs on both engines, byte-identical to a 40-line Python version, after three repair rounds (RW 2.55) | `Option`/`Result` have no methods (RW 2.50 — half built on a branch, §5 Q8); no methods on your own types (2.33); no tuples or sets (2.39); a scope refusal cannot be handled by the program (2.42) | resumable effect handlers, `async` (reserved words, rejected or deferred) |
 | **Input and data** | reading and writing granted files; scoped HTTPS with method and path grants; standard input on the interpreter | **no command-line arguments, no environment, no exit code, no sleep (2.40); no JSON library (2.41); no character-from-number (2.52)** | — |
 | **Two engines** | the interpreter and a WebAssembly engine give the same answers on the shared subset (differential tests in CI); a `.dwx` artifact runs. **Measured 2026-11-17** (Windows laptop, the portable release build, four programs, every answer equal to Python's): the WASM engine — compiled to machine code by Wasmtime's Cranelift at load — took 0.06 to 0.33 times Python 3.13's time on recursion, a loop and list work, and 1.6 times on string-and-map work; the interpreter, which runs by default, 2.1 to 6.1 times. Start-up: `run` hello 9.5 ms (Python 25, Node 39, Java 62, Rust 5.6); `--sandbox` 66 ms | WASM refuses some constructs the documents teach, at compile time, in words (3.25, 3.4); no early "this target cannot run this" verdict (6.61) | a native backend, tiered execution, an optimizer |
 | **Authority (static)** | `delulu authority` reports what a program can do; `--within` answers within / exceeds / inconclusive; `--preflight` refuses before any effect | a computed scope is *inconclusive*, by design (6.64) | — |
@@ -184,6 +184,29 @@ every query (0.7 to 0.8 s a query in a release build, 2026-11-17; about 3 s thro
 
 ## 5. The queue: what to build, in order
 
+**The roadmap to a public preview — the only order of work (D-V2-238, 2026-11-18).** Six milestones, each finished
+before the next begins, each with a test a machine can check. **Nothing outside them is started before the preview:**
+no new subsystem, audit, research pass, proof, sandbox layer, federation or device work. The Q items further down
+stay as the detailed briefs; this table decides their order.
+
+| M | Milestone | Items, in order | Done when | Sessions |
+|---|---|---|---|---|
+| **M1** | **The everyday language** | 0. commit the everyday probe (53 programs, the owner's evidence folder `S5-harness/probe.py`) under `measurements/everyday/`, its `main`-returns-`Err` case expecting exit 1 — the scoreboard for everything after · 1. `Option`/`Result` methods (RW 2.50: finish `claude/relaxed-brown-2l78i1`; Q8) · 2. an empty list or map filled in a loop, and returning a list a function built (RW 2.55, 2.51) · 3. methods on a program's own types, `p.f()` calling `f(p)` (RW 2.33, first half) · 4. tuples, with their patterns (RW 2.39) · 5. `Set`, `sort_by` carrying its callback's row, comprehensions as `map`/`filter` (RW 2.39) · 6. `root.args()`, the environment as a granted capability, `main`'s `Result` as the exit code, `sleep` (RW 2.40; Q4's first half) · 7. `json.parse` and `json.write`, a character from its code, an `Int` in another base (RW 2.41, 2.52; Q4's second half) · 8. a record written through a list, a line continued by an operator, the `let mut` and missing-method messages (RW 2.45, 2.49, 2.53, 2.54) · 9. interfaces — the typeclass design and its RFC, then the build (RW 2.33's second half, 2.9) | every probe program runs on both engines but `try`/`catch` and `let mut`, which stay refused by design with a message naming the DeluluLang form; the order report (`S5-harness/orders.delulu`) is at most 50 lines; three new programs run on both engines — a command-line tool that reads its arguments, a job that reads and writes JSON, a design that uses an interface | 20–30 |
+| **M2** | **Fast by default** | plain `delulu run` uses the WASM engine for whatever it compiles and the interpreter for the rest, saying so once on standard error, never silently; WASM learns a named function passed as a value, and `readline` (RW 3.25); a cache of compiled modules | the probe and the four benchmarks (`S5-harness/bench.py`) run on WASM with no flag; plain `delulu run` is faster than Python 3.13 on three of the four | 4–6 |
+| **M3** | **Truthful outcomes** | a panic gets its own exit code, not 2; a closed output pipe is a clean stop; a killed guest or daemon leaves an outcome (Q3; RW 6.58, 6.59, 6.84, 6.68; FABLE-013) | each failure verified on 2026-11-17 has a test that was red first and is green | 2–3 |
+| **M4** | **One file to download** | the portable build (no Python) is the default and Python an opt-in build; `--version` names its commit and target and `doctor` names an older `delulu` on `PATH` (Q7); `.solulu` in packages (Q5); archives for Windows, Linux and macOS on x86-64 and ARM64 with checksums, SBOM and provenance — `launch/2.0.0`'s preparation redone on `master`; an install script; optional: `delulu build --exe`, the runtime and one `.dwx` in a single executable, still held to `--grant` | on a clean machine or OS account: download, `delulu new`, `run`, upgrade — green, with an old `delulu` first on `PATH` as the control | 4–6 |
+| **M5** | **Agents first** | MCP at the current protocol, each tool's schema sent when asked (Q6); the Skill rewritten for M1; the AI trial (`measurements/ai-usability/`) re-run, then its tasks against Python in a sandbox | the Skill alone completes at least 80% of the trial's tasks and compiles first try in at least half; the head-to-head recorded whatever it shows | 3–4 |
+| **M6** | **Public preview** | an independent reading of D-V2-227 to D-V2-237 (the owner, a person he names, or another AI system); the two-account steps repeated with `--holder-key`; RW 6.71; a getting-started page, a tutorial and the reference; the final public repository and a `v2.0.0-preview` tag — **the owner's word** | the owner says yes | 2–3, and the reviewer's time |
+
+**Sizes** come from the measured pace of the November basics: six rows in six days, about one per working session
+(RW 2.34 to 2.38 with 2.46, 2026-11-06 to 2026-11-12). Interfaces and JSON are larger and may take several sessions
+each. Altogether 35 to 52 sessions: at one a day about five to eight weeks, at two a day three to four. An estimate
+from that pace, not a promise; the newest `CLOUD_SYNC_LOG.md` entry says where the work stands.
+
+**After the preview**, each only when measured need shows it: a native (JIT or AOT) tier, if a benchmark shows WASM is
+the bottleneck; the package registry; an HTTP server, dates, regular expressions; the generated architecture views
+(Q9); the saturated broker (Q10); splitting `cli.rs`; whether strict mode requires `--holder-key`.
+
 One change per item, on a branch, pushed to `origin`, full CI read before it lands (§6). For every item: **see the
 defect fail first; fix it as small as it can be; put the defect back and watch your test go red; run the Survey
 before and after.** Sizes are scope, not time.
@@ -294,7 +317,7 @@ from an open debt into a defined process. Keep Apache-2.0 with `NOTICE` and `TRA
    `DELULU_STATE_DIR` to a scratch path so nothing touches the owner's real state.
 5. **Change something:** a branch off `origin/master`; witness, fix, falsify (§5's opening); §6's second block.
 6. **Record it**, in the same commit: `V2_LOG.md` (what, why, evidence); `CHANGELOG.md` if a user would notice; a
-   `D-V2-nn` in `V2_DECISION_LOG.md` for a decision (the next free number is **D-V2-238**); the `REMAINING_WORK.md`
+   `D-V2-nn` in `V2_DECISION_LOG.md` for a decision (the next free number is **D-V2-239**); the `REMAINING_WORK.md`
    row; a `CLOUD_SYNC_LOG.md` entry from its template; and the rows of this guide you made untrue.
 7. **Hand off through git alone.** Everything pushed; the sync-log entry's *Open / next* says exactly what you would
    do next.
@@ -346,13 +369,13 @@ newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after t
    `b7f5706` streams the comparison (run `44068658511`, 18 of 18; on `master`). Still open of §5 Q1:
    RW 6.71, and RW 4.94's terminal-safe rendering of string data. Of §5 Q2: repeat the audit's two-account steps
    (T5) with `--holder-key`, and the owner's choice whether strict mode requires it (RW 4.102).
-3. **§5 Q3**, then **Q4** — the outcome contract before the features that will rely on it.
-4. Then Q5 to Q10 in order, unless the owner reorders them.
+3. **The roadmap at the top of §5, from M1's item 0** — commit the everyday probe first, so every later step is
+   scored by it — then M1's items in order (D-V2-238).
+4. Nothing outside the roadmap before the preview. A commission that means to change the order says so.
 
-**If you have one hour only:** do step 1, then write §5 Q3's first red-first witness — an internal panic must not
-exit 2, the code that means "nothing was examined" (the panic hook, `crates/delulu/src/main.rs`) — and commit it marked
-`#[ignore = "Q3: not built"]` with a sync-log entry. A named failing witness is worth more to the next engineer than
-a half-written fix.
+**If you have one hour only:** do step 1, then M1's item 0 — commit the everyday probe under `measurements/everyday/`
+with today's result (32 of 34 day-one constructs, 0 of 18 next-step ones) and a sync-log entry. A scoreboard every
+later session reads is worth more to the next engineer than a half-built feature.
 
 ---
 

@@ -32,13 +32,13 @@ files, so it still opens when the tree does not build.
 | Rust lines | 213834 |
 | Rust files outside `src/` (test/bench targets) | 180 |
 | Markdown documents | 332 |
-| Markdown lines | 118266 |
+| Markdown lines | 118349 |
 | DeluluLang programs | 317 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
 | CLI verbs, read from the dispatch | 47 |
-| Nodes / edges in this map | 1785 / 21696 |
+| Nodes / edges in this map | 1785 / 21703 |
 | … edges that are **inferred**, not read (each says so) | 400 |
 | Open discrepancies | 49 |
 

@@ -112,7 +112,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-237**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-238**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -388,9 +388,9 @@ Read it before the list below, which is the state of 2026-11-05.
     from `delulu schema`), and ~~RW 6.75~~ (D-V2-219: a sandboxed guest's fault reaches the envelope and the report,
     carried in its goodbye as the guest's word; its abnormal-end half is RW 6.84). The audit's §7 P1 items are done
     except P1-6's answer bound (RW 6.62) and the rest of P1-7 (RW 6.60, 6.68);
-  - **Since 2026-11-17 the queue is `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` §5** — the owner's commission of that
-    day made that guide canonical. The basics order below lives on inside it: RW 2.40 and 2.41 are its Q4 and RW 2.50
-    its Q8, after Q3 (truthful outcomes); RW 2.33 and 2.39 follow the queue. Ask the owner only if he has said otherwise.
+  - **Since 2026-11-18 the order of work is the roadmap at the top of `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` §5
+    (D-V2-238):** M1 the everyday language — the basics order below is M1's — then M2 fast by default, M3 truthful
+    outcomes, M4 one file to download, M5 agents first, M6 the public preview. Nothing outside it before the preview.
   - **NOW, at the owner's word (2026-11-06, D-V2-220): the language basics first.** *"Build basics first for DeluluLang
     … After each build, write and run programs and softwares of varying complexities and test and verify and fix it."*
     - The order: ~~compound assignment (2.34)~~ (done 2026-11-08 by on-demand routine run 21, D-V2-221; its programs
@@ -415,7 +415,7 @@ Read it before the list below, which is the state of 2026-11-05.
   - the OpenShell pin bump (RW 7.28);
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-237 (the next is D-V2-238);
+  - the last decision is D-V2-238 (the next is D-V2-239);
   - the last mutant is M1303, so continue from M1304;
   - there are 157 DL codes and 411 reference anchors;
   - pull requests are numbered on GitHub, and #145 was the last merged (by fast-forward, on the owner's instruction, 2026-11-17, D-V2-235).

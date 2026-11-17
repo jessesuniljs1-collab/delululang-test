@@ -13555,3 +13555,24 @@ embedded Python is 35,999,232 — Windows links Python as a DLL). Raw outputs: t
   is coarse. The AI-usability figures quoted to the owner earlier in the session were September's; `REPORT.md`
   (re-scored 2026-11-08) reads 0% and 50% completion for no documentation and for the Skill alone.
 - **Not re-run:** two OS accounts, many runs against one broker, Linux and macOS sandboxes (CI only), devices.
+
+## 2026-11-18 — the laptop (Opus 5.5): one roadmap (D-V2-238); the probe's count corrected; what the engines are, checked
+
+**The roadmap.** The owner asked why there is no concrete plan in order, and when DeluluLang can be downloaded and used.
+D-V2-238 makes the roadmap at the top of the guide's §5 the only order of work to a public preview (M1 the everyday
+language … M6 the preview), with machine checks and sizes from the November pace.
+
+**A correction.** The everyday probe of 2026-11-17 has 53 programs, not 55, and its next-step group 18 constructs, not
+21 — an addition error in the answer to the owner, the guide's §1, the entry above and the sync log. Corrected in the
+guide; the result stands: 32 of 34 day-one constructs run, none of the 18.
+
+**Checked while answering the owner's questions** (portable release build at `fe6fc47`):
+- the interpreter is a tree-walking interpreter over the checked program, the reference engine and the default; the
+  WASM engine compiles the program to WebAssembly, which Wasmtime compiles to machine code with Cranelift at its speed
+  setting; capabilities are handles and every effect a host import (`codegen.rs`, `host.rs`);
+- the engines agree on faults: division by zero, remainder by zero (DL0902), overflow (DL0901) and an index out of
+  range (DL0903), on both;
+- `@jit` without `--grant exec.native` is DL1906, a warning: the hint is ignored. With the grant the program runs on
+  the interpreter at the same speed (207 against 187 ms) — no native tier exists behind the grant;
+- the default build does not start without Python on `PATH` (exit 127, a shared library not found); the portable
+  build does.

@@ -10199,3 +10199,15 @@ Survey and doctor: in the commit below.
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** the language basics are the gap the owner is right about — see the guide's §1 language row; the
   queue is the guide's §5 and the owner's word on its order.
+
+### 2026-11-18 — the laptop: checkpoint 20 — one roadmap to a public preview (D-V2-238); the probe's count corrected (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W7mcSsKhQtbrx8RAxz`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the roadmap at the top of the guide's §5 (M1 to M6) is the only order of work until the preview; the
+  guide's §10 and `AI_ONBOARDING.md` point at it. The probe's numbers corrected: 53 programs and 18 next-step
+  constructs (the entry above said 55 and 21).
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/AI_ONBOARDING.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Numbers taken:** `D-V2-238`. Next free: `D-V2-239`, M1302.
+- **Open / next — the next AI's inbox:** the roadmap's M1, item 0: commit the everyday probe under
+  `measurements/everyday/` (copy it from the owner's evidence folder, `S5-harness/probe.py`), then item 1, RW 2.50.
