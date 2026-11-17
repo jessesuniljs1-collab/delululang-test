@@ -13490,3 +13490,15 @@ evidence and what is not established.
 
 **CI.** Run `44041739843` at `e73b050` (D-V2-236): 15 of 18 green and none red when this was written — the four test jobs (macOS, Ubuntu, Windows, ARM64) among them; the three miri-slow jobs still running. This commit's own run is named in the
 sync-log entry below. `master` is not moved for either until its run is read green.
+
+## 2026-11-17 — the laptop (Opus 5.5): D-V2-236 and D-V2-237 on `master`
+
+**CI read, job by job.** Run `44041739843` at `e73b050`: **18 of 18**; the seven tests D-V2-236 added or leans on `ok` by
+name on macOS, Ubuntu, Windows and ARM64. Run `44045532008` at `9766b7f`: **18 of 18**; the six holder-pin tests `ok` by
+name on the same four. (Three background watchers had stopped on a dropped connection to GitHub, not on CI; the runs
+were read directly.)
+
+**The merges.** `git push origin e73b050:master` (from `eb6838d`), then `git push origin 9766b7f:master` — fast-forwards,
+no hash rewritten. `D:\nelan\DeluluLang` fast-forwarded with them. Nothing tagged, released or published.
+
+**Still owed:** an independent reading of D-V2-227, 228, 231, 232, 234, 236 and 237.

@@ -34,9 +34,9 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:484` — says 1268 Rust files; the tree has 352
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:484` — says 28 Rust files; the tree has 352
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:484` — says 349 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:482` — says 1268 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:482` — says 28 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:482` — says 349 Rust files; the tree has 352
 - `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 352
 
 ## note — `c-token-not-a-campaign-finding` (1)

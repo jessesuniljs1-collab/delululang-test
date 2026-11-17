@@ -10127,3 +10127,17 @@ Survey and doctor: in the commit below.
      branch; never merge red.
   3. Repeat the audit's T5 two-account steps with `--holder-key` (the guide's §5 Q2).
   4. The guide's §10 from its step 3 (Q3, Q4).
+
+### 2026-11-17 — the laptop: checkpoint 15 — MERGED: `master` fast-forwarded to `e73b050` (D-V2-236) and `9766b7f` (D-V2-237); the owner's checkout synced
+- Session: `https://claude.ai/code/session_01Deh6W8tdA5yEh54KPAr36F`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master`.   Merged: **yes** — `eb6838d..e73b050` on run `44041739843` (18 of 18), `e73b050..9766b7f` on run
+  `44045532008` (18 of 18), each read job by job, the new tests `ok` by name on all four test jobs.
+- Files in this records commit: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` (the rows that described the two
+  commits as pending now describe them as done), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/review/fable-deep-verification-state.json`, `docs/survey/*`. Documents only.
+- **To sync another machine:** `git fetch origin && git switch master && git merge --ff-only origin/master`.
+- **Still owed:** an independent reading of D-V2-227, 228, 231, 232, 234, 236 and 237 (the guide's §4 item 5).
+- **Open / next — the next AI's inbox, in order:**
+  1. Read the push run of this records commit on `master` (documents only).
+  2. Repeat the audit's T5 two-account steps with `--holder-key` (the guide's §5 Q2, RW 4.102).
+  3. The guide's §10 from its step 3: §5 Q3 (one outcome for every way a run ends), then Q4 (arguments and JSON).

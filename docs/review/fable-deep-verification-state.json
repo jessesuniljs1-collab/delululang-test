@@ -15,8 +15,8 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 14,
-  "checkpoint_note": "Two commits on laptop/fable-deep-verification ahead of master eb6838d, each to be fast-forwarded only on its own green full CI run: e73b050 (D-V2-236, print-and-reparse; run 44041739843: 15 of 18 green and none red when this was written — the four test jobs (macOS, Ubuntu, Windows, ARM64) among them; the three miri-slow jobs still running) and the commit after it (D-V2-237, --holder-key, FABLE-022). Models: Fable 5.2, then Opus 5.5 at max effort.",
+  "checkpoint": 15,
+  "checkpoint_note": "master fast-forwarded to e73b050 (run 44041739843, 18 of 18) and 9766b7f (run 44045532008, 18 of 18). An independent reading of D-V2-227, 228, 231, 232, 234, 236, 237 is still owed.",
   "last_session": {
     "date": "2026-11-17",
     "where": "owner's laptop (Windows 11 x64), WSL2 Ubuntu 20.04 on it, and GitHub-hosted runners of the test repository",
@@ -84,8 +84,8 @@
   },
   "next_three_commands": [
     {
-      "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification --limit 3",
-      "expect": "the runs of e73b050 (44041739843) and of the commit after it; read each whole; fast-forward master on each green, in order"
+      "run": "git fetch origin && git log --oneline -3 origin/master",
+      "expect": "master at the records commit after 9766b7f, or later; read its push run"
     },
     {
       "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
@@ -290,7 +290,7 @@
   "integration": {
     "decision": "D-V2-233, ended by D-V2-235",
     "pull_request": 145,
-    "state": "merged: master fast-forwarded to 959528b on 2026-11-17",
+    "state": "merged: master at 9766b7f (2026-11-17), then this records commit",
     "blocker": "CONTRIBUTING.md section 4 items 2 and 3: a risk-class change needs a sponsor who is not its author; D-V2-231 and D-V2-232 are in a risk class and only their author has read them",
     "land_by": "fast-forward or merge commit only; never squash or rebase (records cite commit hashes)",
     "not_merged_on_purpose": [
