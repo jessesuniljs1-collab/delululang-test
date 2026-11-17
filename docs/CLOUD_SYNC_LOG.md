@@ -10177,3 +10177,14 @@ Survey and doctor: in the commit below.
   1. Read the push run of this records commit on `master` (documents only; its macOS job runs the timing witness again).
   2. Repeat the audit's T5 two-account steps with `--holder-key` (RW 4.102).
   3. The guide's §10 from its step 3: §5 Q3 (one outcome for every way a run ends), then Q4 (arguments and JSON).
+
+### 2026-11-17 — the laptop: checkpoint 18 — the guide's and the onboarding brief's stale lines made true (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W7mcSsKhQtbrx8RAxz`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **Why:** answering the owner's questions about the state of the project, lines were found that D-V2-236 and D-V2-237
+  had made untrue and their records commits had not touched: the guide's §1 (the Guard row; the closing verdict),
+  §2 (the diagram's note on DIR), §3 (what is owed an independent reading), §10 (the state, CI read from the old
+  branch, and a one-hour task already done); `AI_ONBOARDING.md`'s counters (last decision D-V2-208 and D-V2-226 —
+  it is D-V2-237; pull request #144 — it is #145), its DIR work item (done) and which queue governs (the guide's §5).
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** unchanged from checkpoint 17 — T5 with `--holder-key`; then the guide's §10 from its step 3.

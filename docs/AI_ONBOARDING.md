@@ -112,7 +112,7 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
 6. **Record:**
    - a `V2_LOG.md` entry (what, why, evidence);
    - `CHANGELOG.md` for anything a user sees;
-   - a `D-V2-nn` for a decision (the last is **D-V2-208**);
+   - a `D-V2-nn` for a decision (the last is **D-V2-237**);
    - the row in `REMAINING_WORK.md`. A table row is **one line**: never wrap it, a gate checks;
    - `V2_PHASE_STATUS.md`;
    - the sync-log entry;
@@ -388,6 +388,9 @@ Read it before the list below, which is the state of 2026-11-05.
     from `delulu schema`), and ~~RW 6.75~~ (D-V2-219: a sandboxed guest's fault reaches the envelope and the report,
     carried in its goodbye as the guest's word; its abnormal-end half is RW 6.84). The audit's §7 P1 items are done
     except P1-6's answer bound (RW 6.62) and the rest of P1-7 (RW 6.60, 6.68);
+  - **Since 2026-11-17 the queue is `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` §5** — the owner's commission of that
+    day made that guide canonical. The basics order below lives on inside it: RW 2.40 and 2.41 are its Q4 and RW 2.50
+    its Q8, after Q3 (truthful outcomes); RW 2.33 and 2.39 follow the queue. Ask the owner only if he has said otherwise.
   - **NOW, at the owner's word (2026-11-06, D-V2-220): the language basics first.** *"Build basics first for DeluluLang
     … After each build, write and run programs and softwares of varying complexities and test and verify and fix it."*
     - The order: ~~compound assignment (2.34)~~ (done 2026-11-08 by on-demand routine run 21, D-V2-221; its programs
@@ -406,15 +409,16 @@ Read it before the list below, which is the state of 2026-11-05.
       `DELULU_CORE.md` gets its own decision.
     - After each: programs of varying size, run on both engines, and what they find fixed;
   - then the outcome contracts: RW 6.83, 6.77, 6.84, 6.76 and 6.78–6.81 (the audit's §11.7);
-  - the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67), then RW 6.68;
+  - ~~the DIR and review-surface defects (RW 4.93, 4.94, 5.7, 6.67)~~ — done 2026-11-17 (D-V2-234, D-V2-236) but for RW 4.94's
+    terminal-safe rendering of string data; then RW 6.68;
   - the answer contracts: RW 6.50–6.52, 6.54–6.60 and 4.88, each witnessed red first;
   - the OpenShell pin bump (RW 7.28);
   - the launch, only on the owner's word.
 - **Counters:**
-  - the last decision is D-V2-226;
+  - the last decision is D-V2-237 (the next is D-V2-238);
   - the last mutant is M1303, so continue from M1304;
   - there are 157 DL codes and 411 reference anchors;
-  - pull requests are numbered on GitHub, and #144 was the last merged (by fast-forward, the laptop, 2026-11-08).
+  - pull requests are numbered on GitHub, and #145 was the last merged (by fast-forward, on the owner's instruction, 2026-11-17, D-V2-235).
 
 ## 11. Keep this file true
 

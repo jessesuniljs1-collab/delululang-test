@@ -34,7 +34,7 @@ fully supported. Version `1.0.0` is tagged in the test repository; **nothing has
 | **Input and data** | reading and writing granted files; scoped HTTPS with method and path grants; standard input on the interpreter | **no command-line arguments, no environment, no exit code, no sleep (2.40); no JSON library (2.41); no character-from-number (2.52)** | — |
 | **Two engines** | the interpreter and a WebAssembly engine give the same answers on the shared subset (differential tests in CI); a `.dwx` artifact runs | WASM refuses some constructs the documents teach, at compile time, in words (3.25, 3.4); no early "this target cannot run this" verdict (6.61) | a native backend, tiered execution, an optimizer |
 | **Authority (static)** | `delulu authority` reports what a program can do; `--within` answers within / exceeds / inconclusive; `--preflight` refuses before any effect | a computed scope is *inconclusive*, by design (6.64) | — |
-| **Guard, leases, broker (run time)** | every use is decided by a broker daemon: grants, delegation that only narrows, single-use leases, revocation, an owner code for guarded classes, a hash-chained audit log, a dead-man per run. Two real OS accounts: 28 of 31 pre-registered custody steps as expected (audit §4 T5). 256 runs at once against one broker: all served, chain verified (§3) | **a broker adopts a certificate issued to a different key (FABLE-022)**; a lease token is passed on the command line (4.90); at 384 runs at once 20 were refused by their own dead-man — fail-closed (4.101); on one OS account the proposer can approve (4.91, documented) | multi-tenancy; federation is not model-checked (5.5) |
+| **Guard, leases, broker (run time)** | every use is decided by a broker daemon: grants, delegation that only narrows, single-use leases, revocation, an owner code for guarded classes, a hash-chained audit log, a dead-man per run. Two real OS accounts: 28 of 31 pre-registered custody steps as expected (audit §4 T5). 256 runs at once against one broker: all served, chain verified (§3) | **a broker adopts a certificate issued to a different key unless it was started with `--holder-key` (FABLE-022; the opt-in fix is D-V2-237, the default is unchanged)**; a lease token is passed on the command line (4.90); at 384 runs at once 20 were refused by their own dead-man — fail-closed (4.101); on one OS account the proposer can approve (4.91, documented) | multi-tenancy; federation is not model-checked (5.5) |
 | **Plugins and Verified artifacts** | build, inspect, verify, load under `--grant plugin=.`; signatures; a wrong ceiling, tampering and a contained plugin are refused; **a decoded tree must have one id per node, no parser placeholders and lexer-valid names (D-V2-234), and must print as text that parses back to the same tree (D-V2-236) — so every lexer and parser rule binds an artifact as it binds text; `why` verifies before it answers** | **neither has had an independent review; string data from an artifact is not yet shown through the terminal-safe path (RW 4.94's remainder); `plugin verify` counts private functions as exports (RW 6.71). No escape from a grant or a jail has been shown** | a plugin marketplace |
 | **Sandbox** | `run --sandbox` starts a jailed guest that holds no authority — AppContainer and a Job on Windows, Landlock and seccomp on Linux, Seatbelt on macOS (CI on all three); a KVM microVM builds reproducibly in CI | the guest channel cannot carry actors, foreign code, Python, plugins or secrets — those runs are refused; the sandbox is opt-in | L3/L4 external launchers are measured by nobody (4.89, 6.50) |
 | **Truthful outcomes** | a report is proved writable before the run and never lost quietly (D-V2-227); `test`, `fix`, `schema validate`, `authority` no longer report success for work not done (D-V2-232) | **a panic inside the tool exits 2, which is documented as "nothing was examined" (FABLE-013); a closed output pipe panics (6.58); `main` returning `Err` exits 0; a killed guest or daemon leaves no terminal outcome (6.59, 6.84, 6.68)** | a single typed outcome for every way a run can end |
@@ -46,9 +46,9 @@ fully supported. Version `1.0.0` is tagged in the test repository; **nothing has
 
 **Honest one-paragraph verdict.** The core idea works end to end and is uniform across platforms: a program without
 a grant is refused, a narrowed lease cannot be widened, and the record of what happened verifies. What is missing is
-ordinary — arguments, JSON, a few methods — plus three things that matter more than they sound: an artifact
-verifier that does not yet re-establish what the parser guarantees, outcome codes that still lie in a few failure
-paths, and a certificate that is not bound to its holder. None of this is ready to be called production-ready, and
+ordinary — arguments, JSON, a few methods — plus things that matter more than they sound: outcome codes that still
+lie in a few failure paths; a certificate bound to its holder only when the operator asks (`--holder-key`,
+D-V2-237); and an artifact verifier, now held to every parser rule (D-V2-234, D-V2-236), that no second party has read. None of this is ready to be called production-ready, and
 it is not safe to describe as a security boundary between mutually distrustful processes sharing one OS account.
 
 ## 2. Architecture, and the tools that know it
@@ -60,9 +60,9 @@ build`, checked fresh in CI), and the queries below read the same data.
 ```
             text source (.delulu, .solulu)                         a Verified artifact (.dpx: DIR)
                        │                                                      │
-   delulu-syntax   lexer → parser → AST ──────────────────────────────────────┤  (DIR decodes straight to an AST:
-                       │                                                      │   the parser's guarantees are NOT
-   delulu-check    resolve → type and effect check → reference capabilities ◄─┘   re-established — §5 Q1)
+   delulu-syntax   lexer → parser → AST ──────────────────────────────────────┤  (a decoded tree is printed and
+                       │                                                      │   parsed again: every parser rule
+   delulu-check    resolve → type and effect check → reference capabilities ◄─┘   binds it — D-V2-236)
                        │            └→ authority report (what this program can do)
         ┌──────────────┼───────────────────────────┐
    delulu-runtime      │                      delulu-wasm
@@ -150,8 +150,8 @@ in a risk class, and counts a model reviewing its own output as one party. The b
 review candidate (D-V2-233); the owner then instructed the merge himself (D-V2-235), which satisfies *"no change
 merges on the say-so of its own author"* and does **not** supply the reading. In a risk class, and still to be read:
 D-V2-232 (two exit codes; `STABILITY.md` §1), D-V2-231 with its three amendments (a `Busy` answer on the broker's wire;
-the client repeats a request the daemon said it did not read), D-V2-234 (what a Verified artifact is); D-V2-227 and
-D-V2-228 are best read with them. If a reader finds one wrong, the remedy is a revert commit — the history is linear.
+the client repeats a request the daemon said it did not read), D-V2-234 and D-V2-236 with its two amendments (what a Verified
+artifact is), D-V2-237 (whom a broker adopts a certificate for); D-V2-227 and D-V2-228 are best read with them. If a reader finds one wrong, the remedy is a revert commit — the history is linear.
 
 ## 4. Open issues, by real impact
 
@@ -313,15 +313,17 @@ exits 0 whatever it finds, so read its count.
 
 ## 10. Exactly what to do next
 
-**State when this was written (17 November 2026, the last Fable 5.2 session):** `master` holds everything — the
-Fable branch was fast-forwarded into it at `959528b` on the owner's instruction (D-V2-235) and the owner's checkout
+**State when this was written (17 November 2026: Claude Fable 5.2's last session, finished by Claude Opus 5.5 after
+the owner switched models):** `master` holds everything — the Fable branch was fast-forwarded into it at `959528b` on
+the owner's instruction (D-V2-235); `e73b050`, `9766b7f` and `b7f5706` followed the same day, each on its own green full
+run (`master` at `a24243d`, its push run green); and the owner's checkout
 `D:\nelan\DeluluLang` was brought to it. Nothing is half-edited; the tree is clean and every change is pushed. The
 newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after this was written.
 
 **For the owner — only he can do these:**
 
 1. **Arrange the independent reading** §4 item 5 owes, or change the rule that asks for it (§8). Pull request #145
-   shows the whole diff in one place.
+   shows the diff up to `959528b`; `git diff 959528b a24243d` shows the rest (D-V2-236, D-V2-237).
 2. **FABLE-022** (a certificate was not bound to its holder — §5 Q2): an **opt-in** fix is built (D-V2-237,
    `--holder-key`), so nothing changed for anyone who does not ask for it. Left to him: whether strict mode should
    **require** it, which changes what RFC 0001 describes (his word, or his delegate's `D-V2-nn` plus an
@@ -336,7 +338,7 @@ newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after t
 **For the next engineer, in order:**
 
 1. `git fetch origin`; `git switch master`; `git merge --ff-only origin/master`; §6's first block. Read the CI run of the tip
-   (`gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3`) **to its
+   (`gh run list -R jessesuniljs1-collab/delululang-test --branch master -L 3`) **to its
    end** before building on it, and write its result into §3's table.
 2. **Done on 2026-11-17:** `e73b050` (print-and-reparse at decode, D-V2-236; run `44041739843`, 18 of 18) and
    `9766b7f` (`broker start --holder-key`, D-V2-237; run `44045532008`, 18 of 18) are on `master`; `20a7591`'s push run was red on macOS on `verify`'s timing witness (D-V2-236's decode cost), and
@@ -346,9 +348,10 @@ newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after t
 3. **§5 Q3**, then **Q4** — the outcome contract before the features that will rely on it.
 4. Then Q5 to Q10 in order, unless the owner reorders them.
 
-**If you have one hour only:** do step 1, then the four red-first tests of step 2, and commit them marked
-`#[ignore = "RW 4.93: the guard is not written"]` with a sync-log entry. A named failing witness is worth more to
-the next engineer than a half-written guard.
+**If you have one hour only:** do step 1, then write §5 Q3's first red-first witness — an internal panic must not
+exit 2, the code that means "nothing was examined" (the panic hook, `crates/delulu/src/main.rs`) — and commit it marked
+`#[ignore = "Q3: not built"]` with a sync-log entry. A named failing witness is worth more to the next engineer than
+a half-written fix.
 
 ---
 
