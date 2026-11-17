@@ -189,6 +189,7 @@ impl Dir {
         // reconstructed module before any code path can touch it.
         validate_module(&dir.module)?;
         shape_of(&dir.module)?;
+        parser_could_have_made(&dir.module)?;
         Ok(dir)
     }
 }
@@ -296,8 +297,36 @@ pub fn verify_checked(bytes: &[u8]) -> Result<(Dir, CheckResult), DirError> {
 ///
 /// **What this does not re-establish**, and the text path does: which word may stand where (a keyword or a reserved
 /// word as a declared name, DL0106 and DL1608), the shape of a compound assignment, a variable reference being one
-/// segment, the parser's own nesting bound. Printing the tree and parsing the text again would hold all of them by
-/// construction; the printer reads its source text today and cannot print a tree that has none (RW 4.93's row).
+/// segment, the parser's own nesting bound. [`parser_could_have_made`], which runs after this, holds all of them by
+/// construction. These three stay because that comparison sets positions and node numbers aside, and because a name
+/// is refused here in the lexer's own words.
+/// Ask the parser itself whether it could have made this tree: print it as text, parse the text, and compare.
+///
+/// The text path holds a program to every rule the lexer and the parser have — which word may stand where (DL0106,
+/// DL1608), how a literal is spelled, how deep a thing may nest, what a compound assignment's value is. A decoded tree
+/// met none of them. Rather than keep a second copy of each rule here, to fall behind the first, the tree is printed
+/// with no source beside it ([`delulu_syntax::fmt::print_module`]) and given to the parser: it is accepted only when
+/// the text parses with no error **and** parses to the same tree, positions and node numbers aside
+/// ([`delulu_syntax::fmt::ast_fingerprint`], the formatter's own identity law). So every rule the parser has today,
+/// and every one it gains, binds an artifact as it binds text — and a tree that would print as one program and run
+/// as another is refused, because the printed program is not it.
+fn parser_could_have_made(m: &Module) -> Result<(), DirError> {
+    let text = delulu_syntax::fmt::print_module(m);
+    let (again, diags) = delulu_syntax::parse_file(0, &text);
+    if let Some(d) = diags.iter().find(|d| d.is_error()) {
+        return Err(DirError::Malformed(format!(
+            "printed as text, the tree is not a program the parser accepts — {}: {}",
+            d.code, d.message
+        )));
+    }
+    if delulu_syntax::fmt::ast_fingerprint(&again) != delulu_syntax::fmt::ast_fingerprint(m) {
+        return Err(DirError::Malformed(
+            "printed as text and parsed again, the tree is a different tree — not one the parser makes".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn shape_of(m: &Module) -> Result<usize, DirError> {
     if !m.recovered.is_empty() {
         return Err(DirError::Malformed(format!(
@@ -1309,6 +1338,86 @@ mod tests {
         for name in ["fib2", "_fib", "F", "fib_of_n"] {
             let m = renamed(&c.module, "fib", name);
             verify(&artifact_of(&m)).unwrap_or_else(|e| panic!("the name {name:?} is a word: {}", e.message()));
+        }
+    }
+
+    /// The first function's body, to change one thing in.
+    fn first_body(m: &mut Module) -> &mut Block {
+        match m.items.iter_mut().find_map(|it| if let Item::Fn(f) = it { Some(f) } else { None }) {
+            Some(f) => &mut f.body,
+            None => panic!("the module has a function"),
+        }
+    }
+
+    fn refused_as_unparseable(m: &Module, what: &str) {
+        let said = refused_at_decode(&artifact_of(m), what);
+        assert!(said.contains("printed as text"), "{what}: the refusal names the cause: {said}");
+    }
+
+    #[test]
+    fn a_keyword_standing_where_a_name_is_declared_is_refused_at_decode() {
+        // RW 4.94: which word may stand where. Each of these is one word to the lexer, so the name check passes it;
+        // as text each is DL0106 or a plain parse error.
+        let c = check_source(0, "module m\nfn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\n");
+        // `consume` and `recover` are the pair that needs the parse's own verdict: the parser reports DL1608 and then
+        // carries on with the word as the name, so the tree it recovers to is this very tree.
+        for word in ["consume", "if", "fn", "recover", "return", "module", "let", "match", "true"]
+            .into_iter()
+            .step_by(if cfg!(miri) { 3 } else { 1 })
+        {
+            refused_as_unparseable(&renamed(&c.module, "fib", word), &format!("a function named `{word}`"));
+            refused_as_unparseable(&renamed(&c.module, "n", word), &format!("a parameter named `{word}`"));
+        }
+    }
+
+    #[test]
+    fn a_compound_assignment_whose_value_is_not_its_own_sum_is_refused_at_decode() {
+        // RW 4.94. The parser writes `x += 2` as `x = x + 2` and marks it `compound: Add`; the formatter and `why`
+        // print it from the mark. A tree marked `+=` whose value multiplies runs one thing and shows another.
+        let c = check_source(0, "module m\nfn f() -> Int {\n    var x = 1\n    x += 2\n    x\n}\n");
+        assert!(!c.has_errors(), "{:?}", c.result.diags);
+        verify(&artifact_of(&c.module)).expect("the honest tree verifies");
+
+        let mut lie = c.module.clone();
+        let Stmt::Assign { value: Expr::Binary { op, .. }, compound: Some(_), .. } = &mut first_body(&mut lie).stmts[1] else {
+            panic!("the second statement is the compound assignment")
+        };
+        *op = BinOp::Mul;
+        refused_as_unparseable(&lie, "`x += 2` that multiplies");
+
+        // … and one whose value reads another variable than the one it assigns.
+        let mut lie = c.module.clone();
+        let Stmt::Assign { value: Expr::Binary { lhs, rhs, .. }, .. } = &mut first_body(&mut lie).stmts[1] else { panic!() };
+        std::mem::swap(lhs, rhs);
+        refused_as_unparseable(&lie, "`x += 2` whose value is `2 + x`");
+    }
+
+    #[test]
+    fn a_literal_no_source_text_spells_is_refused_at_decode() {
+        // The parser makes `-1` as a negation of `1`, and has no spelling at all for a Float that is not a number.
+        let c = check_source(0, "module m\nfn f() -> Int { 1 }\n");
+        let mut m = c.module.clone();
+        let Stmt::Expr(Expr::Lit { kind, .. }) = &mut first_body(&mut m).stmts[0] else { panic!("a literal") };
+        *kind = LitKind::Int(-1);
+        refused_as_unparseable(&m, "an Int literal below zero");
+
+        let c = check_source(0, "module m\nfn f() -> Float { 1.5 }\n");
+        assert!(!c.has_errors(), "{:?}", c.result.diags);
+        for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.5] {
+            let mut m = c.module.clone();
+            let Stmt::Expr(Expr::Lit { kind, .. }) = &mut first_body(&mut m).stmts[0] else { panic!("a literal") };
+            *kind = LitKind::Float(v);
+            refused_as_unparseable(&m, &format!("the Float literal {v}"));
+        }
+    }
+
+    #[test]
+    fn a_tree_printed_and_parsed_again_is_the_same_tree_for_every_corpus_program() {
+        // The twin of the three refusals above: what the parser made, printed with no source text beside it, parses
+        // back to itself.
+        for src in corpus() {
+            let c = check_source(0, src);
+            parser_could_have_made(&c.module).unwrap_or_else(|e| panic!("`{src}`: {}", e.message()));
         }
     }
 

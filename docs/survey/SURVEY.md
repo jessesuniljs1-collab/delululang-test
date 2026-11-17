@@ -29,16 +29,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 352 |
-| Rust lines | 212864 |
+| Rust lines | 213050 |
 | Rust files outside `src/` (test/bench targets) | 180 |
 | Markdown documents | 332 |
-| Markdown lines | 117839 |
+| Markdown lines | 117958 |
 | DeluluLang programs | 317 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
 | CLI verbs, read from the dispatch | 47 |
-| Nodes / edges in this map | 1785 / 21624 |
+| Nodes / edges in this map | 1785 / 21651 |
 | … edges that are **inferred**, not read (each says so) | 400 |
 | Open discrepancies | 49 |
 
@@ -199,7 +199,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 18725 lines
+- **Modules:** 18 files, 18834 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -207,7 +207,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/check.rs` | 5234 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1638 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
-| `src/dir.rs` | 1368 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
+| `src/dir.rs` | 1477 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 133 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
 | `src/lib.rs` | 2772 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 573 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
@@ -372,14 +372,14 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 9595 lines
+- **Modules:** 9 files, 9672 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/ast.rs` | 697 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
-| `src/fmt.rs` | 1884 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
+| `src/fmt.rs` | 1954 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
 | `src/grammar.rs` | 115 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
-| `src/lexer.rs` | 1515 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
+| `src/lexer.rs` | 1522 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 700 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 186 | The language's one rule for turning written decimal text into a `Float`. |

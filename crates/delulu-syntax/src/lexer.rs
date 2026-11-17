@@ -57,6 +57,13 @@ const BIDI_CONTROLS: &[(char, &str)] = &[
 ///
 /// **CR is not here**, because `\r\n` is an ordinary Windows line ending; a *lone* CR is refused
 /// separately below, where the pair can be told from the stray.
+/// Every character this lexer refuses raw anywhere in source, with its name: [`BIDI_CONTROLS`] and
+/// [`LINE_BREAK_LOOKALIKES`]. A string holds one only by its `\u{…}` escape, so whatever prints a string as source
+/// text — the formatter — writes the escape for exactly these, and asks here which they are.
+pub fn refused_raw_characters() -> impl Iterator<Item = (char, &'static str)> {
+    BIDI_CONTROLS.iter().chain(LINE_BREAK_LOOKALIKES.iter()).copied()
+}
+
 const LINE_BREAK_LOOKALIKES: &[(char, &str)] = &[
     ('\u{000B}', "LINE TABULATION (vertical tab)"),
     ('\u{000C}', "FORM FEED"),

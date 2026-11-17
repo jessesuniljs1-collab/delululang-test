@@ -15,8 +15,8 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 12,
-  "checkpoint_note": "Run 44016663858 at 959528b read whole: 18 of 18. master fast-forwarded to 959528b (D-V2-235). An independent reading of D-V2-227, 228, 231, 232, 234 is still owed.",
+  "checkpoint": 13,
+  "checkpoint_note": "D-V2-236 (print-and-reparse at decode) and FMT-ESCAPE-RAW-1 are committed on laptop/fable-deep-verification, one commit ahead of master eb6838d. Its CI run was dispatched and NOT read: read it, fast-forward master on green.",
   "last_session": {
     "date": "2026-11-17",
     "where": "owner's laptop (Windows 11 x64), WSL2 Ubuntu 20.04 on it, and GitHub-hosted runners of the test repository",
@@ -84,8 +84,8 @@
   },
   "next_three_commands": [
     {
-      "run": "git fetch origin && git log --oneline -3 origin/master",
-      "expect": "master at 959528b or later (merged 2026-11-17, D-V2-235)"
+      "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification --limit 3",
+      "expect": "the jobs=everything run of the commit after eb6838d; read it whole; on green: git push origin <commit>:master"
     },
     {
       "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
@@ -204,7 +204,8 @@
         "D-V2-232",
         "D-V2-233",
         "D-V2-234",
-        "D-V2-235"
+        "D-V2-235",
+        "D-V2-236"
       ],
       "remaining_work_rows": [
         "6.87",

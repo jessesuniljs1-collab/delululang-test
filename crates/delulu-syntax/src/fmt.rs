@@ -46,6 +46,17 @@ pub fn format_source(file: FileId, src: &str) -> Result<String, Vec<Diagnostic>>
     Ok(Printer::new(src, comments).module(&module))
 }
 
+/// Print a tree that has no source text beside it — one decoded from an artifact — in the same canonical form.
+///
+/// Nothing a tree does not hold is printed: no comment, and every `Int` in decimal. What the printer writes is read
+/// from the tree alone, so for a tree the parser made, parsing the result gives that tree again
+/// ([`ast_fingerprint`]-equal) — the identity law, without the source. A caller holding a tree it did not parse uses
+/// exactly that to ask whether the parser could have made it (`delulu-check`'s `dir.rs`).
+pub fn print_module(module: &Module) -> String {
+    let _no_spellings = IntSpellings::enter("", &[]);
+    Printer::new("", Vec::new()).module(module)
+}
+
 thread_local! {
     /// FMT-INT-BASE-1: the spelling of each `Int` literal of the source being formatted that is not plain decimal
     /// digits, by the offset it starts at. The AST holds a literal's VALUE (`LitKind::Int(i64)`, and DIR's bytes with
@@ -944,12 +955,16 @@ fn fstring_text(e: &Expr) -> String {
     operands.reverse();
     let mut out = String::from("f\"");
     let text = |s: &str, out: &mut String| {
-        let quoted = escape_str(s);
-        for c in quoted[1..quoted.len() - 1].chars() {
+        // Each character on its own: a brace of the text is doubled, and the braces of an escape (`\u{1b}`) are not —
+        // doubling them too printed `\u{{1b}}`, which does not lex (FMT-ESCAPE-RAW-1).
+        for c in s.chars() {
             match c {
                 '{' => out.push_str("{{"),
                 '}' => out.push_str("}}"),
-                c => out.push(c),
+                c => {
+                    let quoted = escape_str(c.encode_utf8(&mut [0; 4]));
+                    out.push_str(&quoted[1..quoted.len() - 1]);
+                }
             }
         }
     };
@@ -988,7 +1003,11 @@ fn escape_str(s: &str) -> String {
             '\t' => out.push_str("\\t"),
             '\r' => out.push_str("\\r"),
             '\0' => out.push_str("\\0"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            // FMT-ESCAPE-RAW-1: and every character the lexer refuses raw (DL0107, DL0108) — the lexer's own list. A
+            // string holds one only because its author wrote the escape; printed raw, the output would not lex.
+            c if (c as u32) < 0x20 || crate::lexer::refused_raw_characters().any(|(r, _)| r == c) => {
+                out.push_str(&format!("\\u{{{:x}}}", c as u32))
+            }
             c => out.push(c),
         }
     }
@@ -1279,7 +1298,58 @@ mod tests {
         );
         let out2 = format_source(0, &out).expect("formatted output reparses");
         assert_eq!(out, out2, "IDEMPOTENCE violated:\n--- first ---\n{out}\n--- second ---\n{out2}");
+        // The identity law with no source beside the tree (`print_module`): what a reader of an artifact relies on.
+        // Natively only — under Miri it is the same printer run a second time, and
+        // `a_tree_prints_without_its_source_and_parses_back_to_itself` runs it there.
+        if !cfg!(miri) {
+            source_free_identity(src, &m1);
+        }
         out
+    }
+
+    fn source_free_identity(src: &str, parsed: &Module) {
+        let bare = print_module(parsed);
+        let (m3, d3) = crate::parse_file(0, &bare);
+        assert!(d3.iter().all(|d| !d.is_error()), "a tree printed without its source must reparse clean:\n{bare}\n{d3:?}");
+        assert_eq!(
+            ast_fingerprint(parsed),
+            ast_fingerprint(&m3),
+            "IDENTITY violated without the source:\n--- input ---\n{src}\n--- printed ---\n{bare}"
+        );
+    }
+
+    #[test]
+    fn a_character_refused_raw_in_source_is_printed_as_its_escape() {
+        // FMT-ESCAPE-RAW-1. The lexer refuses eleven bidirectional controls and the line-break look-alikes raw
+        // (DL0107, DL0108) and tells the author to write the escape. A string that did hold one by its escape was
+        // printed with the character raw: `delulu fmt` then refused the file (DL1702, the output no longer parses), and
+        // an artifact holding such a string could not be printed as a program at all.
+        for (c, _) in crate::lexer::refused_raw_characters() {
+            let hex = format!("{:x}", c as u32);
+            let src = format!("module m\nfn f() -> Str {{\n    \"a\\u{{{hex}}}b\"\n}}\nfn g(n: Int) -> Str {{\n    f\"x\\u{{{hex}}}{{n}}\"\n}}\n");
+            let out = laws(&src);
+            assert!(!out.contains(c), "U+{hex} must not appear raw in formatted output: {out:?}");
+            assert!(out.contains(&format!("\\u{{{hex}}}")), "U+{hex} is written as its escape: {out}");
+        }
+        // The twin: a character the lexer reads raw is still printed raw.
+        let out = laws("module m\nfn f() -> Str {\n    \"naïve — ok ✓\"\n}\n");
+        assert!(out.contains("naïve — ok ✓"), "{out}");
+    }
+
+    #[test]
+    fn a_tree_prints_without_its_source_and_parses_back_to_itself() {
+        // What the source would have supplied is the two things a tree does not hold: comments, and the base an `Int`
+        // was written in. Neither is printed, and the tree is still the tree.
+        let src = "module m\n// a comment\nfn f(n: Int) -> Int {\n    var x = 0xFF_00 // trailing\n    x += n\n    if x > 1_000 { x } else { -x }\n}\n";
+        let (m, d) = crate::parse_file(0, src);
+        assert!(d.is_empty(), "{d:?}");
+        source_free_identity(src, &m);
+        let bare = print_module(&m);
+        assert!(!bare.contains("//"), "no comment is invented: {bare}");
+        assert!(bare.contains("65280") && !bare.contains("0x"), "an Int prints as its value: {bare}");
+        // … and a formatting run on the same thread is not disturbed by it, nor disturbs it.
+        assert!(format_source(0, src).unwrap().contains("0xFF_00"));
+        assert_eq!(print_module(&m), bare);
     }
 
     #[test]

@@ -290,7 +290,7 @@ from an open debt into a defined process. Keep Apache-2.0 with `NOTICE` and `TRA
    `DELULU_STATE_DIR` to a scratch path so nothing touches the owner's real state.
 5. **Change something:** a branch off `origin/master`; witness, fix, falsify (§5's opening); §6's second block.
 6. **Record it**, in the same commit: `V2_LOG.md` (what, why, evidence); `CHANGELOG.md` if a user would notice; a
-   `D-V2-nn` in `V2_DECISION_LOG.md` for a decision (the next free number is **D-V2-236**); the `REMAINING_WORK.md`
+   `D-V2-nn` in `V2_DECISION_LOG.md` for a decision (the next free number is **D-V2-237**); the `REMAINING_WORK.md`
    row; a `CLOUD_SYNC_LOG.md` entry from its template; and the rows of this guide you made untrue.
 7. **Hand off through git alone.** Everything pushed; the sync-log entry's *Open / next* says exactly what you would
    do next.
@@ -334,12 +334,13 @@ newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after t
 1. `git fetch origin`; `git switch master`; `git merge --ff-only origin/master`; §6's first block. Read the CI run of the tip
    (`gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3`) **to its
    end** before building on it, and write its result into §3's table.
-2. **§5 Q1's remainder — print-and-reparse.** The three guards are in (`crates/delulu-check/src/dir.rs`,
-   `shape_of`; its tests build each malformed tree in code — copy their pattern). Start in
-   `crates/delulu-syntax/src/fmt.rs`: `Printer` holds the source text; find every place it reads `src` or a span's
-   slice (`int_spelling`, comments, blank-line preservation) and give each a fallback computed from the tree.
-   First test: for every program in the repository, printing its tree with no source and parsing the result gives
-   an equal `ast_fingerprint`. Only then wire it into `verify_checked`.
+2. **§5 Q1's remainder — print-and-reparse: BUILT on 2026-11-17 (D-V2-236), on the branch
+   `laptop/fable-deep-verification`, one commit ahead of `master`; its CI run was not read before the session
+   ended.** Wherever this guide says the artifact path does not re-establish word position, literals, nesting or
+   compound-assignment shape (§1's plugin row, §4 item 1, §5 Q1, §6's test gaps, §7 item 1), read: it does, once
+   that commit is on `master`. **Do first:** the newest `CLOUD_SYNC_LOG.md` entry's *Open / next* — read the run,
+   fast-forward `master` on green, add the one missing mutant. What stays open of Q1: RW 6.71, and RW 4.94's
+   terminal-rendering remainder.
 3. **§5 Q3**, then **Q4** — the outcome contract before the features that will rely on it.
 4. Then Q5 to Q10 in order, unless the owner reorders them.
 

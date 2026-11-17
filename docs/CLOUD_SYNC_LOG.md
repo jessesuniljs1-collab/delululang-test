@@ -10068,3 +10068,38 @@ Survey and doctor: in the commit below.
 - **Still owed:** an independent reading of D-V2-227, 228, 231, 232, 234 (the guide's §4 item 5).
 - **Open / next:** the guide's §10 — first its Q1 remainder (print-and-reparse), then Q3 and Q4. The push run of this
   records commit on `master` is to be read by whoever comes next; it changes documents only.
+
+### 2026-11-17 — the laptop: Fable 5.2, checkpoint 13 — print-and-reparse at decode (D-V2-236), FMT-ESCAPE-RAW-1; PUSHED TO THE BRANCH ONLY, its CI run NOT YET READ
+- Session: `https://claude.ai/code/session_01Deh6W8tdA5yEh54KPAr36F`. Model: Claude Fable 5.2; effort as the owner
+  set it. One sub-agent call (web reading) was refused by the agent gate and did nothing.
+- Branch: `laptop/fable-deep-verification`, one commit ahead of `master` (`eb6838d`).   Merged: **no.** The session's
+  usage limit arrived before the commit's CI run could finish.
+- **CI read at the start:** `master`'s push runs `44026715137`, `44026715144`, `44026715183` (`959528b`) and
+  `44026946608` (`eb6838d`): green.
+- **What changed for a user:** a Verified plugin is refused (DL1504) unless its tree, printed as text, parses back to
+  itself; `delulu fmt` no longer refuses a file whose string holds an escaped bidirectional or line-break character.
+- Files: M `crates/delulu-check/src/dir.rs`; M `crates/delulu-syntax/src/fmt.rs`, `lexer.rs`; M `CHANGELOG.md`,
+  `docs/AI_ONBOARDING.md`, `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `V2_LOG.md`, `docs/REMAINING_WORK.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/review/fable-deep-verification-state.json`,
+  `docs/survey/*`. Nothing added, deleted or renamed; no workflow, no entrenched file.
+- **Numbers taken:** `D-V2-236`; mutants M1296, M1297. Next free: `D-V2-237`, M1298.
+- Tests: Windows only — see the `V2_LOG.md` entry. Linux, macOS, ARM64, Miri: the CI run dispatched at this commit.
+- **The owner's question — is everything on `master` and in `D:\nelan\DeluluLang`?** Every commit of
+  `laptop/fable-deep-verification` up to `eb6838d`: yes, and the folder is on `master` at `eb6838d`. **Not there, on
+  purpose:** (1) this entry's commit, until its run is read; (2) `laptop/fable-research-runner` — a throwaway CI
+  harness, recorded "never merge" when it was made; its findings are in the audit; (3) `D:\nelan\fable-audit-evidence`
+  — 378 MB of raw logs, built binaries and host paths, which the commission says to keep out of public commits; what
+  matters from it is cited in the audit and the decision log; (4) `claude/relaxed-brown-2l78i1`, the routine's
+  unfinished RW 2.50. The worktree `D:\nelan\dl-fable-audit` is a second checkout of the same repository, nothing more.
+- **Is everything in the two prompts done? No.** Done: the integration and merge, the canonical guide, truthful
+  execution (D-V2-232), artifact ingress (D-V2-234, 236). Part done: broker concurrency (RW 4.100). Not done:
+  certificate-holder binding (FABLE-022 — needs the owner's decision), the language fundamentals list, the generated
+  architecture views, repository simplification beyond the guide's section 8 list. The guide's sections 4, 5 and 10
+  say which and in what order.
+- **Open / next — the next AI's inbox, in order:**
+  1. `gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification --limit 3`; read
+     the `jobs=everything` run of this commit to its end, job by job. Green: `git push origin <this commit>:master`,
+     then in `D:\nelan\DeluluLang`: `git fetch origin && git merge --ff-only origin/master`. Red: fix forward on the
+     branch; do not merge.
+  2. Add a mutant for FMT-ESCAPE-RAW-1 (drop the lexer-list arm of `escape_str`; the new test must go red).
+  3. Then the guide's section 10 from its step 3 (Q3, Q4).

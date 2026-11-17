@@ -7255,3 +7255,49 @@ passed either way, and since it the drop is said truthfully, without the start c
 times: nothing was allowed. Repaired in the test: it waits until the stopped daemon takes no connection. A real
 daemon is a process and its threads end with it; `broker_cli`, `grants_cli` and `guard_e2e` assert the same words
 against real processes and were green. No product code changed.
+
+## D-V2-236 — A decoded tree is accepted only if the parser could have made it: print it, parse it, compare — TAKEN (head chef, 2026-11-17, under the owner's delegation)
+
+**What.** `Dir::decode` now ends with `parser_could_have_made` (`crates/delulu-check/src/dir.rs`): the decoded tree
+is printed as text with no source beside it (`delulu_syntax::fmt::print_module`, new), the text is parsed, and the
+artifact is refused (DL1504, `Malformed`, never a fallback to Contained) unless the text parses with no error **and**
+parses to the same tree, positions and node numbers aside (`fmt::ast_fingerprint`, the formatter's identity law).
+This is the closure by construction that D-V2-234 named and did not build: every rule the lexer and the parser have
+today, and every one they gain, binds an artifact as it binds text. No new DL code.
+
+**The guide was wrong about the obstacle.** It said the printer reads its source text. It does not: it takes from
+the source only the comments and the base an `Int` was written in, and a tree holds neither. `print_module` is the
+existing printer given no comments and no spellings.
+
+**Witnessed red first** (`E45`, the check written but not yet called): a function or parameter named `if`, `fn`,
+`return`, `module`, `let`, `match`, `true`, `consume`, `recover`; a statement marked `+=` whose value multiplies, or
+reads `2 + x`; an `Int` literal below zero; a `Float` literal that is NaN, an infinity, or negative. Each decoded
+before and is refused now. **Twin:** every corpus program, and every repository program that verified before (the
+sweep of D-V2-234), still decodes and verifies; the formatter's whole test suite now also holds the identity law with
+no source (`laws`), the repository corpus included.
+
+**Mutants.** M1296 — the comparison removed: two tests red. M1297 — the parse's errors ignored: survived at first
+(a tree that fails to parse usually also differs), then red once `consume` and `recover` were added — the parser
+reports DL1608 and recovers to the very same tree, so only its verdict refuses them.
+
+**A defect this found, older than the branch: FMT-ESCAPE-RAW-1.** A string that holds a bidirectional control or a
+line-break look-alike — legal, by its escape, and what DL0107 and DL0108 tell the author to write — was printed with
+the character raw. `delulu fmt` then refused the file (DL1702; nothing was written, so no file was harmed), and under
+this decision an honest plugin holding such a string would have been refused. In an f-string the braces of any escape
+were doubled as if they were text (`\u{{1b}}`), which does not lex. Fixed in `fmt.rs` (`escape_str` asks the lexer's
+own list, `lexer::refused_raw_characters`; `fstring_text` escapes character by character). Red first (`E47`), every
+character of the list tried, in a string and in an f-string. No mutant was run for this fix — the session's limit.
+
+**Cost, measured** (laptop, Windows, release build, 2026-11-17, the largest repository program that verifies, 13 KB
+of source, a 136 KB artifact): decode 2.1 ms before, 7.7 ms now; `verify` 8.4 ms; checking the same program from
+text 1.1 ms. Most of the new time is the fingerprint (two JSON trees), not the parse. Not optimized.
+
+**Not established.** No independent reading (it joins D-V2-227, 228, 231, 232, 234). Miri, macOS, Linux and ARM64:
+the CI run of this commit, **not yet read** when this was written — `master` is not moved for it until it is. The
+printer was read for panics on a tree the parser never makes (one `unreachable!`, guarded by its caller; indexing
+behind length checks) and the fuzz entry now reaches it, but no fuzz campaign was run locally beyond the crate's tests.
+Characters the lexer accepts raw and a terminal may not show (U+200B, U+FEFF, U+007F, ESC inside a string) are
+accepted from an artifact exactly as from text; whether text should accept them is RW 4.94's remaining question.
+
+**Rows.** RW 4.94: the artifact side closed; what remains is the terminal-safe rendering of string data. RW 5.7:
+closed — the fuzz entry verifies, and verifying now prints and re-parses.

@@ -13447,3 +13447,31 @@ switched to `master` and fast-forwarded.
 **Still owed, and not hidden by the merge:** an independent reading of D-V2-227, 228, 231, 232 and 234.
 
 **For whoever continues:** `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, Part I, §10.
+
+## 2026-11-17 — the laptop (Fable 5.2): print-and-reparse at decode (D-V2-236); FMT-ESCAPE-RAW-1 found and fixed; the owner's questions answered
+
+**Start of session.** `git fetch`: nothing new. The three push runs of `master` read: `44026715137`,
+`44026715144`, `44026715183` at `959528b` and `44026946608` at `eb6838d`, all green. Survey check ok; doctor ok.
+
+**What was built.** D-V2-236, in full in the decision log: a decoded tree is printed, parsed and compared, at decode.
+Red first; two mutants; the formatter's suite holds the identity law without the source. Along the way the probe of
+string literals found FMT-ESCAPE-RAW-1 (the formatter printed raw a character the lexer refuses raw), fixed.
+
+**Tests on the laptop.** `delulu-check`, `delulu-syntax`, `delulu-runtime`, `delulu-wasm` whole: 1,127 passed
+(before the escape fix; `delulu-syntax` 173 and `dir::` 25 again after it). Eight CLI suites: plugin, plugin load,
+signing, artifact review, compound assignment, locale plugin, secret verify — green; `doctor_cli` red only while the
+Survey map was stale, as it must be. `scripts/clippy.sh`: clean.
+
+**The owner asked** whether `master` and his folder hold everything. Answer recorded in the sync log: every commit of
+`laptop/fable-deep-verification` is on `master`; `laptop/fable-research-runner` (a throwaway harness, three commits)
+and the raw evidence folder (378 MB: logs, built binaries, host paths) are deliberately not, and why.
+
+**Three projects he named were read** (READMEs and docs through `gh`; the sub-agent's web access was refused by the
+project's own agent gate, as designed): `unstablebuild/rune` — a GPL-3 IDE and terminal multiplexer in Go, not a
+language; it adds a language by an extension that starts an LSP server, a Tree-sitter grammar and an indexer
+specification, and gives agents skills from `.rune/skills` and `.agents/skills` with an `allowed-tools` list.
+`google/rune` — an unfinished systems language in C (Apache-2.0) whose `secret(T)` types make comparisons
+constant-time. `anomalyco/opencode` — an MIT coding agent with a read-only `plan` agent. What follows for DeluluLang
+is three suggestions, none built: a Tree-sitter grammar (nothing in `editors/` has one; Rune, Neovim, Helix and Zed
+all want it); the skill at `skills/delulu/SKILL.md` also reachable at `.agents/skills/delulu/`; and asking whether
+`Secret[T]` comparisons should be constant-time. Nothing was copied; Rune's code is GPL and must not be.
