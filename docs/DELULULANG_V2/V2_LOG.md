@@ -13419,3 +13419,10 @@ string-literal character rules, nesting, compound-assignment shape — RW 4.94 s
 full run is read green; the independent reading of the risk-class changes is still owed and is recorded as owed.
 
 **Survey and doctor after the last edit:** as the commit message states them.
+
+## 2026-11-17 — the laptop (Fable 5.2): the merge's gating run was red on macOS on one older test; repaired in the test (D-V2-231, third amendment)
+
+Run `44012764481` at `b7d3e8a`: `test (macos-latest)` **red** in
+`brokerd::tests::revoke_mid_run_then_daemon_death_fail_closed`; the other fourteen finished jobs green, D-V2-234's tests
+`ok` on all four test jobs; the three `miri-slow` jobs had not finished when this was written. The cause and the repair are in D-V2-231's third amendment. `master` was not
+moved on that run; the next commit's run decides.

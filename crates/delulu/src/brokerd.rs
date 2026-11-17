@@ -4477,6 +4477,15 @@ mod tests {
         // Kill the daemon mid-run: the next effectful op is DL1401 — fast, never a hang, and there
         // is no embedded path to fall back to.
         stop_daemon(&state, handle);
+        // "Dead" is this test's premise, and in a test the daemon is a thread of this process: its accepting thread
+        // can outlive `serve_inner` by one connection, which it takes and drops. Since D-V2-231 a connection taken and
+        // dropped is said to be exactly that — truthfully, and without the start command — so the premise is waited
+        // for: no connection is taken any more (CI run 44012764481, macOS, was red here on that one connection).
+        let gone = std::time::Instant::now();
+        while broker_transport::connect(&state).is_ok() {
+            assert!(gone.elapsed() < std::time::Duration::from_secs(5), "the stopped daemon still takes connections");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
         let started = std::time::Instant::now();
         match custody.check(Op::FsWrite, Some("./out/a.txt")) {
             CustodyDecision::Deny(d) => {

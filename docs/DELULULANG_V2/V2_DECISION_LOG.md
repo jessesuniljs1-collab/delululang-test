@@ -7244,3 +7244,14 @@ is remedied by a revert commit, which this linear history allows.
 green job by job; no squash, no rebase, no force — every cited hash is kept. Then the owner's checkout
 `D:\nelan\DeluluLang` is brought to `master`. `laptop/fable-research-runner` and `claude/relaxed-brown-2l78i1` are
 still not merged (D-V2-233, points 6 and 7). Nothing is tagged, released or published.
+
+**D-V2-231, third amendment (2026-11-17) — an older test's premise raced with this decision's wording.** Run
+`44012764481` at `b7d3e8a`: red on `test (macos-latest)` in
+`brokerd::tests::revoke_mid_run_then_daemon_death_fail_closed` (the pull request's run `44012768973` of the same
+commit passed it). The test stops the daemon — a thread of the test's own process — and expects the next operation
+to be DL1401 with the start command. The daemon's accepting thread can outlive `serve_inner` by one connection,
+which it takes and drops; until this decision a dropped connection was worded as a missing broker, so the test
+passed either way, and since it the drop is said truthfully, without the start command. The code was DL1401 both
+times: nothing was allowed. Repaired in the test: it waits until the stopped daemon takes no connection. A real
+daemon is a process and its threads end with it; `broker_cli`, `grants_cli` and `guard_e2e` assert the same words
+against real processes and were green. No product code changed.

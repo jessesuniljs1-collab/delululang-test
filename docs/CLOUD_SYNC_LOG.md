@@ -10043,3 +10043,10 @@ Survey and doctor: in the commit below.
 - **Still owed:** an independent reading of D-V2-227, 228, 231, 232 and 234 (D-V2-235 says the merge does not
   replace it).
 - **Open / next, in order:** the recovery plan's §10.
+
+### 2026-11-17 — the laptop: Fable 5.2, checkpoint 11b — the gating run `44012764481` at `b7d3e8a` read so far: macOS red on one older broker unit test, fourteen jobs green, three `miri-slow` jobs still running; repaired in the test (D-V2-231, third amendment); `master` not moved yet
+- Session and model as the entry above.   Branch: `laptop/fable-deep-verification`.   Merged: not yet.
+- Files: M `crates/delulu/src/brokerd.rs` (one test), `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- Tests: the `brokerd::` unit module on Windows, green. macOS: this commit's CI run.
+- **Open / next:** read this commit's full run; on green, fast-forward `master` (D-V2-235) and sync the owner's checkout.
