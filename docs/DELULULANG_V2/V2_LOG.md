@@ -13671,3 +13671,29 @@ Deno scopes folders (`--allow-read=./data`) and hosts (`--allow-net=example.com`
 throws a refused operation as a catchable `NotCapable` error (its security documentation); Cloudflare's egress handler
 sees the whole request, but Workers have no file system. The study states the difference. M5's slice and RW 2.42 are
 updated.
+
+## 2026-11-18 — the laptop (Opus 5.5): M5's reviewer slice, first run — four Sonnet 5.5 reviewers with no knowledge of the language
+
+The owner asked for the blind fixtures to be checked with Sonnet 5.5 sub-agents that know nothing of DeluluLang. Four
+fresh sub-agents (`sonnet`, Sonnet 5.5; read-only, each in its own folder under the agent work folder; the project's
+agent gate in force): A1 and A2 with the code only, B1 and B2 with the code and the gate's report for each update.
+The scoring, the prior knowledge each declared and the defects found are in the owner's evidence folder,
+`S5-harness/m5-results/scoring.txt`.
+
+- **Prior knowledge:** none of the syntax or the grant format; three quoted the project instructions' one-line
+  description of the language, the fourth said only that the name appeared there. So the reviewers had the concept,
+  not the language — Claude Code passes a project's instructions to its sub-agents.
+- **Verdicts:** all four, 8 of 8 against the key. Mean confidence 4.4 and 4.1 with the code alone, 4.6 and 4.6 with the
+  reports; one code-only reviewer gave two possible permission lines where the reports' readers gave the exact one.
+  Time: about 26 s and 12 tool calls with the code alone, about 37 s and 20 with the reports.
+- **What was hard without the reports:** the grant syntax for writes and for other methods, and whether a missing
+  effect fails to compile — what the reports answer.
+- **What the reviewers found wrong in the reports**, checked: a host chosen between literals is called hidden; a
+  redundant *inconclusive* follows an *exceeds* for the same host; a compile error hides the permission question —
+  RW 6.89. **A fixture defect, the head chef's:** update D's second branch uses a grant pattern as a host.
+
+**Reading.** On fifteen-line programs whose changes are literal and local, a model that does not know the language
+found every new permission from the code alone, so this suite cannot show whether the gate helps a reviewer detect.
+It shows that DeluluLang code is readable by such a model, and that the gate's value here was exactness and
+confidence. The next suite needs larger programs, requests reached through helpers and other modules, and human
+reviewers beside the models.

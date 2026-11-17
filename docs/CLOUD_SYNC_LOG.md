@@ -10256,3 +10256,13 @@ Survey and doctor: in the commit below.
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's reviewer slice with the blind set, when
   reviewers are found.
+
+### 2026-11-18 — the laptop: checkpoint 26 — M5's reviewer slice, first run (four Sonnet 5.5 sub-agents); RW 6.89 (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W9zQBqvWNhPeJ9Pzcm`. Model: Claude Opus 5.5, effort `max`. **Four
+  sub-agents, `sonnet` (Sonnet 5.5)**, read-only, in the agent work folder; none wrote to the repository.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the `V2_LOG.md` entry of this date; M5's slice records its first run; RW 6.89, the gate's report.
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's reviewer slice, a harder suite with human
+  reviewers.
