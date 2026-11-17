@@ -171,6 +171,10 @@ impl Dir {
 
     /// Decode DIR bytes with full hostile-input hardening: bad CBOR, an unsupported version, or a
     /// structurally impossible AST all return an `Err` — never a panic.
+    ///
+    /// This is the one place bytes become a tree, so it is also where the tree is held to what the parser guarantees
+    /// of every tree it makes ([`shape_of`]): a reader that never verifies — `delulu why` once was one — gets the same
+    /// refusals as the loader.
     pub fn decode(bytes: &[u8]) -> Result<Dir, DirError> {
         let dir: Dir = ciborium::from_reader(bytes).map_err(|e| DirError::Malformed(e.to_string()))?;
         if dir.dir_version != DIR_VERSION {
@@ -184,6 +188,7 @@ impl Dir {
         // A hostile CBOR payload can satisfy the *schema* while violating them, so we validate the
         // reconstructed module before any code path can touch it.
         validate_module(&dir.module)?;
+        shape_of(&dir.module)?;
         Ok(dir)
     }
 }
@@ -271,6 +276,286 @@ pub fn verify_checked(bytes: &[u8]) -> Result<(Dir, CheckResult), DirError> {
     }
 
     Ok((dir, result))
+}
+
+// ===== what the parser guarantees of a tree, re-established for a decoded one (RW 4.93, 4.94) =====
+
+/// Hold a decoded tree to three things the parser guarantees of every tree it makes, and that what runs after it
+/// relies on without asking. Returns how many nodes the tree holds.
+///
+/// 1. **Every node has its own id.** The parser numbers nodes as it makes them. The reference-capability rules look a
+///    receiver's type up by its id, and the loader's per-site tables (`plugin_gets`, `plugin_loads`, `foreign_binds`)
+///    are keyed by id — two nodes under one id and one of them is judged, or run, as the other.
+/// 2. **`recovered` is empty.** It lists the placeholders the parser left where it reported an error; the checker
+///    types each as unknown and says nothing, because the parse error already said. For a decoded tree none did.
+/// 3. **Every name is one word to the lexer** ([`delulu_syntax::lexer::is_one_word`] — the lexer's own answer, not a
+///    second copy of its rule): no other script, no bidirectional control, no space or dot, no parser placeholder.
+///
+/// The walk is driven by the tree's own serialization, so it reaches every id and every name of every node kind —
+/// one added to the syntax tomorrow included — with no list of fields here to fall behind.
+///
+/// **What this does not re-establish**, and the text path does: which word may stand where (a keyword or a reserved
+/// word as a declared name, DL0106 and DL1608), the shape of a compound assignment, a variable reference being one
+/// segment, the parser's own nesting bound. Printing the tree and parsing the text again would hold all of them by
+/// construction; the printer reads its source text today and cannot print a tree that has none (RW 4.93's row).
+fn shape_of(m: &Module) -> Result<usize, DirError> {
+    if !m.recovered.is_empty() {
+        return Err(DirError::Malformed(format!(
+            "the tree lists {} parser placeholder(s) — a tree the parser finished without an error lists none",
+            m.recovered.len()
+        )));
+    }
+    let mut walk = Walk::default();
+    match m.serialize(&mut walk) {
+        Ok(()) => Ok(walk.ids.len()),
+        Err(Fault(why)) => Err(DirError::Malformed(why)),
+    }
+}
+
+/// The walk's state. It is a `serde::Serializer` that writes nothing: serializing the tree into it visits every
+/// value the tree holds, and the two it stops at are told apart by their TYPE's name — `NodeId` and `Ident` — which
+/// the derive hands over, so no field of any node is listed here.
+#[derive(Default)]
+struct Walk {
+    ids: std::collections::HashSet<u32>,
+    /// The next integer is a `NodeId`'s.
+    at_node_id: bool,
+    /// The next string is an `Ident`'s name.
+    at_ident_name: bool,
+}
+
+/// Why the walk stopped.
+#[derive(Debug)]
+struct Fault(String);
+
+impl std::fmt::Display for Fault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Fault {}
+
+impl serde::ser::Error for Fault {
+    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+        Fault(msg.to_string())
+    }
+}
+
+/// The fields of one struct or struct variant, being visited.
+struct Fields<'a> {
+    walk: &'a mut Walk,
+    of_ident: bool,
+}
+
+impl Fields<'_> {
+    fn field<T: ?Sized + Serialize>(&mut self, key: &'static str, value: &T) -> Result<(), Fault> {
+        self.walk.at_ident_name = self.of_ident && key == "name";
+        let visited = value.serialize(&mut *self.walk);
+        self.walk.at_ident_name = false;
+        visited
+    }
+}
+
+impl serde::ser::SerializeStruct for Fields<'_> {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, key: &'static str, value: &T) -> Result<(), Fault> {
+        self.field(key, value)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeStructVariant for Fields<'_> {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, key: &'static str, value: &T) -> Result<(), Fault> {
+        self.field(key, value)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeSeq for &mut Walk {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Fault> {
+        value.serialize(&mut **self)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeTuple for &mut Walk {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Fault> {
+        value.serialize(&mut **self)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeTupleStruct for &mut Walk {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Fault> {
+        value.serialize(&mut **self)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeTupleVariant for &mut Walk {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Fault> {
+        value.serialize(&mut **self)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeMap for &mut Walk {
+    type Ok = ();
+    type Error = Fault;
+    fn serialize_key<T: ?Sized + Serialize>(&mut self, key: &T) -> Result<(), Fault> {
+        key.serialize(&mut **self)
+    }
+    fn serialize_value<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Fault> {
+        value.serialize(&mut **self)
+    }
+    fn end(self) -> Result<(), Fault> {
+        Ok(())
+    }
+}
+
+impl<'a> serde::Serializer for &'a mut Walk {
+    type Ok = ();
+    type Error = Fault;
+    type SerializeSeq = Self;
+    type SerializeTuple = Self;
+    type SerializeTupleStruct = Self;
+    type SerializeTupleVariant = Self;
+    type SerializeMap = Self;
+    type SerializeStruct = Fields<'a>;
+    type SerializeStructVariant = Fields<'a>;
+
+    fn serialize_u32(self, v: u32) -> Result<(), Fault> {
+        if std::mem::take(&mut self.at_node_id) && !self.ids.insert(v) {
+            return Err(Fault(format!("the id {v} is held by more than one node — the parser gives every node its own")));
+        }
+        Ok(())
+    }
+
+    fn serialize_str(self, v: &str) -> Result<(), Fault> {
+        if std::mem::take(&mut self.at_ident_name) && !delulu_syntax::lexer::is_one_word(v) {
+            return Err(Fault(format!("{v:?} is not a name: the lexer does not read it as one word")));
+        }
+        Ok(())
+    }
+
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(self, name: &'static str, value: &T) -> Result<(), Fault> {
+        self.at_node_id = name == "NodeId";
+        let visited = value.serialize(&mut *self);
+        self.at_node_id = false;
+        visited
+    }
+
+    fn serialize_struct(self, name: &'static str, _: usize) -> Result<Fields<'a>, Fault> {
+        Ok(Fields { walk: self, of_ident: name == "Ident" })
+    }
+
+    fn serialize_struct_variant(self, _: &'static str, _: u32, _: &'static str, _: usize) -> Result<Fields<'a>, Fault> {
+        Ok(Fields { walk: self, of_ident: false })
+    }
+
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        value: &T,
+    ) -> Result<(), Fault> {
+        value.serialize(self)
+    }
+
+    fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<(), Fault> {
+        value.serialize(self)
+    }
+
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self, Fault> {
+        Ok(self)
+    }
+    fn serialize_tuple(self, _: usize) -> Result<Self, Fault> {
+        Ok(self)
+    }
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self, Fault> {
+        Ok(self)
+    }
+    fn serialize_tuple_variant(self, _: &'static str, _: u32, _: &'static str, _: usize) -> Result<Self, Fault> {
+        Ok(self)
+    }
+    fn serialize_map(self, _: Option<usize>) -> Result<Self, Fault> {
+        Ok(self)
+    }
+
+    // Everything else holds neither an id nor a name.
+    fn serialize_bool(self, _: bool) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_i8(self, _: i8) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_i16(self, _: i16) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_i32(self, _: i32) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_i64(self, _: i64) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_u8(self, _: u8) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_u16(self, _: u16) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_u64(self, _: u64) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_f32(self, _: f32) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_f64(self, _: f64) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_char(self, _: char) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_bytes(self, _: &[u8]) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_none(self) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_unit(self) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_unit_struct(self, _: &'static str) -> Result<(), Fault> {
+        Ok(())
+    }
+    fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<(), Fault> {
+        Ok(())
+    }
 }
 
 // ===== structural validation (panic-proofing the reconstructed AST) =========================
@@ -873,5 +1158,211 @@ mod tests {
             }
             other => panic!("a test-carrying DIR must be refused, got {other:?}"),
         }
+    }
+
+    // ===== RW 4.93, 4.94: a decoded tree is one the parser could have produced =================
+    //
+    // Every tree below is built here, in code, from a module the parser made: the test changes one thing the parser
+    // guarantees and re-derives the stored tables from the changed tree, so the artifact is self-consistent and the
+    // comparison in `verify` has nothing to object to. No artifact file is committed.
+
+    /// Visit every `id` field of a serialized tree, in order — the same key `fmt::ast_fingerprint` strips.
+    fn each_id(v: &mut serde_json::Value, n: &mut usize, f: &mut dyn FnMut(usize, &mut serde_json::Value)) {
+        match v {
+            serde_json::Value::Object(map) => {
+                for (k, child) in map.iter_mut() {
+                    if k == "id" && child.is_number() {
+                        f(*n, child);
+                        *n += 1;
+                    } else {
+                        each_id(child, n, f);
+                    }
+                }
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(|it| each_id(it, n, f)),
+            _ => {}
+        }
+    }
+
+    /// The module with its `k`th node given the id of its first.
+    fn with_one_id_repeated(m: &Module, k: usize) -> Module {
+        let mut v = serde_json::to_value(m).unwrap();
+        let mut first = None;
+        each_id(&mut v, &mut 0, &mut |i, id| {
+            if i == 0 {
+                first = Some(id.clone());
+            } else if i == k {
+                *id = first.clone().unwrap();
+            }
+        });
+        serde_json::from_value(v).unwrap()
+    }
+
+    fn count_ids(m: &Module) -> usize {
+        let mut n = 0;
+        each_id(&mut serde_json::to_value(m).unwrap(), &mut n, &mut |_, _| {});
+        n
+    }
+
+    /// The module with every name spelled `from` spelled `to` instead — declaration and uses alike.
+    fn renamed(m: &Module, from: &str, to: &str) -> Module {
+        fn walk(v: &mut serde_json::Value, from: &str, to: &str) {
+            match v {
+                serde_json::Value::Object(map) => {
+                    if map.len() == 2 && map.contains_key("span") && map.get("name").and_then(|n| n.as_str()) == Some(from) {
+                        map.insert("name".into(), serde_json::Value::String(to.into()));
+                    }
+                    map.values_mut().for_each(|c| walk(c, from, to));
+                }
+                serde_json::Value::Array(items) => items.iter_mut().for_each(|c| walk(c, from, to)),
+                _ => {}
+            }
+        }
+        let mut v = serde_json::to_value(m).unwrap();
+        walk(&mut v, from, to);
+        serde_json::from_value(v).unwrap()
+    }
+
+    /// The artifact a changed tree makes: its tables re-derived from it, so it is self-consistent.
+    fn artifact_of(m: &Module) -> Vec<u8> {
+        let (table, _) = crate::resolve::resolve(m);
+        let result = crate::check::check_module(m, &table);
+        Dir::from_checked(m, &result).encode()
+    }
+
+    fn refused_at_decode(bytes: &[u8], what: &str) -> String {
+        match Dir::decode(bytes) {
+            Err(e @ DirError::Malformed(_)) => {
+                assert_eq!(e.code(), "DL1504");
+                assert!(e.requires_human(), "{what}: never repaired by a machine, never a fallback to Contained");
+                e.message()
+            }
+            other => panic!("{what}: must be refused where bytes become a tree, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_tree_in_which_two_nodes_share_an_id_is_refused_at_decode() {
+        // The parser gives every node its own id, and what follows it keys tables by id: the reference-capability
+        // rules, and the loader's per-site tables. Each node of each corpus program is given the first node's id in
+        // turn, so every kind of id-bearing node the corpus holds is tried.
+        // Under Miri (a hundred times slower, and looking for undefined behaviour, not for coverage) the first program
+        // and one node in four: the walk is the same code.
+        let (programs, nodes) = if cfg!(miri) { (usize::MAX, 4) } else { (1, 1) };
+        let mut tried = 0;
+        for src in corpus().into_iter().step_by(programs) {
+            let c = check_source(0, src);
+            for k in (1..count_ids(&c.module)).step_by(nodes) {
+                let m = with_one_id_repeated(&c.module, k);
+                let said = refused_at_decode(&artifact_of(&m), &format!("node {k} of `{src}`"));
+                assert!(said.contains("more than one node"), "the refusal names the cause: {said}");
+                tried += 1;
+            }
+        }
+        assert!(tried > if cfg!(miri) { 2 } else { 50 }, "the corpus gives this test something to try: {tried}");
+    }
+
+    #[test]
+    fn a_tree_that_lists_parser_placeholders_is_refused_at_decode() {
+        // `recovered` lists the placeholders the parser left where it reported an error; the checker types each as
+        // unknown and says nothing, "its parse error already said". No module that parsed has any — and for an
+        // artifact no parse error ever said.
+        let c = check_source(0, "module m\nfn f() -> Int { 1 }\n");
+        let mut m = c.module.clone();
+        let mut ids = Vec::new();
+        each_id(&mut serde_json::to_value(&m).unwrap(), &mut 0, &mut |_, id| ids.push(NodeId(id.as_u64().unwrap() as u32)));
+        m.recovered = ids;
+        let said = refused_at_decode(&artifact_of(&m), "a non-empty `recovered`");
+        assert!(said.contains("placeholder"), "the refusal names the cause: {said}");
+    }
+
+    #[test]
+    fn a_name_the_lexer_does_not_read_as_one_word_is_refused_at_decode() {
+        // RW 4.94. Each of these is refused in source text (DL0101 to DL0108) or cannot be written there at all.
+        let c = check_source(0, "module m\nfn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\n");
+        assert!(!c.has_errors());
+        let bad = [
+            "",
+            " ",
+            "fi b",
+            "fib ",
+            "fib\n",
+            "1fib",
+            "fib.x",
+            "fib-x",
+            "<error>",
+            "<missing>",
+            "fïb",
+            "f\u{202E}ib", // a bidirectional control: DL0107 in text
+            "f\u{200B}ib", // a zero-width space
+            "fib\0",
+            "\"fib\"",
+            "fib//",
+        ];
+        // Under Miri one name in four (each is a whole check of the module there).
+        for name in bad.into_iter().step_by(if cfg!(miri) { 4 } else { 1 }) {
+            let m = renamed(&c.module, "fib", name);
+            let said = refused_at_decode(&artifact_of(&m), &format!("the name {name:?}"));
+            assert!(said.contains("is not a name"), "the refusal names the cause: {said}");
+        }
+        // The twin: a word the lexer does read is still an artifact that decodes and verifies.
+        for name in ["fib2", "_fib", "F", "fib_of_n"] {
+            let m = renamed(&c.module, "fib", name);
+            verify(&artifact_of(&m)).unwrap_or_else(|e| panic!("the name {name:?} is a word: {}", e.message()));
+        }
+    }
+
+    #[test]
+    fn the_walk_at_decode_reaches_every_id_a_second_reading_of_the_tree_finds() {
+        // The walk finds an id by its TYPE, wherever it is held. This reads the same trees another way — by the
+        // field's name in the tree's JSON form — and the two must count the same nodes: a node kind either reading
+        // missed would show as a difference. (The repository's programs are held to the same below.)
+        for src in corpus() {
+            let c = check_source(0, src);
+            assert_eq!(shape_of(&c.module).unwrap(), count_ids(&c.module), "{src}");
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "the witness is the breadth of real programs read from disk; Miri runs the tests above")]
+    fn every_program_in_the_repository_that_checks_clean_still_makes_an_artifact_that_verifies() {
+        // The control for the refusals above, over every single-file program the repository keeps: none of them may
+        // refuse a tree the parser made. (An artifact holds no actor and no written reference capability — those
+        // refusals are older, and stay.)
+        fn sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    sources(&p, out);
+                } else if p.extension().is_some_and(|x| x == "delulu" || x == "solulu") {
+                    out.push(p);
+                }
+            }
+        }
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut files = Vec::new();
+        for kept in ["tests", "examples", "docs/book", "measurements"] {
+            sources(&repo.join(kept), &mut files);
+        }
+        files.sort();
+        let (mut verified, mut older_refusal) = (0, 0);
+        for f in &files {
+            let Ok(src) = std::fs::read_to_string(f) else { continue };
+            let c = check_source(0, &src);
+            if c.has_errors() {
+                continue;
+            }
+            match verify(&serialize(&c.module, &c.result)) {
+                Ok(dir) => {
+                    assert_eq!(shape_of(&dir.module).unwrap(), count_ids(&dir.module), "{}: the two readings", f.display());
+                    verified += 1
+                }
+                Err(DirError::Malformed(said)) if said.contains("not supported in v0.7") => older_refusal += 1,
+                Err(e) => {
+                    panic!("{}: a program that checks clean made an artifact that is refused: {}", f.display(), e.message())
+                }
+            }
+        }
+        assert!(verified >= 60, "the sweep found its programs: {verified} verified, {older_refusal} older refusals");
     }
 }

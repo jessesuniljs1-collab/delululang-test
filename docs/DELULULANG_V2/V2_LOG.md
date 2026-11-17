@@ -13398,3 +13398,24 @@ of which statuses changed. `AI_ONBOARDING.md` §10 and the structure index point
 **Not done in this entry:** no code changed. The next code is the plan's Q1 (Verified-artifact ingress).
 
 **Survey and doctor after the last edit:** as the commit message states them.
+
+## 2026-11-17 — the laptop (Fable 5.2): Verified-artifact ingress repaired (D-V2-234; RW 4.93 and 6.67 closed, 4.94 and 5.7 in part); RW 4.100's unit test was racy and is repaired (D-V2-231, second amendment); the owner instructs the merge into `master` (D-V2-235)
+
+**1. CI read.** Run `43966124449` at `9aa8e42` (documents only): **red** on `test (ubuntu-24.04)` and `arm64`, one test
+each — `brokerd::tests::a_connection_past_the_bound_is_told_so_and_its_request_is_not_read`, `BrokenPipe`. The pull
+request's own run `43965132089` at `df9feb5` failed the same test on macOS; its second run `43966135129` at `9aa8e42`
+passed. So the test this branch added at `11c0cce` was a flake, on a commit recorded as 18 of 18. Reproduced on Linux
+beside six busy loops (2 of 60), two causes, both in the test's helpers; repaired there; 120 of 120 after. D-V2-231's
+second amendment has the account. No product code changed for it.
+
+**2. The plan's Q1 — artifact ingress (D-V2-234).** `Dir::decode` refuses a tree in which two nodes share an id, a
+tree that lists parser placeholders, and a name the lexer does not read as one word; `delulu why` on a Verified
+artifact verifies before it reports; the fuzz entry runs the verifier. Witnessed red first, ten mutants each red on
+its own test, 84 honest repository programs still verify. One check the audit proposed (a type-table count) refused
+an honest program in that sweep and was not built; the decision says why. **Not closed:** which word may stand where,
+string-literal character rules, nesting, compound-assignment shape — RW 4.94 stays open for them.
+
+**3. The merge (D-V2-235).** The owner instructed it in the session. It is done by fast-forward once this commit's
+full run is read green; the independent reading of the risk-class changes is still owed and is recorded as owed.
+
+**Survey and doctor after the last edit:** as the commit message states them.

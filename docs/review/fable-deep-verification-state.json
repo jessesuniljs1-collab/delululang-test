@@ -15,8 +15,8 @@
   ],
   "audit": "docs/review/DeluluLang_Fable_5_2_Deep_Verification_Audit.md",
   "queue": "docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md, section 'Single execution queue' (the one queue; the audit's section 10 gives the evidence for its order)",
-  "checkpoint": 10,
-  "checkpoint_note": "Checkpoint 9's CI run 43938925325 at df9feb5 is read whole: 18 of 18, the eleven named tests ok on all four test jobs. The branch is NOT merged: it is the integration candidate of pull request #145, held because CONTRIBUTING.md section 4 asks for an independent reviewer of a risk-class change and none exists (D-V2-233). docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md is rewritten as the one continuation guide (Part I new, Part II Codex's plan). No code changed at this checkpoint; its own CI run is dispatched after the push.",
+  "checkpoint": 11,
+  "checkpoint_note": "Run 43966124449 at 9aa8e42 read: 16 of 18, red on Ubuntu and ARM64 on one flaky unit test this branch added at 11c0cce (also red on macOS in pull-request run 43965132089); repaired in the tests (D-V2-231, second amendment; 120 of 120 on Linux beside six busy loops). Verified-artifact ingress built (D-V2-234): RW 4.93 and 6.67 closed, 4.94 and 5.7 in part. The owner instructed the merge into master in the session (D-V2-235): fast-forward once this checkpoint's full run is read green. An independent reading of D-V2-227, 228, 231, 232, 234 is still owed.",
   "last_session": {
     "date": "2026-11-17",
     "where": "owner's laptop (Windows 11 x64), WSL2 Ubuntu 20.04 on it, and GitHub-hosted runners of the test repository",
@@ -84,16 +84,16 @@
   },
   "next_three_commands": [
     {
-      "run": "gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3",
-      "expect": "the run dispatched at checkpoint 10's commit, 18 of 18; write it into the recovery plan's section 3 table"
+      "run": "git fetch origin && git log --oneline -3 origin/master",
+      "expect": "master at this branch's tip or later (D-V2-235); if still ac2a162, read the tip's CI run and fast-forward on green"
     },
     {
-      "run": "gh pr view 145 -R jessesuniljs1-collab/delululang-test --json state,reviews,mergeable",
-      "expect": "OPEN until a second party has read D-V2-227 to D-V2-233; if MERGED, master has the branch and work moves to branches off master"
+      "run": "cargo run -p delulu-survey -- check && cargo run -p delulu -- doctor --check",
+      "expect": "ok; ok"
     },
     {
       "run": "cargo test --locked -p delulu-check -j 4 dir::",
-      "expect": "green; then the recovery plan's Q1: four red-first tests in crates/delulu-check/src/dir.rs"
+      "expect": "21 passed; then the recovery plan's section 10, step 2 (print-and-reparse)"
     }
   ],
   "engineering": {
@@ -202,7 +202,9 @@
         "D-V2-230",
         "D-V2-231",
         "D-V2-232",
-        "D-V2-233"
+        "D-V2-233",
+        "D-V2-234",
+        "D-V2-235"
       ],
       "remaining_work_rows": [
         "6.87",
@@ -284,14 +286,15 @@
     "2026-11-15": "43703463838 success"
   },
   "integration": {
-    "decision": "D-V2-233",
+    "decision": "D-V2-233, ended by D-V2-235",
     "pull_request": 145,
-    "state": "candidate held for independent review; master not moved (ac2a162)",
+    "state": "merge instructed by the owner in the session of 2026-11-17; fast-forward of master on the tip's green run",
     "blocker": "CONTRIBUTING.md section 4 items 2 and 3: a risk-class change needs a sponsor who is not its author; D-V2-231 and D-V2-232 are in a risk class and only their author has read them",
     "land_by": "fast-forward or merge commit only; never squash or rebase (records cite commit hashes)",
     "not_merged_on_purpose": [
       "laptop/fable-research-runner",
       "claude/relaxed-brown-2l78i1"
-    ]
+    ],
+    "still_owed": "an independent reading of D-V2-227, 228, 231, 232, 234 (CONTRIBUTING.md section 4 item 2)"
   }
 }

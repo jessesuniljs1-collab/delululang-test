@@ -7141,3 +7141,106 @@ the generated map.
 **For whoever reads this later.** On this branch "verified" means: green CI on the exact commit, each change
 witnessed failing before its fix and falsified after. It does not mean reviewed by anyone but its author — which is
 why it is a candidate and not `master`.
+
+## D-V2-234 — a decoded artifact's tree is held to what the parser guarantees: one id per node, no placeholders, every name one word to the lexer; `why` verifies before it reports (RW 4.93 and RW 6.67 closed; RW 4.94 and RW 5.7 in part) — TAKEN (head chef, 2026-11-17, under the owner's delegation and his commission of that date; **awaiting independent review**)
+
+**Context.** A Verified plugin ships its syntax tree (the DIR). `dir::verify` decodes it and re-runs `resolve` and
+`check_module` on it — the same rule code as for text, which is the design and is kept. But the tree did not come
+from the parser, and the checker relies on things the parser guarantees and nothing re-established (the Fable audit's
+§4 T1, after Codex's pipeline audit of 2026-11-05): the reference-capability rules and the loader's per-site tables
+are keyed by node id, so a tree in which two nodes share an id is judged as a different program than it runs as
+(RW 4.93 — DL1604 skipped; no authority escape shown by anyone); `recovered` tells the checker to say nothing about
+a placeholder because a parse error already did; and a name was never held to the lexer's rules (RW 4.94). Besides,
+`delulu why <effect> <file.dpx>` decoded the DIR and reported from its stored facts without verifying them
+(RW 6.67), and the fuzz entry never ran the verifier (RW 5.7).
+
+**Decision.**
+1. **In `Dir::decode` — the one place bytes become a tree — one walk refuses** a repeated node id, a non-empty
+   `recovered`, and any `Ident` the lexer does not read as exactly one word. All three are `DirError::Malformed`:
+   DL1504, `requires_human`, never a fallback to Contained. Being in `decode`, every reader gets them, verifying or
+   not. No wire-format change, no new diagnostic code.
+2. **The walk is driven by the tree's own serialization** — a `serde::Serializer` that writes nothing and stops at
+   two types by name, `NodeId` and `Ident`. It lists no field of any node, so a node kind added to the syntax later
+   is reached without anyone remembering this file. A hand-written walk is how such a rule goes stale
+   (`HANDOFF.md` §11, *a walk's catch-all swallows what it never names*).
+3. **The name rule is the lexer's own answer** (`delulu_syntax::lexer::is_one_word`: lex the text; no diagnostic; one
+   token spanning all of it; a name, a keyword's spelling, or `_`). No second copy of the rule exists. A keyword is
+   accepted because the parser makes one a member name after a `.`; *which word may stand where* is the parser's
+   rule and is **not** re-established here (below).
+4. **`why` on a Verified artifact verifies first** (`dir_verify`) and refuses with the loader's own diagnostic.
+5. **`fuzz_one_dir` runs the verifier**, under the property that what verifies still verifies once re-encoded.
+
+**One thing the audit asked for was tried and not built, and why.** Its §4 T1 proposed a second, independent
+tripwire: after the replay, the type table must hold exactly as many entries as the tree has expressions and blocks.
+Written and run, it refused an honest program — `docs/book/samples/08_foreign.delulu`: 32 types for 34 expressions.
+A receiver that names a foreign library (or a module) is an expression the checker gives no type, so the equation
+does not hold for honest trees and the audit's sentence *"the repository already asserts this for honest input"* was
+wrong (that test asserts the tables are not empty). The sweep below is what caught it, before it shipped. The
+tripwire's purpose — to notice a kind of node the walk misses — is met instead by construction (2) and by a test
+that reads every tree a second way (by field name, in JSON form) and requires the two counts to agree.
+
+**What is NOT re-established, stated so nobody reads "closed" as "complete":** which word may stand where (a keyword
+or a reserved word as a declared name — DL0106, DL1608); the character rules for string literals; the parser's
+nesting bound (bounded today only by the CBOR decoder's own recursion limit); the shape of a compound assignment; a
+variable reference being one segment. RW 4.94 stays open for these. The closure by construction is to print the
+decoded tree and parse the text again; the printer reads its source text and cannot yet print a tree that has none.
+That is the next step of this row, not a different idea.
+
+**Evidence** (Windows, `-j 4`, 2026-11-17; raw output outside the repository, E40 to E43).
+- **Seen failing first.** With the three refusals and the call removed — the code as it was — the three new tests
+  are red and the honest controls green (E40). `why`'s test with the reader put back: `plugin verify` refuses the
+  rewritten artifact, DL1504, and `why Read` answers *"has no export that performs `Read`"*, exit 0 (E42).
+- **Each tree is built in the test, as code**, from a module the parser made, with its stored tables re-derived so
+  it is self-consistent. Every id-bearing node of the ten corpus programs is given another node's id in turn
+  (78 trees); sixteen names the lexer refuses or text cannot spell. No artifact file is committed.
+- **Honest trees still verify:** every single-file program under `tests/`, `examples/`, `docs/book/` and
+  `measurements/` that checks clean — 84 verify, 10 meet the older refusals (actors, written reference
+  capabilities) — and the existing sixteen `dir::tests`.
+- **Ten mutants, each red, each on its own test** (E41): the repeat not refused; `recovered` not refused; the name
+  not asked; ids not seen by the walk; names not seen by the walk; the walk not called; and four of the lexer
+  predicate (diagnostics ignored, the start of the span, its end, the token's kind).
+- **Suites:** `delulu-check`, `delulu-syntax`, `delulu-runtime`, `delulu-wasm` whole, and `plugin_cli`,
+  `plugin_load_cli`, `signing_cli`, `json_contract`, `cli_contract`, `artifact_review`: 60 targets, 1,217 passed, none
+  failed, cargo's own exit 0 (E43). Linux, macOS, ARM64 and Miri: the commit's CI run.
+
+**Who is affected.** An artifact that verified yesterday is refused today only if this compiler could never have
+built it. The refusals only refuse: reverting the change restores the old behaviour exactly; no migration.
+
+**Review.** Security-critical, and in `CONTRIBUTING.md` §4's risk class (authority behaviour: what a Verified plugin
+is). Its author is the only party who has read it. It rides the same held pull request (#145, D-V2-233).
+
+**D-V2-231, second amendment (2026-11-17) — its own unit test was racy; the product was not.** Run `43965132089`
+(the pull request's run at `df9feb5`, macOS) and run `43966124449` (at `9aa8e42`, a documents-only commit; Ubuntu
+and ARM64) each failed `brokerd::tests::a_connection_past_the_bound_is_told_so_and_its_request_is_not_read` with
+`BrokenPipe`, where run `43938925325` at `df9feb5` had passed it on every system. Reproduced on Linux (WSL) beside
+six busy loops: 2 of 60 red, and two different causes, both in the tests' helpers. (1) `ask_once` returned its
+write's error: a connection past the bound is answered unread and, on a Unix socket, closed at once, so a client held
+a moment after connecting has its write refused with the answer already there to read. The real client reads it
+(the first amendment); the test's raw client did not. (2) `hold_the_bound` took one `Busy` for the bound being held
+by its sixty-four silent connections; the reader of a request served a moment before still counts until its thread
+ends, so the bound could be sixty-three and one about to leave, and the next connection was served — an `Issue` meant
+to be turned away came back `Issued`. Repaired in the tests only: the answer is read whatever became of the send, and
+each silent connection is seen to be held (the daemon takes connections in order and one thread tells those turned
+away, in order, so after a later `Busy` every earlier connection is either told or held). After: 120 of 120 on Linux
+beside the same six loops, and the whole `brokerd::` module green there; Windows green. No product code changed.
+The lesson is the first amendment's again: a test of the broker's timing is run many times on Linux, starved,
+before it is pushed.
+
+## D-V2-235 — the Fable 5.2 branch is merged into `master` on the owner's instruction of 2026-11-17; D-V2-233's hold ends; the independent reading it waited for has still not happened — TAKEN (the owner's instruction, carried out by the head chef, 2026-11-17)
+
+**The instruction.** After D-V2-233 held the branch as a candidate (pull request #145) for want of an independent
+reviewer, the owner wrote, in the session: *"After merging all ur work with master branch; Sync the master branch
+with `D:\nelan\DeluluLang`. This maybe the last session with u fable 5.2 as model"*. D-V2-233, point 3, said who could
+lift the hold: the owner. He has.
+
+**What this is and is not.** `CONTRIBUTING.md` §4 item 3 — *no change merges on the say-so of its own author* — is
+met: the merge is on the project lead's say-so, in writing, not the author's. Item 2 — a sponsor who has **read** a
+risk-class change — is **not** met and is not claimed: nobody but their author has read D-V2-227, 228, 231, 232 and
+234. The owner merged knowing that (D-V2-233 and the pull request say it in plain words). They are on `master` and
+**still awaiting an independent reading**; the recovery plan's §4 item 5 carries that as an open debt, and a finding
+is remedied by a revert commit, which this linear history allows.
+
+**How.** A fast-forward of `master` to the branch's tip, only once the tip's full `jobs=everything` run has been read
+green job by job; no squash, no rebase, no force — every cited hash is kept. Then the owner's checkout
+`D:\nelan\DeluluLang` is brought to `master`. `laptop/fable-research-runner` and `claude/relaxed-brown-2l78i1` are
+still not merged (D-V2-233, points 6 and 7). Nothing is tagged, released or published.

@@ -29,17 +29,17 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 352 |
-| Rust lines | 212184 |
+| Rust lines | 212855 |
 | Rust files outside `src/` (test/bench targets) | 180 |
 | Markdown documents | 332 |
-| Markdown lines | 117622 |
+| Markdown lines | 117781 |
 | DeluluLang programs | 317 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
 | CLI verbs, read from the dispatch | 47 |
-| Nodes / edges in this map | 1785 / 21578 |
-| … edges that are **inferred**, not read (each says so) | 399 |
+| Nodes / edges in this map | 1785 / 21614 |
+| … edges that are **inferred**, not read (each says so) | 400 |
 | Open discrepancies | 49 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -97,7 +97,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 50970 lines
+- **Modules:** 44 files, 51038 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -109,11 +109,11 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_client.rs` | 779 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 756 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 689 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 6613 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 6678 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 397 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 181 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 189 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 12143 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 12146 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 387 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
@@ -199,7 +199,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 18227 lines
+- **Modules:** 18 files, 18725 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -207,8 +207,8 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/check.rs` | 5234 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1638 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
-| `src/dir.rs` | 877 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
-| `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
+| `src/dir.rs` | 1368 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
+| `src/fuzz.rs` | 133 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
 | `src/lib.rs` | 2772 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 573 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
 | `src/manifest.rs` | 380 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
@@ -372,14 +372,14 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 9535 lines
+- **Modules:** 9 files, 9595 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/ast.rs` | 697 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
 | `src/fmt.rs` | 1884 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
 | `src/grammar.rs` | 115 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
-| `src/lexer.rs` | 1455 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
+| `src/lexer.rs` | 1515 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 700 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 186 | The language's one rule for turning written decimal text into a `Float`. |
@@ -458,7 +458,7 @@ suites with `delulu-survey impact mod:<path> --depth 2`.
 | `test` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1247` | 7 |
 | `toolchain` | `crates/delulu/src/toolchain.rs` | `crates/delulu/src/cli.rs:1286` | 6 |
 | `verify-sig` | `crates/delulu/src/signing.rs` | `crates/delulu/src/cli.rs:1254` | 4 |
-| `why` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1264` | 13 |
+| `why` | `crates/delulu/src/cli.rs` | `crates/delulu/src/cli.rs:1264` | 14 |
 
 Internal subcommands — spawned by the host, never typed. Each is dispatched through a constant, so
 its spelling is **not read here** (`DYNAMIC`): the map names the constant and does not guess its value.

@@ -10018,3 +10018,28 @@ Survey and doctor: in the commit below.
   (2) read this commit's CI run to its end and write it into the guide's §3 table; (3) the guide's Q1, Verified-artifact
   ingress, red-first in `crates/delulu-check/src/dir.rs` — the guide's §10 says where to start; (4) then Q3 and Q4.
   **Start from this branch, not from `master`**, until #145 lands.
+
+### 2026-11-17 — the laptop: Fable 5.2, checkpoint 11 — Verified-artifact ingress (D-V2-234); RW 4.100's flaky unit test repaired (D-V2-231, second amendment); the owner instructs the merge into `master` (D-V2-235)
+- Session: `https://claude.ai/code/session_01Deh6WBJXdWAMcbyNesiiix` (the same work; the link changed again). Model:
+  Claude Fable 5.2 as the harness names it; effort `high`, then `medium`, as the owner set it. No sub-agent.
+- Branch: `laptop/fable-deep-verification`.   Pull request: #145.   Merged: **by fast-forward, on the owner's
+  instruction in the session, once this commit's full CI run is read green** — the entry after this one says that it
+  happened and names the run.
+- Base of this entry: `9aa8e42`. Nothing new on `origin/master` (`ac2a162`).
+- **CI read since the entry above.** Run `43966124449` at `9aa8e42`: **RED** on `test (ubuntu-24.04)` and `arm64` —
+  one test, this branch's own, a flake (also red on macOS in the pull request's run `43965132089` at `df9feb5`).
+  Repaired in the test; the product did not change.
+- **What changed for a user:** a Verified plugin whose tree the compiler could never have built is refused at decode
+  (DL1504); `delulu why` on a `.dpx` verifies before it answers.
+- Files: M `crates/delulu-check/src/dir.rs`, `fuzz.rs`; M `crates/delulu-syntax/src/lexer.rs`;
+  M `crates/delulu/src/cli.rs`, `brokerd.rs` (tests only); M `crates/delulu/tests/plugin_cli.rs`; M `CHANGELOG.md`,
+  `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (4.93 and 6.67 closed; 4.94 and 5.7 in part), `docs/review/fable-deep-verification-state.json`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Nothing added, deleted or renamed; no workflow, no entrenched file.
+- **Numbers taken:** `D-V2-227` to `D-V2-235`.
+- Tests: Windows — `delulu-check`, `delulu-syntax`, `delulu-runtime`, `delulu-wasm` whole and six CLI suites, 60
+  targets, 1,217 passed; the broker's unit tests. Linux (WSL) — the repaired test 120 of 120 beside six busy loops,
+  the `brokerd::` module green. Ten mutants for D-V2-234, each red. macOS, ARM64, Miri: this commit's CI run.
+- **Still owed:** an independent reading of D-V2-227, 228, 231, 232 and 234 (D-V2-235 says the merge does not
+  replace it).
+- **Open / next, in order:** the recovery plan's §10.

@@ -30,11 +30,18 @@ pub fn fuzz_one_manifest(data: &[u8]) {
 /// A compiled DIR from a `.dpx`: hostile CBOR must be an `Err`, never a panic — and anything that
 /// DOES decode must re-encode to bytes that decode to the same thing (canonical, so a signature over
 /// it means one program).
+///
+/// RW 5.7: it also runs the **verifier** on the bytes, which this entry never did — the replay (`resolve` and
+/// `check_module` over a tree that did not come from the parser) is the larger surface, and it must answer, never
+/// panic. And what the verifier accepts it must accept again once re-encoded: one program, one verdict.
 pub fn fuzz_one_dir(data: &[u8]) {
     if let Ok(dir) = crate::dir::Dir::decode(data) {
         let once = dir.encode();
         let again = crate::dir::Dir::decode(&once).expect("a DIR that decoded re-encodes to one that decodes");
         assert_eq!(again.encode(), once, "DIR re-encoding is stable");
+        if crate::dir::verify(data).is_ok() {
+            assert!(crate::dir::verify(&once).is_ok(), "a DIR that verified verifies again once re-encoded");
+        }
     }
 }
 

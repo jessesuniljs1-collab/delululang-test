@@ -6617,12 +6617,15 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
         return 0;
     }
 
-    // Verified: replay the DIR's own facts and follow the real chain to the primitive op.
+    // Verified: follow the real chain to the primitive op over the DIR's facts — **re-proved first**. RW 6.67: this
+    // decoded the DIR and reported from its stored facts as they stood, so an artifact whose stored facts had been
+    // rewritten was answered confidently and falsely, where `plugin verify` and a load refuse it (DL1504). The
+    // answer is now given only for facts the replay recomputed and found equal.
     let Some(dir_bytes) = dpx.dir.as_deref() else {
         eprintln!("error: verified plugin `{name}` carries no DIR");
         return 1;
     };
-    let dir = match delulu_check::dir_deserialize(dir_bytes) {
+    let dir = match delulu_check::dir_verify(dir_bytes) {
         Ok(d) => d,
         Err(e) => {
             print_diagnostics("why", &[Diagnostic::error(e.code(), e.message())], &map, None, opts.json);

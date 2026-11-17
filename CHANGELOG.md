@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a Verified artifact is held to what the parser guarantees, 2026-11-17
+
+- **A Verified plugin whose tree the compiler could never have built is refused where it is read** (DL1504): two
+  nodes under one id, parser placeholders, or a name the lexer does not read as one word (another script, a
+  bidirectional control, a space, a dot). Before, such a tree could verify, and one reference-capability rule
+  (DL1604) could be skipped that way. An artifact built by `delulu plugin build` is unaffected. (D-V2-234; RW 4.93,
+  RW 4.94 in part.)
+- **`delulu why <effect> <plugin.dpx>` verifies the artifact before it answers**, and refuses what `plugin verify`
+  refuses. It used to answer from stored facts it had not checked. (RW 6.67.)
+
 ## Unreleased — a command that did nothing no longer says it passed, 2026-11-17
 
 - **Changed (RW 6.51, D-V2-232): `delulu test` refuses what it was given and cannot find — exit 2, nothing run.** A

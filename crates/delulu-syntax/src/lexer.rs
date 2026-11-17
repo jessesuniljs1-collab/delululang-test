@@ -70,6 +70,24 @@ pub fn lex(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
     (tokens, diags)
 }
 
+/// Whether this lexer reads `text` as exactly one word — a name, a keyword's own spelling, or `_` — and nothing else.
+///
+/// The lexer itself answers, so that a tree which did not come from text (a Verified artifact's, decoded in
+/// `delulu_check::dir`) is held to the rules for a name that text is held to, whatever they become, and to no second
+/// copy of them (RW 4.94): ASCII only, no bidirectional control, no space, no dot, never empty.
+///
+/// **Which word may stand where is not answered here.** A keyword is a member name after a `.` and is refused as a
+/// declared name; that is the parser's rule (`expect_decl_name`, `expect_member_name`).
+pub fn is_one_word(text: &str) -> bool {
+    let (tokens, diags) = lex(0, text);
+    diags.is_empty()
+        && tokens.first().is_some_and(|t| {
+            t.span.start == 0
+                && t.span.end as usize == text.len()
+                && (matches!(t.kind, TokenKind::Ident(_) | TokenKind::Underscore) || t.kind.keyword_lexeme().is_some())
+        })
+}
+
 /// Lex with the comment side channel (Stage 8, phase 8d): identical tokens and
 /// diagnostics to [`lex`], plus every comment in source order for the formatter.
 pub fn lex_with_comments(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
@@ -1451,5 +1469,47 @@ mod fstring_lex_tests {
         // Not an exponent: a name after a number stays a name (`e` with no digit), and a method call stays one.
         assert!(matches!(lex(0, "1.e").0[0].kind, TokenKind::Int(1)));
         assert!(lex(0, "2.exp()").1.is_empty());
+    }
+}
+
+/// RW 4.94: [`is_one_word`], the lexer's answer for a name that did not come from text.
+#[cfg(test)]
+mod one_word_tests {
+    use super::*;
+
+    #[test]
+    fn one_word_is_a_name_a_keyword_or_an_underscore_and_nothing_else() {
+        // RW 4.94: the answer a decoded tree's names are held to (`delulu_check::dir`). A keyword is a word — it is a
+        // member name after a `.` — and where a word may stand is the parser's rule, not this one.
+        for word in ["x", "fib", "_", "_x", "x_1", "Int", "import", "consume", "recover", "fn", "self", "a1b2"] {
+            assert!(is_one_word(word), "{word:?} is one word");
+        }
+        for not in [
+            "",
+            " ",
+            "x ",
+            " x",
+            "x y",
+            "x\n",
+            "x\t",
+            "1x",
+            "x.y",
+            "x-y",
+            "x//",
+            "x/*c*/",
+            "\"x\"",
+            "<error>",
+            "é",
+            "naïve",
+            "x\u{202E}",
+            "\u{202E}x",
+            "x\u{200B}y",
+            "x\0",
+            "x;",
+            "(",
+            "42",
+        ] {
+            assert!(!is_one_word(not), "{not:?} is not one word");
+        }
     }
 }

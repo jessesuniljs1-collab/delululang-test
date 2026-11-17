@@ -6400,34 +6400,99 @@ mod tests {
 
     // ----- RW 4.100 (D-V2-231): a connection turned away at the bound is told so, and its sender asks again -----
 
-    /// One request on one connection, answered or not, never asked again: what every client did before RW 4.100.
+    /// One request on one connection, never asked again: what every client did before RW 4.100.
+    ///
+    /// **The answer is read whatever became of the send.** A connection past the bound is answered without being
+    /// read, and on a Unix socket it is closed as soon as the answer is written — so a client the scheduler held for
+    /// a moment after connecting finds its write refused (`EPIPE`) with the answer already there to read. Returning
+    /// the write's error made this helper report a daemon that had answered as one that had not: CI runs
+    /// `43965132089` (macOS) and `43966124449` (Ubuntu, ARM64), and 1 of 60 on Linux beside six busy loops. With no
+    /// answer to read, the error is the send's if it failed, else the read's.
     fn ask_once(state: &Path, body: ReqBody) -> io::Result<Response> {
         let within = std::time::Duration::from_secs(5);
         let mut conn = broker_transport::connect(state)?;
         conn.set_read_timeout(Some(within))?;
-        send_frame(&mut conn, &Request::new(body))?;
-        read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, within))
+        let sent = send_frame(&mut conn, &Request::new(body));
+        match read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, within)) {
+            Ok(answer) => Ok(answer),
+            Err(unread) => Err(sent.err().unwrap_or(unread)),
+        }
     }
 
-    /// Connections that say nothing, opened until the daemon is reading as many as it reads at once — which it says
-    /// itself, by answering one more with `Busy`. Each holds a reader until it is dropped, or for five seconds.
-    /// Returns them and the bound the daemon named.
-    fn hold_the_bound(state: &Path) -> (Vec<broker_transport::Connection>, u32) {
-        let mut held = Vec::new();
-        let began = std::time::Instant::now();
-        while began.elapsed() < std::time::Duration::from_secs(4) {
-            if held.len() >= 64 {
-                // Not yet `Busy`: a reader the daemon has not counted yet, or this asking took the last place itself.
-                if let Ok(Response::Busy { reading }) = ask_once(state, ReqBody::Status) {
-                    return (held, reading);
-                }
-            }
-            match broker_transport::connect(state) {
-                Ok(c) => held.push(c),
-                Err(_) => std::thread::sleep(std::time::Duration::from_millis(2)),
+    /// [`ask_once`] for a connection that is expected to be turned away. macOS will not give a read deadline to a
+    /// connection the other end has already closed (`EINVAL`: D-V2-231's amendment), and such a try read nothing and
+    /// sent nothing; it is made again. Every try is one more connection past the bound.
+    fn ask_past_the_bound(state: &Path, body: impl Fn() -> ReqBody) -> io::Result<Response> {
+        let mut answer = ask_once(state, body());
+        for _ in 0..16 {
+            match &answer {
+                Err(e) if e.kind() == io::ErrorKind::InvalidInput => answer = ask_once(state, body()),
+                _ => break,
             }
         }
-        panic!("{} silent connections and the daemon still reads another: the bound was not reached", held.len());
+        answer
+    }
+
+    /// Whether the daemon has answered or closed this silent connection — turned it away — rather than holding it.
+    /// One it holds has nothing to read, so the read waits out its few milliseconds; one it turned away has a `Busy`
+    /// to read, or is closed.
+    fn was_turned_away(conn: &mut broker_transport::Connection) -> bool {
+        use std::io::Read as _;
+        if conn.set_read_timeout(Some(std::time::Duration::from_millis(5))).is_err() {
+            return true; // macOS: no deadline for a connection the other end has closed
+        }
+        let mut byte = [0u8; 1];
+        !matches!(conn.read(&mut byte), Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut))
+    }
+
+    /// Sixty-four connections that say nothing, **each one seen to be held** — so the daemon is reading as many as it
+    /// reads at once and every one of its readers is one of these. Each holds its reader until it is dropped, or
+    /// until the daemon's own five seconds for a request run out. Returns them and the bound the daemon named.
+    ///
+    /// Until 2026-11-17 this opened connections until one more was answered `Busy`, and took that for the bound being
+    /// held. It was not always: the reader of a request served a moment earlier (this helper's own probe, or a
+    /// test's `Status`) still counts until its thread ends, so `Busy` could mean sixty-three silent connections and
+    /// one reader about to leave — and the next connection was then read and served (1 of 60 on Linux beside six
+    /// busy loops: an `Issue` meant to be turned away came back `Issued`). Now each connection is looked at: the
+    /// daemon takes connections in the order they arrive and one thread answers those it turns away, in that order,
+    /// so once a later connection has been answered `Busy` every earlier one has either been answered too — it was
+    /// turned away, and has that to read — or is held.
+    fn hold_the_bound(state: &Path) -> (Vec<broker_transport::Connection>, u32) {
+        let mut held: Vec<broker_transport::Connection> = Vec::new();
+        let mut unseen: Vec<broker_transport::Connection> = Vec::new();
+        let began = std::time::Instant::now();
+        // The first of them is held for five seconds; what is built on this needs some of that left.
+        while began.elapsed() < std::time::Duration::from_millis(2_500) {
+            while held.len() + unseen.len() < 64 {
+                match broker_transport::connect(state) {
+                    Ok(c) => unseen.push(c),
+                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(2)),
+                }
+            }
+            let answer = ask_once(state, ReqBody::Status);
+            if !matches!(answer, Ok(Response::Busy { .. })) {
+                // Served, or cut off: a reader was free. Those turned away so far may not have been told yet; give
+                // the thread that tells them a moment, and the next `Busy` settles it.
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            for mut conn in std::mem::take(&mut unseen) {
+                if !was_turned_away(&mut conn) {
+                    match answer {
+                        Ok(Response::Busy { .. }) => held.push(conn),
+                        _ => unseen.push(conn),
+                    }
+                }
+            }
+            if let (Ok(Response::Busy { reading }), 64) = (&answer, held.len()) {
+                return (held, *reading);
+            }
+        }
+        panic!(
+            "this machine did not hold the daemon's bound within 2.5 s ({} connections seen held, {} not yet seen): the \
+             test measured nothing about the daemon",
+            held.len(),
+            unseen.len()
+        );
     }
 
     /// The tree's nodes and the chain's `issue` records: what an `Issue` that was read leaves behind.
@@ -6455,7 +6520,7 @@ mod tests {
         let before = nodes_and_issues(&state);
         let (held, reading) = hold_the_bound(&state);
         assert_eq!(reading, 64, "the bound the daemon names");
-        let turned_away = ask_once(&state, ReqBody::Issue(spec(&["Write"])));
+        let turned_away = ask_past_the_bound(&state, || ReqBody::Issue(spec(&["Write"])));
         assert!(
             matches!(turned_away, Ok(Response::Busy { reading: 64 })),
             "a connection past the bound is answered, and the answer is `Busy`: {turned_away:?}"

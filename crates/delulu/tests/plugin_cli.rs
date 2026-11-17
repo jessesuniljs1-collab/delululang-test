@@ -233,3 +233,48 @@ fn dwx_build_still_works_beside_dpx() {
     let _ = std::fs::remove_file(&src);
     let _ = std::fs::remove_file(&out);
 }
+
+#[test]
+fn why_on_a_verified_artifact_reports_only_what_it_re_proved() {
+    // RW 6.67. `why` on a Verified artifact read the stored facts and reported from them without re-proving them,
+    // so an artifact whose stored facts were rewritten got a confident, false answer — where `plugin verify` and a
+    // load refuse it. It verifies first now, and refuses as they do.
+    let dir = scaffold("why_reproved", MANIFEST, CODE);
+    let o = delulu(&["plugin", "build", dir.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let honest = dir.join("summarize.dpx");
+
+    // The twin: the honest artifact is answered, by the export that reads.
+    let o = delulu(&["why", "Read", honest.to_str().unwrap()]);
+    assert!(o.status.success(), "why on an honest artifact: {}{}", stdout(&o), stderr(&o));
+    assert!(stdout(&o).contains("summarize"), "{}", stdout(&o));
+
+    // The same code, its stored facts rewritten to say every function is pure — the rewrite `dir.rs`'s own test of
+    // the comparison makes. The container is written again around it, so its section hashes are true.
+    let dpx = delulu_wasm::read_dpx(&std::fs::read(&honest).unwrap()).unwrap();
+    let mut stored = delulu_check::Dir::decode(dpx.dir.as_deref().unwrap()).unwrap();
+    for facts in stored.facts.values_mut() {
+        facts.effects.clear();
+        facts.pure = true;
+    }
+    let rewritten = dir.join("rewritten.dpx");
+    std::fs::write(&rewritten, delulu_wasm::write_dpx(&dpx.manifest, Some(&stored.encode()), None, None, dpx.lock.as_deref()))
+        .unwrap();
+
+    let verify = delulu(&["plugin", "verify", rewritten.to_str().unwrap()]);
+    assert_eq!(verify.status.code(), Some(1), "plugin verify refuses it: {}{}", stdout(&verify), stderr(&verify));
+    assert!(format!("{}{}", stdout(&verify), stderr(&verify)).contains("DL1504"));
+
+    let why = delulu(&["why", "Read", rewritten.to_str().unwrap()]);
+    let said = format!("{}{}", stdout(&why), stderr(&why));
+    assert_eq!(why.status.code(), Some(1), "why refuses what verify refuses: {said}");
+    assert!(said.contains("DL1504"), "by the same code: {said}");
+    assert!(!said.contains("has no export that performs"), "and gives no answer read from facts it did not prove: {said}");
+
+    let why = delulu(&["why", "Read", rewritten.to_str().unwrap(), "--json"]);
+    assert_eq!(why.status.code(), Some(1), "{}", stdout(&why));
+    let v: serde_json::Value =
+        serde_json::from_str(stdout(&why).trim()).unwrap_or_else(|e| panic!("one envelope: {e}: {}", stdout(&why)));
+    assert_eq!(v["summary"]["errors"], 1, "{v}");
+    assert_eq!(v["diagnostics"][0]["code"], "DL1504", "{v}");
+}
