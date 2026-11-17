@@ -7393,3 +7393,8 @@ this commit's CI run, not read when this was written.
 
 **The lesson, recorded in `HANDOFF.md` §11.5:** this witness passed locally at 4.4 against 5, and the margin went
 unread. A ratio that close to its bound is a red waiting for a busy runner.
+
+**D-V2-236, second amendment — read on CI (head chef — Claude Opus 5.5 — 2026-11-17).** Run `44068658511` at `b7f5706`,
+`jobs=everything`: **18 of 18**; `verify_is_comfortably_fast_for_per_load_use`, `a_tree_compared_by_bytes_agrees_with_its_fingerprint`
+and the repository sweeps `ok` by name on macOS, Ubuntu, Windows and ARM64. A passing test's figure is not printed, so
+the macOS margin was read on its own (`witness.yml`, `macos-latest`, no busy loops): ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`). `master` fast-forwarded to `b7f5706`.

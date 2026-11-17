@@ -141,7 +141,7 @@ commit, read job by job.
 | `959528b` | that test waits until the stopped daemon takes no connection; records | D-V2-231 third amendment | `44016663858`, **18 of 18** — the run `master` was fast-forwarded on |
 | `e73b050` | **print-and-reparse at decode** — every lexer and parser rule binds an artifact; FMT-ESCAPE-RAW-1 | D-V2-236 · RW 5.7 closed, RW 4.94's artifact side | `44041739843`, **18 of 18** — `master` fast-forwarded to it |
 | `9766b7f` | **a certificate is for its holder**, opt-in: `broker start --holder-key` | D-V2-237 · RW 4.102 (FABLE-022) | `44045532008`, **18 of 18** — `master` fast-forwarded to it |
-| *the commit after `20a7591`* | the tree comparison at decode streamed (`fmt::same_tree`), not two JSON fingerprints — `20a7591`'s push run `44063570521` was red on macOS on `verify`'s timing witness (5.19 against 5) | D-V2-236, second amendment | named in the newest `CLOUD_SYNC_LOG.md` entry; not on `master` until read green |
+| `b7f5706` | the tree comparison at decode streamed (`fmt::same_tree`), not two JSON fingerprints — `20a7591`'s push run `44063570521` was red on macOS on `verify`'s timing witness (5.19 against 5) | D-V2-236, second amendment | `44068658511`, **18 of 18** — `master` fast-forwarded to it; on macOS: ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`) |
 
 **What "verified" means for these, exactly.** Each change has a test that was seen failing before the fix and
 mutants that turn it red again; each commit's full CI run was read to its end, the red ones included and named above.
@@ -233,7 +233,7 @@ gh workflow run witness.yml --ref <branch> -f os=macos-latest -f target=<test fi
 | | |
 |---|---|
 | **The 18 CI jobs** | `test` on `ubuntu-24.04`, `windows-latest`, `macos-latest`; `arm64`; `lints`; `heavy-gates`; `fuzz`; `formal`; `supply-chain`; `editor`; `microvm`; `microvm-reproducible`; `miri` (`delulu-diag`, `delulu-atlas`); `miri-ffi`; `miri-slow` (`delulu-check`, `delulu-syntax`, `delulu-broker`). A push to `master` runs them; a branch needs the dispatch above |
-| **Current evidence** | run `44041739843` at `e73b050`, 18 of 18, and run `44045532008` at `9766b7f`, 18 of 18, each read job by job on 2026-11-17 — the new tests `ok` by name on macOS, Ubuntu, Windows and ARM64. The push run of the records commit after them, `44063570521`, was red on macOS on `verify`'s timing witness (5.19 against 5) — fixed by D-V2-236's second amendment, whose run is in the newest `CLOUD_SYNC_LOG.md` entry |
+| **Current evidence** | run `44041739843` at `e73b050`, 18 of 18, and run `44045532008` at `9766b7f`, 18 of 18, each read job by job on 2026-11-17 — the new tests `ok` by name on macOS, Ubuntu, Windows and ARM64. The push run of the records commit after them, `44063570521`, was red on macOS on `verify`'s timing witness (5.19 against 5) — fixed by D-V2-236's second amendment (`b7f5706`, run `44068658511`, 18 of 18; on macOS: ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`)) |
 | **Platforms** | Windows: the laptop. Linux: WSL2 on the laptop (`wsl`, a copy of the tree under `~`), and CI. **macOS and ARM64: CI only — there is no local stand-in, so a macOS failure is found one push late. Read the run before you build on the commit** (this cost a red commit, §3) |
 | **The laptop cannot finish the whole workspace suite comfortably** | the whole `delulu` package is about 25 minutes at `-j 4`; let CI run the workspace. Freeze the tree while a suite runs; run one heavy job at a time |
 | **Known test gaps** | malformed artifact trees are built in `dir.rs`'s tests for ids, placeholders, names, words, literals and compound assignments (D-V2-234, 236), and every repository program is printed and parsed again — but no fuzz campaign has run on the new decode path; nothing exercises macOS locally; the 256-run storm is a script, not a suite; no end-to-end install-and-upgrade test; DNS rebinding and cross-host redirects are not attacked; the audit's two-account steps (T5) have not been re-run with `--holder-key` |
@@ -340,7 +340,7 @@ newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after t
    end** before building on it, and write its result into §3's table.
 2. **Done on 2026-11-17:** `e73b050` (print-and-reparse at decode, D-V2-236; run `44041739843`, 18 of 18) and
    `9766b7f` (`broker start --holder-key`, D-V2-237; run `44045532008`, 18 of 18) are on `master`; `20a7591`'s push run was red on macOS on `verify`'s timing witness (D-V2-236's decode cost), and
-   the commit after it streams the comparison — read its run first (the newest `CLOUD_SYNC_LOG.md` entry). Still open of §5 Q1:
+   `b7f5706` streams the comparison (run `44068658511`, 18 of 18; on `master`). Still open of §5 Q1:
    RW 6.71, and RW 4.94's terminal-safe rendering of string data. Of §5 Q2: repeat the audit's two-account steps
    (T5) with `--holder-key`, and the owner's choice whether strict mode requires it (RW 4.102).
 3. **§5 Q3**, then **Q4** — the outcome contract before the features that will rely on it.

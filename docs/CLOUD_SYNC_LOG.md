@@ -10164,3 +10164,16 @@ Survey and doctor: in the commit below.
      `D:\nelan\DeluluLang`. Red: fix forward on the branch; never raise the bound.
   2. Repeat the audit's T5 two-account steps with `--holder-key` (RW 4.102).
   3. The guide's §10 from its step 3 (Q3, then Q4).
+
+### 2026-11-17 — the laptop: checkpoint 17 — MERGED: `master` fast-forwarded to `b7f5706` (D-V2-236, second amendment); the owner's checkout synced
+- Session: `https://claude.ai/code/session_01Deh6W8tdA5yEh54KPAr36F`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master`.   Merged: **yes** — `20a7591..b7f5706` on run `44068658511` (18 of 18), read job by job.
+- **The macOS margin** (`witness.yml`, `macos-latest`, the timing witness): ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`).
+- Files in this records commit: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/review/fable-deep-verification-state.json`, `docs/survey/*`. Documents only.
+- **To sync another machine:** `git fetch origin && git switch master && git merge --ff-only origin/master`.
+- **Still owed:** an independent reading of D-V2-227, 228, 231, 232, 234, 236 and 237.
+- **Open / next — the next AI's inbox, in order:**
+  1. Read the push run of this records commit on `master` (documents only; its macOS job runs the timing witness again).
+  2. Repeat the audit's T5 two-account steps with `--holder-key` (RW 4.102).
+  3. The guide's §10 from its step 3: §5 Q3 (one outcome for every way a run ends), then Q4 (arguments and JSON).

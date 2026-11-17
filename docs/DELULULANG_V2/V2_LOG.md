@@ -13514,3 +13514,11 @@ the test exists to catch and that the earlier runs had passed by a hair.
 7.7 ms → 2.3 ms. The bound was not touched. Details, tests and mutants: the decision log, D-V2-236's second amendment.
 
 **`master`** stays at `20a7591` until this commit's own full run is read green.
+
+## 2026-11-17 — the laptop (Opus 5.5): `b7f5706` on `master` — the decode cost repaired and read on macOS
+
+**CI read, job by job.** Run `44068658511` at `b7f5706`: **18 of 18**, the timing witness and the new comparison's
+test `ok` by name on all four test jobs. **The margin, read rather than inferred:** `witness.yml` on
+`macos-latest`, `verify_is_comfortably_fast_for_per_load_use` — ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`).
+
+**The merge.** `git push origin b7f5706:master` — a fast-forward from `20a7591`; `D:\nelan\DeluluLang` with it.
