@@ -10188,3 +10188,14 @@ Survey and doctor: in the commit below.
   it is D-V2-237; pull request #144 — it is #145), its DIR work item (done) and which queue governs (the guide's §5).
 - Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/AI_ONBOARDING.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** unchanged from checkpoint 17 — T5 with `--holder-key`; then the guide's §10 from its step 3.
+
+### 2026-11-17 — the laptop: checkpoint 19 — the owner's questions verified by running them; the guide corrected; RW 2.55 (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W7mcSsKhQtbrx8RAxz`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the probe, the benchmarks, the realistic program and the feature checks in the `V2_LOG.md` entry of this
+  date; the guide's §1, §2 and §4 lines they found wrong; RW 2.55 (an empty container filled in a loop meets three
+  refusals in a row).
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** the language basics are the gap the owner is right about — see the guide's §1 language row; the
+  queue is the guide's §5 and the owner's word on its order.

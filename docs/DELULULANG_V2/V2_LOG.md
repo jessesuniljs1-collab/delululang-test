@@ -13522,3 +13522,36 @@ test `ok` by name on all four test jobs. **The margin, read rather than inferred
 `macos-latest`, `verify_is_comfortably_fast_for_per_load_use` — ratio 2.58, 2.93 and 2.37 against the bound of 5 in three single runs with the figure shown (`44084540629`, `44084546749`, `44084552668`; 5.19 before the fix), and ten passes of ten in a row (`44084142499`).
 
 **The merge.** `git push origin b7f5706:master` — a fast-forward from `20a7591`; `D:\nelan\DeluluLang` with it.
+
+## 2026-11-17 — the laptop (Opus 5.5): the owner's questions verified by running them
+
+The owner asked what works, how close a release is, how heavy the language is and how it compares, and then to
+*"check and verify everything"*. Everything below was run on 2026-11-17 on the laptop (Windows 11), at `0b5e827`,
+with the portable release build (`--no-default-features --features net`, 36,464,640 bytes; the default build with
+embedded Python is 35,999,232 — Windows links Python as a DLL). Raw outputs: the owner's evidence folder, `S5-*`.
+
+- **The everyday-program probe, rebuilt** (the 2026-11-02 harness was lost with its session's scratch folder): 55
+  programs, one construct each, checked and run on both engines, output compared. 32 of 34 day-one constructs run
+  (31 on WASM: `readline` is DL1201 there); `const` and `let mut` are spelled `let` and `var` (`let mut`'s message does
+  not say so, RW 2.53). **None of the 21 a Java or Python programmer reaches for next run** — the list is in the
+  guide's §1 language row. Rows 2.33, 2.39, 2.40, 2.41, 2.45, 2.49, 2.50, 2.52 stand as written.
+- **A realistic program**: a 77-line order report (CSV in, validated rows as `Result`, totals in a `Map`, sorted by a
+  hand-written insertion sort, report out, two tests) runs on both engines and is byte-identical to a 40-line Python
+  version. Three repair rounds, all from one pattern — RW 2.55, new.
+- **Performance**, four programs × six lanes, median of three fresh processes, every answer equal to Python's: the
+  WASM engine took 0.06–0.33× Python 3.13's time on recursion, a loop and lists, and 1.6× on word counting; the
+  interpreter 2.1–6.1×; Rust 0.03–0.35×, Node 0.30–1.17×, Java 0.10–2.04×. Start-up: `run` hello 9.5 ms on the
+  interpreter, 13.7 ms on WASM, 66 ms in the sandbox (Python 25, Node 39, Java 62, Rust 5.6). Linking Python costs
+  2.1 ms on every command (`--version` 9.0 against 6.9 ms).
+- **Confirmed by running:** an ungranted run refused (DL0703) and `--preflight` refusing before anything runs (exit
+  1); the broker end to end on a scratch state — a lease used, its replay refused (DL1407), a wider path refused, a
+  revoked lease refused (DL1403), the audit chain verified (16 records); plugin build, verify, load (and the rigged
+  variant refused, DL1501); `--sandbox` confining on Windows; the NumPy example (`mean = 2.5`, default build);
+  D-V2-232's two `test` refusals; MCP — 12 tools, 228,755 bytes from `tools/list`, answering `2025-06-18` when asked
+  for `2025-11-25`; `main` returning `Err` exits 0 and a closed output pipe panics with exit 2 (RW 6.58, FABLE-013);
+  `--version` names no commit, and the 2026-08-07 binary on `PATH` prints the same `delulu 1.0.0`.
+- **Found wrong, corrected in the guide:** the Atlas command (`atlas <file>`, not `atlas tree <file>`); a `.solulu`
+  package no longer checks clean (it refuses); the Survey answers in 0.7–0.8 s, not 3 s, and its module-level impact
+  is coarse. The AI-usability figures quoted to the owner earlier in the session were September's; `REPORT.md`
+  (re-scored 2026-11-08) reads 0% and 50% completion for no documentation and for the Skill alone.
+- **Not re-run:** two OS accounts, many runs against one broker, Linux and macOS sandboxes (CI only), devices.
