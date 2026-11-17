@@ -7301,3 +7301,60 @@ accepted from an artifact exactly as from text; whether text should accept them 
 
 **Rows.** RW 4.94: the artifact side closed; what remains is the terminal-safe rendering of string data. RW 5.7:
 closed — the fuzz entry verifies, and verifying now prints and re-parses.
+
+**D-V2-236, first amendment (head chef — Claude Opus 5.5 — 2026-11-17).** The mutant this decision said was not
+run: M1301, `escape_str` without the lexer's list (`fmt.rs`) — `a_character_refused_raw_in_source_is_printed_as_its_escape`
+red. Evidence `E50`.
+
+## D-V2-237 — A broker started with `--holder-key` adopts a certificate only if it was issued to that key (FABLE-022) — TAKEN (head chef, 2026-11-17, under the owner's delegation)
+
+**Who.** Begun by Claude Fable 5.2 (the check in `Broker::adopt` and its three unit tests, seen red first: `E48`);
+finished by Claude Opus 5.5 after the owner switched models in the same session (the fail-closed state, the daemon
+wiring, `broker start --holder-key`, `doctor`, the end-to-end test, the mutants, these records).
+
+**The finding (the audit, FABLE-022).** `Broker::adopt` verified a chain — signatures, issuers, windows, anchor,
+linkage, attenuation — and never compared the leaf's `subject` with anything. So a certificate was a bearer
+instrument: any broker pinned to the same anchor that obtained the file adopted it, and then held what the anchor had
+issued to another key. Shown by the audit between two OS accounts on disposable fixtures.
+
+**What.** Of the audit's three options, (A) — bind — opt-in:
+
+- `delulu broker start --require-anchored-roots <ANCHOR> --holder-key <FILE>` writes into `root_policy.json` the
+  key file's absolute path and its **public** half (never the private half). `--holder-key` without the anchor flag
+  is refused (exit 2) and writes nothing; the flags of a start write the whole policy, so a start with the anchor and
+  no `--holder-key` unpins.
+- At **every** start the daemon reads the key file again and derives its public half (`holder_key_of`; it never
+  creates a key). Equal to what the policy recorded: adoption is pinned to it (`Broker::require_holder`). The file
+  gone, unreadable or holding another key: **every adoption is refused**, saying why (`Broker::holder_unavailable`) —
+  never a placeholder key, because a certificate's subject is a plain string a signer may set to anything. So a
+  broker pinned this way holds the private half of the key every certificate it adopts must name. The audit's option
+  (A) said "the adopting broker's own key"; the broker's own key is its token-signing key, which `rotate-key`
+  replaces — a separate holder key keeps identity apart from it, and matches how the federation tests already name
+  a vehicle.
+- `Broker::adopt` refuses (DL1415, `CertUntrusted`, audited as a `deny`) a chain whose **leaf** — the certificate
+  that carries the authority — names another key, after `verify_chain` and before the replay checks, so a refusal
+  marks nothing adopted. Hex case is not identity.
+- The start-up banner, `doctor` ("certificate holder": Ok pinned / Problem key file missing / Note not pinned, in
+  strict mode only) and the audit log's `root-policy-mode` record (a new `holder` field) say which holder each start
+  pinned, so a pin removed between two starts leaves evidence.
+- A root policy whose `holder` is present and not whole poisons, like every other unreadable policy (ROOTPOLICY-1).
+
+**Why opt-in, and why no entrenched record.** RFC 0001 describes bearer certificates and does not promise holder
+binding; nothing in `rfcs/` or any other entrenched file was edited, and with no `--holder-key` every broker behaves
+exactly as before. A configured broker refusing more is hardening, not a new meaning of Authority. **Making the pin
+the default in strict mode would change what RFC 0001 describes** — that needs the entrenched route and is not taken
+here; it stays open (the guide's §4 item 2).
+
+**Witnessed and falsified.** Red first in the broker crate (`E48`: a broker pinned as `payload` adopted a certificate
+issued to `vehicle`). Mutants, each red on its own test (`E50`): M1298 the comparison removed (two unit tests and the
+end-to-end test); M1299 the daemon never pins the key it read (the end-to-end test, at its first refusal); M1300 an
+unknown holder key does not refuse (a unit test, and the end-to-end test at its last step).
+
+**Tests, Windows, this laptop.** `delulu-broker` whole, the daemon's `brokerd::` unit tests and `broker_cli`: 356
+passed (`E51`); `federation_cli` 11 passed, the new `a_broker_pinned_to_its_holder_key_adopts_only_what_was_issued_to_that_key`
+among them (`E49`); `scripts/clippy.sh` clean. Linux, macOS, ARM64, Miri: this commit's CI run, not read when this
+was written.
+
+**Not established.** No independent reading. Not run between two OS accounts again (the audit's T5 steps are the
+witness to repeat). A same-user process can still edit `root_policy.json` or the key file — the residual every
+Tier 1 setting has (`DEPLOYMENT.md`); the pin is a boundary in Tier 2, where the broker's state is another account's.

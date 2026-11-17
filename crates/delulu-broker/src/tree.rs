@@ -154,6 +154,14 @@ pub struct Broker {
     /// enforces the mechanism, the deployment provides that custody (a category-7 boundary — see
     /// `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`).
     strict_anchor: Option<String>,
+    /// **The holder this broker adopts for** (FABLE-022, D-V2-237): when set, [`Broker::adopt`] takes a chain only if
+    /// its leaf's `subject` is this key. A certificate names the party its authority is delegated TO; without this
+    /// pin nothing compares that name with the broker presenting it, so a certificate is a bearer instrument — any
+    /// broker pinned to the same anchor that obtains the file adopts it. `None` ⇒ exactly that, as before. Held and
+    /// protected as the pinned anchor is: a public key, set only by in-process daemon-init code. `Some(Err(why))`: a
+    /// holder was pinned and its key could not be established at start, so every adoption is refused, saying why —
+    /// never a placeholder key, because a certificate's subject is a plain string a signer may set to anything.
+    strict_holder: Option<Result<String, String>>,
     /// P8-04 step 5 (D-V2-106): dead-men armed on nodes — each a FUTURE self-revocation the daemon
     /// performs if its holder stops beating (`deadman.rs`). Daemon memory only, like the tree itself.
     pub(crate) deadmen: HashMap<GrantId, crate::deadman::Deadman>,
@@ -203,6 +211,7 @@ impl Broker {
             adoptions_poisoned: false,
             guard: crate::guard::GuardState::new(),
             strict_anchor: None,
+            strict_holder: None,
             deadmen: HashMap::new(),
             proposals: crate::proposal::ProposalState::default(),
         }
@@ -491,7 +500,9 @@ impl Broker {
     /// Observability, not enforcement (invariant 26 / trap 6): no decision reads this record. As with
     /// [`Broker::record_plugin_signature`] it is a **no-op with no sink attached**, and then consumes
     /// no seq — so in-memory brokers and the existing accounting are byte-identical.
-    pub fn record_root_policy_mode(&mut self, mode: &str, anchor: Option<&str>) {
+    /// `holder` (FABLE-022, D-V2-237): the holder key adoption is pinned to, `unavailable` when one is pinned and its
+    /// key could not be read, or none — so a pin removed, or its key file swapped, between two starts leaves evidence.
+    pub fn record_root_policy_mode(&mut self, mode: &str, anchor: Option<&str>, holder: Option<&str>) {
         if self.sink.is_none() {
             return;
         }
@@ -501,7 +512,7 @@ impl Broker {
             "root-policy-mode",
             None,
             Some(mode.to_string()),
-            Some(serde_json::json!({ "mode": mode, "anchor": anchor })),
+            Some(serde_json::json!({ "mode": mode, "anchor": anchor, "holder": holder })),
             "allow",
             None,
         );
@@ -542,6 +553,33 @@ impl Broker {
     /// The pinned anchor iff strict root-issuance mode is on, else `None`.
     pub fn strict_anchor(&self) -> Option<&str> {
         self.strict_anchor.as_deref()
+    }
+
+    /// Pin **the holder this broker adopts for** (FABLE-022, D-V2-237): after this, [`Broker::adopt`] refuses a chain
+    /// whose leaf was issued to any other key. Like [`Broker::require_anchored_roots`] there is no IPC or CLI-runtime
+    /// path to it — only daemon-init code calls it — and it means something only beside a pinned anchor: where any
+    /// process may mint a root, which certificate a broker adopts decides nothing.
+    pub fn require_holder(&mut self, holder_pubkey_hex: String) {
+        self.strict_holder = Some(Ok(holder_pubkey_hex));
+    }
+
+    /// A holder was pinned but its key could not be established (`why` says how): refuse every adoption until it can
+    /// be — the fail-closed reading of "this broker adopts only for that key, and cannot now say which key that is".
+    pub fn holder_unavailable(&mut self, why: String) {
+        self.strict_holder = Some(Err(why));
+    }
+
+    /// The pinned holder key, if one is pinned and known.
+    pub fn strict_holder(&self) -> Option<&str> {
+        match &self.strict_holder {
+            Some(Ok(k)) => Some(k),
+            _ => None,
+        }
+    }
+
+    /// The pin as `adopt` reads it: none, a key, or why the pinned key is not known.
+    pub(crate) fn holder_pin(&self) -> Option<Result<&str, &str>> {
+        self.strict_holder.as_ref().map(|r| r.as_ref().map(String::as_str).map_err(String::as_str))
     }
 
     /// The DISC-1 strict-mode invariant, checkable over live broker state: the ids of any **root**

@@ -10103,3 +10103,27 @@ Survey and doctor: in the commit below.
      branch; do not merge.
   2. Add a mutant for FMT-ESCAPE-RAW-1 (drop the lexer-list arm of `escape_str`; the new test must go red).
   3. Then the guide's section 10 from its step 3 (Q3, Q4).
+
+### 2026-11-17 — the laptop: checkpoint 14 — a certificate is for its holder (D-V2-237, FABLE-022); PUSHED TO THE BRANCH ONLY
+- Session: `https://claude.ai/code/session_01Deh6W8tdA5yEh54KPAr36F`. Models: Claude Fable 5.2, then — at its usage
+  limit, by the owner's switch — Claude Opus 5.5 at effort `max`. No sub-agent.
+- Branch: `laptop/fable-deep-verification`: `e73b050` (D-V2-236) and this commit, both ahead of `master` (`eb6838d`).
+  Merged: **no** — each lands by fast-forward once its own full CI run is read green.
+- **CI read since the entry above:** run `44041739843` at `e73b050`: 15 of 18 green and none red when this was written — the four test jobs (macOS, Ubuntu, Windows, ARM64) among them; the three miri-slow jobs still running.
+- **What changed for a user:** `broker start --require-anchored-roots <ANCHOR> --holder-key <FILE>` — a certificate
+  issued to another key is refused (DL1415); `doctor` gains a "certificate holder" line in strict mode.
+- Files: M `crates/delulu-broker/src/cert.rs`, `tree.rs`; M `crates/delulu/src/brokerd.rs`, `cli.rs`, `doctor.rs`;
+  M `crates/delulu/tests/federation_cli.rs`; M `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/AI_ONBOARDING.md`,
+  `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (new row 4.102), `docs/CLOUD_SYNC_LOG.md`, `docs/review/fable-deep-verification-state.json`,
+  `docs/survey/*`. Nothing added, deleted or renamed; no workflow; no entrenched file.
+- **Numbers taken:** `D-V2-237`; mutants M1298 to M1301. Next free: `D-V2-238`, M1302.
+- Tests: Windows — see the decision. Linux, macOS, ARM64, Miri: this commit's CI run.
+- **Open / next — the next AI's inbox, in order:**
+  1. Read run `44041739843` (`e73b050`) to its end; green: `git push origin e73b050:master`.
+  2. Read this commit's `jobs=everything` run (`gh run list -R jessesuniljs1-collab/delululang-test --branch
+     laptop/fable-deep-verification -L 3`) to its end; green: fast-forward `master` to it. Then in
+     `D:\nelan\DeluluLang`: `git fetch origin && git merge --ff-only origin/master`. Red: fix forward on the
+     branch; never merge red.
+  3. Repeat the audit's T5 two-account steps with `--holder-key` (the guide's §5 Q2).
+  4. The guide's §10 from its step 3 (Q3, Q4).

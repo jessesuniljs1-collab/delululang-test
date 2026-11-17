@@ -1577,7 +1577,7 @@ fn usage() -> &'static str {
      \x20 delulu audit     bundle [--out F] | reconcile <bundle> [--expect-start HASH]  [--dir DIR] [--json]\n\
      \x20 delulu audit     export --format ocsf [--since SEQ] [--out F] [--device-name NAME]  [--dir DIR] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (the chain as OCSF 1.8.0 events, each carrying its record) | verify --ocsf F [--expect-start HASH]\n\
-     \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key\n\
+     \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR [--holder-key FILE]] | status | stop | rotate-key\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]\n\
      \x20 delulu sandbox   status [--json]   (what this host can actually confine a guest with, from a real launch, and the\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 sandbox lifecycle records in this machine's audit chain — read-only, and it writes nothing)\n\
@@ -5520,7 +5520,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
 
 /// Read an ed25519 signing seed from a key file (phase 6h). Accepts a raw 32-byte seed or 64 hex
 /// characters (whitespace ignored) — nothing is generated here; the human supplies the key.
-fn read_ed25519_seed(path: &str) -> Result<[u8; 32], String> {
+pub(crate) fn read_ed25519_seed(path: &str) -> Result<[u8; 32], String> {
     let raw = std::fs::read(path).map_err(|e| format!("cannot read key file `{path}`: {e}"))?;
     if raw.len() == 32 {
         let mut s = [0u8; 32];

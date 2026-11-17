@@ -53,11 +53,11 @@ Root authority can now only enter by adopting a certificate that verifies agains
 # ON A DIFFERENT MACHINE (or offline media) — this key never touches the delulu host:
 delulu grants pubkey --key anchor.key            # prints ANCHOR (the public half)
 
-# On the delulu host:
-delulu broker start --require-anchored-roots <ANCHOR>
+# On the delulu host — this broker's holder key stays HERE (the broker reads it at every start):
+delulu grants pubkey --key holder.key            # prints HOLDER (and makes holder.key if it is missing)
+delulu broker start --require-anchored-roots <ANCHOR> --holder-key holder.key
 
-# Back on the signing machine — mint a root certificate for a holder, with ABSOLUTE scopes:
-delulu grants pubkey --key holder.key            # prints HOLDER
+# Back on the signing machine — mint a root certificate for that holder, with ABSOLUTE scopes:
 delulu grants certify --subject <HOLDER> --effects Write \
       --fs-write /srv/app/out --ttl 1h --key anchor.key --out root.dlcert
 
@@ -69,6 +69,16 @@ delulu run app.delulu --lease <token>
 
 **What you get on top of Tier 0:** a same-user process **cannot manufacture root authority**. Without
 the anchor private key it cannot mint a certificate, and unsigned issuance is refused `DL1421`.
+
+**`--holder-key` (FABLE-022, D-V2-237): a certificate is for its holder, not for whoever has the file.** A
+certificate names the key it was issued to (`--subject`). With `--holder-key` the broker adopts a certificate only if
+that name is the public half of the key file it was started with — a file it reads again at every start, so it must
+hold the private half. Without it a certificate is a **bearer** credential (RFC 0001's word): any broker pinned to
+the same anchor that obtains the file adopts it, and holds what was issued to someone else. That matters as soon as
+one anchor issues different authority to different hosts. If the key file is gone, unreadable or replaced at a start,
+the broker adopts nothing until it is restored (fail closed). A start that names the anchor but no `--holder-key`
+unpins — the banner, `doctor` ("certificate holder") and the audit log's `root-policy-mode` record all say which
+holder, if any, each start pinned.
 
 **What you still do not get:** that process can edit `<state>/root_policy.json` or restart the broker
 without the flag, downgrading you to Tier 0. It cannot do so *quietly* — every start records its
@@ -611,7 +621,7 @@ version**, at which point the ergonomic break can be paired with the migration i
 
 ```bash
 delulu doctor                                   # is this deployment sound?
-delulu broker start --require-anchored-roots X  # Tier 1/2
+delulu broker start --require-anchored-roots X --holder-key K  # Tier 1/2 (K: this broker's holder key)
 delulu audit verify                             # has the log been tampered with?
 delulu audit export --format ocsf --out c.jsonl # the chain for a SIEM (OCSF 1.8.0), still verifiable
 delulu audit tail | grep root-policy-mode       # was this broker ever downgraded?

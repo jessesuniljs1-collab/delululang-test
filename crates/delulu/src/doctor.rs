@@ -583,6 +583,39 @@ fn security_posture(r: &mut Report) {
         ),
     }
 
+    // 1b. FABLE-022 (D-V2-237): in strict mode, whom this broker adopts for. Reported from the policy; the daemon reads
+    //     the key file itself at start (doctor never reads a private key).
+    let policy = crate::brokerd::read_root_policy(&dir);
+    if policy.anchor.is_some() {
+        match &policy.holder {
+            Some(h) if h.file.exists() => r.push(
+                "security posture",
+                "certificate holder",
+                Status::Ok,
+                format!(
+                    "pinned — a certificate is adopted only if it was issued to `{}`, the key at `{}`",
+                    h.public,
+                    h.file.display()
+                ),
+            ),
+            Some(h) => r.push(
+                "security posture",
+                "certificate holder",
+                Status::Problem,
+                format!(
+                    "pinned to the key at `{}`, which is not there — the broker refuses every adoption from its next start until it is restored",
+                    h.file.display()
+                ),
+            ),
+            None => r.push(
+                "security posture",
+                "certificate holder",
+                Status::Note,
+                "not pinned — a certificate is a bearer credential here: any broker pinned to this anchor that obtains the file can adopt it (FABLE-022). Pin this broker's holder key with `delulu broker start --require-anchored-roots <anchor> --holder-key <file>`",
+            ),
+        }
+    }
+
     // 2. Anchor key custody. Strict mode's whole value is that the private half signs OFFLINE — the
     //    broker never needs it. A signing key sitting beside the state it protects collapses that
     //    back to file permissions, which is exactly the boundary category 7 says is not one.

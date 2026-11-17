@@ -571,6 +571,34 @@ impl crate::tree::Broker {
         let leaf = chain.last().expect("verify_chain rejects an empty chain");
         let fingerprint = leaf.fingerprint();
         let chain_fps: Vec<String> = chain.iter().map(|c| c.fingerprint()).collect();
+        // FABLE-022 (D-V2-237): a certificate names the party its authority is delegated TO, and until this nothing
+        // compared that name with the broker presenting it — a broker pinned to the same anchor adopted, and then
+        // used, what the anchor had issued to another. A broker pinned to a holder takes only a chain whose LEAF —
+        // the certificate that carries the authority — was issued to that key. After `verify_chain`, so a chain that
+        // does not verify is refused for that; before the replay checks, so a refusal here marks nothing adopted.
+        // The key is compared as the hex it is, whatever its case. With no holder pinned: a bearer certificate, as
+        // RFC 0001 describes it and as before.
+        let refusal = match self.holder_pin() {
+            None => None,
+            Some(Ok(me)) if leaf.subject.eq_ignore_ascii_case(me) => None,
+            Some(Ok(me)) => Some(format!(
+                "this certificate was issued to `{}`, and this broker adopts only what is issued to `{me}` (its \
+                 pinned holder, `broker start --holder-key`). A certificate names the party its authority is \
+                 delegated to; holding the file does not make this broker that party. Ask the issuer for a \
+                 certificate whose subject is `{me}`, or have the holder of `{}` delegate to it",
+                leaf.subject, leaf.subject
+            )),
+            Some(Err(why)) => Some(format!(
+                "this broker is pinned to a holder key it could not read when it started ({why}), so it cannot say \
+                 whom it adopts for and adopts nothing. Restore the key file, or start the broker again with \
+                 `--require-anchored-roots <anchor> --holder-key <file>`"
+            )),
+        };
+        if let Some(detail) = refusal {
+            let seq = self.consume_seq();
+            self.record_op(seq, "adopt", None, Some(fingerprint.clone()), None, "deny", None);
+            return Err(Denial::CertUntrusted { detail });
+        }
         if self.adopted_node(&fingerprint).is_some() {
             let seq = self.consume_seq();
             self.record_op(seq, "adopt", None, Some(fingerprint.clone()), None, "deny", None);
@@ -1026,6 +1054,83 @@ mod tests {
             .expect("a chain verifying against the PINNED anchor adopts, whatever the caller passes");
         assert_eq!(b.inspect(&node).map(|n| n.parent.is_none()), Some(true), "the adopted node is a root");
         assert!(b.unjustified_root_nodes().is_empty(), "the sole root is a justified adoption");
+    }
+
+    // ===== FABLE-022 (D-V2-237): a broker pinned to a holder adopts only what was issued to it ========
+
+    fn broker_for_holder(now: i64, anchor: &str, me: &str) -> crate::tree::Broker {
+        let mut b = strict_broker_at(now, anchor);
+        b.require_holder(me.to_string());
+        b
+    }
+
+    /// The finding, as the audit ran it between two OS accounts: the ground issued a certificate to `vehicle`; a
+    /// broker that is `payload` obtains the file and adopts it, and then holds what the ground gave `vehicle`.
+    /// Falsify by removing the comparison in `adopt`: the first adoption below succeeds.
+    #[test]
+    fn a_broker_pinned_to_a_holder_refuses_a_certificate_issued_to_another() {
+        let to_vehicle = vec![cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000))];
+
+        let mut payload = broker_for_holder(500, "ground", "payload");
+        let e = payload.adopt(&to_vehicle, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
+        assert_eq!(e.code(), "DL1415");
+        let said = format!("{e:?}");
+        assert!(said.contains("vehicle") && said.contains("payload"), "the refusal names both parties: {said}");
+        assert!(payload.unjustified_root_nodes().is_empty());
+        assert_eq!(payload.adopted_node(&to_vehicle[0].fingerprint()), None, "nothing was adopted");
+
+        // The refusal is not a replay mark: the same file is still adoptable by the broker it was issued to.
+        let mut vehicle = broker_for_holder(500, "ground", "vehicle");
+        vehicle.adopt(&to_vehicle, &anchors(&["ground"]), &FakeVerifier, holder()).expect("issued to this broker");
+    }
+
+    /// It is the LEAF that names who holds the authority. A chain the ground rooted at `vehicle` and `vehicle`
+    /// delegated on to `payload` is `payload`'s — and is not `vehicle`'s to adopt, though `vehicle` is named in it.
+    #[test]
+    fn the_holder_a_broker_is_pinned_to_is_compared_with_the_leaf_of_the_chain() {
+        let chain = ground_to_vehicle(); // ground → vehicle → payload
+        let mut payload = broker_for_holder(500, "ground", "payload");
+        payload.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).expect("the leaf names this broker");
+
+        let mut vehicle = broker_for_holder(500, "ground", "vehicle");
+        let e = vehicle.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
+        assert_eq!(e.code(), "DL1415", "the root names `vehicle`; the leaf, which carries the authority, does not");
+
+        // A key is the same key however its hex is cased.
+        let mut cased = broker_for_holder(500, "ground", "PAYLOAD");
+        cased.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).expect("hex case is not identity");
+    }
+
+    /// The twin: with no holder pinned a certificate is the bearer instrument RFC 0001 describes, as before — and a
+    /// chain that does not verify is refused for that, never for whom it names.
+    #[test]
+    fn with_no_holder_pinned_adoption_is_as_it_was() {
+        let to_vehicle = vec![cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000))];
+        let mut b = strict_broker_at(500, "ground");
+        assert_eq!(b.strict_holder(), None);
+        b.adopt(&to_vehicle, &anchors(&["ground"]), &FakeVerifier, holder()).expect("no pin: any holder's file adopts");
+
+        let mut pinned = broker_for_holder(500, "ground", "vehicle");
+        let evil = vec![cert("attacker", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000))];
+        let e = pinned.adopt(&evil, &anchors(&["attacker"]), &FakeVerifier, holder()).unwrap_err();
+        assert!(format!("{e:?}").contains("not a configured trust anchor"), "{e:?}");
+    }
+
+    /// A pinned holder whose key could not be read at start adopts nothing — and no subject, however it is spelled,
+    /// matches the reason in its place. Falsify by making `holder_unavailable` a no-op: the first adoption succeeds.
+    #[test]
+    fn a_broker_whose_pinned_holder_key_is_unknown_adopts_nothing() {
+        let why = "cannot read key file `vehicle.key`";
+        let mut b = strict_broker_at(500, "ground");
+        b.holder_unavailable(why.to_string());
+        assert_eq!(b.strict_holder(), None, "no key is pinned while it is unknown");
+        for subject in ["vehicle", why, ""] {
+            let c = vec![cert("ground", subject, ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000))];
+            let e = b.adopt(&c, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
+            assert_eq!(e.code(), "DL1415", "subject {subject:?}");
+            assert!(format!("{e:?}").contains("could not read"), "the refusal says why: {e:?}");
+        }
+        assert!(b.unjustified_root_nodes().is_empty());
     }
 
     /// Strict mode is strictly additive: the legacy default is unchanged. Unsigned roots still work,

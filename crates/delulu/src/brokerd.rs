@@ -2055,7 +2055,8 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // that verifies against this pinned anchor; unsigned `Issue` (and thus `grants delegate` auto-root
     // and `run --grant` against this daemon) is refused DL1421. Reported at start so the mode — and any
     // silent downgrade from config tampering — is visible.
-    let (strict, root_policy_poisoned) = load_root_policy(state_dir);
+    let policy = read_root_policy(state_dir);
+    let (strict, root_policy_poisoned) = (policy.anchor.clone(), policy.poisoned);
     if let Some(anchor) = &strict {
         broker.require_anchored_roots(anchor.clone());
     } else if root_policy_poisoned {
@@ -2065,6 +2066,24 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         broker.require_anchored_roots(UNREADABLE_ROOT_POLICY_ANCHOR.to_string());
         broker.poison_adoptions();
     }
+    // FABLE-022 (D-V2-237): the holder pin. The key file is read again at every start and must still hold the key the
+    // policy was written for, so this broker holds the private half of whom it adopts for. A file gone, unreadable or
+    // swapped refuses every adoption (fail closed) rather than dropping the pin.
+    let holder_state: Option<Result<String, String>> = policy.holder.as_ref().map(|h| match holder_key_of(&h.file) {
+        Ok(now) if now.public.eq_ignore_ascii_case(&h.public) => Ok(now.public),
+        Ok(now) => Err(format!(
+            "the key file `{}` now holds the key `{}`, not the `{}` this policy was written for",
+            h.file.display(),
+            now.public,
+            h.public
+        )),
+        Err(e) => Err(e),
+    });
+    match &holder_state {
+        Some(Ok(public)) => broker.require_holder(public.clone()),
+        Some(Err(why)) => broker.holder_unavailable(why.clone()),
+        None => {}
+    }
     // ADOPT-REPLAY-1: reload the revoked-certificate denylist so a revocation made in a PREVIOUS
     // daemon lifetime still refuses re-adoption. The rest of the tree is intentionally ephemeral (a
     // restart fails bearer tokens closed); this denylist is the one exception, because a certificate
@@ -2073,9 +2092,13 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // Category-7 detection: write the effective mode into the hash-chained log, so a same-uid
     // downgrade leaves evidence rather than only a banner. See `Broker::record_root_policy_mode`.
     match (&strict, root_policy_poisoned) {
-        (Some(a), _) => broker.record_root_policy_mode("strict", Some(a)),
-        (None, true) => broker.record_root_policy_mode("unreadable-policy", None),
-        (None, false) => broker.record_root_policy_mode("legacy", None),
+        (Some(a), _) => broker.record_root_policy_mode(
+            "strict",
+            Some(a),
+            holder_state.as_ref().map(|h| h.as_deref().unwrap_or("unavailable")),
+        ),
+        (None, true) => broker.record_root_policy_mode("unreadable-policy", None, None),
+        (None, false) => broker.record_root_policy_mode("legacy", None, None),
     }
     // RW 4.48: the startup record held the chain's append lock; no request holds it yet.
     release_audit_lock(&audit_lock);
@@ -2118,6 +2141,21 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
              protect the anchor PRIVATE key and `{}` from same-uid access (category 7).",
             root_policy_path(state_dir).display()
         );
+        match &holder_state {
+            Some(Ok(public)) => blog!(
+                "delulu broker: adoption pinned to the holder `{public}` (FABLE-022, D-V2-237) — a certificate \
+                 issued to any other key is refused; the key file is read again at every start."
+            ),
+            Some(Err(why)) => blog!(
+                "delulu broker: the pinned holder key could not be established ({why}) — EVERY adoption is \
+                 refused until it is restored (FABLE-022, fail closed)."
+            ),
+            None => blog!(
+                "delulu broker: no holder pinned — a certificate is a bearer credential here: any broker pinned \
+                 to this anchor that obtains the file can adopt it (FABLE-022). Pin this broker's holder with \
+                 `broker start --require-anchored-roots <anchor> --holder-key <file>`."
+            ),
+        }
     } else if root_policy_poisoned {
         blog!(
             "delulu broker: root policy `{}` EXISTS but is UNREADABLE — refusing to create root \
@@ -2819,7 +2857,7 @@ fn seed_guard_policy(state_dir: &Path, file: &str) -> Result<(), i32> {
 /// `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`). The startup banner reports the mode so a downgrade
 /// is at least visible. The anchor is not validated here (it is the operator's trust decision); a
 /// bogus anchor simply means no chain ever verifies (fail closed).
-fn seed_root_policy(state_dir: &Path, anchor: &str) -> Result<(), i32> {
+fn seed_root_policy(state_dir: &Path, anchor: &str, holder: Option<&HolderKey>) -> Result<(), i32> {
     if anchor.trim().is_empty() {
         eprintln!("error: --require-anchored-roots needs an anchor public key (hex)");
         return Err(2);
@@ -2828,7 +2866,11 @@ fn seed_root_policy(state_dir: &Path, anchor: &str) -> Result<(), i32> {
         eprintln!("error: cannot create state dir: {e}");
         return Err(2);
     }
-    let doc = serde_json::json!({ "version": 1, "require_anchored_roots": true, "anchor": anchor });
+    let mut doc = serde_json::json!({ "version": 1, "require_anchored_roots": true, "anchor": anchor });
+    if let Some(h) = holder {
+        // FABLE-022 (D-V2-237): where the holder key is and what its public half is — never the private half.
+        doc["holder"] = serde_json::json!({ "key_file": h.file.to_string_lossy(), "public": h.public });
+    }
     // **ROOTPOLICY-1**: written atomically (temp + rename), exactly as the revoked-certificate
     // denylist is. A crash or a full disk part-way through a plain `write` used to be able to leave a
     // truncated file — and a truncated root policy is not a broken feature, it is a SILENTLY WEAKER
@@ -2863,22 +2905,66 @@ fn seed_root_policy(state_dir: &Path, anchor: &str) -> Result<(), i32> {
 /// into exactly that shape is not a legacy marker — it is a policy we cannot read, and the safe
 /// reading of "the operator created this file" is that strict mode was intended. It poisons.
 pub(crate) fn load_root_policy(state_dir: &Path) -> (Option<String>, bool) {
+    let p = read_root_policy(state_dir);
+    (p.anchor, p.poisoned)
+}
+
+/// What `<state>/root_policy.json` says, whole: the pinned anchor, the pinned holder (FABLE-022, D-V2-237), and
+/// whether the file exists but cannot be read. [`load_root_policy`] is its first and last parts.
+pub(crate) struct RootPolicy {
+    pub(crate) anchor: Option<String>,
+    pub(crate) holder: Option<HolderKey>,
+    pub(crate) poisoned: bool,
+}
+
+/// The holder named by `broker start --holder-key FILE`, as the policy keeps it: the key file's absolute path and the
+/// public half it held when the policy was written. Only the PUBLIC half is ever written down. The file is read again
+/// at every start ([`holder_key_of`]), so a broker pinned this way holds the private half of the key every certificate
+/// it adopts must name — the binding the audit's option (A) asked for, without making the broker's own token key an
+/// identity that `rotate-key` would change.
+pub(crate) struct HolderKey {
+    pub(crate) file: PathBuf,
+    pub(crate) public: String,
+}
+
+/// Read a holder key file and derive its public half. Never creates a key: a key made here would pin a holder that no
+/// certificate names, and would write a private key the operator never asked for.
+pub(crate) fn holder_key_of(file: &Path) -> Result<HolderKey, String> {
+    let file = std::path::absolute(file).map_err(|e| format!("cannot resolve `{}`: {e}", file.display()))?;
+    let seed = crate::cli::read_ed25519_seed(&file.to_string_lossy())?;
+    Ok(HolderKey { public: crate::cert_crypto::public_key_hex(&seed), file })
+}
+
+pub(crate) fn read_root_policy(state_dir: &Path) -> RootPolicy {
+    let poisoned = || RootPolicy { anchor: None, holder: None, poisoned: true };
     let path = root_policy_path(state_dir);
     let Ok(text) = std::fs::read_to_string(&path) else {
         // Truly absent → legacy. Present but unreadable (permissions, IO error) → cannot tell, so
         // distinguish the two rather than treating both as "no policy".
-        return if path.exists() { (None, true) } else { (None, false) };
+        return if path.exists() { poisoned() } else { RootPolicy { anchor: None, holder: None, poisoned: false } };
     };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return (None, true);
+        return poisoned();
     };
     if v.get("require_anchored_roots").and_then(serde_json::Value::as_bool) != Some(true) {
-        return (None, true);
+        return poisoned();
     }
-    match v.get("anchor").and_then(serde_json::Value::as_str).filter(|s| !s.is_empty()) {
-        Some(a) => (Some(a.to_string()), false),
-        None => (None, true),
-    }
+    let Some(anchor) = v.get("anchor").and_then(serde_json::Value::as_str).filter(|s| !s.is_empty()) else {
+        return poisoned();
+    };
+    // FABLE-022 (D-V2-237): absent is no pin. Present, it must be whole — a pin that cannot be read is not "no pin",
+    // for the same reason the policy itself poisons (ROOTPOLICY-1): uncertainty must not become authority.
+    let holder = match v.get("holder") {
+        None => None,
+        Some(h) => {
+            let field = |k: &str| h.get(k).and_then(serde_json::Value::as_str).filter(|s| !s.is_empty());
+            match (field("key_file"), field("public")) {
+                (Some(f), Some(p)) => Some(HolderKey { file: PathBuf::from(f), public: p.to_string() }),
+                _ => return poisoned(),
+            }
+        }
+    };
+    RootPolicy { anchor: Some(anchor.to_string()), holder, poisoned: false }
 }
 
 /// The anchor pinned when a root policy is unreadable (ROOTPOLICY-1). It is not a key and can never
@@ -2920,8 +3006,28 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
             // daemon (or its detached child) loads it. Sticky once set: a later `broker start` without
             // the flag keeps it, because the persisted file governs. To return to legacy, remove
             // `<state>/root_policy.json` (an owner action — see the residual note on the function).
-            if let Some(anchor) = flag_value(args, "--require-anchored-roots") {
-                if let Err(code) = seed_root_policy(&state_dir, &anchor) {
+            // FABLE-022 (D-V2-237): `--holder-key FILE` pins whom this broker adopts for. It is written with the anchor
+            // or not at all — a holder pin means something only where roots need an anchored certificate — and the
+            // flags of a start write the whole policy, so a start that names the anchor and no holder unpins (and says
+            // so in its banner and in the audit log).
+            let holder_key = flag_value(args, "--holder-key");
+            let anchor = flag_value(args, "--require-anchored-roots");
+            if holder_key.is_some() && anchor.is_none() {
+                eprintln!(
+                    "error: `--holder-key` pins whose certificates this broker adopts, which means something only \
+                     beside a pinned anchor: pass it with `--require-anchored-roots <anchor-pubkey>` (FABLE-022)"
+                );
+                return 2;
+            }
+            if let Some(anchor) = anchor {
+                let holder = match holder_key.as_deref().map(|f| holder_key_of(Path::new(f))).transpose() {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("error: --holder-key: {e}");
+                        return 2;
+                    }
+                };
+                if let Err(code) = seed_root_policy(&state_dir, &anchor, holder.as_ref()) {
                     return code;
                 }
             }
@@ -6179,7 +6285,7 @@ mod tests {
     fn strict_mode_refuses_unsigned_issue_over_the_wire() {
         let state = temp_state("strict_issue");
         // Persist strict mode BEFORE the daemon loads it (serve_inner reads root_policy.json at start).
-        seed_root_policy(&state, "an_anchor_pubkey_that_no_chain_here_matches").unwrap();
+        seed_root_policy(&state, "an_anchor_pubkey_that_no_chain_here_matches", None).unwrap();
         let handle = start_daemon(&state);
 
         // The DISC-1 hole — an unsigned root issuance — is refused DL1421, not served.
@@ -6338,6 +6444,47 @@ mod tests {
     /// one of the poisoning cases to the same `None` the missing file produces — which the caller
     /// reads as *legacy: unsigned roots allowed* — so a truncated or tampered file silently turned the
     /// DISC-1 gate off. Each case below returned `(None, false)` before the fix.
+    /// FABLE-022 (D-V2-237): the holder pin in the root policy. Written whole, it reads back whole; present and not
+    /// whole, it poisons like any other policy that cannot be read — it is never read as "no pin".
+    #[test]
+    fn a_holder_pin_reads_back_whole_or_poisons() {
+        let state = temp_state("holder_policy");
+        let key = state.join("holder.key");
+        std::fs::write(&key, [7u8; 32]).unwrap();
+        let h = holder_key_of(&key).unwrap();
+        assert_eq!(h.public, crate::cert_crypto::public_key_hex(&[7u8; 32]), "the public half of the file's key");
+        assert!(h.file.is_absolute());
+        assert!(holder_key_of(&state.join("absent.key")).is_err(), "a missing key is refused, never created");
+        assert!(!state.join("absent.key").exists());
+
+        seed_root_policy(&state, "abc123", Some(&h)).unwrap();
+        let text = std::fs::read_to_string(root_policy_path(&state)).unwrap();
+        assert!(!text.contains(&"07".repeat(32)), "the private half is never written: {text}");
+        let p = read_root_policy(&state);
+        assert_eq!((p.anchor.as_deref(), p.poisoned), (Some("abc123"), false));
+        let got = p.holder.expect("the pin reads back");
+        assert_eq!((got.file, got.public), (h.file.clone(), h.public.clone()));
+
+        // Without `--holder-key` the same anchor is written with no pin.
+        seed_root_policy(&state, "abc123", None).unwrap();
+        assert!(read_root_policy(&state).holder.is_none());
+
+        for (tag, holder) in [
+            ("null", "null"),
+            ("a string", "\"abc\""),
+            ("no key file", "{\"public\":\"ab\"}"),
+            ("no public half", "{\"key_file\":\"/k\"}"),
+            ("an empty public half", "{\"key_file\":\"/k\",\"public\":\"\"}"),
+        ] {
+            let body = format!("{{\"version\":1,\"require_anchored_roots\":true,\"anchor\":\"abc123\",\"holder\":{holder}}}");
+            std::fs::write(root_policy_path(&state), body).unwrap();
+            let p = read_root_policy(&state);
+            assert!(p.poisoned && p.anchor.is_none() && p.holder.is_none(), "a holder pin that is `{tag}` must poison");
+            assert_eq!(load_root_policy(&state), (None, true), "`{tag}`");
+        }
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
     #[test]
     fn a_root_policy_that_cannot_be_read_poisons_rather_than_reading_as_legacy() {
         let state = temp_state("rootpolicy_class");
@@ -6347,7 +6494,7 @@ mod tests {
         assert_eq!(load_root_policy(&state), (None, false), "a missing policy is the legacy default");
 
         // The real shape, written by `seed_root_policy` → strict with that anchor.
-        seed_root_policy(&state, "abc123").unwrap();
+        seed_root_policy(&state, "abc123", None).unwrap();
         assert_eq!(load_root_policy(&state), (Some("abc123".to_string()), false));
 
         // Every unreadable shape must poison. Truncation is the one a crash or a full disk produces

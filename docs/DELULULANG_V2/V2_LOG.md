@@ -13475,3 +13475,18 @@ constant-time. `anomalyco/opencode` — an MIT coding agent with a read-only `pl
 is three suggestions, none built: a Tree-sitter grammar (nothing in `editors/` has one; Rune, Neovim, Helix and Zed
 all want it); the skill at `skills/delulu/SKILL.md` also reachable at `.agents/skills/delulu/`; and asking whether
 `Secret[T]` comparisons should be constant-time. Nothing was copied; Rune's code is GPL and must not be.
+
+## 2026-11-17 — the laptop (Fable 5.2, then Opus 5.5): a certificate is for its holder (D-V2-237, FABLE-022)
+
+**Models.** Claude Fable 5.2 began this — the check in `Broker::adopt` and its unit tests, red first — and reached its
+usage limit; the owner switched the session to Claude Opus 5.5 (effort `max`), which finished it.
+
+**What.** `broker start --require-anchored-roots <ANCHOR> --holder-key <FILE>`: the broker adopts a certificate only
+if its leaf names the public half of that key file, which it reads again at every start; the file gone or changed,
+it adopts nothing. Without the flag nothing changes. The decision log has the design, the reasons for opt-in, the
+evidence and what is not established.
+
+**Also.** D-V2-236's missing mutant run (M1301, red). Records written for both.
+
+**CI.** Run `44041739843` at `e73b050` (D-V2-236): 15 of 18 green and none red when this was written — the four test jobs (macOS, Ubuntu, Windows, ARM64) among them; the three miri-slow jobs still running. This commit's own run is named in the
+sync-log entry below. `master` is not moved for either until its run is read green.

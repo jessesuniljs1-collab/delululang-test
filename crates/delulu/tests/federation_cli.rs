@@ -425,6 +425,65 @@ fn a_certificate_resists_tampering_replay_and_outliving_its_window() {
 /// The denylist is now persisted (`revoked_certs.json`) and reloaded at startup, so the revocation
 /// holds across the restart while a *never-revoked* certificate still re-adopts normally (the
 /// intended post-restart recovery path — proved by the sibling test).
+/// **FABLE-022 (D-V2-237), end to end with real keys.** A broker started with `--holder-key` adopts a certificate only
+/// if it was issued to that key, read from its file at every start — so the broker holds the private half of whom it
+/// adopts for. The audit's finding was the first adoption below succeeding. Falsify by not calling `require_holder`
+/// at start (the first adoption succeeds) or by dropping the pin when the key file is gone (the last one does).
+#[test]
+fn a_broker_pinned_to_its_holder_key_adopts_only_what_was_issued_to_that_key() {
+    let f = setup("holder");
+    let o = f.certify(&[
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--ttl",
+        "1h",
+        "--key",
+        &f.gk(),
+        "--out",
+        "v.dlcert",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+
+    // A pin needs an anchor beside it: asked alone it is refused, and nothing is written.
+    let o = f.vehicle(&["broker", "start", "--holder-key", &f.vk()]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("--require-anchored-roots"), "{}", stderr(&o));
+    assert!(!f.state.join("root_policy.json").exists(), "a refused start writes no policy");
+
+    // Pinned to another key (the ground's own): the certificate issued to the vehicle is refused, in words.
+    let o = f.vehicle(&["broker", "start", "--require-anchored-roots", &f.ground_pub, "--holder-key", &f.gk()]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let o = f.vehicle(&["grants", "adopt", "v.dlcert", "--anchor", &f.ground_pub]);
+    assert!(!o.status.success(), "a certificate issued to another key must not adopt:\n{}", stdout(&o));
+    let said = stderr(&o);
+    assert!(said.contains(&f.vehicle_pub) && said.contains(&f.ground_pub), "the refusal names both keys: {said}");
+    let policy = std::fs::read_to_string(f.state.join("root_policy.json")).unwrap();
+    let ground_seed = std::fs::read(&f.ground_key).unwrap();
+    let ground_hex: String = ground_seed.iter().map(|b| format!("{b:02x}")).collect();
+    assert!(!policy.contains(&ground_hex), "the policy holds the public half only: {policy}");
+
+    // Pinned to the vehicle's own key: it adopts.
+    assert!(f.vehicle(&["broker", "stop"]).status.success(), "stop for restart");
+    let o = f.vehicle(&["broker", "start", "--require-anchored-roots", &f.ground_pub, "--holder-key", &f.vk()]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["grants", "adopt", "v.dlcert", "--anchor", &f.ground_pub]);
+    assert!(o.status.success(), "the certificate issued to this broker's holder adopts: {}", stderr(&o));
+
+    // The key file gone at the next start: the pin is not dropped — every adoption is refused (fail closed).
+    assert!(f.vehicle(&["broker", "stop"]).status.success(), "stop for restart");
+    std::fs::rename(&f.vehicle_key, f.cwd.join("vehicle.key.away")).unwrap();
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["grants", "adopt", "v.dlcert", "--anchor", &f.ground_pub]);
+    assert!(!o.status.success(), "a broker that cannot read its holder key must adopt nothing:\n{}", stdout(&o));
+    assert!(stderr(&o).contains("could not read"), "and it says why: {}", stderr(&o));
+}
+
 #[test]
 fn a_revoked_certificate_stays_revoked_across_a_daemon_restart() {
     let f = setup("revoke_restart");

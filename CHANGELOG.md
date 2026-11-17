@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a certificate is for its holder, 2026-11-17
+
+- **Federation (D-V2-237, FABLE-022).** `delulu broker start --require-anchored-roots <ANCHOR> --holder-key <FILE>`:
+  the broker adopts a certificate only if it was issued to the key in that file, which it reads again at every start.
+  A certificate issued to another key is refused (DL1415), naming both keys; if the key file is gone or changed, every
+  adoption is refused until it is restored. Without `--holder-key` nothing changes: a certificate is a bearer
+  credential, as before. `doctor` reports the pin in strict mode.
+
 ## Unreleased — a Verified artifact must be a program the parser could have made, 2026-11-17
 
 - **Verified plugins (D-V2-236).** When an artifact is decoded its tree is printed as text and parsed again; it is
