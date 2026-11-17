@@ -285,7 +285,7 @@ It is a Rust workspace, with Rust pinned at 1.96.1 by `rust-toolchain.toml`. Its
 
 **Since 2026-11-17 the current account is [`DELULULANG_AI_FIRST_RECOVERY_PLAN.md`](DELULULANG_AI_FIRST_RECOVERY_PLAN.md),
 Part I** — status by area, the open issues that matter, the build queue with files and tests, and exact next
-actions. It is on the branch `laptop/fable-deep-verification` (pull request #145) until that lands on `master`.
+actions. It is on `master` since 2026-11-17 (D-V2-235).
 Read it before the list below, which is the state of 2026-11-05.
 
 - `master` holds #119 to #123 and on-demand routine runs 17 to 19's milestones, each landed on a green run (the reviews

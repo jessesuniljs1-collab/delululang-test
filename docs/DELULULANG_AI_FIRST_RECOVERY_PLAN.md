@@ -6,7 +6,7 @@ you can start work. Part II is the research it rests on (Codex, 13 November 2026
 | | |
 |---|---|
 | Maintained by | the head chef of each session; this revision by Claude Fable 5.2, 17 November 2026, under the owner's commission of 2026-11-17 ([the commission](prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md)) |
-| True of | the branch **`laptop/fable-deep-verification`** in `jessesuniljs1-collab/delululang-test` (the only repository anyone pushes to) — the integration candidate of pull request [#145](https://github.com/jessesuniljs1-collab/delululang-test/pull/145). **`master` is still `ac2a162` and has none of §3's work, this file included, until that pull request lands** |
+| True of | **`master` at `959528b` or the records commit directly after it**, in `jessesuniljs1-collab/delululang-test` (the only repository anyone pushes to). The Fable 5.2 branch was fast-forwarded into `master` on 2026-11-17 on the owner's instruction (D-V2-235) |
 | Keep it true | when you land a change, edit the rows it touches here in the same commit — §3's table, §4's list, §5's queue, §10. Do not append a diary: the diary is `docs/DELULULANG_V2/V2_LOG.md` |
 | Words | **tested** = a named test or command was run and its result read; **source** = read in the code, not run; **CI** = the named run was read job by job; **proposed** = nobody has built it |
 
@@ -119,7 +119,7 @@ Three branches were compared at `origin` on 2026-11-17 (`git merge-base`: all th
 
 | Branch | What it holds | Outcome |
 |---|---|---|
-| `laptop/fable-deep-verification` | the audit, and every code change below — a straight line of commits on `ac2a162` | **Integration candidate — not merged.** Pull request [#145](https://github.com/jessesuniljs1-collab/delululang-test/pull/145) into `master`, held for an independent reviewer (D-V2-233; the paragraph under the next table says exactly why and how it lands). Work continues on this branch meanwhile |
+| `laptop/fable-deep-verification` | the audit, and every code change below — a straight line of commits on `ac2a162` | **Merged into `master` by fast-forward on 2026-11-17, on the owner's instruction in the session (D-V2-235), after the tip's full CI run was read green.** It had been held as pull request [#145](https://github.com/jessesuniljs1-collab/delululang-test/pull/145) for want of an independent reviewer (D-V2-233); that reading is still owed (§4 item 5). The branch stays on `origin`, equal to `master` at the merge |
 | `laptop/fable-research-runner` | three commits: one workflow (`.github/workflows/fable-research.yml`) and four scripts under `research/fable-s1/` that built the binary on four runners and ran the audit's fixtures; runs `43506513620`, `43508697812`, `43509259836`, green | **Deliberately not merged.** Its first commit is titled "throwaway, never merge": the workflow runs on every push to that branch and the scripts assert nothing by themselves. Its results are in the audit (§4 to §6). Kept on `origin` as the ready multi-platform harness for §5 Q3 and Q4 — copy its files onto a working branch when needed |
 | `claude/relaxed-brown-2l78i1` (not a Fable-audit branch; the routine's) | RW 2.50, `Option`/`Result` methods, half built at `d5e647d` | **Not merged.** Run `43389262361`: 14 jobs green, 4 red — two generated-file tests (`release_requires_full_coverage`, `the_generated_reference_is_not_stale`) on four systems. §5 Q8 |
 
@@ -137,24 +137,18 @@ commit, read job by job.
 | `11c0cce` | **a connection the broker turns away at its bound of 64 is told so, unread, and its client asks again** (128 of 128 and 256 of 256 runs at once, was 101 and 129) | D-V2-231 · RW 4.100 closed (FABLE-039) | `43788300598`, **15 of 18 — red** on Ubuntu, ARM64, macOS. **Never use this commit alone** |
 | `df9feb5` | the repair of `11c0cce` (the client asked for its read deadline after sending; macOS refuses that) and **`test`, `fix`, `schema validate` and `authority` stop reporting success for work not done** | D-V2-231 amended, D-V2-232 · RW 6.51, 6.55, 6.79 closed; 6.78 parts 1 and 3 | `43938925325`, 18 of 18 |
 | `9aa8e42` | this guide rewritten as the canonical one; the integration decision | D-V2-233 | `43966124449`, **16 of 18 — red** on Ubuntu and ARM64: one flaky unit test this branch added at `11c0cce` (it also failed on macOS in the pull request's run `43965132089` at `df9feb5`). No product defect; repaired in the next commit |
-| *the commit after `9aa8e42`* | **Verified-artifact ingress** (a repeated node id, parser placeholders and names the lexer refuses are refused at decode; `why` verifies first); the flaky broker test repaired; the owner's instruction to merge | D-V2-234, D-V2-231 second amendment, D-V2-235 · RW 4.93, 6.67 closed; 4.94, 5.7 in part | named in the newest `CLOUD_SYNC_LOG.md` entry — `master` is fast-forwarded only on its green run |
+| `b7d3e8a` | **Verified-artifact ingress** (a repeated node id, parser placeholders and names the lexer refuses are refused at decode; `why` verifies first); the flaky broker test repaired; the owner's instruction to merge | D-V2-234, D-V2-231 second amendment, D-V2-235 · RW 4.93, 6.67 closed; 4.94, 5.7 in part | `44012764481`, **17 of 18 — red** on macOS: one older broker unit test (`revoke_mid_run_then_daemon_death_fail_closed`) that asked a stopped daemon too soon; its three `miri-slow` jobs green. No product defect; repaired in the next commit |
+| `959528b` | that test waits until the stopped daemon takes no connection; records | D-V2-231 third amendment | `44016663858`, **18 of 18** — the run `master` was fast-forwarded on |
 
 **What "verified" means for these, exactly.** Each change has a test that was seen failing before the fix and
-mutants that turn it red again; each commit's full CI run was read to its end. **None of it was reviewed by a
-second party — which is why none of it is on `master`.** `CONTRIBUTING.md` §4 asks for a sponsor who is not the
-author for a change in a risk class, and counts a model reviewing its own output as one party; the owner's
-commission of 2026-11-17 authorises a merge only when that review exists, and says that otherwise the candidate
-waits on a review branch with the blocker written down. The author of every commit above is Claude Fable 5.2. In
-a risk class: D-V2-232 (it changes two exit codes, which `STABILITY.md` §1 covers) and D-V2-231 (a `Busy` answer
-on the broker's wire; its client now repeats a request the daemon said it did not read — `Issue` and `Revoke`
-included). D-V2-227 and D-V2-228 touch a run's outcome and the broker daemon and are best read with them.
-
-**To land it.** A second party — the owner himself, a person he names, or a different AI system he starts for the
-purpose; never a sub-agent of the author — reads D-V2-227 to D-V2-233 in
-[`V2_DECISION_LOG.md`](DELULULANG_V2/V2_DECISION_LOG.md) and the diffs they name, and says so in pull request #145
-and in a line under each decision. Then **fast-forward**: `git push origin laptop/fable-deep-verification:master`,
-or the pull request's *Create a merge commit*. **Never *Squash* or *Rebase*** — the records cite these commit
-hashes. The owner may instead change the rule (§8, *Policy and licence*); that is his alone.
+mutants that turn it red again; each commit's full CI run was read to its end, the red ones included and named above.
+**None of it was read by a second party.** `CONTRIBUTING.md` §4 asks for a sponsor who is not the author for a change
+in a risk class, and counts a model reviewing its own output as one party. The branch was therefore first held as a
+review candidate (D-V2-233); the owner then instructed the merge himself (D-V2-235), which satisfies *"no change
+merges on the say-so of its own author"* and does **not** supply the reading. In a risk class, and still to be read:
+D-V2-232 (two exit codes; `STABILITY.md` §1), D-V2-231 with its three amendments (a `Busy` answer on the broker's wire;
+the client repeats a request the daemon said it did not read), D-V2-234 (what a Verified artifact is); D-V2-227 and
+D-V2-228 are best read with them. If a reader finds one wrong, the remedy is a revert commit — the history is linear.
 
 ## 4. Open issues, by real impact
 
@@ -168,7 +162,7 @@ row of the audit's registry (its Appendix A).
 | 2 | **A certificate is not bound to its holder.** A broker adopts, and can then use, a certificate its anchor issued to a different key. | "Per-agent identity" is what many agents at once need most. | FABLE-022 | **Open — a decision first, §5 Q2** |
 | 3 | **Some failures still report the wrong thing.** A panic in the tool exits 2 ("nothing was examined"); a closed output pipe panics; `main` returning `Err` exits 0; a killed guest or daemon leaves no terminal outcome. | An agent that retries on these can repeat an effect. | FABLE-013, RW 6.58, 6.59, 6.84, 6.68, 2.40 | **Open — §5 Q3.** The report half is done (D-V2-227) |
 | 4 | **No arguments, no JSON.** | Every real agent task starts with input and ends with structured output. The language can do it by hand (§1); nobody should have to. | RW 2.40, 2.41, 2.52 | **Open — §5 Q4** |
-| 5 | **The whole Fable branch is unmerged for want of an independent reviewer** (§3). | Until it lands `master` lacks every fix in §3 and this guide. The rule is the project's own, and `11c0cce` shows why it exists — it passed its author's tests and broke macOS. | D-V2-233; D-V2-227, 228, 231, 232 | **Blocked on a reviewer — the owner's to arrange**, or his rule to change. Pull request #145 |
+| 5 | **Five merged changes have had no independent reading** (§3). | The project's own rule; and this branch shows why it exists — `11c0cce` passed its author's tests and broke macOS, and a test it added was flaky for three commits. | D-V2-227, 228, 231, 232, 234 (D-V2-235 records the debt) | **Owed.** Any second party — the owner, a person he names, a different AI system: read the decisions and their diffs and add a line under each in `V2_DECISION_LOG.md`. Or the owner changes the rule (§8) |
 | 6 | **A saturated broker lets a run's own dead-man fire.** At 384 runs started together, 20 were revoked (DL1403) while their beats waited in line. Fail-closed, recorded — and a ceiling. | Many agents at once is the target workload. Measured once, on one Windows laptop, debug build. | RW 4.101 (FABLE-043), RW 7.30 (FABLE-042) | **Open** — measure on Linux with a release build before choosing a remedy; who is heard first when the broker is full is the owner's to weigh |
 | 7 | **Packages and `.solulu`.** A package's entry file run directly misses its imports; a package ignores `.solulu` and checks clean with the entry unread; `fmt` refuses the extension. | The owner chose `.solulu` as the future default. | RW 6.52, FABLE-016 | **Open — §5 Q5** |
 | 8 | **The default build needs the build machine's `libpython` to start at all.** Under another OS account every command died at load. | A release built this way does not run elsewhere. The Python-free (`net`) build passed everything on four platforms. | FABLE-025, RW 3.26 | **Open** — ship the Python-free build; §7 |
@@ -236,7 +230,7 @@ gh workflow run witness.yml --ref <branch> -f os=macos-latest -f target=<test fi
 | | |
 |---|---|
 | **The 18 CI jobs** | `test` on `ubuntu-24.04`, `windows-latest`, `macos-latest`; `arm64`; `lints`; `heavy-gates`; `fuzz`; `formal`; `supply-chain`; `editor`; `microvm`; `microvm-reproducible`; `miri` (`delulu-diag`, `delulu-atlas`); `miri-ffi`; `miri-slow` (`delulu-check`, `delulu-syntax`, `delulu-broker`). A push to `master` runs them; a branch needs the dispatch above |
-| **Current evidence** | the candidate: run `43938925325` at `df9feb5`, 18 of 18, read job by job on 2026-11-17 — the eleven tests its last two code commits added or repaired are `ok` by name on all four test jobs. `master` `ac2a162`: push run `43302145758` and scheduled run `43409171490`, 18 of 18 each. A later commit's run is in §3's table |
+| **Current evidence** | run `44016663858` at `959528b`, 18 of 18, read job by job on 2026-11-17 — the commit `master` was fast-forwarded to. The push run of `master` itself is named in the newest `CLOUD_SYNC_LOG.md` entry |
 | **Platforms** | Windows: the laptop. Linux: WSL2 on the laptop (`wsl`, a copy of the tree under `~`), and CI. **macOS and ARM64: CI only — there is no local stand-in, so a macOS failure is found one push late. Read the run before you build on the commit** (this cost a red commit, §3) |
 | **The laptop cannot finish the whole workspace suite comfortably** | the whole `delulu` package is about 25 minutes at `-j 4`; let CI run the workspace. Freeze the tree while a suite runs; run one heavy job at a time |
 | **Known test gaps** | malformed artifact trees are built in `dir.rs`'s tests for ids, placeholders and names only (D-V2-234) — nothing yet for word position, nesting or literals; nothing exercises macOS locally; the 256-run storm is a script, not a suite; no end-to-end install-and-upgrade test; DNS rebinding and cross-host redirects are not attacked |
@@ -294,9 +288,7 @@ from an open debt into a defined process. Keep Apache-2.0 with `NOTICE` and `TRA
 4. **Try the product:** `cargo build -p delulu -j 4`, then in a scratch directory outside the checkout: `delulu new
    hello`, `delulu check`, `delulu authority`, `delulu run` with and without `--grant console`, `delulu test`. Set
    `DELULU_STATE_DIR` to a scratch path so nothing touches the owner's real state.
-5. **Change something.** **Until pull request #145 lands, work on `laptop/fable-deep-verification` or a branch
-   off it** — `master` lacks §3's fixes and this guide. After it lands, a branch off `origin/master`. Witness, fix,
-   falsify (§5's opening); §6's second block.
+5. **Change something:** a branch off `origin/master`; witness, fix, falsify (§5's opening); §6's second block.
 6. **Record it**, in the same commit: `V2_LOG.md` (what, why, evidence); `CHANGELOG.md` if a user would notice; a
    `D-V2-nn` in `V2_DECISION_LOG.md` for a decision (the next free number is **D-V2-236**); the `REMAINING_WORK.md`
    row; a `CLOUD_SYNC_LOG.md` entry from its template; and the rows of this guide you made untrue.
@@ -318,25 +310,28 @@ exits 0 whatever it finds, so read its count.
 
 ## 10. Exactly what to do next
 
-**State when this was written (17 November 2026):** the candidate branch is at the commit that added this revision;
-`master` is `ac2a162`; pull request #145 is open and unreviewed; nothing is half-edited — the tree is clean and every
-change is pushed. The newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after this was written.
+**State when this was written (17 November 2026, the last Fable 5.2 session):** `master` holds everything — the
+Fable branch was fast-forwarded into it at `959528b` on the owner's instruction (D-V2-235) and the owner's checkout
+`D:\nelan\DeluluLang` was brought to it. Nothing is half-edited; the tree is clean and every change is pushed. The
+newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after this was written.
 
 **For the owner — only he can do these:**
 
-1. **Unblock pull request #145** (§3, *To land it*): read it, or have a second party read it, or change the rule.
-   Nothing else in this list waits for it — the work continues on the branch.
+1. **Arrange the independent reading** §4 item 5 owes, or change the rule that asks for it (§8). Pull request #145
+   shows the whole diff in one place.
 2. **Decide FABLE-022** (a certificate is not bound to its holder — §5 Q2). It changes what RFC 0001 describes, so
    it needs his recorded word or his delegate's `D-V2-nn` plus an entrenched-change record. Consider filing it as a
    private security advisory rather than a public issue.
 3. **Say who is heard first when the broker is full** (§4 item 6) once Q10's measurement exists.
-4. Housekeeping he may want: delete `laptop/fable-research-runner` (or keep it as the harness); update or remove the
-   2026-08-07 `delulu` on the laptop's `PATH`; the WSL copy `/home/user/fable-audit-s1` and the audit worktree's
-   `target/release` can be deleted to free disk. The cloud routine stays paused unless he resumes it.
+4. Housekeeping he may want: delete the branches `laptop/fable-research-runner` (or keep it as the harness),
+   `laptop/fable-deep-verification` (now equal to `master`) and the local `codex/research-recovery` (its files are
+   on `master`); remove the worktree `D:\nelan\dl-fable-audit` and the raw evidence `D:\nelan\fable-audit-evidence`
+   once he no longer wants them; update or remove the 2026-08-07 `delulu` on the laptop's `PATH`; delete the WSL copy
+   `/home/user/fable-audit-s1`. The cloud routine stays paused unless he resumes it.
 
 **For the next engineer, in order:**
 
-1. `git fetch origin`; `git switch laptop/fable-deep-verification`; §6's first block. Read the CI run of the tip
+1. `git fetch origin`; `git switch master`; `git merge --ff-only origin/master`; §6's first block. Read the CI run of the tip
    (`gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3`) **to its
    end** before building on it, and write its result into §3's table.
 2. **§5 Q1's remainder — print-and-reparse.** The three guards are in (`crates/delulu-check/src/dir.rs`,
@@ -360,8 +355,7 @@ the next engineer than a half-written guard.
 queue, gates and component analysis rest on it. Where Part I and Part II disagree, Part I is newer. Statuses that
 have changed since: RW 6.77 and 6.83 are closed (D-V2-227); RW 6.51, 6.55 and 6.79 are closed and RW 6.78 is half
 done (D-V2-232); its P1.1 and P1.3 are therefore done except for the parts §5 Q3 lists; its proposed `D-V2-227` was
-taken by another decision — the next free number is in §9. All of that is on the candidate branch (§3), not yet on
-`master`.*
+taken by another decision — the next free number is in §9.*
 
 **13 November 2026 · audited `ac2a16202e790657810b819e882b8d721dc0aef4` · proposed execution order.** Codex head chef, GPT‑6.1 Sol at handoff. Earlier session model and effort were not independently recorded. This is the plan requested in the owner's research commission. It takes effect as a work queue when adopted. Repository rules and recorded decisions remain in force until changed through their own process.
 

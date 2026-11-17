@@ -10050,3 +10050,21 @@ Survey and doctor: in the commit below.
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - Tests: the `brokerd::` unit module on Windows, green. macOS: this commit's CI run.
 - **Open / next:** read this commit's full run; on green, fast-forward `master` (D-V2-235) and sync the owner's checkout.
+
+### 2026-11-17 — the laptop: Fable 5.2, checkpoint 12 — MERGED: `master` fast-forwarded to `959528b` on the owner's instruction (D-V2-235); the owner's checkout synced; handoff
+- Session: `https://claude.ai/code/session_01Deh6WBJXdWAMcbyNesiiix`. Model: Claude Fable 5.2; effort `medium`, as the
+  owner set it. No sub-agent.
+- Branch: `master`.   Pull request: #145 (closed by the fast-forward).   Merged: **yes.**
+- **CI read.** Run `44016663858` at `959528b`: **18 of 18**, job by job; the eight new or repaired tests `ok` by name on
+  macOS, Ubuntu, Windows and ARM64. Run `44012764481` at `b7d3e8a` finished 17 of 18 (macOS, the test `959528b` repaired).
+- **Merged, pushed, kept local, blocked:** *merged* — `laptop/fable-deep-verification`, twelve commits, into
+  `master` by fast-forward; *pushed* — everything; *kept local* — raw evidence only
+  (`D:\nelan\fable-audit-evidence`), and the files moved aside from the owner's checkout (there too); *blocked* —
+  nothing. *Not merged, on purpose* — `laptop/fable-research-runner`, `claude/relaxed-brown-2l78i1`.
+- Files in this records commit: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/AI_ONBOARDING.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/review/fable-deep-verification-state.json`,
+  `docs/survey/*`. Documents only.
+- **To sync another machine:** `git fetch origin && git switch master && git merge --ff-only origin/master`.
+- **Still owed:** an independent reading of D-V2-227, 228, 231, 232, 234 (the guide's §4 item 5).
+- **Open / next:** the guide's §10 — first its Q1 remainder (print-and-reparse), then Q3 and Q4. The push run of this
+  records commit on `master` is to be read by whoever comes next; it changes documents only.

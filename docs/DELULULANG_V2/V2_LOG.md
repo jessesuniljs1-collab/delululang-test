@@ -13426,3 +13426,24 @@ Run `44012764481` at `b7d3e8a`: `test (macos-latest)` **red** in
 `brokerd::tests::revoke_mid_run_then_daemon_death_fail_closed`; the other fourteen finished jobs green, D-V2-234's tests
 `ok` on all four test jobs; the three `miri-slow` jobs had not finished when this was written. The cause and the repair are in D-V2-231's third amendment. `master` was not
 moved on that run; the next commit's run decides.
+
+## 2026-11-17 — the laptop (Fable 5.2): the Fable 5.2 branch is on `master` (D-V2-235); the owner's checkout synced; the last Fable 5.2 session's handoff
+
+**CI read.** Run `44016663858` at `959528b`, `jobs=everything`: **18 of 18**, read job by job; on the three `test`
+jobs and `arm64` the eight tests the last two code commits added or repaired are `ok` by name. Run `44012764481`
+at `b7d3e8a`, read to its end: 17 of 18, red on macOS only (the test `959528b` repaired), its `miri-slow` jobs green.
+
+**The merge.** `git push origin 959528b:master` — a fast-forward from `ac2a162`, twelve commits, no hash rewritten.
+On the owner's instruction in the session (D-V2-235). `laptop/fable-research-runner` and
+`claude/relaxed-brown-2l78i1` were not merged. Nothing tagged, released or published.
+
+**The owner's checkout.** `D:\nelan\DeluluLang` was on `codex/research-recovery` at `ac2a162` with six untracked
+files and one edited file — Codex's plan, five prompts and two index rows. Each was compared with `master` first:
+the five prompts are byte-identical to the committed ones, the plan is byte-identical to the version committed at
+`919114e` (it is Part II of today's guide), and the two rows are superseded by the committed rows. They were moved
+aside to `D:\nelan\fable-audit-evidence\primary-checkout-aside-2026-11-17`, not deleted, and the checkout was
+switched to `master` and fast-forwarded.
+
+**Still owed, and not hidden by the merge:** an independent reading of D-V2-227, 228, 231, 232 and 234.
+
+**For whoever continues:** `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, Part I, §10.
