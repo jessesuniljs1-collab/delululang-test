@@ -307,9 +307,11 @@ pub fn verify_checked(bytes: &[u8]) -> Result<(Dir, CheckResult), DirError> {
 /// met none of them. Rather than keep a second copy of each rule here, to fall behind the first, the tree is printed
 /// with no source beside it ([`delulu_syntax::fmt::print_module`]) and given to the parser: it is accepted only when
 /// the text parses with no error **and** parses to the same tree, positions and node numbers aside
-/// ([`delulu_syntax::fmt::ast_fingerprint`], the formatter's own identity law). So every rule the parser has today,
-/// and every one it gains, binds an artifact as it binds text — and a tree that would print as one program and run
-/// as another is refused, because the printed program is not it.
+/// ([`delulu_syntax::fmt::ast_fingerprint`]'s equality, the formatter's own identity law — computed by
+/// [`delulu_syntax::fmt::same_tree`] without building either tree as JSON, which cost more than checking the program
+/// and broke `verify`'s timing bound on macOS: D-V2-236, second amendment). So every rule the parser has today, and
+/// every one it gains, binds an artifact as it binds text — and a tree that would print as one program and run as
+/// another is refused, because the printed program is not it.
 fn parser_could_have_made(m: &Module) -> Result<(), DirError> {
     let text = delulu_syntax::fmt::print_module(m);
     let (again, diags) = delulu_syntax::parse_file(0, &text);
@@ -319,7 +321,7 @@ fn parser_could_have_made(m: &Module) -> Result<(), DirError> {
             d.code, d.message
         )));
     }
-    if delulu_syntax::fmt::ast_fingerprint(&again) != delulu_syntax::fmt::ast_fingerprint(m) {
+    if !delulu_syntax::fmt::same_tree(&again, m) {
         return Err(DirError::Malformed(
             "printed as text and parsed again, the tree is a different tree — not one the parser makes".into(),
         ));

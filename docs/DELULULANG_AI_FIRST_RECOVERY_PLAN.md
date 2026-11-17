@@ -6,7 +6,7 @@ you can start work. Part II is the research it rests on (Codex, 13 November 2026
 | | |
 |---|---|
 | Maintained by | the head chef of each session; this revision by Claude Fable 5.2, 17 November 2026, under the owner's commission of 2026-11-17 ([the commission](prompt/DeluluLang_Fable_5_2_Final_Engineering_Integration_Handover_Commission.md)) |
-| True of | **`master` at `9766b7f` or the records commit directly after it**, in `jessesuniljs1-collab/delululang-test` (the only repository anyone pushes to). The Fable 5.2 branch was fast-forwarded into `master` on 2026-11-17 on the owner's instruction (D-V2-235), and twice more the same day as each new commit's full CI run was read green |
+| True of | **`master` at the newest commit the newest `CLOUD_SYNC_LOG.md` entry names as merged**, in `jessesuniljs1-collab/delululang-test` (the only repository anyone pushes to). The Fable 5.2 branch was fast-forwarded into `master` on 2026-11-17 on the owner's instruction (D-V2-235), and twice more the same day as each new commit's full CI run was read green |
 | Keep it true | when you land a change, edit the rows it touches here in the same commit — §3's table, §4's list, §5's queue, §10. Do not append a diary: the diary is `docs/DELULULANG_V2/V2_LOG.md` |
 | Words | **tested** = a named test or command was run and its result read; **source** = read in the code, not run; **CI** = the named run was read job by job; **proposed** = nobody has built it |
 
@@ -141,6 +141,7 @@ commit, read job by job.
 | `959528b` | that test waits until the stopped daemon takes no connection; records | D-V2-231 third amendment | `44016663858`, **18 of 18** — the run `master` was fast-forwarded on |
 | `e73b050` | **print-and-reparse at decode** — every lexer and parser rule binds an artifact; FMT-ESCAPE-RAW-1 | D-V2-236 · RW 5.7 closed, RW 4.94's artifact side | `44041739843`, **18 of 18** — `master` fast-forwarded to it |
 | `9766b7f` | **a certificate is for its holder**, opt-in: `broker start --holder-key` | D-V2-237 · RW 4.102 (FABLE-022) | `44045532008`, **18 of 18** — `master` fast-forwarded to it |
+| *the commit after `20a7591`* | the tree comparison at decode streamed (`fmt::same_tree`), not two JSON fingerprints — `20a7591`'s push run `44063570521` was red on macOS on `verify`'s timing witness (5.19 against 5) | D-V2-236, second amendment | named in the newest `CLOUD_SYNC_LOG.md` entry; not on `master` until read green |
 
 **What "verified" means for these, exactly.** Each change has a test that was seen failing before the fix and
 mutants that turn it red again; each commit's full CI run was read to its end, the red ones included and named above.
@@ -160,7 +161,7 @@ row of the audit's registry (its Appendix A).
 
 | # | Issue | Why it matters | Rows | State |
 |---|---|---|---|---|
-| 1 | **A Verified artifact was checked less strictly than the same program as text — closed for the parser's rules (D-V2-236).** A decoded tree is held to one id per node, no placeholders and lexer-valid names (D-V2-234), then printed with no source and parsed again, and accepted only if it is the same tree. | It is the feature named "Verified". | RW 4.94 (its remainder: terminal-safe rendering of string data), 6.71 (RW 4.93, 5.7, 6.67 closed) | **Done for the parser's rules; awaiting independent review (D-V2-234, 236).** Decoding costs 7.7 ms where it cost 2.1 ms, for a 13 KB program |
+| 1 | **A Verified artifact was checked less strictly than the same program as text — closed for the parser's rules (D-V2-236).** A decoded tree is held to one id per node, no placeholders and lexer-valid names (D-V2-234), then printed with no source and parsed again, and accepted only if it is the same tree. | It is the feature named "Verified". | RW 4.94 (its remainder: terminal-safe rendering of string data), 6.71 (RW 4.93, 5.7, 6.67 closed) | **Done for the parser's rules; awaiting independent review (D-V2-234, 236).** Decoding a 13 KB program costs about 2.3 ms (2.1 ms before it; 7.7 ms in its first form, which turned `verify`'s timing witness red on macOS — D-V2-236's second amendment) |
 | 2 | **A certificate is not bound to its holder.** A broker adopts, and can then use, a certificate its anchor issued to a different key. | "Per-agent identity" is what many agents at once need most. | FABLE-022 | **Opt-in fix on `master` (D-V2-237)** — `broker start --require-anchored-roots <anchor> --holder-key <file>` adopts only what was issued to that key; the default is unchanged. Open: whether strict mode should require it (§5 Q2) |
 | 3 | **Some failures still report the wrong thing.** A panic in the tool exits 2 ("nothing was examined"); a closed output pipe panics; `main` returning `Err` exits 0; a killed guest or daemon leaves no terminal outcome. | An agent that retries on these can repeat an effect. | FABLE-013, RW 6.58, 6.59, 6.84, 6.68, 2.40 | **Open — §5 Q3.** The report half is done (D-V2-227) |
 | 4 | **No arguments, no JSON.** | Every real agent task starts with input and ends with structured output. The language can do it by hand (§1); nobody should have to. | RW 2.40, 2.41, 2.52 | **Open — §5 Q4** |
@@ -232,7 +233,7 @@ gh workflow run witness.yml --ref <branch> -f os=macos-latest -f target=<test fi
 | | |
 |---|---|
 | **The 18 CI jobs** | `test` on `ubuntu-24.04`, `windows-latest`, `macos-latest`; `arm64`; `lints`; `heavy-gates`; `fuzz`; `formal`; `supply-chain`; `editor`; `microvm`; `microvm-reproducible`; `miri` (`delulu-diag`, `delulu-atlas`); `miri-ffi`; `miri-slow` (`delulu-check`, `delulu-syntax`, `delulu-broker`). A push to `master` runs them; a branch needs the dispatch above |
-| **Current evidence** | run `44041739843` at `e73b050`, 18 of 18, and run `44045532008` at `9766b7f`, 18 of 18, each read job by job on 2026-11-17 — the new tests `ok` by name on macOS, Ubuntu, Windows and ARM64. The push run of the records commit after them is named in the newest `CLOUD_SYNC_LOG.md` entry |
+| **Current evidence** | run `44041739843` at `e73b050`, 18 of 18, and run `44045532008` at `9766b7f`, 18 of 18, each read job by job on 2026-11-17 — the new tests `ok` by name on macOS, Ubuntu, Windows and ARM64. The push run of the records commit after them, `44063570521`, was red on macOS on `verify`'s timing witness (5.19 against 5) — fixed by D-V2-236's second amendment, whose run is in the newest `CLOUD_SYNC_LOG.md` entry |
 | **Platforms** | Windows: the laptop. Linux: WSL2 on the laptop (`wsl`, a copy of the tree under `~`), and CI. **macOS and ARM64: CI only — there is no local stand-in, so a macOS failure is found one push late. Read the run before you build on the commit** (this cost a red commit, §3) |
 | **The laptop cannot finish the whole workspace suite comfortably** | the whole `delulu` package is about 25 minutes at `-j 4`; let CI run the workspace. Freeze the tree while a suite runs; run one heavy job at a time |
 | **Known test gaps** | malformed artifact trees are built in `dir.rs`'s tests for ids, placeholders, names, words, literals and compound assignments (D-V2-234, 236), and every repository program is printed and parsed again — but no fuzz campaign has run on the new decode path; nothing exercises macOS locally; the 256-run storm is a script, not a suite; no end-to-end install-and-upgrade test; DNS rebinding and cross-host redirects are not attacked; the audit's two-account steps (T5) have not been re-run with `--holder-key` |
@@ -338,7 +339,8 @@ newest [`CLOUD_SYNC_LOG.md`](CLOUD_SYNC_LOG.md) entry says what happened after t
    (`gh run list -R jessesuniljs1-collab/delululang-test --branch laptop/fable-deep-verification -L 3`) **to its
    end** before building on it, and write its result into §3's table.
 2. **Done on 2026-11-17:** `e73b050` (print-and-reparse at decode, D-V2-236; run `44041739843`, 18 of 18) and
-   `9766b7f` (`broker start --holder-key`, D-V2-237; run `44045532008`, 18 of 18) are on `master`. Still open of §5 Q1:
+   `9766b7f` (`broker start --holder-key`, D-V2-237; run `44045532008`, 18 of 18) are on `master`; `20a7591`'s push run was red on macOS on `verify`'s timing witness (D-V2-236's decode cost), and
+   the commit after it streams the comparison — read its run first (the newest `CLOUD_SYNC_LOG.md` entry). Still open of §5 Q1:
    RW 6.71, and RW 4.94's terminal-safe rendering of string data. Of §5 Q2: repeat the audit's two-account steps
    (T5) with `--holder-key`, and the owner's choice whether strict mode requires it (RW 4.102).
 3. **§5 Q3**, then **Q4** — the outcome contract before the features that will rely on it.

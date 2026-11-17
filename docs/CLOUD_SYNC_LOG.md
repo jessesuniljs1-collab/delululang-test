@@ -10141,3 +10141,26 @@ Survey and doctor: in the commit below.
   1. Read the push run of this records commit on `master` (documents only).
   2. Repeat the audit's T5 two-account steps with `--holder-key` (the guide's §5 Q2, RW 4.102).
   3. The guide's §10 from its step 3: §5 Q3 (one outcome for every way a run ends), then Q4 (arguments and JSON).
+
+### 2026-11-17 — the laptop: checkpoint 16 — `master`'s push run red on macOS (`verify`'s timing witness); fixed (D-V2-236, second amendment); PUSHED TO THE BRANCH ONLY
+- Session: `https://claude.ai/code/session_01Deh6W8tdA5yEh54KPAr36F`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `laptop/fable-deep-verification`, one commit ahead of `master` (`20a7591`).   Merged: **no** — on its green
+  run, by fast-forward.
+- **CI read since the entry above:** push run `44063447964` at `9766b7f`: green (14 run, 2 skipped by design). Push run
+  `44063570521` at `20a7591`: **RED** — `test (macos-latest)`, `dir::tests::verify_is_comfortably_fast_for_per_load_use`,
+  ratio 5.19 against 5: D-V2-236's decode cost, not a flake.
+- **What changed for a user:** decoding a Verified artifact costs about what it did before D-V2-236 (2.3 ms for a 13 KB
+  program, release build), with every check D-V2-236 added still made.
+- Files: M `crates/delulu-syntax/src/fmt.rs` (`same_tree`, its test, the laws), `crates/delulu-check/src/dir.rs` (one
+  call); M `CHANGELOG.md`, `HANDOFF.md` (§11.5, one bullet), `docs/AI_ONBOARDING.md`,
+  `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/review/fable-deep-verification-state.json`, `docs/survey/*`. Nothing added, deleted or
+  renamed; no workflow, no entrenched file.
+- **Numbers taken:** mutants M1302, M1303. Next free: `D-V2-238`, M1304.
+- **Open / next — the next AI's inbox, in order:**
+  1. Read this commit's `jobs=everything` run to its end (`gh run list -R jessesuniljs1-collab/delululang-test --branch
+     laptop/fable-deep-verification -L 3`), the timing witness's ratio on macOS included (it prints it). Green:
+     `git push origin <this commit>:master`, then `git fetch origin && git merge --ff-only origin/master` in
+     `D:\nelan\DeluluLang`. Red: fix forward on the branch; never raise the bound.
+  2. Repeat the audit's T5 two-account steps with `--holder-key` (RW 4.102).
+  3. The guide's §10 from its step 3 (Q3, then Q4).

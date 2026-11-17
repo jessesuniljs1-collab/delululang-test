@@ -23,8 +23,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 - **Verified plugins (D-V2-236).** When an artifact is decoded its tree is printed as text and parsed again; it is
   refused (DL1504) unless the text parses and gives the same tree. A reserved word as a name, a `+=` whose value is
-  not its own sum, and a literal no source can spell are refused. Decoding takes longer: 7.7 ms where it took 2.1 ms
-  for a 13 KB program.
+  not its own sum, and a literal no source can spell are refused. Decoding a 13 KB program takes
+  about 2.3 ms in a release build, where it took 2.1 ms before.
 - **`delulu fmt` (FMT-ESCAPE-RAW-1).** A string or f-string that holds a bidirectional control or a line-break
   look-alike by its escape is printed with the escape. Before, the file was refused with DL1702.
 

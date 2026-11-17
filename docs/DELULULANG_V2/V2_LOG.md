@@ -13502,3 +13502,15 @@ were read directly.)
 no hash rewritten. `D:\nelan\DeluluLang` fast-forwarded with them. Nothing tagged, released or published.
 
 **Still owed:** an independent reading of D-V2-227, 228, 231, 232, 234, 236 and 237.
+
+## 2026-11-17 — the laptop (Opus 5.5): `master`'s push run red on macOS — `verify`'s timing witness; the comparison streamed (D-V2-236, second amendment)
+
+**What failed.** Push run `44063570521` at `20a7591` (records only): `test (macos-latest)`, one test,
+`verify_is_comfortably_fast_for_per_load_use` — ratio 5.19 against 5. Push run `44063447964` at `9766b7f`: green.
+Not a flake of the kind the broker tests had (D-V2-231's amendments): a real cost, added by D-V2-236's first form, that
+the test exists to catch and that the earlier runs had passed by a hair.
+
+**What changed.** `fmt::same_tree` replaces two JSON fingerprints at decode; ratio 4.4 → 2.7 here; release decode
+7.7 ms → 2.3 ms. The bound was not touched. Details, tests and mutants: the decision log, D-V2-236's second amendment.
+
+**`master`** stays at `20a7591` until this commit's own full run is read green.

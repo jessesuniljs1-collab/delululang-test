@@ -2302,6 +2302,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **Inside `crates/delulu`, the Survey's module-level `impact` is the same number for every module** (106 for each of
   13 queried, 2026-11-04; RW 6.63). Plan a removal there from `cargo` references and the tests that name the module,
   never from that number. The crate-level numbers are sound.
+- **Read a timing witness's margin, not its verdict** (D-V2-236's second amendment, 2026-11-17). Print-and-reparse
+  at decode raised `verify`'s ratio against one check of the same program to 4.4 on a quiet laptop, against a bound of
+  5. The crate's suite passed, so the number went unread — and `master`'s push run read 5.19 on macOS two runs later.
+  When a change adds work to a timed path, run its timing witness alone, read the number it prints and record it; a
+  ratio within a quarter of its bound is a red waiting for a busy runner. Cut the cost; never the bound.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

@@ -7358,3 +7358,38 @@ was written.
 **Not established.** No independent reading. Not run between two OS accounts again (the audit's T5 steps are the
 witness to repeat). A same-user process can still edit `root_policy.json` or the key file — the residual every
 Tier 1 setting has (`DEPLOYMENT.md`); the pin is a boundary in Tier 2, where the broker's state is another account's.
+
+**D-V2-236, second amendment (head chef — Claude Opus 5.5 — 2026-11-17): the comparison at decode was too slow, and
+a test said so.** `master`'s push run `44063570521` (at `20a7591`, a records-only commit) was **red on macOS**:
+`dir::tests::verify_is_comfortably_fast_for_per_load_use` read `verify` at 5.19 times one check of the same program,
+against its bound of 5 (D-V2-130: a ratio to a control measured in the same window). The branch runs of `e73b050`
+and `9766b7f`, and `9766b7f`'s own push run, had passed it narrowly; on this laptop it read 4.34 to 4.44 — the
+pre-D-V2-236 ratio was 2.1 to 2.5. The cause was this decision's, measured in its first form: two JSON fingerprints
+(`ast_fingerprint`) at every decode, each building the whole tree as a `serde_json::Value`, stripping, sorting and
+printing it.
+
+**The fix is the cost, not the bound.** `delulu_syntax::fmt::same_tree` gives the fingerprints' equality without
+building JSON: each tree is written once into a flat byte string by a `serde::Serializer` that skips every `Span` and
+`NodeId` by its type's name (as `shape_of` finds ids, so no field is listed), compares `imports` and `effects` as
+sets, as `normalize_sets` does, and refuses a map rather than compare it in an order a `HashMap` would not keep. It is
+stricter than JSON on one point only — a `Float` is compared bit for bit, where JSON writes NaN and the infinities as
+one `null` — and no source spells those. `parser_could_have_made` calls it; `ast_fingerprint` stays for the formatter.
+
+**After**, same laptop, debug, three runs: 2.67, 2.76, 2.69 (`E52`'s neighbour runs; the bound unchanged at 5).
+Release, the largest repository program that verifies (13 KB of source, a 136 KB artifact): decode 2.3 ms (7.7 ms in
+the first form; 2.1 ms before D-V2-236), of which print, parse and compare 0.77 ms; `verify` 3.6 ms (was 8.4 ms);
+checking the same program from text 1.3 ms (`E53`).
+
+**Held to the fingerprint.** `fmt::tests::a_tree_compared_by_bytes_agrees_with_its_fingerprint` — three pairs that
+are the same tree (layout and an `Int`'s base; imports reordered; a row's effects reordered) and nine that are not (a
+literal, an operator, a name, a string, a float, `y += 2` against `y = y + 2`, an extra function, a different import,
+a repeated import), each asking both and requiring the same answer; and a placeholder in `recovered`. Every formatter
+law (`laws`, the repository corpus included) now also asserts that the two agree. Mutants (`E52`): M1302 `same_tree`
+says yes to any two trees — that test and two `dir::` refusals red; M1303 the two sets compared in order — red.
+
+**Tests, Windows, this laptop:** `delulu-check`, `delulu-syntax`, `delulu-runtime`, `delulu-wasm` whole and six
+plugin CLI suites — 1,189 passed (`E54`); `scripts/clippy.sh` clean (after `cargo fmt`). Linux, macOS, ARM64, Miri:
+this commit's CI run, not read when this was written.
+
+**The lesson, recorded in `HANDOFF.md` §11.5:** this witness passed locally at 4.4 against 5, and the margin went
+unread. A ratio that close to its bound is a red waiting for a busy runner.

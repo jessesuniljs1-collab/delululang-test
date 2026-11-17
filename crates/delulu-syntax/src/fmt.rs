@@ -171,6 +171,352 @@ fn normalize_sets(v: &mut serde_json::Value, key: &str) {
     }
 }
 
+// ===== the identity law's equality, streamed (D-V2-236, second amendment) =====
+
+/// Whether two trees are the same tree, positions and node numbers aside: the equality of their [`ast_fingerprint`]s,
+/// computed without building either tree as JSON.
+///
+/// Decoding an artifact asks this once per load (`delulu-check`'s `dir.rs`, `parser_could_have_made`). Two JSON
+/// fingerprints cost about three times what checking the same program from text does, and pushed `verify` past the
+/// bound its timing witness holds it to (`verify_is_comfortably_fast_for_per_load_use`, red on macOS in `master`'s push
+/// run `44063570521`). Here each tree is written once into a flat byte string. Every `Span` and `NodeId` is skipped by
+/// its TYPE's name, the way the decode walk finds ids, so no field is listed, and `imports` and `effects` are compared
+/// as the sets they are. `a_tree_compared_by_bytes_agrees_with_its_fingerprint` and every formatter law hold the two
+/// to the same answers. A map in a tree, which no node has today, is refused rather than compared in an order a
+/// `HashMap` would not keep.
+pub fn same_tree(a: &Module, b: &Module) -> bool {
+    match (shape_bytes(a), shape_bytes(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
+fn shape_bytes<T: serde::Serialize + ?Sized>(v: &T) -> Result<Vec<u8>, ShapeError> {
+    let mut s = Shape::default();
+    v.serialize(&mut s)?;
+    Ok(s.out)
+}
+
+#[derive(Default)]
+struct Shape {
+    out: Vec<u8>,
+    /// The next sequence is a set (`imports`, `effects`): its elements are compared in no order.
+    set_next: bool,
+}
+
+impl Shape {
+    fn tag(&mut self, t: u8) {
+        self.set_next = false;
+        self.out.push(t);
+    }
+    fn index(&mut self, t: u8, i: u32) {
+        self.tag(t);
+        self.out.extend_from_slice(&i.to_le_bytes());
+    }
+    fn int(&mut self, v: i128) {
+        self.tag(b'i');
+        self.out.extend_from_slice(&v.to_le_bytes());
+    }
+    fn text(&mut self, t: u8, s: &[u8]) {
+        self.tag(t);
+        self.out.extend_from_slice(&(s.len() as u64).to_le_bytes());
+        self.out.extend_from_slice(s);
+    }
+}
+
+#[derive(Debug)]
+struct ShapeError(String);
+
+impl std::fmt::Display for ShapeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ShapeError {}
+
+impl serde::ser::Error for ShapeError {
+    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+        ShapeError(msg.to_string())
+    }
+}
+
+/// A sequence, tuple or variant payload being written; `set` collects a set's elements to sort them.
+struct Items<'a> {
+    s: &'a mut Shape,
+    set: Option<Vec<Vec<u8>>>,
+}
+
+impl Items<'_> {
+    fn item<T: serde::Serialize + ?Sized>(&mut self, v: &T) -> Result<(), ShapeError> {
+        match &mut self.set {
+            Some(items) => items.push(shape_bytes(v)?),
+            None => {
+                self.s.tag(b',');
+                v.serialize(&mut *self.s)?;
+            }
+        }
+        Ok(())
+    }
+    fn close(self) -> Result<(), ShapeError> {
+        if let Some(mut items) = self.set {
+            items.sort_unstable();
+            for it in &items {
+                self.s.text(b',', it);
+            }
+        }
+        self.s.tag(b']');
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeSeq for Items<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_element<T: serde::Serialize + ?Sized>(&mut self, v: &T) -> Result<(), ShapeError> {
+        self.item(v)
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        self.close()
+    }
+}
+
+impl serde::ser::SerializeTuple for Items<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_element<T: serde::Serialize + ?Sized>(&mut self, v: &T) -> Result<(), ShapeError> {
+        self.item(v)
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        self.close()
+    }
+}
+
+impl serde::ser::SerializeTupleStruct for Items<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, v: &T) -> Result<(), ShapeError> {
+        self.item(v)
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        self.close()
+    }
+}
+
+impl serde::ser::SerializeTupleVariant for Items<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, v: &T) -> Result<(), ShapeError> {
+        self.item(v)
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        self.close()
+    }
+}
+
+impl serde::ser::SerializeMap for Items<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_key<T: serde::Serialize + ?Sized>(&mut self, _: &T) -> Result<(), ShapeError> {
+        Err(ShapeError("a map in a syntax tree".into()))
+    }
+    fn serialize_value<T: serde::Serialize + ?Sized>(&mut self, _: &T) -> Result<(), ShapeError> {
+        Err(ShapeError("a map in a syntax tree".into()))
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        Err(ShapeError("a map in a syntax tree".into()))
+    }
+}
+
+/// The fields of one struct or struct variant being written; a `Span`'s are skipped.
+struct Fields<'a> {
+    s: &'a mut Shape,
+    skip: bool,
+}
+
+impl Fields<'_> {
+    fn field<T: serde::Serialize + ?Sized>(&mut self, key: &'static str, v: &T) -> Result<(), ShapeError> {
+        if self.skip {
+            return Ok(());
+        }
+        self.s.text(b'k', key.as_bytes());
+        // `ast_fingerprint` sorts the arrays under these two keys (`normalize_sets`); so does this.
+        self.s.set_next = key == "imports" || key == "effects";
+        let r = v.serialize(&mut *self.s);
+        self.s.set_next = false;
+        r
+    }
+    fn close(self) -> Result<(), ShapeError> {
+        if !self.skip {
+            self.s.tag(b'}');
+        }
+        Ok(())
+    }
+}
+
+impl serde::ser::SerializeStruct for Fields<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, key: &'static str, v: &T) -> Result<(), ShapeError> {
+        self.field(key, v)
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        self.close()
+    }
+}
+
+impl serde::ser::SerializeStructVariant for Fields<'_> {
+    type Ok = ();
+    type Error = ShapeError;
+    fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, key: &'static str, v: &T) -> Result<(), ShapeError> {
+        self.field(key, v)
+    }
+    fn end(self) -> Result<(), ShapeError> {
+        self.close()
+    }
+}
+
+impl<'a> serde::Serializer for &'a mut Shape {
+    type Ok = ();
+    type Error = ShapeError;
+    type SerializeSeq = Items<'a>;
+    type SerializeTuple = Items<'a>;
+    type SerializeTupleStruct = Items<'a>;
+    type SerializeTupleVariant = Items<'a>;
+    type SerializeMap = Items<'a>;
+    type SerializeStruct = Fields<'a>;
+    type SerializeStructVariant = Fields<'a>;
+
+    // A position or a node number: present, and never compared.
+    fn serialize_newtype_struct<T: serde::Serialize + ?Sized>(self, name: &'static str, v: &T) -> Result<(), ShapeError> {
+        if name == "NodeId" {
+            self.tag(b'N');
+            return Ok(());
+        }
+        v.serialize(self)
+    }
+    fn serialize_struct(self, name: &'static str, _: usize) -> Result<Fields<'a>, ShapeError> {
+        let skip = name == "Span";
+        self.tag(if skip { b'P' } else { b'{' });
+        Ok(Fields { s: self, skip })
+    }
+
+    fn serialize_struct_variant(self, _: &'static str, i: u32, _: &'static str, _: usize) -> Result<Fields<'a>, ShapeError> {
+        self.index(b'W', i);
+        Ok(Fields { s: self, skip: false })
+    }
+    fn serialize_seq(self, _: Option<usize>) -> Result<Items<'a>, ShapeError> {
+        let set = std::mem::take(&mut self.set_next);
+        self.tag(b'[');
+        Ok(Items { s: self, set: set.then(Vec::new) })
+    }
+    fn serialize_tuple(self, _: usize) -> Result<Items<'a>, ShapeError> {
+        self.tag(b'(');
+        Ok(Items { s: self, set: None })
+    }
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Items<'a>, ShapeError> {
+        self.tag(b'(');
+        Ok(Items { s: self, set: None })
+    }
+    fn serialize_tuple_variant(self, _: &'static str, i: u32, _: &'static str, _: usize) -> Result<Items<'a>, ShapeError> {
+        self.index(b'T', i);
+        Ok(Items { s: self, set: None })
+    }
+    fn serialize_map(self, _: Option<usize>) -> Result<Items<'a>, ShapeError> {
+        Err(ShapeError("a map in a syntax tree".into()))
+    }
+    fn serialize_newtype_variant<T: serde::Serialize + ?Sized>(
+        self,
+        _: &'static str,
+        i: u32,
+        _: &'static str,
+        v: &T,
+    ) -> Result<(), ShapeError> {
+        self.index(b'V', i);
+        v.serialize(self)
+    }
+    fn serialize_unit_variant(self, _: &'static str, i: u32, _: &'static str) -> Result<(), ShapeError> {
+        self.index(b'U', i);
+        Ok(())
+    }
+    // `Some` leaves a pending set in force, as JSON writes `Some(x)` as `x`.
+    fn serialize_some<T: serde::Serialize + ?Sized>(self, v: &T) -> Result<(), ShapeError> {
+        let set = self.set_next;
+        self.tag(b'y');
+        self.set_next = set;
+        v.serialize(self)
+    }
+    fn serialize_none(self) -> Result<(), ShapeError> {
+        self.tag(b'n');
+        Ok(())
+    }
+    fn serialize_unit(self) -> Result<(), ShapeError> {
+        self.tag(b'u');
+        Ok(())
+    }
+    fn serialize_unit_struct(self, _: &'static str) -> Result<(), ShapeError> {
+        self.tag(b'u');
+        Ok(())
+    }
+    fn serialize_bool(self, v: bool) -> Result<(), ShapeError> {
+        self.tag(if v { b't' } else { b'F' });
+        Ok(())
+    }
+    fn serialize_i8(self, v: i8) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_i16(self, v: i16) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_i32(self, v: i32) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_i64(self, v: i64) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_u8(self, v: u8) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_u16(self, v: u16) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_u32(self, v: u32) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    fn serialize_u64(self, v: u64) -> Result<(), ShapeError> {
+        self.int(v.into());
+        Ok(())
+    }
+    // Bit for bit: stricter than JSON, which writes NaN and the infinities as one `null`. No source spells them.
+    fn serialize_f32(self, v: f32) -> Result<(), ShapeError> {
+        self.serialize_f64(v.into())
+    }
+    fn serialize_f64(self, v: f64) -> Result<(), ShapeError> {
+        self.tag(b'f');
+        self.out.extend_from_slice(&v.to_bits().to_le_bytes());
+        Ok(())
+    }
+    fn serialize_char(self, v: char) -> Result<(), ShapeError> {
+        self.text(b'c', v.encode_utf8(&mut [0; 4]).as_bytes());
+        Ok(())
+    }
+    fn serialize_str(self, v: &str) -> Result<(), ShapeError> {
+        self.text(b's', v.as_bytes());
+        Ok(())
+    }
+    fn serialize_bytes(self, v: &[u8]) -> Result<(), ShapeError> {
+        self.text(b'x', v);
+        Ok(())
+    }
+}
+
 // ===== the printer =========================================================
 
 struct Printer<'a> {
@@ -1316,6 +1662,60 @@ mod tests {
             ast_fingerprint(&m3),
             "IDENTITY violated without the source:\n--- input ---\n{src}\n--- printed ---\n{bare}"
         );
+        // The equality an artifact's decode asks, streamed: it must say what the fingerprint says.
+        assert!(same_tree(parsed, &m3), "the streamed equality disagrees with the fingerprint:\n--- input ---\n{src}");
+    }
+
+    #[test]
+    fn a_tree_compared_by_bytes_agrees_with_its_fingerprint() {
+        // D-V2-236, second amendment. `same_tree` replaced two JSON fingerprints at decode; it is right only while it
+        // gives their answer. Each pair is parsed from text, so every position and node number differs between the
+        // two sides; what is compared is the tree.
+        let same = [
+            // Layout, a comment, and the base an `Int` was written in are not the tree.
+            ("module m\nfn f(x: Int) -> Int {\n    x + 255\n}\n", "module m\n// a comment\nfn f(x: Int) -> Int { x + 0xFF }\n"),
+            // Imports and a row's effects are sets.
+            (
+                "module m\nimport a.b\nimport c.d\nfn f() -> Int { 1 }\n",
+                "module m\nimport c.d\nimport a.b\nfn f() -> Int { 1 }\n",
+            ),
+            (
+                "module m\nfn f(fs: Cap[FsRead], o: Cap[Console]) ! {Read, Write} { o.println(\"x\") }\n",
+                "module m\nfn f(fs: Cap[FsRead], o: Cap[Console]) ! {Write, Read} { o.println(\"x\") }\n",
+            ),
+        ];
+        let different = [
+            ("module m\nfn f(x: Int) -> Int { x + 1 }\n", "module m\nfn f(x: Int) -> Int { x + 2 }\n"),
+            ("module m\nfn f(x: Int) -> Int { x + 1 }\n", "module m\nfn f(x: Int) -> Int { x * 1 }\n"),
+            ("module m\nfn f(x: Int) -> Int { x }\n", "module m\nfn g(x: Int) -> Int { x }\n"),
+            ("module m\nfn f(x: Int) -> Str { \"a\" }\n", "module m\nfn f(x: Int) -> Str { \"b\" }\n"),
+            ("module m\nfn f(x: Float) -> Float { x + 1.5 }\n", "module m\nfn f(x: Float) -> Float { x + 1.25 }\n"),
+            // The sugar the printer prints from its mark: `y += 2` is not `y = y + 2`, though both mean it.
+            (
+                "module m\nfn f() -> Int {\n    var y = 1\n    y += 2\n    y\n}\n",
+                "module m\nfn f() -> Int {\n    var y = 1\n    y = y + 2\n    y\n}\n",
+            ),
+            ("module m\nfn f() -> Int { 1 }\n", "module m\nfn f() -> Int { 1 }\nfn g() -> Int { 1 }\n"),
+            ("module m\nimport a.b\nfn f() -> Int { 1 }\n", "module m\nimport a.c\nfn f() -> Int { 1 }\n"),
+            ("module m\nimport a.b\nfn f() -> Int { 1 }\n", "module m\nimport a.b\nimport a.b\nfn f() -> Int { 1 }\n"),
+        ];
+        let parsed = |src: &str| {
+            let (m, d) = crate::parse_file(0, src);
+            assert!(d.iter().all(|d| !d.is_error()), "{src}: {d:?}");
+            m
+        };
+        for (expected, pairs) in [(true, &same[..]), (false, &different[..])] {
+            for (a, b) in pairs {
+                let (ma, mb) = (parsed(a), parsed(b));
+                assert_eq!(ast_fingerprint(&ma) == ast_fingerprint(&mb), expected, "the fingerprint on:\n{a}\n{b}");
+                assert_eq!(same_tree(&ma, &mb), expected, "same_tree must say what the fingerprint says on:\n{a}\n{b}");
+            }
+        }
+        // A tree that lists a parser placeholder is not the tree that lists none, though the placeholder has no number.
+        let m = parsed("module m\nfn f() -> Int { 1 }\n");
+        let mut placeholder = m.clone();
+        placeholder.recovered.push(NodeId(0));
+        assert!(!same_tree(&m, &placeholder) && ast_fingerprint(&m) != ast_fingerprint(&placeholder));
     }
 
     #[test]

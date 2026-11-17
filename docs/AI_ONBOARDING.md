@@ -412,7 +412,7 @@ Read it before the list below, which is the state of 2026-11-05.
   - the launch, only on the owner's word.
 - **Counters:**
   - the last decision is D-V2-226;
-  - the last mutant is M1301, so continue from M1302;
+  - the last mutant is M1303, so continue from M1304;
   - there are 157 DL codes and 411 reference anchors;
   - pull requests are numbered on GitHub, and #144 was the last merged (by fast-forward, the laptop, 2026-11-08).
 
