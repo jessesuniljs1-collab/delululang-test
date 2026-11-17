@@ -10211,3 +10211,12 @@ Survey and doctor: in the commit below.
 - **Numbers taken:** `D-V2-238`. Next free: `D-V2-239`, M1302.
 - **Open / next — the next AI's inbox:** the roadmap's M1, item 0: commit the everyday probe under
   `measurements/everyday/` (copy it from the owner's evidence folder, `S5-harness/probe.py`), then item 1, RW 2.50.
+
+### 2026-11-18 — the laptop: checkpoint 21 — an AI's update without a grant update, run; RW 3.34; the roadmap amended (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W9zQBqvWNhPeJ9Pzcm`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the scenario and the measurement in the `V2_LOG.md` entry of this date; D-V2-238, first amendment (M2 and
+  M3 gain an item each); RW 3.34, a checked file read at about seven times Python's cost.
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** unchanged — the roadmap's M1, item 0 (commit the everyday probe), then item 1 (RW 2.50).

@@ -13576,3 +13576,19 @@ guide; the result stands: 32 of 34 day-one constructs run, none of the 18.
   the interpreter at the same speed (207 against 187 ms) — no native tier exists behind the grant;
 - the default build does not start without Python on `PATH` (exit 127, a shared library not found); the portable
   build does.
+
+## 2026-11-18 — the laptop (Opus 5.5): an AI's update without a grant update; what a checked file read costs
+
+The owner: *"What if a program get updated but forgot to update grant, everything will crash or come to stop right …
+AI writes code fast and also changes it very fast"*. Run with the portable release build at `bcd29ef` (the scenario is
+in the owner's evidence folder, `S5-harness/update/`):
+- **v1** reads `./data` and prints — runs with `console` and `fs.read=./data`.
+- **v2**, the update, also writes `./out`. With the old grants a plain run prints its first step and stops at the
+  write: DL0703, exit 1, no file written, its `Err` arm (*"write refused, carrying on"*) and its last step never run.
+  `--preflight`: exit 1, nothing printed, the grant named. `authority v2 --within console --within fs.read=./data`:
+  *exceeds* `fs.write=./out`, with the line.
+- **v3**, an update that adds the network without declaring `Net`: `delulu check` refuses it (DL0501) with the exact
+  repair, marked as widening authority. With `Net` declared, `--preflight` names the two grants it needs.
+- **Cost:** 10,000 checked `read_text` calls, 4.5 s on either engine, Python 3.13 0.64 s — RW 3.34.
+
+D-V2-238's first amendment puts `run`'s default preflight and RW 2.42 into M3, and RW 3.34 into M2.

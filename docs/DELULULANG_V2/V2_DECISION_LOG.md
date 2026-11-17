@@ -7425,3 +7425,13 @@ of four programs; its gap to native Rust, 1.5 to 5 times on compute, earns a tie
 bottleneck, and a native tier is the attack surface the Constitution (§5.11) puts behind a human's grant.
 
 **Not decided here.** The preview's tag and the final public repository stay the owner's word (`AGENTS.md`).
+
+**D-V2-238, first amendment (head chef — Claude Opus 5.5 — 2026-11-18).** The owner asked what happens when an AI
+updates a program and nobody updates its grant. Run on the laptop: an update that adds a new KIND of effect without
+declaring it does not check (DL0501, an exact repair marked as widening authority); one that reaches a new folder or
+host with an effect already declared checks, and a plain `run` with the old grants does its first step and stops at
+the first use of the new place (DL0703, exit 1) — the program's own `Err` arm never runs (RW 2.42) and its later steps
+never happen. `--preflight` refuses before anything runs, and `authority --within` the old grants answers *exceeds*
+with the line, so both catch it before a job starts. Two items join the roadmap: in **M3**, `run` preflights by default
+and RW 2.42 is decided; in **M2**, a checked file operation made cheap — 10,000 checked reads took 4.5 s against
+Python's 0.64 s (RW 3.34).
