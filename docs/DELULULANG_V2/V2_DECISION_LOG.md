@@ -7468,3 +7468,11 @@ accepted (scenarios in the owner's evidence folder, `S5-harness/update/`):
   name optional requests apart in the authority report, and only then make preflight the default.
 - **Promotion:** `--within` advances a candidate to staging; it is promoted only after it runs under the production
   grants; the last working version stays live through both.
+
+**D-V2-238, fourth amendment (head chef — Claude Opus 5.5 — 2026-11-18): M5's first slice may run early.** A third
+reviewer advised testing the central idea before committing to the whole roadmap: does naming the new permissions from
+the changed source make a reviewer's job easier? Its mechanical half was run (V2_LOG of this date): of nine AI updates
+of an approved program, every one that needs more authority was named before it ran, with the grant and the line, and
+none that needs none was flagged. Whether that helps a reviewer needs reviewers, not code, so it is M5's first slice,
+allowed to run beside M1. M1 is not postponed for it: without arguments, JSON and methods, even a proven gate guards
+programs nobody can write.

@@ -13623,3 +13623,31 @@ Run with the portable release build at `43b9812` (programs in the owner's eviden
 
 D-V2-238's third amendment corrects the second and reorders M3: RW 2.42's decision and optional requests in the
 authority report come before a default preflight.
+
+## 2026-11-18 — the laptop (Opus 5.5): a third reviewer round, run; nine AI updates through the gate
+
+Checked first:
+- **Cloudflare:** the Code Mode post (2025-09-26) described the production loader as *"in closed beta"*; Cloudflare's
+  changelog of 2026-03-24 says Dynamic Workers are *"now in open beta for all paid Workers users"*, and its egress
+  documentation says `globalOutbound` *"intercepts every `fetch()` and `connect()`"* — block all, allow, inject
+  credentials, log every outbound request. The head chef's "closed beta; status today unverified" is superseded.
+- **The AI trial:** every run was `claude-sonnet-5`; the Skill alone finished 1 of 2 tasks (12 and 13 attempts); with
+  toolchain introspection 2 of 2 (1 and 2 attempts); with MCP or LSP 2 of 2 at the first try. "50%" alone undersold it.
+
+**The mechanical half of a small M5** (the owner's evidence folder, `S5-harness/m5/`; the approved grants `console`,
+`fs.read=./orders`, `net=api.example.com/v1/**`; `authority --within-file`, the portable release build at `0269a87`):
+
+| Update | Before it runs |
+|---|---|
+| the approved version; a refactor; a narrowing | *within* (exit 0) |
+| sends data to a new host | *exceeds* `net=collector.example.net`, line 9 |
+| POSTs where only GET was approved | *exceeds* `net=api.example.com:POST/v1/orders`, line 10 |
+| writes a new folder | *exceeds* `fs.write=./reports`, line 9 |
+| reads a wider folder | *exceeds* `fs.read=.`, line 5 |
+| a host computed at run time | *inconclusive* `net=HOST`, line 10 |
+| a new kind of effect, not declared | does not check (DL0501) |
+
+With the escaping file name of the earlier entry (*within*, refused when run), that is the gate's whole behaviour on
+this suite: every widening named with its grant and line, no false alarm, the undecidable said to be undecidable. The
+suite is the head chef's own, so it is a test of the mechanism, not a review study. One of the nine needed a fix
+before it checked (`post` takes its headers as a `Map`; the message said so).
