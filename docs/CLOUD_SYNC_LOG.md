@@ -10229,3 +10229,12 @@ Survey and doctor: in the commit below.
 - Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
   `V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** unchanged — the roadmap's M1, item 0, then item 1 (RW 2.50).
+
+### 2026-11-18 — the laptop: checkpoint 23 — the reviewer's second round run and adopted; M3 reordered (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W9zQBqvWNhPeJ9Pzcm`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the `V2_LOG.md` entry of this date; D-V2-238, third amendment; RW 2.42 (optional and required work) and RW
+  3.34 (not the canonicalization) extended.
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** unchanged — the roadmap's M1, item 0, then item 1 (RW 2.50).

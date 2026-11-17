@@ -7453,3 +7453,18 @@ accepted (scenarios in the owner's evidence folder, `S5-harness/update/`):
   hosts; keeping a version live is the deployment system's.
 - **The 7 times is file-specific**: 10,000 clock reads cost 13 ms; a read about 430 µs against Python's 65 µs (RW 3.34,
   narrowed; to profile before a fix is chosen).
+
+**D-V2-238, third amendment (head chef — Claude Opus 5.5 — 2026-11-18): the reviewer's second round, run.**
+- **`delulu test` already scopes reads.** `[test-authority]` and `--test-authority` take `effects` and `fs.read`
+  (`cli.rs`): a test reading `./data` under `fs.read = ["./data"]` passes, one reading `./other` is refused, and
+  `fs.write` is rejected as a key. The second amendment's "only an effect ceiling" was wrong; the gap is write folders
+  and network hosts — a staging run under the production grants covers them today.
+- **The clock comparison measured no authorization.** A clock call checks nothing once the capability is held
+  (`prim.rs`, `now_ms`). Measured directly instead: canonicalizing the path costs 39 µs and opening and reading the file
+  36 µs on this machine, so about 300 µs of a checked read's 430 are neither (RW 3.34 — profile the whole read).
+- **Optional before default preflight** — adopted, reordering M3. A job whose optional cache write never runs completes
+  on a plain run without the cache grant, but `--preflight` refuses it and `--within` answers *exceeds*. So the order
+  is: decide RW 2.42 (an explicit fallback for optional work at acquisition and use; required work fails visibly),
+  name optional requests apart in the authority report, and only then make preflight the default.
+- **Promotion:** `--within` advances a candidate to staging; it is promoted only after it runs under the production
+  grants; the last working version stays live through both.

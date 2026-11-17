@@ -13609,3 +13609,17 @@ and Say"*. Run with the portable release build at `b6814b7`:
 
 All four of the reviewer's points stand. D-V2-238's second amendment corrects the first and puts the deployment gate
 first in M3; RW 2.42 and 3.34 are extended.
+
+## 2026-11-18 — the laptop (Opus 5.5): the reviewer's second round, run
+
+Run with the portable release build at `43b9812` (programs in the owner's evidence folder, `S5-harness/update/`):
+- `delulu test t.delulu --test-authority 'effects = ["Read"]' --test-authority 'fs.read = ["./data"]'`: the test inside
+  `./data` passes, the one reading `./other` fails with DL0703; `--test-authority 'fs.write = ["./out"]'` exits 2,
+  *"not a [test-authority] key (effects, fs.read)"*.
+- A clock call checks nothing per use. Rust on this machine, per call: `canonicalize` 39 µs, open and read 36 µs, both
+  83 µs, `canonicalize` twice then open and read 121 µs — against a checked DeluluLang read's 430 µs.
+- `optional.delulu` (an optional cache write in a branch that does not run): plain run exit 0, finished; `--preflight`
+  exit 1, nothing ran; `--within` *exceeds*.
+
+D-V2-238's third amendment corrects the second and reorders M3: RW 2.42's decision and optional requests in the
+authority report come before a default preflight.
