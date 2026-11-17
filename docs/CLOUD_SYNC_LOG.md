@@ -10246,3 +10246,13 @@ Survey and doctor: in the commit below.
 - Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's reviewer slice whenever reviewers are found.
+
+### 2026-11-18 — the laptop: checkpoint 25 — the reviewer's follow-up checked; blind fixtures for M5's reviewer slice (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W9zQBqvWNhPeJ9Pzcm`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the `V2_LOG.md` entry of this date; M5's reviewer slice now names the blind set and the TypeScript policy
+  difference; RW 2.42 gains Deno's catchable refusal as a precedent.
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's reviewer slice with the blind set, when
+  reviewers are found.

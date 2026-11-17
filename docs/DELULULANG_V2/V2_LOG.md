@@ -13651,3 +13651,23 @@ With the escaping file name of the earlier entry (*within*, refused when run), t
 this suite: every widening named with its grant and line, no false alarm, the undecidable said to be undecidable. The
 suite is the head chef's own, so it is a test of the mechanism, not a review study. One of the nine needed a fix
 before it checked (`post` takes its headers as a `Map`; the message said so).
+
+## 2026-11-18 — the laptop (Opus 5.5): the third reviewer's follow-up, checked; the reviewer fixtures made blind
+
+The owner passed on the reviewer's follow-up and asked for it to be checked. Every citation says what it was cited for:
+the Constitution names *"AI agents, LLMs, and future AI systems (agentic software, physical AI, robot controllers)"* as
+the primary users and adds *"the audience is not the principle. The principle is authority"*; `V2_AI_NATIVE_DESIGN.md`
+§1, *"Humans remain first-class users"*; the README, humans learn the language and review AI-written code; the AI trial,
+two tasks under five conditions, ten runs of `claude-sonnet-5`. No release exists, so no production use can be found.
+
+**One finding the earlier table left out:** for the new-host update, `--within` reports two lines — *exceeds*
+`net=collector.example.net` at line 9, and *inconclusive* `net=HOST/PATH` at line 14, because the URL is computed and a
+host's path and method are decided at the call.
+
+**The fixtures gave their answers away** (`new_host.delulu`, `wider_read.delulu`). A blind set is now in the owner's
+evidence folder, `S5-harness/m5-blind/` — the approved program and eight updates named `update_A` to `update_H` in a
+shuffled order — with the key apart in `S5-harness/m5-key/`. For the TypeScript side no platform matches the policy:
+Deno scopes folders (`--allow-read=./data`) and hosts (`--allow-net=example.com`) but not a URL's path or method, and
+throws a refused operation as a catchable `NotCapable` error (its security documentation); Cloudflare's egress handler
+sees the whole request, but Workers have no file system. The study states the difference. M5's slice and RW 2.42 are
+updated.
