@@ -13715,3 +13715,14 @@ Three points, each checked:
 
 The next suite, in M5: a multi-module program; the same questions for both groups, each report beside its source;
 the verdict, the narrowest permission and the operations added or removed scored apart; then the authoring half.
+
+## 2026-11-18 — the laptop (Opus 5.5): RW 6.89 (d) narrowed — the JSON already says what the text report does not
+
+A reviewer ran `authority --within-file approved.grants --json` on the approved program and update E. Re-run here (the
+portable release build): the approved version's `authority.within.coverage.net` is `within`, its `required_grants`
+name `net=api.example.com/v1/**`, and `authority.requests` lists its GET (`api.example.com`, `/v1/rates`, line 10);
+update E's `coverage.net` is `not-requested` and its grants are `console` and `fs.read=./orders`; the refactor keeps its
+GET, at line 11. The closed schema defines `coverage` (including `not-requested`) and `requests`; the agent guide
+describes neither. So the gap is the text report — a count, not the requests — the guide's prose, and a comparison of
+two versions' operations, which adds information even in JSON because two operations can share one grant. The
+reviewer's group means, 26.007 s and 37.156 s, check out. M5's next suite gives the report-assisted agents the JSON.
