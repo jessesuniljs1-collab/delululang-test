@@ -10266,3 +10266,12 @@ Survey and doctor: in the commit below.
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's reviewer slice, a harder suite with human
   reviewers.
+
+### 2026-11-18 — the laptop: checkpoint 27 — a reviewer's reading of the first M5 run, checked; corrections (documents only)
+- Session: `https://claude.ai/code/session_01Deh6W9zQBqvWNhPeJ9Pzcm`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the `V2_LOG.md` entry of this date; M5's slice corrected (Workers' file system) and its next suite
+  specified; RW 6.89 (d), a *within* answer that only counts.
+- Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified.

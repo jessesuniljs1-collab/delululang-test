@@ -13697,3 +13697,21 @@ found every new permission from the code alone, so this suite cannot show whethe
 It shows that DeluluLang code is readable by such a model, and that the gate's value here was exactness and
 confidence. The next suite needs larger programs, requests reached through helpers and other modules, and human
 reviewers beside the models.
+
+## 2026-11-18 — the laptop (Opus 5.5): a reviewer's reading of the first M5 run, checked
+
+Three points, each checked:
+- **A perfect verdict score hid a wrong description.** Reviewer B1 called update E "no new permission" (right, at
+  confidence 5) because "it only requests the GET to `api.example.com/v1/rates`" — but E removed the network call (no
+  `http`; row `{Read, Write}`). Its report said only *"3 request(s) in 2 dimension(s)"*, against 5 in 3 for the approved
+  program, so it could not correct the reader. Re-reading every reason found one more: reviewer B2 said update D's
+  approved branch requests a path outside `/v1/**`, but that branch builds `https://api.example.com/v1/**/x` — induced by
+  the fixture defect recorded above. Two of 32 reasons wrong, both from reviewers with the reports. RW 6.89 gains (d).
+- **The timing measured the set-up.** The report readers were asked more (an agreement column, eight more files), so
+  26 against 37 seconds is not the tool's cost.
+- **Cloudflare Workers do have a file system:** a memory-backed one — read-only bundled files under `/bundle` and a
+  `/tmp` that is *"not persistent and … unique to each request"* (its `node:fs` documentation). The entry above said they
+  had none; corrected in M5's slice. A live folder on the operator's machine remains a different permission.
+
+The next suite, in M5: a multi-module program; the same questions for both groups, each report beside its source;
+the verdict, the narrowest permission and the operations added or removed scored apart; then the authoring half.
