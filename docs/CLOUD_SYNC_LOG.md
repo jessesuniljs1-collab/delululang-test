@@ -10283,3 +10283,10 @@ Survey and doctor: in the commit below.
 - Files: M `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified.
+
+### 2026-11-22 — the laptop: checkpoint 29 — RW 6.90, the Survey has no function nodes (documents only)
+- Session: `https://claude.ai/code/session_01Deh6WAJQfWJ7d6KY1rW1UJ`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `master` (documents only).   Merged: **yes**.
+- **What:** the `V2_LOG.md` entry of this date; RW 6.90.
+- Files: M `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+- **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified; RW 6.90.

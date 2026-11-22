@@ -13726,3 +13726,21 @@ GET, at line 11. The closed schema defines `coverage` (including `not-requested`
 describes neither. So the gap is the text report — a count, not the requests — the guide's prose, and a comparison of
 two versions' operations, which adds information even in JSON because two operations can share one grant. The
 reviewer's group means, 26.007 s and 37.156 s, check out. M5's next suite gives the report-assisted agents the JSON.
+
+## 2026-11-22 — the laptop (Opus 5.5): the Survey has no function nodes (RW 6.90)
+
+The owner asked whether the Survey, `doctor` and the Atlas serve an AI better than an external code-to-knowledge-graph
+tool. Both were asked the same questions — the external one on a copy of the tree, AST only, no model calls. What
+changes this repository's work list:
+- **Who calls `fmt::same_tree`?** The Survey has no function nodes (`query fn:same_tree`: no node). `impact` of
+  `fmt.rs` reaches 312 nodes, `dir.rs` among them through its `use delulu_syntax::ast::*`, not through the call at
+  `dir.rs:324` — the only production caller. The external map missed that call too (four callers, all tests inside
+  `fmt.rs`). `git grep` found it. RW 6.90.
+- **Where the Survey and the Atlas answered and the external map could not:** a diagnostic's 380 cited sites
+  (`query code:DL0703`); whether a file is entrenched (`laundering.rs`, `.github/CODEOWNERS` line 28); and why a
+  program needs `Net` (`atlas why Net examples/guide/05_capabilities.delulu`: `main → fetch`, 53 ms). The external
+  map had no node from any of the 317 `.delulu` files.
+- **Size:** `query code:DL0703` prints 44,778 bytes and refuses `--budget`; the Atlas takes `--budget N`. Folded into
+  RW 6.90.
+
+Survey `check`: ok (1785 nodes, 21751 edges). `doctor --check`: 29 checks passed.
