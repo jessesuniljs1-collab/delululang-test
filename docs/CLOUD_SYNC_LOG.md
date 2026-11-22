@@ -10302,3 +10302,23 @@ Survey and doctor: in the commit below.
   1. `launch/2.0.0` stays on hold. At its next authorized sync, verify its resolved `Cargo.lock` and rerun
      `supply-chain` against the advisories current that day (`docs/AI_ONBOARDING.md`, the launch branch).
   2. The roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified; RW 6.90.
+
+### 2026-11-22 — the laptop: checkpoint 31 — the dependency patch landed; master's push run read; the owner works alone
+- Session: `https://claude.ai/code/session_01Deh6WBWp5CCA2ThsJLgwm8`. Model: Claude Opus 5.5 (`CLAUDE_EFFORT` reads
+  `xhigh`). No sub-agent.
+- **The patch's run:** `45020598730` (`ci.yml`, `jobs=everything`) at `c40e7db2`: 18 of 18 jobs success,
+  `supply-chain` among them.
+- **Landed:** `master` fast-forwarded `3e0f45a3..c40e7db2` (checkpoint 30's commit, unchanged) and pushed.
+  `master`'s push run [`45029751436`](https://github.com/jessesuniljs1-collab/delululang-test/actions/runs/45029751436)
+  at `c40e7db2`: success, 14 jobs success and 2 skipped (`heavy-gates` and `miri-slow`, which a push does not run; the
+  baseline `45018442116` skipped the same two); its `supply-chain`: `advisories` ok, `bans`, `licenses` and `sources`
+  ok. The nightly, red on these advisories since 2026-11-19, has not yet run on `c40e7db2`.
+- **`HANDOFF.md` §11.1** gains the owner's word of this date: he works alone, so every tester and reviewer is an AI.
+- Files: M `HANDOFF.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **Open / next:**
+  1. `launch/2.0.0` stays on hold. At its next authorized sync, verify its resolved `Cargo.lock` and rerun
+     `supply-chain` against the advisories current that day (`docs/AI_ONBOARDING.md`, the launch branch).
+  2. The roadmap's M5 asks for *"human reviewers beside the models"*, and the owner has none (§11.1, this date).
+     Amend D-V2-238 so that a second vendor's models sit beside them, with the owner as the operator.
+  3. The roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified; RW 6.90.

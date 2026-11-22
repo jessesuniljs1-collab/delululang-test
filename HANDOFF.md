@@ -792,6 +792,16 @@ wins, and you should update the memory to match.
     examples.
   - **Changing code.** Change, remove or rewrite code freely where a basic needs it, because git is the history.
     *Never delete a `.md` file* still holds: it is about documents.
+- **He works alone, so every tester and reviewer is an AI** (owner, 2026-11-22: *"I am solo developer. Idk any
+  developer or experts expect for u guys LLMs itself"*). A plan step that needs a human developer, reviewer or expert
+  cannot run as written.
+  - **Testers and reviewers** are fresh AI agents with no DeluluLang context, from at least two vendors where possible
+    (he uses Claude and Codex), and never the model that built what they judge.
+  - **Acceptance is checked by machine** wherever it can be: exit codes, output compared byte for byte, `authority
+    --within` verdicts, an answer key held apart from the tester.
+  - **The owner is the first human user,** in the operator's role: he approves the grants and answers an *exceeds*
+    update. Other people arrive only after a public preview, which is his word.
+  - **What does not change:** agents testing DeluluLang hold no authority, and one AI works on the repository at a time.
 
 ### 11.2 Working rules the project has paid for
 

@@ -13806,3 +13806,13 @@ redirects off the allowlist included. `cargo test -p delulu-runtime --test egres
 **`launch/2.0.0` stays on hold** (the owner's word). It is at `728a582` and still locks wasmtime 48.0.8 and url 2.5.8.
 At its next authorized sync: verify the merged tree's resolved `Cargo.lock`, and rerun `supply-chain` against the
 advisories current that day — more may have been published by then (`docs/AI_ONBOARDING.md`, the launch branch).
+
+**Landed (checkpoint 31).** The patch's `everything` run
+[`45020598730`](https://github.com/jessesuniljs1-collab/delululang-test/actions/runs/45020598730) at `c40e7db2`: 18
+of 18 jobs success. Its `supply-chain` log: `cargo deny check advisories` ok; `check bans licenses sources` ok.
+`master` was fast-forwarded `3e0f45a3..c40e7db2` and pushed; the laptop's checkout moved with it. On the landed tree,
+`survey check`: ok (1785 nodes, 21769 edges); `doctor --check`: 29 checks passed. `master`'s push run
+[`45029751436`](https://github.com/jessesuniljs1-collab/delululang-test/actions/runs/45029751436) at `c40e7db2`:
+success, 14 jobs success and 2 skipped (`heavy-gates` and `miri-slow`, which a push does not run; the baseline
+`45018442116` skipped the same two); its `supply-chain`: `advisories` ok, `bans`, `licenses` and `sources` ok. The
+nightly, red on these advisories since 2026-11-19, has not yet run on `c40e7db2`.
