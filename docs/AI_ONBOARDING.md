@@ -309,6 +309,10 @@ Read it before the list below, which is the state of 2026-11-05.
   (D-V2-208 is additive). CHECKLIST-2.0 cites `1487163`'s runs, read green. `728a582`'s `everything` `41416143488` and
   release dry run `41416147296` were read green by on-demand routine run 19 (18 of 18; the broker's Miri 2 h 01 min). The
   launch itself (a fresh history in the public repository, the tag, the release) waits for the owner's word.
+  **At its next authorized sync (handoff, 2026-11-22):** it still locks wasmtime 48.0.8 and url 2.5.8, which `master`
+  replaced for RUSTSEC-2026-0566 to -0573 and -0592. Verify the merged tree's resolved `Cargo.lock` (wasmtime 48.0.9 or
+  later in the 48 line, url 2.5.9 or later), then rerun `supply-chain` — `cargo deny check advisories`, then `bans
+  licenses sources` — against the advisories current that day.
 - **2.0's readiness is in question (the owner, 2026-11-02):** *"Still cannot write complete program like in java or
   python."* A probe of 39 everyday constructs: 14 ran, 25 were refused (RW 1.15; the gaps are RW 2.33–2.40). The head
   chef recommended holding the launch until the language basics land; **the owner's answer is pending.**

@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — wasmtime 48.0.9 and url 2.5.9, for RUSTSEC-2026-0566 to -0573 and -0592, 2026-11-22
+
+- **Security: wasmtime 48.0.8 → 48.0.9** (with Cranelift 0.135.8 → 0.135.9 and Pulley 48.0.8 → 48.0.9) **and url 2.5.8 →
+  2.5.9** (with form_urlencoded 1.2.2 → 1.2.3): 29 packages, patch releases only, nothing added or removed, and
+  `delulu-wasm`'s Wasmtime feature selection unchanged. Eight Wasmtime advisories were published on 2026-11-16
+  (RUSTSEC-2026-0566 to -0573) and one `url` advisory on 2026-11-20 (RUSTSEC-2026-0592, a stack overflow in
+  `Url::origin()` on nested `blob:` URLs). `cargo deny check advisories` clears all nine on the updated lockfile. For
+  the build before it, no exposure was identified in the paths reviewed; `docs/DELULULANG_V2/V2_LOG.md` of this date
+  lists them, one advisory at a time.
+
 ## Unreleased — a certificate is for its holder, 2026-11-17
 
 - **Federation (D-V2-237, FABLE-022).** `delulu broker start --require-anchored-roots <ANCHOR> --holder-key <FILE>`:

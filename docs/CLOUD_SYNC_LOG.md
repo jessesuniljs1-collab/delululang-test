@@ -10290,3 +10290,15 @@ Survey and doctor: in the commit below.
 - **What:** the `V2_LOG.md` entry of this date; RW 6.90.
 - Files: M `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
 - **Open / next:** the roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified; RW 6.90.
+
+### 2026-11-22 — the laptop: checkpoint 30 — wasmtime 48.0.9 and url 2.5.9, for RUSTSEC-2026-0566 to -0573 and -0592
+- Session: `https://claude.ai/code/session_01Deh6WAJQfWJ7d6KY1rW1UJ`. Model: Claude Opus 5.5, effort `max`. No sub-agent.
+- Branch: `laptop/rustsec-wasmtime-48.0.9-url-2.5.9`, landed on `master` by fast-forward only once its `everything` run
+  is green; that run and `master`'s push run are recorded in the entry after this one.
+- **What:** the `V2_LOG.md` entry of this date. Pre-patch baseline: run `45018442116`, red on `supply-chain` alone.
+- Files: M `Cargo.lock`, `CHANGELOG.md`, `docs/AI_ONBOARDING.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:**
+  1. `launch/2.0.0` stays on hold. At its next authorized sync, verify its resolved `Cargo.lock` and rerun
+     `supply-chain` against the advisories current that day (`docs/AI_ONBOARDING.md`, the launch branch).
+  2. The roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified; RW 6.90.

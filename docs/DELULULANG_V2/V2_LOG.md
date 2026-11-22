@@ -13744,3 +13744,65 @@ changes this repository's work list:
   RW 6.90.
 
 Survey `check`: ok (1785 nodes, 21751 edges). `doctor --check`: 29 checks passed.
+
+## 2026-11-22 — the laptop (Opus 5.5): wasmtime 48.0.9 and url 2.5.9, for RUSTSEC-2026-0566 to -0573 and -0592
+
+**What turned it red.** The nightly `supply-chain` job has failed since 2026-11-19 (`44511199861`, `44722732304`,
+`44895067178`; `44290574132` of 2026-11-18 was green). The pre-patch baseline is `master`'s push run `45018442116` at
+`3e0f45a3`: 13 jobs success, `miri-slow` and `heavy-gates` skipped as on every push, and `supply-chain` failed on
+`cargo deny check advisories` alone — eight advisories against `wasmtime` 48.0.8 (RUSTSEC-2026-0566 to -0573, published
+2026-11-16, fixed in 48.0.9) and one against `url` 2.5.8 (RUSTSEC-2026-0592, published 2026-11-20, fixed in 2.5.9).
+`cargo deny` on the laptop reproduced exactly those nine on the old lockfile (exit 1).
+
+**The change.** `cargo update -p wasmtime@48.0.8 --precise 48.0.9` and `cargo update -p url@2.5.8 --precise 2.5.9`.
+`Cargo.lock` alone changes: 29 packages, every one a patch release — `wasmtime`, its 11 other `wasmtime-*` crates and the
+two `pulley-*` crates 48.0.8 → 48.0.9, the 13 Cranelift crates 0.135.8 → 0.135.9, `url` 2.5.8 → 2.5.9 and `form_urlencoded` 1.2.2 → 1.2.3
+(which `url` 2.5.9 requires); 348 packages before and after, nothing added or removed. Two things the first resolution did
+that the patch does not keep: it took five Cranelift siblings to 0.135.10, a later patch, because Cranelift 0.135.9
+asks for them with `^0.135.9` — pinned back to 0.135.9 so the family is the one wasmtime 48.0.9 was
+released with; and re-resolving wasmtime's graph re-pointed five packages whose own version did not move (`errno`,
+`quinn-udp`, `rustix`, `tempfile`, `winapi-util`) from `windows-sys` 0.61.2 to 0.52.0, and `tempfile` from `getrandom`
+0.3.4 to 0.4.3 — both within their declared ranges, both restored to the original. `cargo metadata --locked` accepts the
+result, and a no-op `cargo update` leaves it byte for byte. wasmtime 48.0.10 (2026-11-19) fixes one advisory,
+GHSA-f2pq-268w-886c, in `wasmtime-wasi`, which is not in the lockfile; it is not taken here.
+
+**Features, at build time and at run time — two different things.** Build time is the Cargo features `delulu-wasm`
+selects for the `wasmtime` crate (`crates/delulu-wasm/Cargo.toml`): unchanged, and still exactly wasmtime's `default`
+minus `cache` — 48.0.9's feature table is identical to 48.0.8's, and `tests/wasmtime_features.rs` passed. Run time is the
+`Config` that `harden_wasm_features` (`crates/delulu-wasm/src/host.rs`) applies to every engine: it turns off, among
+others, the threads, GC, function-references and component-model proposals, whatever the build compiled in.
+
+**The gate.** `cargo deny check advisories` on the updated lockfile: ok — it clears all nine. `cargo deny check bans
+licenses sources`: ok.
+
+**The build before it: no exposure identified in the paths reviewed.** These are the paths read, one advisory at a
+time; they are not a proof that no other path exists, and Wasmtime's own internals were not audited.
+- -0566 (`wasmtime-wasi`'s `AsyncWriteStream`) and -0571 (`wasmtime-wasi-http`): neither crate is in the lockfile,
+  before or after.
+- -0567 (a build *without* the `threads` Cargo feature that turns the threads proposal on through `Config`) and -0570 (a
+  build *without* the `gc` Cargo feature): at build time `delulu-wasm` selects both features, so the build is not the
+  configuration they describe; at run time, separately, `wasm_threads(false)` and `wasm_gc(false)`.
+- -0568 (a stale GC heap base pointer) and -0573 (a GC heap whose reservation is not a multiple of the page size): the
+  `gc` feature is compiled in; at run time the GC proposal is off (`wasm_gc(false)`, with
+  `wasm_function_references(false)`).
+- -0569 (`Caller::get_module_export` called from a host function the embedder invoked): no call to it in the
+  workspace's Rust sources (`git grep`).
+- -0572 (a component cancelling a stream or future copy on the wrong end): `component-model` and
+  `component-model-async` are compiled in; at run time the component model is off (`wasm_component_model(false)`).
+- -0592 (`Url::origin()` on nested `blob:` URLs): no call to `Url::origin()` or `url::quirks::origin` in the
+  workspace's sources, nor in the `src/` of the lockfile's two dependents of `url`, `reqwest` 0.12.28 and `tower-http`
+  0.6.11; the workspace names no `url` type and reaches the crate through `reqwest` alone.
+
+**What ran, on the laptop (Windows), on the updated lockfile.** `scripts/clippy.sh -j 4`: `fmt` clean, clippy 0
+warnings, stamped. `cargo test -p delulu-wasm --no-fail-fast` — every target, 29 of them: 245 passed, 0 failed, 1
+ignored (`differential`, the 50,000-case gate, kept out of the normal suite), among them `wasmtime_features` (1:
+`wasmtime_is_resolved_without_its_compilation_cache`), `hostile_guest` (5) and the parity targets; then `differential`
+itself with `DELULU_FUZZ_N=5000 -- --ignored`: passed. `cargo test -p delulu --test wasm_cli --test core_invariance
+--test egress_cli`: 24, 1 and 15 passed. `cargo test -p delulu-runtime --lib -- egress`: 48 passed, 1 ignored
+(`proxy_child`, which `proxy_variables_do_not_route_a_request` runs as a child process, and which passed), among them
+the 12 `real_transport` tests, which send requests through `reqwest` — so through `url` — over TLS to a local server,
+redirects off the allowlist included. `cargo test -p delulu-runtime --test egress_features`: 2 passed.
+
+**`launch/2.0.0` stays on hold** (the owner's word). It is at `728a582` and still locks wasmtime 48.0.8 and url 2.5.8.
+At its next authorized sync: verify the merged tree's resolved `Cargo.lock`, and rerun `supply-chain` against the
+advisories current that day — more may have been published by then (`docs/AI_ONBOARDING.md`, the launch branch).
