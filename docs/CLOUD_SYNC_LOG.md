@@ -10322,3 +10322,21 @@ Survey and doctor: in the commit below.
   2. The roadmap's M5 asks for *"human reviewers beside the models"*, and the owner has none (§11.1, this date).
      Amend D-V2-238 so that a second vendor's models sit beside them, with the owner as the operator.
   3. The roadmap's M1, item 0, then item 1 (RW 2.50); M5's next suite as specified; RW 6.90.
+
+### 2026-11-22 — the laptop: checkpoint 32 — D-V2-238's fifth amendment; the order report's baseline; RW 3.35, 3.36
+- Session: `https://claude.ai/code/session_01Deh6WBWp5CCA2ThsJLgwm8`. Model: Claude Opus 5.5 (`CLAUDE_EFFORT` reads `xhigh`). No sub-agent.
+- **What:** the `V2_LOG.md` entry of this date — the roadmap's order amended (speed and the first agent trial earlier,
+  one capped GPU experiment before the preview, reviewers from two vendors), the order report's single-machine
+  baseline with a falsified harness, RW 3.35 and 3.36, and a dated note in `measurements/compute/RECORD.md`. Checkpoint
+  31's *Open / next* item 2 (M5's human reviewers) is answered by the amendment.
+- Files: added `measurements/order-report/` (`RECORD.md`, `bench.py`, `results.json`, `programs/orders.delulu`,
+  `programs/orders.py`, `programs/micro/` — nine programs and their Python twins); M
+  `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/REMAINING_WORK.md`,
+  `measurements/compute/RECORD.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/AI_ONBOARDING.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Open / next:**
+  1. Step 1 of the amended order: the probe under `measurements/everyday/`; `main`'s `Err`, directly or through `?`,
+     a diagnostic and exit 1 on both engines and under `--sandbox`; the orders starter propagating its failures; the
+     successful case verified too. Then step 2, the fresh-agent trial, before any other language feature.
+  2. `launch/2.0.0` stays on hold. At its next authorized sync, verify its resolved `Cargo.lock` and rerun
+     `supply-chain` against the advisories current that day (`docs/AI_ONBOARDING.md`, the launch branch).

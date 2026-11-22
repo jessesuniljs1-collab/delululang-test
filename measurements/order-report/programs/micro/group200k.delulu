@@ -1,0 +1,30 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var totals = Map()
+  for i in 0..200000 {
+    let line = f"cust{i % 100},{i % 977}"
+    let parts = line.split(",")
+    match parts.get(0) {
+      Some(name) => match parts.get(1) {
+        Some(c) => match parse_int(c) {
+          Some(cents) => {
+            let cur = match totals.get(name) {
+              Some(v) => v,
+              None => 0
+            }
+            totals.insert(name, cur + cents)
+          },
+          None => {}
+        },
+        None => {}
+      },
+      None => {}
+    }
+  }
+  var sum = 0
+  for v in totals.values() {
+    sum = sum + v
+  }
+  root.console().println(f"{totals.len()} {sum}")
+}

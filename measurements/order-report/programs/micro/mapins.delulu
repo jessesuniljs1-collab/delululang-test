@@ -1,0 +1,19 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var totals = Map()
+  let names = (0..100).map(fn(k: Int) -> Str { f"cust{k}" })
+  for i in 0..200000 {
+    match names.get(i % 100) {
+      Some(name) => {
+        let cur = match totals.get(name) {
+          Some(v) => v,
+          None => 0
+        }
+        totals.insert(name, cur + 1)
+      },
+      None => {}
+    }
+  }
+  root.console().println(str(totals.len()))
+}

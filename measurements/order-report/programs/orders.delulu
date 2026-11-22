@@ -1,0 +1,93 @@
+module orders
+
+type Order { customer: Str, item: Str, qty: Int, cents: Int }
+type Total { customer: Str, cents: Int, count: Int }
+
+fn parse_line(line: Str) -> Result[Order, Str] {
+    let f = line.split(",")
+    if f.len() != 4 {
+        return Err("expected 4 fields: " + line)
+    }
+    let qty = match parse_int(f[2].trim()) {
+        Some(n) => n
+        None => { return Err("bad quantity: " + line) }
+    }
+    let cents = match parse_int(f[3].trim()) {
+        Some(n) => n
+        None => { return Err("bad price: " + line) }
+    }
+    Ok(Order { customer: f[0].trim(), item: f[1].trim(), qty: qty, cents: cents })
+}
+
+fn money(c: Int) -> Str {
+    str(c / 100) + "." + str(c % 100).pad_left(2, "0")
+}
+
+fn sort_by_cents(xs: List[Total]) -> ref List[Total] {
+    var out: ref List[Total] = []
+    for x in xs {
+        var placed = false
+        var next: ref List[Total] = []
+        for y in out {
+            if !placed && x.cents > y.cents {
+                next.push(x)
+                placed = true
+            }
+            next.push(y)
+        }
+        if !placed {
+            next.push(x)
+        }
+        out = next
+    }
+    out
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let text = match root.fs_read("./data").read_text("orders.csv") {
+        Ok(t) => t
+        Err(e) => {
+            out.println("cannot read orders.csv")
+            return
+        }
+    }
+    var orders: ref List[Order] = []
+    var errors: ref List[Str] = []
+    for line in text.split("\n") {
+        if line.trim().is_empty() { continue }
+        match parse_line(line) {
+            Ok(o) => orders.push(o)
+            Err(e) => errors.push(e)
+        }
+    }
+    var totals: ref Map[Str, Total] = Map()
+    for o in orders {
+        match totals.get(o.customer) {
+            Some(t) => totals.insert(o.customer, Total { customer: o.customer, cents: t.cents + o.qty * o.cents, count: t.count + 1 })
+            None => totals.insert(o.customer, Total { customer: o.customer, cents: o.qty * o.cents, count: 1 })
+        }
+    }
+    var report = ""
+    for t in sort_by_cents(totals.values()) {
+        report = report + t.customer.pad_right(8, " ") + money(t.cents).pad_left(10, " ") + "  (" + str(t.count) + " orders)\n"
+    }
+    for e in errors {
+        report = report + "skipped: " + e + "\n"
+    }
+    match root.fs_write("./out").write_text("report.txt", report) {
+        Ok(_) => out.println("wrote report.txt: " + str(orders.len()) + " orders, " + str(errors.len()) + " skipped")
+        Err(e) => out.println("cannot write report.txt")
+    }
+}
+
+test "a good line parses" {
+    match parse_line("alice,widget,2,1250") {
+        Ok(o) => assert_eq(o.qty * o.cents, 2500)
+        Err(e) => assert(false)
+    }
+}
+
+test "money pads its cents" {
+    assert_eq(money(105), "1.05")
+}

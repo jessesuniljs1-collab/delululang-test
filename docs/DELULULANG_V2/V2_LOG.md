@@ -13816,3 +13816,37 @@ of 18 jobs success. Its `supply-chain` log: `cargo deny check advisories` ok; `c
 success, 14 jobs success and 2 skipped (`heavy-gates` and `miri-slow`, which a push does not run; the baseline
 `45018442116` skipped the same two); its `supply-chain`: `advisories` ok, `bans`, `licenses` and `sources` ok. The
 nightly, red on these advisories since 2026-11-19, has not yet run on `c40e7db2`.
+
+## 2026-11-22 — the laptop (Opus 5.5): D-V2-238's fifth amendment — speed and the first trial earlier, one GPU experiment; the order report's baseline
+
+**What.** The roadmap's order of work is amended (`V2_DECISION_LOG.md`, D-V2-238's fifth amendment): trustworthy
+outcomes, then the first fresh-agent trial at once, the M1 items it names, M2 with the order report's speed target, one
+capped GPU experiment on the laptop's RTX 4050, then the rest. `measurements/order-report/` is new: the harness, the
+programs, the raw times and the record. RW 3.35 and 3.36 are new; `measurements/compute/RECORD.md` gains a dated note;
+M5's human reviewers become a second vendor's models.
+
+**Why.** The owner asked for speed as well as permissions, and for a GPU path. Two rounds with Codex GPT 6.2 Astra
+shaped the order, and the owner forwarded its approval: *"Head Chef Claude Opus 5.5 just check and verify and record
+everything."*
+
+**Evidence, each run on the laptop the same day.**
+
+- **The harness was falsified first.** A wrapper that corrupted only the first of three repetitions' report was caught
+  (`repetition 1: report differs from the expected bytes (2121 vs 2112 bytes)`), and one that exited 1 was reported
+  FAILED; the harness exited 1 both times. The first harness, which Codex criticised, kept only each lane's last report
+  and left a failed lane out of its comparison — both confirmed in its source before it was replaced.
+- **The baseline** (release binary built from `8eb845cb`, 7 repetitions each, every one exiting 0 with the expected
+  bytes): at 1,000 lines plain `delulu run` 18.2 ms, WASM 22.1, Python 49.6; at 10,000 lines 60.8, 53.1 and 58.5; at
+  100,000 lines 519.1, 361.4 and 148.6. The 100,000-line report was read by hand.
+- **Where the time goes** (the micro suite): on WASM the counting loop (39.7 ms against Python's 818.8), `fib(30)` (23.8
+  against 95.4), the library sort (22.6 against 88.9) and f-strings (27.0 against 65.8) win; `split` (108.7 against
+  51.3), `parse_int` (55.4 against 40.3) and Map `get`/`insert` (86.4 against 46.4) lose — RW 3.35.
+- **Compute today** (the debug binary built from `c40e7db2`): no grant is DL0703; `cpu-reference` unwaived and an
+  unknown `vendor-x-cuda` are DL1911; `--sandbox` refuses; `--engine wasm` is DL1201 — RW 3.36. `dispatch` takes a
+  buffer of `f64` and returns one (`compute.rs`), and `dot_self` is one of its five reference kernels, as Codex said.
+- **The GPU and CI:** the laptop has an NVIDIA GeForce RTX 4050 Laptop GPU with 6,141 MiB. The test repository's owner
+  is a personal account (`gh api`), and GitHub's GPU runners are for organizations on paid plans; GitHub advises against
+  self-hosted runners on public repositories (docs.github.com: *Larger runners*, *Actions runner pricing*, *Secure use
+  reference*).
+
+**Not done here:** no code changed; step 1 is next. `launch/2.0.0` stays on hold.

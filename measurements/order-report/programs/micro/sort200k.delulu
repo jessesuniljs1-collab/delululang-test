@@ -1,0 +1,19 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var xs = []
+  var s = 12345
+  for i in 0..200000 {
+    s = (s * 1103515245 + 12345) % 2147483648
+    xs.push(s)
+  }
+  let ys = xs.sort()
+  var check = 0
+  for i in 0..1000 {
+    match ys.get(i * 200) {
+      Some(v) => { check = (check + v) % 1000000007 },
+      None => {}
+    }
+  }
+  root.console().println(str(check))
+}

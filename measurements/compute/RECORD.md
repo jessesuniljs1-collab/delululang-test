@@ -107,3 +107,31 @@ before anything runs:
     -- outside the proof (contained at process level) --
     - compute/gpu0 [reduce_sum]  (kernels are signed artifacts; what they compute is not proven)
 ```
+
+## 2026-11-22 — today's binary, the laptop's GPU, and the experiment scheduled
+
+*Taken 2026-11-22 on the laptop, the debug binary built from `c40e7db2`.*
+
+**What the binary does with a program that mints `root.compute("gpu0")` and dispatches `reduce_sum`** (the program in
+`crates/delulu/tests/compute_cli.rs`):
+
+| Run | Answer |
+|---|---|
+| no `compute` grant | DL0703: *"compute device `gpu0` was not granted"*, naming the grant to pass |
+| `adapter=cpu-reference`, attestation not waived | DL1911: it does not attest independent below-adapter enforcement, so `waive-attestation` must say single enforcement is accepted |
+| `adapter=vendor-x-cuda`, attestation waived | DL1911: *"not one this build knows"* — refused rather than taken on trust |
+| `--sandbox` | refused before anything runs: *"it uses Compute. Nothing ran."* |
+| `--engine wasm` | DL1201: WASM codegen does not support `.compute` |
+
+- **The laptop's GPU:** an NVIDIA GeForce RTX 4050 Laptop GPU with 6,141 MiB (`nvidia-smi`), beside the processor's
+  integrated AMD Radeon 780M. A real adapter can be built and run here.
+- **CI:** GitHub's GPU runners (NVIDIA T4, Linux and Windows) are larger runners, for organizations on the Team or
+  Enterprise Cloud plans, billed per minute on public repositories too; `delululang-test` belongs to a personal account.
+  A self-hosted runner on a public repository lets a fork's pull request run code on the host, and GitHub's own
+  documentation advises against it. So CI tests an adapter's refusals and limits, and the GPU run is a laptop witness,
+  as the microVM's KVM tests are.
+- **The experiment** (D-V2-238, fifth amendment, step 5; RW 3.36): a signed `dot_self` on the RTX 4050, behind a build
+  option, capped at 2–3 sessions. It succeeds when the named GPU runs it with no CPU fallback, the answer agrees with
+  the CPU reference within a stated tolerance, a withheld grant blocks it, and the timings, transfers included, are
+  recorded at several sizes. A reviewer expected the GPU to lose at every size, because each dispatch copies its buffer
+  from the CPU and returns one number; that is a prediction, and the experiment records what it measures.

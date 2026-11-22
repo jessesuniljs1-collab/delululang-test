@@ -1,0 +1,10 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var n = 0
+  for i in 0..200000 {
+    let parts = "cust42,519".split(",")
+    n = n + parts.len()
+  }
+  root.console().println(str(n))
+}

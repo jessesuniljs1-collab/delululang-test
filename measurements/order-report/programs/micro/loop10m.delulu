@@ -1,0 +1,11 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var acc = 0
+  var i = 0
+  while i < 10000000 {
+    acc = acc + i
+    i = i + 1
+  }
+  root.console().println(str(acc))
+}

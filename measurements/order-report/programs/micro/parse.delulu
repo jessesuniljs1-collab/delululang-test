@@ -1,0 +1,12 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var n = 0
+  for i in 0..200000 {
+    match parse_int("519") {
+      Some(v) => { n = n + v },
+      None => {}
+    }
+  }
+  root.console().println(str(n))
+}

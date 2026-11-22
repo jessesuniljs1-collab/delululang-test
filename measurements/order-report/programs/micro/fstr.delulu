@@ -1,0 +1,10 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  var n = 0
+  for i in 0..200000 {
+    let line = f"cust{i % 100},{i % 977}"
+    n = n + line.len()
+  }
+  root.console().println(str(n))
+}

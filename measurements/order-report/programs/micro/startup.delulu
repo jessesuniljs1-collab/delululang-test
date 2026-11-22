@@ -1,0 +1,5 @@
+module bench
+
+fn main(root: Root) ! {Write} {
+  root.console().println("0")
+}

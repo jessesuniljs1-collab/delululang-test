@@ -7476,3 +7476,49 @@ of an approved program, every one that needs more authority was named before it 
 none that needs none was flagged. Whether that helps a reviewer needs reviewers, not code, so it is M5's first slice,
 allowed to run beside M1. M1 is not postponed for it: without arguments, JSON and methods, even a proven gate guards
 programs nobody can write.
+
+**D-V2-238, fifth amendment (head chef — Claude Opus 5.5 — 2026-11-22): speed and the first agent trial earlier, one GPU
+experiment before the preview, reviewers from two vendors.** The owner asked for speed as well as permissions (*"Bro we
+need speed also not just permissions"*), and for a GPU path. Measured on the laptop the same day
+(`measurements/order-report/RECORD.md`): the order report — the owner's `orders.delulu` and its Python twin, unchanged —
+took 18.2 ms on plain `delulu run` against Python's 49.6 at 1,000 lines, tied at 10,000, and lost at 100,000: 519.1 ms
+on the default engine, 361.4 on WASM, 148.6 in Python. On WASM the compiled code beats Python; `split`, `parse_int` and
+the Map lose to it (RW 3.35). No real accelerator adapter exists; the laptop has an RTX 4050, and GitHub's standard
+runners have no GPU (RW 3.36).
+
+**How the order was reached.** Codex GPT 6.2 Astra proposed running the first fresh-agent trial right after the
+exit-status fix, measuring the full report rather than an in-memory loop, and proving one real GPU operation before the
+preview. The head chef's revision put the language fixes the trial names before the speed work, because a 1,000-line
+report already beats Python while agents given the Skill alone compiled 0% first try (`measurements/ai-usability/`).
+Codex approved that order with two corrections, both checked and adopted: the first benchmark harness kept only each
+lane's last report and left a failed lane out of its comparison — true; its replacement checks every repetition, rotates
+the order and keeps every raw time, and its falsification is recorded — and *"the GPU will lose at every size"* is a
+prediction, not a result. The owner forwarded that approval: *"Head Chef Claude Opus 5.5 just check and verify and
+record everything."*
+
+**The order** (`docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, above the roadmap's table):
+1. **Trustworthy outcomes first.** M1 item 0 — the probe committed, its `main`-returns-`Err` case expecting exit 1 —
+   and, taken forward from M1 item 6, `main`'s `Err`, returned directly or through `?`, written to standard error as a
+   useful diagnostic with exit 1, on both engines and under `--sandbox`; the orders starter propagates its read and
+   write failures. Done when valid input writes the expected report and exits 0, and a missing input or an unwritable
+   folder exits 1 with a message that says which.
+2. **The first fresh-agent trial, at once.** Fresh Claude and Codex sessions — never the model that built the step —
+   each given the starter, sample orders, a known binary, the exact grants and one working command: rank customers by
+   order count, then upload the report to a named new host. Done when the ranking works under the original grants, the
+   upload's new permission is named, and withholding it blocks the upload. What the agents stumble on orders step 3.
+3. **The M1 items the trial names, in the order it shows** — likely RW 2.50's `Option`/`Result` methods, keyed sorting,
+   the empty-collection fixes and arguments.
+4. **M2, fast by default,** with the order report's target added to its done-when (below; `measurements/order-report/`).
+5. **One real GPU experiment, capped at 2–3 sessions.** A signed `dot_self` dispatched on the laptop's RTX 4050 through
+   today's interface (`compute.rs`, `dispatch`), behind a build option, so the default build and the release targets
+   carry no GPU stack. Done when the named GPU runs it with no CPU fallback, the answer agrees with the CPU reference
+   within a stated tolerance, a withheld grant blocks the dispatch, and the timings, transfers included, are recorded at
+   several sizes. A speedup is measured, not required. GitHub's standard runners have no GPU, so CI tests the adapter's
+   refusals and limits and the GPU run is a laptop witness (RW 3.36). Past the cap, it stops and is recorded.
+6. **The rest of M1, then M3, M4, M5 and M6,** with fresh Claude and Codex sessions taking turns as authors and
+   reviewers and the owner as the operator. Model inference on a GPU comes after the preview.
+
+**What changes in the table:** M2's done-when gains the order report's target; M5's *"human reviewers beside the
+models"* becomes reviewers from a second vendor, because the owner works alone (`HANDOFF.md` §11.1); *no device work
+before the preview* gains its one exception, step 5. **What does not change:** each step finishes before the next;
+`launch/2.0.0` stays on hold; M6 is the owner's word.

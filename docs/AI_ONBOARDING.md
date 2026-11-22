@@ -395,6 +395,10 @@ Read it before the list below, which is the state of 2026-11-05.
   - **Since 2026-11-18 the order of work is the roadmap at the top of `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md` §5
     (D-V2-238):** M1 the everyday language — the basics order below is M1's — then M2 fast by default, M3 truthful
     outcomes, M4 one file to download, M5 agents first, M6 the public preview. Nothing outside it before the preview.
+    **Amended 2026-11-22 (the fifth amendment):** the work runs in six steps — (1) `main`'s `Err`, directly or through
+    `?`, exits 1 with a diagnostic, and the probe and the orders starter prove it; (2) the first fresh-agent trial at
+    once; (3) the M1 items it names; (4) M2, with the order report's target (`measurements/order-report/`); (5) one GPU
+    experiment on the RTX 4050, capped at 2–3 sessions; (6) the rest of M1, then M3–M6. **Next: step 1.**
   - **NOW, at the owner's word (2026-11-06, D-V2-220): the language basics first.** *"Build basics first for DeluluLang
     … After each build, write and run programs and softwares of varying complexities and test and verify and fix it."*
     - The order: ~~compound assignment (2.34)~~ (done 2026-11-08 by on-demand routine run 21, D-V2-221; its programs
