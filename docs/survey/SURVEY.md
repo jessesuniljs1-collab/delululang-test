@@ -29,16 +29,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 352 |
-| Rust lines | 213851 |
+| Rust lines | 213855 |
 | Rust files outside `src/` (test/bench targets) | 180 |
 | Markdown documents | 332 |
-| Markdown lines | 119119 |
+| Markdown lines | 119144 |
 | DeluluLang programs | 327 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
 | CLI verbs, read from the dispatch | 47 |
-| Nodes / edges in this map | 1807 / 21813 |
+| Nodes / edges in this map | 1807 / 21817 |
 | … edges that are **inferred**, not read (each says so) | 400 |
 | Open discrepancies | 49 |
 
@@ -347,7 +347,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 4982 lines
+- **Modules:** 14 files, 4985 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -355,7 +355,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 | `src/codeowners.rs` | 190 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/diff.rs` | 197 | `delulu-survey diff <git-ref>` (P4-06): what a change touched, and everything that breaks because |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 714 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/lib.rs` | 717 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 498 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 266 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 528 | Reading Markdown. |

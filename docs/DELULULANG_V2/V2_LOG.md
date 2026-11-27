@@ -13897,3 +13897,21 @@ removes statements and gives up no right.
   machine was low on memory. GitHub runs it (the push and `everything` runs, recorded in the sync log).
 
 **Not done here:** no history rewritten, no branch modified or deleted, no release.
+
+## 2026-11-27 — the laptop (Opus 5.5): the Survey no longer maps a local plugin's `.remember/` folder
+
+**What.** An assistant plugin, `remember`, installed on the laptop on 2026-11-27, keeps its session notes and logs in
+`.remember/` at the repository root, with its own `.gitignore`. Two changes:
+- `.remember` joins the Survey's `EXCLUDED_DIRS`, with its reason.
+- The root `.gitignore` names `/.remember/`, so the folder stays ignored even without the plugin's own file.
+
+**Why.** The Survey walks the disk, not git, so it mapped the folder: 42 files, two of them Markdown. The map then
+depended on one machine's session. `repository_structure.rs` failed on the two unlisted notes, and a commit of that
+map would have failed freshness on every clean checkout. The plugin's data is not touched; packaging never read it.
+`package-toolchain.sh` and the `Dockerfile` copy named files only.
+
+**Evidence.**
+- `clean_checkout.rs` (*the Survey reads no file that git ignores*) was red with the folder present: *"reads 42
+  file(s) that git ignores"*. It is green with the exclusion.
+- `accounting.rs` pins the rule: `.remember/now.md` is excluded, and the reason names the plugin.
+- `git check-ignore -v .remember/now.md` answers `.gitignore:5:/.remember/`.

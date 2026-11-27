@@ -1,4 +1,8 @@
 /target
+# A local assistant plugin's session notes and logs (`remember`, from 2026-11-27). Machine-local:
+# never committed, mapped by the Survey, or packaged. The plugin writes its own `.remember/.gitignore`;
+# this line holds even if that file goes.
+/.remember/
 # Rust build output anywhere (e.g. examples/<pkg>/target from `delulu build`,
 # and per-package target/ dirs holding interface.json).
 target/

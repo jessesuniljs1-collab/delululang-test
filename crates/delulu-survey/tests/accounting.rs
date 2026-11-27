@@ -78,6 +78,7 @@ fn a_tracked_file_missing_from_the_map_would_be_named() {
     assert!(excluded_by("crates/delulu/src/cli.rs").is_none(), "an ordinary source file is excluded by no rule");
     assert!(excluded_by("README.md").is_none());
     assert!(excluded_by(".claude/settings.json").is_some_and(|w| w.contains("agent scratch")));
+    assert!(excluded_by(".remember/now.md").is_some_and(|w| w.contains("plugin")));
     assert!(excluded_by("docs/survey/survey.json").is_some_and(|w| w.contains("own output")));
     assert!(excluded_by("editors/vscode/delulu.vsix").is_some());
     // A directory merely NAMED like an excluded one, deeper in the tree, is excluded too — as the scanner does.

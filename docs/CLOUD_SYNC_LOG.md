@@ -10362,3 +10362,10 @@ Survey and doctor: in the commit below.
      `launch/2.0.0` (on hold) before any launch, and `claude/relaxed-brown-2l78i1` before it merges.
   3. RW 7.33: clear the name before any branding, and fix the `delulu-lang` metadata, both before the release.
   4. Unchanged from checkpoint 32: step 1 of D-V2-238's amended order, then step 2. `launch/2.0.0` stays on hold.
+
+### 2026-11-27 — the laptop: checkpoint 34 — the Survey no longer maps `.remember/`
+- Session: `https://claude.ai/code/session_01Deh6W8nQ6oFC8ECFUYGFVV`. Model: Claude Opus 5.5 (`CLAUDE_EFFORT` reads `xhigh`). No sub-agent.
+- **What:** the second `V2_LOG.md` entry of this date. It is a separate commit, at the owner's word.
+- Files: modified `crates/delulu-survey/src/lib.rs`, `crates/delulu-survey/tests/accounting.rs`, `.gitignore`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` and `docs/survey/*`. Added, deleted, renamed: nothing.
+- **Open / next:** checkpoint 33's.

@@ -66,6 +66,9 @@ pub const EXCLUDED_DIRS: &[(&str, &str)] = &[
     // warnings that are the packaging working correctly. Build output, like `target/`.
     ("dist", "packaged distribution archives — a staged copy of files already mapped at their source"),
     ("node_modules", "vendored JavaScript dependencies"),
+    // An assistant plugin (`remember`, first seen 2026-11-27) keeps its session notes and logs here,
+    // with its own `.gitignore`. Mapping it made the committed map depend on one machine's session.
+    (".remember", "a local assistant plugin's session notes and logs — machine-local, never part of the repository"),
 ];
 
 /// Files the Survey never reads, by extension, with the reason each is excluded.
