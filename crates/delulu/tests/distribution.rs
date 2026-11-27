@@ -43,8 +43,19 @@ fn the_packaging_script_ships_the_portable_build() {
          without the exact CPython it was linked against"
     );
     assert!(s.contains("sha256sum") && s.contains("SHA256SUMS"), "an archive without checksums asks to be trusted for no reason");
-    for owed in ["LICENSE", "NOTICE", "TRADEMARK.md"] {
+    for owed in ["LICENSE", "NOTICE"] {
         assert!(s.contains(owed), "the archive must carry {owed} — a binary alone is not a distribution");
+    }
+    // Every file the script requires must be in the tree, or it refuses every build — D-V2-239 removed
+    // `TRADEMARK.md`, which this list used to name.
+    let required = s
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("for f in LICENSE "))
+        .and_then(|l| l.strip_prefix("for f in ")?.strip_suffix("; do"))
+        .expect("the packaging script lists the legal files it requires");
+    for f in required.split_whitespace() {
+        assert!(root().join(f).is_file(), "the packaging requires `{f}`, which is not in the tree — it would refuse every build");
     }
     // D-V2-143: required, not copied "if present" — `test -f "$f" && cp` skipped a missing LICENSE without a word —
     // and beside them the notices of everything the binary links, generated from the build's own graph.

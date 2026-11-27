@@ -37,7 +37,8 @@ it; inspect remotes before any git operation; never distribute a microVM image u
 release only on objective readiness, never because CI is green; record honest blockers; never weaken a test to pass.
 
 **The licence is not open.** The owner decided it on 2026-07-24 — Apache-2.0, `NOTICE`, `TRADEMARK.md` (ruling D27,
-§11.1). On 2026-10-17 the head chef wrongly told him it was undecided, and the prompt took that over. What is open is a
+§11.1). On 2026-11-27 he withdrew the name policy: `TRADEMARK.md` is deleted, `NOTICE` holds attribution only, and no
+file states trademark rights that are not established, since none is registered or applied for (D-V2-239). On 2026-10-17 the head chef wrongly told him it was undecided, and the prompt took that over. What is open is a
 binary distribution's compliance (third-party notices) and the GPL microVM image.
 
 **The order** (the prompt's §1–§7): audit the state → **P9-05** → the decisions → the WSL microVM images, the WSL suite
@@ -336,7 +337,7 @@ none of its crates a dependency — bind every run.
 | --- | --- |
 | **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. **Push every commit there as soon as it is made**, so the local repository and GitHub stay in sync — no need to ask first (owner's standing permission, 2026-09-17). **In a cloud session (§0), `git push` reaches only the session's own branch: push there, open a pull request into `master`, and the owner merges.** | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
 | **The final public repository is gated on the owner's decisions — remind him first, then wait.** **Since 2026-10-17 these decisions are delegated to the head chef** (the owner's commission, at the top of this file): resolve each §1.1 item with a recorded `D-V2-nn`, then act. Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
-| **Never auto-decide the licence.** | **Delegated 2026-10-17** (the commission at the top of this file): a change is now the head chef's, as a recorded decision that serves the owner's intent of 2026-07-24 (§11.1). Before that: owner-reserved. The decision itself is made: Apache-2.0 for the code, `NOTICE`, and `TRADEMARK.md` for the name, under ruling **D27** (§8, §11.1). Any *change* to it is the owner's — present options and wait. (This row said "recommended and staged, not decided" until 2026-09-25, contradicting §8 and §11.1 of this same file.) |
+| **Never auto-decide the licence.** | **Delegated 2026-10-17** (the commission at the top of this file): a change is now the head chef's, as a recorded decision that serves the owner's intent of 2026-07-24 (§11.1). Before that: owner-reserved. The decision itself is made: Apache-2.0 for the code, `NOTICE`, and `TRADEMARK.md` for the name, under ruling **D27** (§8, §11.1); on 2026-11-27 the owner withdrew the name policy, and `NOTICE` became attribution only (**D-V2-239**). Any *change* to it is the owner's — present options and wait. (This row said "recommended and staged, not decided" until 2026-09-25, contradicting §8 and §11.1 of this same file.) |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
 | **Never claim execution that did not happen.** | "Prepared" and "green" are different words and this project keeps them different. See §8. |
@@ -681,7 +682,8 @@ wins, and you should update the memory to match.
   commit message whose push should run CI. The final public repository's gate above is unaffected.
 - **Never auto-decide the licence.** It is already decided: **Apache-2.0** for the code plus `NOTICE`
   and `TRADEMARK.md` for the name, shipped under ruling **D27** (commit `42702e2`) and discharging
-  hardening finding C9. The rule still binds any *change* to it — owner-reserved, present options and
+  hardening finding C9. Since 2026-11-27 (D-V2-239, the owner's word) there is no name policy: `NOTICE`
+  is attribution only, and no file states trademark rights that are not established. The rule still binds any *change* to it — owner-reserved, present options and
   wait — but the decision itself is not outstanding.
 - **Harden, never redefine, Authority and Guard.** Closing a hole is welcome. Changing what they mean
   is not, without the owner. The owner has stated this as a guardrail more than once.

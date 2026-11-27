@@ -145,7 +145,7 @@ def main():
 
     with out.open("w", encoding="utf-8", newline="\n") as w:
         w.write(f"THIRD-PARTY NOTICES — DeluluLang {version}, {target}\n\n")
-        w.write("The `delulu` binary in this archive is DeluluLang's own work (LICENSE, NOTICE, TRADEMARK.md) linked with\n"
+        w.write("The `delulu` binary in this archive is DeluluLang's own work (LICENSE, NOTICE) linked with\n"
                 f"the {len(entries)} crates below and the Rust standard library: the portable build, `cargo build --release -p\n"
                 "delulu --no-default-features --features net`, as `cargo tree` resolves it for this target. Each crate is\n"
                 "listed with its licence as its authors declare it; where the expression offers a choice, DeluluLang uses\n"

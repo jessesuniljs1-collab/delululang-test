@@ -46,7 +46,6 @@ DeluluLang/
 ├── README.md                       # project front door
 ├── LICENSE                         # Apache-2.0 (the code), © Jesse Sunil (D27)
 ├── NOTICE                          # attribution carried by every redistribution (Apache §4d)
-├── TRADEMARK.md                    # the DeluluLang NAME policy — derivatives rename (D27)
 ├── GOVERNANCE.md                   # project governance; Jesse Sunil = lead
 ├── HANDOFF.md                      # the briefing for whoever works here next — rules, state, memory
 ├── AGENTS.md                       # the rules every AI agent reads (2026-09-28)
@@ -555,7 +554,6 @@ account for everything and check nothing.
 | `CODE_OF_CONDUCT.md` | The Contributor Covenant 2.1, verbatim, with its contact filled by the repository's private reporting form (D-V2-151). |
 | `CONTRIBUTING.md` | How to propose a change, and the rules a change must satisfy. It binds this project too, which `governance.rs` tests. |
 | `SECURITY.md` | The disclosure policy and the threat model's edges. |
-| `TRADEMARK.md` | Name and mark usage. Owner-reserved territory. |
 | `AGENTS.md` | The rules every AI agent reads — hard rules, the cloud period, how a change is made, running sub-agents, traps. The short form of `HANDOFF.md`. |
 | `CLAUDE.md` | Loaded into every Claude Code session; imports `AGENTS.md` and adds what is Claude-specific (no auto memory in cloud sessions, commit trailers, `gh` use). |
 

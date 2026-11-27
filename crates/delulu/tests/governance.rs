@@ -35,9 +35,14 @@ fn the_governance_artifacts_exist() {
 /// default copyright and nobody may use it. They must never silently vanish, and the machine-readable
 /// declaration must agree with the files — a `Cargo.toml` that claims MIT over an Apache LICENSE is a
 /// supply-chain lie the same way a wrong SBOM is.
+///
+/// D-V2-239 (the owner's word, 2026-11-27): `NOTICE` carries attribution — the copyright line and the
+/// original creator — and no obligation of its own. Apache-2.0 §4(d) makes every redistribution carry
+/// `NOTICE` and says its contents do not modify the License, so a term written there binds no one and
+/// still travels with every copy.
 #[test]
 fn the_licensing_is_present_and_consistent() {
-    for f in ["LICENSE", "NOTICE", "TRADEMARK.md", "GOVERNANCE.md"] {
+    for f in ["LICENSE", "NOTICE", "GOVERNANCE.md"] {
         assert!(root().join(f).exists(), "{f} is required — its absence reverts the project to default copyright (D27)");
     }
     let license = read("LICENSE");
@@ -48,12 +53,13 @@ fn the_licensing_is_present_and_consistent() {
         read("Cargo.toml").contains("license = \"Apache-2.0\""),
         "Cargo.toml must declare the same licence the LICENSE file grants"
     );
-    // NOTICE carries the attribution Apache §4(d) propagates; the trademark policy is the rename rule.
-    assert!(read("NOTICE").contains("Jesse Sunil"), "NOTICE must record the original creator");
-    assert!(
-        read("TRADEMARK.md").contains("different name"),
-        "the trademark policy must state the derivative-renaming rule (D27, reading A)"
-    );
+    // NOTICE carries the attribution Apache §4(d) propagates, and nothing else.
+    let notice = read("NOTICE");
+    assert!(notice.contains("Copyright") && notice.contains("Jesse Sunil"), "NOTICE must record the copyright holder");
+    assert!(notice.contains("originally created by Jesse Sunil"), "NOTICE must record the original creator");
+    for term in ["must not be removed", "must be released"] {
+        assert!(!notice.contains(term), "NOTICE states an obligation the licence does not have: `{term}` (D-V2-239)");
+    }
 }
 
 /// SECURITY.md carries the substance, not just a heading: a disclosure window, a severity rubric

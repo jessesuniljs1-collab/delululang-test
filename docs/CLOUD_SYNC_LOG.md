@@ -10340,3 +10340,25 @@ Survey and doctor: in the commit below.
      successful case verified too. Then step 2, the fresh-agent trial, before any other language feature.
   2. `launch/2.0.0` stays on hold. At its next authorized sync, verify its resolved `Cargo.lock` and rerun
      `supply-chain` against the advisories current that day (`docs/AI_ONBOARDING.md`, the launch branch).
+
+### 2026-11-27 — the laptop: checkpoint 33 — unsupported trademark statements removed; `NOTICE` is attribution only (D-V2-239)
+- Session: `https://claude.ai/code/session_01Deh6W8nQ6oFC8ECFUYGFVV`. Model: Claude Opus 5.5 (`CLAUDE_EFFORT` reads `xhigh`).
+  Two web-fetch sub-agents ran, and `agent_gate.py` refused both; nothing of theirs was used.
+- **What:** the `V2_LOG.md` entry of this date — the owner's legal audit, D-V2-239 and RW 7.33. He approved the
+  corrections, the deletion and the commit. His audit instructions stay outside the repository.
+- Files: deleted `TRADEMARK.md`. Modified:
+  - the legal files: `NOTICE`, `README.md`, `GOVERNANCE.md`, `Cargo.toml`, `CHANGELOG.md`;
+  - the scripts and tests: `scripts/package-toolchain.sh`, `scripts/third-party-notices.py`,
+    `crates/delulu/tests/governance.rs`, `crates/delulu/tests/distribution.rs`;
+  - the records: `docs/REPOSITORY_STRUCTURE.md`, `HANDOFF.md`, `docs/AI_ONBOARDING.md`,
+    `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md`, `docs/assistant-memory/delulu-licensing-intent.md`,
+    `docs/assistant-memory/MEMORY.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+    `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` and `docs/survey/*`.
+
+  Added, renamed: nothing.
+- **Open / next:**
+  1. Read and record this commit's CI: the `everything` run on its branch, the release dry run and `master`'s push run.
+  2. Carry D-V2-239 to the live branches through their normal sync, never by rewriting them. That means
+     `launch/2.0.0` (on hold) before any launch, and `claude/relaxed-brown-2l78i1` before it merges.
+  3. RW 7.33: clear the name before any branding, and fix the `delulu-lang` metadata, both before the release.
+  4. Unchanged from checkpoint 32: step 1 of D-V2-238's amended order, then step 2. `launch/2.0.0` stays on hold.

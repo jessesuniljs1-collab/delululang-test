@@ -34,9 +34,9 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** update the number, or say plainly that it is a snapshot of a past moment
 
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:535` — says 1268 Rust files; the tree has 352
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:535` — says 28 Rust files; the tree has 352
-- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:535` — says 349 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:536` — says 1268 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:536` — says 28 Rust files; the tree has 352
+- `docs/DELULULANG_AI_FIRST_RECOVERY_PLAN.md:536` — says 349 Rust files; the tree has 352
 - `docs/review/DeluluLang_Codex_Strategic_Review.md:128` — says 340 Rust files; the tree has 352
 
 ## note — `c-token-not-a-campaign-finding` (1)
@@ -49,14 +49,14 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** a current document should cite the archived path
 
-- `CHANGELOG.md:2862` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
+- `CHANGELOG.md:2877` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:30` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:31` — prose names `docs/design/PRODUCTION_READINESS_REVIEW.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:32` — prose names `docs/design/PRODUCTION_READINESS_2026-08-09.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:33` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:34` — prose names `docs/design/P19_ECOSYSTEM_REVIEW.md`, which moved to `docs/archive/v1/design/P19_ECOSYSTEM_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:35` — prose names `docs/design/STAGE10_AUTONOMY_HONESTY_REVIEW.md`, which moved to `docs/archive/v1/design/STAGE10_AUTONOMY_HONESTY_REVIEW.md` in V2-0; the citation is historical and left as written
-- `docs/REPOSITORY_STRUCTURE.md:504` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
+- `docs/REPOSITORY_STRUCTURE.md:503` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/archive/v1/NEXT_EVOLUTION_2026/DOCUMENTATION_AUDIT.md:160` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/archive/v1/NEXT_EVOLUTION_2026/DOCUMENTATION_AUDIT.md:161` — prose names `docs/design/PRODUCTION_READINESS_REVIEW.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/archive/v1/NEXT_EVOLUTION_2026/DOCUMENTATION_AUDIT.md:162` — prose names `docs/design/PRODUCTION_READINESS_2026-08-09.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md` in V2-0; the citation is historical and left as written

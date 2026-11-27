@@ -13850,3 +13850,50 @@ everything."*
   reference*).
 
 **Not done here:** no code changed; step 1 is next. `launch/2.0.0` stays on hold.
+
+## 2026-11-27 — the laptop (Opus 5.5): unsupported trademark statements removed; `NOTICE` is attribution only (D-V2-239)
+
+**What.** The owner's trademark, licensing and attribution audit, and the corrections he approved:
+- `TRADEMARK.md` is deleted, under his explicit exception to "never delete a `.md`".
+- `NOTICE` holds the copyright line and the original creator.
+- `README.md`, `GOVERNANCE.md`, `Cargo.toml`'s comment and the packaging scripts no longer call the name a trademark.
+- `GOVERNANCE.md`'s copyright line covers the owner's own work.
+
+`LICENSE` and Apache-2.0 are unchanged. RW 7.33 is new.
+
+**Why.** "DeluluLang" is not a registered trademark, and no application has been filed. The old files stated rights and
+terms that neither the law nor the licence establishes. D-V2-239 gives each finding with its source. The change
+removes statements and gives up no right.
+
+**Evidence, each run on the laptop the same day.**
+- **The search.** All 1,302 tracked files were searched case-insensitively for:
+  - trademark, registered, pending, proprietary and exclusive right;
+  - all rights reserved, intellectual property, ownership, endorsement and affiliation;
+  - the TM and registered-mark symbols.
+
+  The statements sat in five files, and two scripts and two tests depended on `TRADEMARK.md`. `CODE_OF_CONDUCT.md`'s
+  Contributor Covenant attribution and every third-party notice are legitimate and untouched.
+- **`LICENSE`, diffed against apache.org's text:** a leading blank line and the appendix's filled-in copyright line.
+- **Branches and releases.** `master` and nine other branches carry the same two blobs. `gh release list` is empty, the
+  workflow artifact count is 0, `v1.0.0` has neither file, and the final public repository is empty.
+- **The sources.**
+  - IP India's text of the Trade Marks Act: s2(1)(zb), s27, s28(1) and s107.
+  - The Apache License, and the ASF's *Assembling LICENSE and NOTICE files*, *Applying the Apache License* and
+    *Licensing FAQ*.
+  - GitHub's *Trademark Policy*, Terms of Service §D.5 and *Licensing a repository*.
+  - Two web-fetch sub-agents were refused by `agent_gate.py`, so the head chef fetched the pages with `curl`.
+- **The screening is preliminary, not a clearance.** USPTO's search API returned:
+  - 0 records for `delululang` and for `delulu*lang*`;
+  - 34 records for `delulu*`, whose live software-class ones are in RW 7.33.
+
+  IP India's e-search answered HTTP 503.
+- **The tests.**
+  - `governance.rs` and `distribution.rs` were red on the old files and are green on the new.
+  - Each mutant is caught: the old `NOTICE`, a `NOTICE` without the creator, and `TRADEMARK.md` back in the packaging
+    list.
+  - At the owner's word the first version's phrase bans were dropped, so a future trademark policy or registration
+    stays possible.
+- **The whole suite.** It did not finish on the laptop: Claude Code stopped it while it was compiling, because the
+  machine was low on memory. GitHub runs it (the push and `everything` runs, recorded in the sync log).
+
+**Not done here:** no history rewritten, no branch modified or deleted, no release.

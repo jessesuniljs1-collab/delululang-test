@@ -29,16 +29,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 352 |
-| Rust lines | 213834 |
+| Rust lines | 213851 |
 | Rust files outside `src/` (test/bench targets) | 180 |
-| Markdown documents | 333 |
-| Markdown lines | 119033 |
+| Markdown documents | 332 |
+| Markdown lines | 119119 |
 | DeluluLang programs | 327 |
 | Registered diagnostic codes | 157 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
 | CLI verbs, read from the dispatch | 47 |
-| Nodes / edges in this map | 1808 / 21804 |
+| Nodes / edges in this map | 1807 / 21813 |
 | … edges that are **inferred**, not read (each says so) | 400 |
 | Open discrepancies | 49 |
 

@@ -72,7 +72,7 @@ cp "$BIN" "$STAGE/bin/"
 # Everything a recipient is legally and practically owed. A binary with no LICENSE beside it is not
 # a distribution anyone should accept — so each is REQUIRED: a tree missing one stops here, never ships
 # without it (D-V2-143; `test -f && cp` skipped a missing file without a word).
-for f in LICENSE NOTICE TRADEMARK.md README.md CHANGELOG.md SECURITY.md; do
+for f in LICENSE NOTICE README.md CHANGELOG.md SECURITY.md; do
   test -f "$f" || { echo "no $f in the tree — refusing to package a distribution without it"; exit 1; }
   cp "$f" "$STAGE/"
 done
@@ -145,8 +145,8 @@ under the same grants. 'delulu sandbox probe' says what this machine can
 confine. The morphs in morphs/ are found without installing anything:
 'delulu morph list', then 'delulu morph render <file> --to compact-ai'.
 
-Licences: LICENSE and NOTICE are DeluluLang's (Apache-2.0; TRADEMARK.md for the
-name). THIRD-PARTY-NOTICES.txt carries the licence and notice texts of every
+Licences: LICENSE and NOTICE are DeluluLang's (Apache-2.0).
+THIRD-PARTY-NOTICES.txt carries the licence and notice texts of every
 crate the binary links, the C code they bundle, and the Rust standard library;
 SBOM.cdx.json lists the same crates as a CycloneDX bill of materials.
 

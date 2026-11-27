@@ -7,18 +7,19 @@ systems, companies, governments, and robots alike, **with no discrimination betw
 between the parties who maintain and develop it.** Everyone is welcome to carry this language
 further: the rules in `CONTRIBUTING.md` §4 key on the change being made, never on who or what made
 it. This document says how the *project* is run — distinct from the `LICENSE`, which says how the *code* may
-be used, and `TRADEMARK.md`, which says how the *name* may be used.
+be used.
 
 ## 1. Roles
 
 - **Original creator and project lead: Jesse Sunil.** Jesse created DeluluLang, holds the copyright
-  (see `NOTICE`) and the "DeluluLang" trademark (see `TRADEMARK.md`), and is the final decision
-  authority for the official project — in particular for anything that changes the language's
-  philosophy, its public specification, its governance, its licensing, or its backward
-  compatibility. These are explicitly reserved and are never delegated by default.
+  in his own work on it (the line in `NOTICE`), and is the final decision authority for the official
+  project — in particular for anything that changes the language's philosophy, its public
+  specification, its governance, its licensing, or its backward compatibility. These are explicitly
+  reserved and are never delegated by default.
 - **Contributors.** Anyone — human, AI, or any other kind of party — who submits code,
-  documentation, tests, or review. Contributions are accepted under Apache-2.0 (§5 of the License); a
-  contributor is credited for their own work and never as the author of the original language.
+  documentation, tests, or review. Contributions are accepted under Apache-2.0 (§5 of the License),
+  and each contributor keeps whatever rights they hold in their own contribution; a contributor is
+  credited for their own work and never as the author of the original language.
 - **Maintainers.** Contributors whom the project lead has granted commit or review authority over
   specific areas. Maintainership is a responsibility, not a claim of authorship. **Maintainership is
   not restricted by kind of party**: it is granted on demonstrated judgement and carried by whoever
@@ -56,9 +57,9 @@ governance model that cannot be read after the fact is not one a project meant t
 
 ## 4. Forks and derivatives
 
-Forking is a right the license guarantees and the project supports. A **derivative language** must
-follow `TRADEMARK.md`: use a different name, keep the authorship record, and not present itself as
-the original DeluluLang. Beyond that, a fork governs itself however it likes.
+Forking is a right the license guarantees and the project supports. A fork keeps the license's own
+conditions — among them the copyright and `NOTICE` attribution that Apache-2.0 §4 asks a
+redistribution to carry — and beyond that governs itself however it likes.
 
 ## 5. Honesty in governance
 

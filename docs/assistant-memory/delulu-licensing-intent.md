@@ -8,6 +8,24 @@ metadata:
   modified: 2026-10-17T12:28:56.997Z
 ---
 
+**2026-11-27 — Jesse narrowed this (D-V2-239); it outranks the 2026-07-24 text below.** His audit instructions (kept
+outside the repository) say that no trademark is registered, applied for or pending anywhere; the name may change before
+the public release; Apache-2.0 stays; he stays recognised as the original creator. He approved the corrections:
+- `TRADEMARK.md` is DELETED, under his explicit exception to "never delete a `.md`"; git history keeps it.
+- `NOTICE` holds only the copyright line and "originally created by Jesse Sunil".
+- `GOVERNANCE.md` says he holds the copyright *in his own work*, and each contributor keeps the rights in theirs.
+- README, `Cargo.toml` and the packaging scripts make no trademark statement.
+
+**Superseded:** "the attribution may never be changed or removed" and "derivatives must rename". Apache §4(d) says the
+`NOTICE` file is informational and does not modify the licence. And in India an unregistered name gives no
+infringement action (Trade Marks Act s27(1)), only passing off (s27(2)).
+
+**How to apply:**
+- Remove unsupported claims, but never write a waiver or surrender of rights.
+- A future name policy or registration is allowed on evidence; the tests deliberately do not forbid one.
+- Never say the name is cleared. Treat the US, EU and UK DELULU marks (Decart.Ai, Veritas Apex, Delulu Chat, DELULU
+  SPRINT) as screening leads (RW 7.33).
+
 **RESOLVED 2026-07-24 (owner-approved): Apache-2.0 + trademark policy, derivatives rename.** Jesse
 chose Apache-2.0 for the code and reading A (a derivative language must use a DIFFERENT name).
 Shipped as ruling **D27** (commit closing campaign C9): `LICENSE` (verbatim Apache-2.0, © Jesse

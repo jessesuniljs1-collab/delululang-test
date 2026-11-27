@@ -81,7 +81,7 @@ digest. The full texts are in the files each line names, and the head chef's who
 | Edit an entrenched file casually. | Entrenched files: `docs/design/` CONSTITUTION, DELULU_CORE, STABILITY, SOUNDNESS_AUDIT; `SECURITY.md`; `rfcs/`; `docs/security/`; `crates/delulu-check/tests/laundering.rs`; `crates/delulu-conform/`; `tests/conformance/witnesses.toml`; CODEOWNERS "entrenched"; the licence. Each change needs a `D-V2-nn` decision plus an `ENTRENCHED_CHANGE_RECORD.md` entry. Ask `cargo run -p delulu-survey -- query doc:<path>` before editing under `docs/design/`. |
 | Add a new `DL` diagnostic code casually. | There are 157. A new one needs a `D-V2-nn`, and several documents quote the count. |
 | Commit or ship a built Linux kernel or microVM image. | D-NE-27: GPL obligations first. |
-| Change the licence (Apache-2.0 + `NOTICE` + `TRADEMARK.md`, ruling D27). | The owner's intent of 2026-07-24 is the evidence any change must serve. |
+| Change the licence (Apache-2.0 + `NOTICE`, ruling D27; the name policy withdrawn 2026-11-27, D-V2-239). | The owner's intent of 2026-07-24, as he narrowed it on 2026-11-27, is the evidence any change must serve. |
 
 **Decisions.** The owner's commission of 2026-10-17 ([`design/DeluluLang_Autonomous_Development_Prompt.md`](design/DeluluLang_Autonomous_Development_Prompt.md))
 delegates every outstanding DeluluLang decision to the working AI, owner-reserved ones included. Each is written in
@@ -206,7 +206,8 @@ and a backup; no microVM image until its GPL obligations are met; never weaken a
   - Sous-chef agents only where they add real value, one at a time preferred. Claude's are the model the owner names, else Sonnet 5.5 or
     Haiku 5.5 (2026-11-12).
     Judge an agent by its logs, never its summary, and re-run every claim against the current binary.
-- **2026-07-24:** Apache-2.0 + `NOTICE` + `TRADEMARK.md` (D27).
+- **2026-07-24:** Apache-2.0 + `NOTICE` + `TRADEMARK.md` (D27). **2026-11-27:** the name policy is withdrawn and
+  deleted; `NOTICE` is attribution only; no file states trademark rights that are not established (D-V2-239).
 
 **What the project has paid to learn** (each is a memory file; search its name):
 - *"Ready" includes an ordinary program* (2026-11-02): write the programs users will write before calling anything

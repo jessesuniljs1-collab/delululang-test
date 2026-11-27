@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — unsupported trademark statements removed; `NOTICE` is attribution only, 2026-11-27
+
+- **Licensing (D-V2-239, the owner's word).** "DeluluLang" is not a registered trademark, and no application has been
+  filed. The project files no longer make trademark statements that are not established.
+  - `TRADEMARK.md` is removed; git history keeps it.
+  - `NOTICE` keeps the copyright line and names Jesse Sunil as DeluluLang's original creator. It no longer calls the
+    name a trademark, sets a naming rule for derivatives, or says the attribution may never change. Apache-2.0 §4(d)
+    makes `NOTICE` informational: it does not modify the licence.
+  - `README.md`, `GOVERNANCE.md` and `Cargo.toml` no longer call the name a trademark. `GOVERNANCE.md` says the owner
+    holds the copyright in his own work and each contributor keeps the rights in theirs. The packaged archive no
+    longer carries `TRADEMARK.md`.
+  - **Unchanged:** the code's licence is still Apache-2.0, and `LICENSE` is unchanged. Use, modification,
+    redistribution, sale and forking stay as Apache-2.0 allows. Its §6 still grants no permission to use the
+    licensor's names or marks beyond describing where the work came from.
+
 ## Unreleased — wasmtime 48.0.9 and url 2.5.9, for RUSTSEC-2026-0566 to -0573 and -0592, 2026-11-22
 
 - **Security: wasmtime 48.0.8 → 48.0.9** (with Cranelift 0.135.8 → 0.135.9 and Pulley 48.0.8 → 48.0.9) **and url 2.5.8 →

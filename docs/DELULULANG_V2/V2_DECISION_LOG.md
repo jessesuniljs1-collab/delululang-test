@@ -7522,3 +7522,58 @@ record everything."*
 models"* becomes reviewers from a second vendor, because the owner works alone (`HANDOFF.md` §11.1); *no device work
 before the preview* gains its one exception, step 5. **What does not change:** each step finishes before the next;
 `launch/2.0.0` stays on hold; M6 is the owner's word.
+
+## D-V2-239 — Unsupported trademark statements removed: `TRADEMARK.md` deleted, `NOTICE` attribution only; Apache-2.0, the copyright and the creator's attribution unchanged — TAKEN (the owner's word, 2026-11-27, carried out by the head chef)
+
+**Why.** The owner, 2026-11-27, in audit instructions he keeps outside the repository: "DeluluLang" is not registered
+as a trademark in India or any other jurisdiction, no application has been filed or is pending, and the name may
+change before the public release. He asked for an independently checked audit, preferring that `TRADEMARK.md` go.
+He then approved the corrections, with these terms:
+- delete the file outright, an explicit exception to "never delete a `.md`";
+- keep his original-creator attribution, the copyright notices, every third-party notice and Apache-2.0;
+- remove unsupported claims and surrender no right.
+
+**What was found** (each read on 2026-11-27):
+1. **`TRADEMARK.md` claimed more than the facts support.** It said the owner *"holds all rights in the 'DeluluLang'
+   name and any DeluluLang logos or wordmarks"*. In India the exclusive right to a mark comes from registration (Trade
+   Marks Act 1999, s28(1)). An unregistered mark gives no infringement action (s27(1)); passing off remains (s27(2)).
+   - Its rename rule and *"the authorship record … may not be changed"* read as obligations with nothing behind them.
+   - Its comparison with Rust, Python and Mozilla implied an equivalence the project does not have. Their foundations
+     hold US registrations: RUST 5737390, PYTHON 2824281, MOZILLA 2815227.
+   - It never said "registered" and used no registration symbol, so it did not represent the mark as registered:
+     s107(1)(a) read with s107(3).
+2. **`NOTICE` carried the same statements to every redistribution:** *"'DeluluLang' is a trademark of Jesse Sunil"*, an
+   attribution that *"must not be removed or altered"*, and a derivative that *"must be released under a DIFFERENT
+   name"*. Apache-2.0 §4(d): *"The contents of the NOTICE file are for informational purposes only and do not modify
+   the License."* The ASF's guidance: *"Do not add anything to NOTICE which is not legally required."*
+3. **Other files repeated them:** `README.md`, `GOVERNANCE.md` §1 and §4, a `Cargo.toml` comment, and the two
+   packaging scripts. No source file, CLI message, workflow, manifest or skill made a trademark, patent or ownership
+   claim.
+4. **`LICENSE` is the standard text.** It differs from apache.org's only by a leading blank line and the appendix's
+   filled-in copyright line. It is unchanged.
+5. **Where the old wording is public:** commit `42702e2` onward, and the same two blobs on `master` and nine other
+   branches. There is no release and no workflow artifact, `v1.0.0` predates both files, and the final public
+   repository is empty. A normal corrective commit is enough: no history is rewritten and no branch is deleted.
+
+**Decided:**
+- `TRADEMARK.md` is deleted, under the owner's exception; git history keeps it.
+- `NOTICE` keeps its copyright line and adds only *"DeluluLang was originally created by Jesse Sunil."*
+- `README.md` states §6 of the licence neutrally.
+- `GOVERNANCE.md` says the owner holds the copyright *in his own work*, and that each contributor keeps whatever rights
+  they hold in theirs. It does not claim every contribution, or machine-written material, for the owner.
+- The `Cargo.toml` comment and the packaging scripts no longer mention a trademark.
+- **No right is given up.** The change removes statements that were not established. It waives, abandons or
+  surrenders no right, registered or unregistered, present or future. A trademark policy or a registration may follow
+  later, on evidence.
+
+**Tests:**
+- `governance.rs` asserts that `NOTICE` records the copyright holder and the original creator, and carries neither of
+  the old obligations: "must not be removed" and "must be released".
+- `distribution.rs` asserts that every legal file the packaging script requires exists in the tree. It used to name
+  `TRADEMARK.md`, which would now refuse every build.
+- Neither test forbids a future trademark policy or registration.
+
+**Open:**
+- RW 7.33: a professional clearance of the final name before branding, and the unheld `delulu-lang` namespace in the
+  package metadata. Nothing here says the name is cleared.
+- A question for counsel: how far the copyright line extends to code that AI models wrote at the owner's direction.
